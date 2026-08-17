@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import SimuladorComissao from "./simulador";
 import { abrirContestacao } from "./actions";
+import { lookupComissao, proximoTier } from "@/lib/comissao";
+import Card from "@/components/ui/Card";
 
 const MESES = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez",
@@ -51,6 +53,11 @@ export default async function ComissaoPage() {
     .eq("profile_id", user.id)
     .gte("data", inicioMes)
     .order("data", { ascending: false });
+
+  const producaoRealMes = (vendasMes ?? []).reduce((s, v) => s + Number(v.valor), 0);
+  const tiersOrdenados = [...(tiers ?? [])].sort((a, b) => a.producao_min - b.producao_min);
+  const tierAtual = lookupComissao(tiersOrdenados, producaoRealMes);
+  const proximo = proximoTier(tiersOrdenados, producaoRealMes);
 
   const { data: contestacoes } = await supabase
     .from("contestacoes")
@@ -123,6 +130,52 @@ export default async function ComissaoPage() {
           </div>
         )}
       </section>
+
+      <Card title="Tabela de comissão do seu cargo">
+        <p className="mb-4 text-sm text-stone-300">
+          Produção do mês (extrato):{" "}
+          <span className="text-gold">{moeda(producaoRealMes)}</span>
+          {proximo && (
+            <>
+              {" "}
+              — faltam <span className="text-gold-bright">{moeda(proximo.faltaProducao)}</span>{" "}
+              pro próximo tier (+{moeda(proximo.ganhoTotal)} na comissão total).
+            </>
+          )}
+          {!proximo && tierAtual && (
+            <span className="ml-1 text-emerald-400">Você já está no tier máximo.</span>
+          )}
+        </p>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
+              <th className="pb-2">Produção mín.</th>
+              <th className="pb-2 text-right">Fixo</th>
+              <th className="pb-2 text-right">% Variável</th>
+              <th className="pb-2 text-right">Total no limiar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tiersOrdenados.map((t, i) => {
+              const ativo = tierAtual?.tierIdx === i;
+              const totalLimiar = t.fixo + Math.round((t.pct_variavel / 100) * t.producao_min);
+              return (
+                <tr
+                  key={t.producao_min}
+                  className={`border-t border-imperium-line ${ativo ? "bg-gold/10" : ""}`}
+                >
+                  <td className={`py-2 ${ativo ? "text-gold-bright" : "text-stone-300"}`}>
+                    {moeda(t.producao_min)} {ativo && "← você está aqui"}
+                  </td>
+                  <td className="py-2 text-right text-stone-100">{moeda(t.fixo)}</td>
+                  <td className="py-2 text-right text-stone-400">{t.pct_variavel}%</td>
+                  <td className="py-2 text-right text-stone-100">{moeda(totalLimiar)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
 
       <SimuladorComissao tiers={tiers ?? []} />
 

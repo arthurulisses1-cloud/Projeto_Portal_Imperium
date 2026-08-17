@@ -172,29 +172,78 @@ export default async function CarreiraPage() {
           </div>
         </div>
         {Array.from(criteriosPorBloco.entries()).map(([bloco, itens]) => (
-          <div key={bloco} className="mb-4">
+          <div key={bloco} className="mb-5">
             <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gold">
               Bloco {bloco} — {BLOCO_LABELS[bloco]}
             </p>
-            <ul className="space-y-1">
-              {itens!.map((item) => (
-                <li key={item.id} className="flex justify-between text-sm">
-                  <span className="text-stone-300">{item.texto}</span>
-                  {item.tipo === "strikes" && (
-                    <span
-                      className={
-                        (strikesRecentesTotal ?? 0) === 0 ? "text-emerald-400" : "text-wine-bright"
-                      }
-                    >
-                      {strikesRecentesTotal ?? 0} strike(s)
-                    </span>
-                  )}
-                  {item.tipo === "manual" && (
-                    <span className="text-stone-500">registro do líder</span>
-                  )}
-                </li>
-              ))}
-            </ul>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {itens!.map((item) => {
+                const ehEstrela = item.tipo === "auto" && /estrela/i.test(item.texto);
+                const pctEstrela =
+                  ehEstrela && item.target_value
+                    ? Math.min(100, (profile.stars_total / item.target_value) * 100)
+                    : null;
+                const semStrikes = (strikesRecentesTotal ?? 0) === 0;
+
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded border border-imperium-line bg-imperium-bg/40 p-3"
+                  >
+                    <div className="mb-1.5 flex items-start justify-between gap-2">
+                      <p className="text-sm text-stone-300">{item.texto}</p>
+                      <span
+                        className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${
+                          item.tipo === "strikes"
+                            ? semStrikes
+                              ? "bg-emerald-400"
+                              : "bg-wine-bright"
+                            : item.tipo === "manual"
+                              ? "bg-stone-600"
+                              : pctEstrela !== null && pctEstrela >= 100
+                                ? "bg-emerald-400"
+                                : "bg-gold"
+                        }`}
+                      />
+                    </div>
+
+                    {item.tipo === "strikes" && (
+                      <p className={`text-xs ${semStrikes ? "text-emerald-400" : "text-wine-bright"}`}>
+                        {strikesRecentesTotal ?? 0} strike(s) nos últimos {item.dias_strikes} dias
+                      </p>
+                    )}
+
+                    {item.tipo === "manual" && (
+                      <p className="text-xs text-stone-500">Registro do líder</p>
+                    )}
+
+                    {item.tipo === "auto" && pctEstrela !== null && (
+                      <div>
+                        <div className="mb-1 flex justify-between text-[11px] text-stone-500">
+                          <span>
+                            {profile.stars_total}/{item.target_value}
+                          </span>
+                          <span className="text-gold">{pctEstrela.toFixed(0)}%</span>
+                        </div>
+                        <div className="h-1 overflow-hidden rounded-full bg-imperium-line">
+                          <div
+                            className="h-full rounded-full bg-gold"
+                            style={{ width: `${pctEstrela}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {item.tipo === "auto" && pctEstrela === null && (
+                      <p className="text-xs text-stone-600">
+                        {item.target_value ? `Meta: ${item.target_value}` : "Automático"} · aguardando
+                        dado da planilha
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ))}
       </Card>

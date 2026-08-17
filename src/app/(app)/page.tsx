@@ -5,6 +5,9 @@ import Card from "@/components/ui/Card";
 import Laurel from "@/components/ui/Laurel";
 import Bussola from "@/components/ui/Bussola";
 import RankBadge from "@/components/ui/RankBadge";
+import BarraMeta from "@/components/ui/BarraMeta";
+import ConfrontoWidget from "@/components/ui/Confronto";
+import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito } from "@/lib/guerra";
 
 const STATUS_TONE: Record<string, "good" | "warn" | "gold"> = {
   cumprido: "good",
@@ -25,7 +28,7 @@ export default async function MuralPage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "full_name, avatar_emoji, role, rank, stars_total, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))"
+      "full_name, avatar_emoji, role, rank, stars_total, tribo:tribos!profiles_tribo_id_fkey(id, nome, exercito:exercitos(nome))"
     )
     .eq("id", user.id)
     .single();
@@ -62,6 +65,49 @@ export default async function MuralPage() {
   );
   const quote =
     quotes && quotes.length > 0 ? quotes[dayOfYear % quotes.length] : null;
+
+  const [confrontoExercitos, confrontoTribos, topCredito] = await Promise.all([
+    buscarConfrontoExercitos(supabase),
+    buscarConfrontoTribos(supabase),
+    buscarTopCredito(supabase, 5),
+  ]);
+
+  // meta individual: meta de crédito da firma dividida por Exército → Tribo → membros da Tribo
+  let metaIndividual = 0;
+  const triboId = (profile?.tribo as unknown as { id?: string } | null)?.id;
+  if (triboId) {
+    const { data: triboRow } = await supabase
+      .from("tribos")
+      .select("id, exercito_id")
+      .eq("id", triboId)
+      .single();
+    if (triboRow) {
+      const agora = new Date();
+      const [{ data: metaMes }, { count: numExercitos }, { count: numTribos }, { count: numMembros }] =
+        await Promise.all([
+          supabase
+            .from("metas_mensais")
+            .select("meta_credito_total")
+            .eq("ano", agora.getFullYear())
+            .eq("mes", agora.getMonth() + 1)
+            .maybeSingle(),
+          supabase.from("exercitos").select("id", { count: "exact", head: true }),
+          supabase
+            .from("tribos")
+            .select("id", { count: "exact", head: true })
+            .eq("exercito_id", triboRow.exercito_id),
+          supabase
+            .from("profiles")
+            .select("id", { count: "exact", head: true })
+            .eq("tribo_id", triboRow.id)
+            .in("role", ["sdr", "closer"]),
+        ]);
+      const metaCredito = metaMes?.meta_credito_total ?? 0;
+      if (metaCredito > 0 && numExercitos && numTribos && numMembros) {
+        metaIndividual = metaCredito / numExercitos / numTribos / numMembros;
+      }
+    }
+  }
 
   const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
   const statusHoje = compromissoHoje
@@ -117,6 +163,24 @@ export default async function MuralPage() {
                 ]
           }
         />
+      </Card>
+
+      {ehExecutivo && metaIndividual > 0 && (
+        <Card title="Meta do mês">
+          <BarraMeta realizado={pagosMes} meta={metaIndividual} />
+        </Card>
+      )}
+
+      <Card title="Guerra Civil — Exércitos">
+        <ConfrontoWidget dados={confrontoExercitos} />
+      </Card>
+
+      <Card title="Guerra de Tribos">
+        <ConfrontoWidget dados={confrontoTribos} />
+      </Card>
+
+      <Card title="Ranking Individual de Crédito — Top 5">
+        <ConfrontoWidget dados={topCredito} />
       </Card>
 
       {quote && (

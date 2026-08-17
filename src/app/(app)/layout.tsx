@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
 import RankBadge from "@/components/ui/RankBadge";
 import AppNav from "@/components/ui/AppNav";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
         {user && (
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             {profile && <RankBadge rank={profile.rank} size="sm" />}
             <div className="text-right">
               <p className="text-sm text-stone-100">{profile?.full_name ?? user.email}</p>

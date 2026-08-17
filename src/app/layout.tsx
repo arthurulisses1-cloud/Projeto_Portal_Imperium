@@ -40,6 +40,13 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${cinzel.variable} ${garamond.variable} antialiased bg-imperium-bg text-stone-100`}
       >
+        <script
+          // roda antes da hidratação pra não piscar o tema errado (padrão: Roma)
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('imperium-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}",
+          }}
+        />
         {children}
       </body>
     </html>

@@ -1,6 +1,14 @@
-import type { Config } from "tailwindcss";
+// Padrão Tailwind pra cor themável via CSS var (suporta opacidade tipo bg-gold/10)
+function withOpacity(varName: string) {
+  return ({ opacityValue }: { opacityValue?: string }) =>
+    opacityValue !== undefined
+      ? `rgb(var(${varName}) / ${opacityValue})`
+      : `rgb(var(${varName}))`;
+}
 
-const config: Config = {
+// (sem tipo Config explícito de propósito — a tipagem oficial não cobre
+// cores como função, mas o Tailwind aceita isso normalmente em runtime)
+const config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -8,27 +16,42 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // As funções withOpacity são o padrão oficial do Tailwind pra cor via
+      // CSS var com suporte a opacidade (bg-gold/10 etc.) — a tipagem do
+      // Config não cobre esse padrão, daí o "as any" aqui.
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
         imperium: {
-          bg: "#0a0d16",
-          surface: "#12182a",
-          raised: "#182036",
-          line: "#262f4a",
-          "line-strong": "#39456b",
+          bg: withOpacity("--c-bg"),
+          surface: withOpacity("--c-surface"),
+          raised: withOpacity("--c-raised"),
+          line: withOpacity("--c-line"),
+          "line-strong": withOpacity("--c-line-strong"),
         },
         gold: {
-          DEFAULT: "#c9a24a",
-          bright: "#e8c874",
-          dim: "#8a7038",
+          DEFAULT: withOpacity("--c-gold"),
+          bright: withOpacity("--c-gold-bright"),
+          dim: withOpacity("--c-gold-dim"),
         },
         wine: {
-          DEFAULT: "#7a2431",
-          bright: "#9c3040",
+          DEFAULT: withOpacity("--c-wine"),
+          bright: withOpacity("--c-wine-bright"),
         },
-        templar: "#a3272f",
-        maximus: "#b08d4f",
+        templar: withOpacity("--c-templar"),
+        maximus: withOpacity("--c-maximus"),
+        stone: {
+          50: withOpacity("--stone-50"),
+          100: withOpacity("--stone-100"),
+          200: withOpacity("--stone-200"),
+          300: withOpacity("--stone-300"),
+          400: withOpacity("--stone-400"),
+          500: withOpacity("--stone-500"),
+          600: withOpacity("--stone-600"),
+          700: withOpacity("--stone-700"),
+          800: withOpacity("--stone-800"),
+          900: withOpacity("--stone-900"),
+        },
       },
       fontFamily: {
         display: ["var(--font-cinzel)", "serif"],
@@ -36,7 +59,7 @@ const config: Config = {
       },
       backgroundImage: {
         "laurel-glow":
-          "radial-gradient(circle at 50% 0%, rgba(201,162,74,0.10), transparent 60%)",
+          "radial-gradient(circle at 50% 0%, rgb(var(--c-gold) / 0.10), transparent 60%)",
       },
     },
   },
