@@ -8,10 +8,8 @@ export default function SimuladorComissao({ tiers }: { tiers: Tier[] }) {
   const resultado = lookupComissao(tiers, producao);
 
   return (
-    <div className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-      <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-        Simulador por faixa de produção
-      </h2>
+    <div className="card-imp">
+      <h2 className="kicker mb-4">Simulador por faixa de produção</h2>
       <label className="mb-1 block text-xs text-stone-400">
         Produção hipotética do mês (R$)
       </label>
@@ -21,7 +19,7 @@ export default function SimuladorComissao({ tiers }: { tiers: Tier[] }) {
         step={1000}
         value={producao}
         onChange={(e) => setProducao(Math.max(0, Number(e.target.value) || 0))}
-        className="mb-4 w-48 rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
+        className="input-imp mb-4 w-48"
       />
 
       {resultado ? (
@@ -43,7 +41,7 @@ export default function SimuladorComissao({ tiers }: { tiers: Tier[] }) {
           </div>
           <div>
             <p className="text-stone-500">Total</p>
-            <p className="text-amber-400">
+            <p className="text-gold-bright">
               {resultado.total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
             </p>
           </div>
@@ -52,7 +50,7 @@ export default function SimuladorComissao({ tiers }: { tiers: Tier[] }) {
         <p className="text-sm text-stone-500">Tabela de comissão não configurada pro seu nível.</p>
       )}
       {resultado?.abaixoDoMinimo && (
-        <p className="mt-3 text-xs text-amber-500">
+        <p className="mt-3 text-xs text-gold">
           Produção abaixo do menor tier — o valor mostrado usa o tier mínimo como base.
         </p>
       )}

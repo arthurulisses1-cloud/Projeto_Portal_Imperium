@@ -10,6 +10,7 @@ import {
 import MembroCard from "@/components/MembroCard";
 import ConvidarForm from "./convidar-form";
 import { criarTribo, renomearTribo, atualizarLogoTribo } from "./actions";
+import Card from "@/components/ui/Card";
 
 export default async function TriboPage() {
   const supabase = await createClient();
@@ -29,27 +30,18 @@ export default async function TriboPage() {
     return (
       <main className="mx-auto max-w-lg space-y-4 px-6 py-8">
         <div>
-          <h1 className="font-serif text-xl text-amber-400">Minha Tribo</h1>
-          <p className="text-xs text-stone-400">Você ainda não criou sua Tribo</p>
+          <h1 className="font-display text-2xl text-gold-bright">Minha Tribo</h1>
+          <p className="kicker mt-1">Você ainda não criou sua Tribo</p>
         </div>
-        <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
+        <Card>
           <form action={criarTribo} className="space-y-4">
             <div>
               <label className="mb-1 block text-xs text-stone-400">Nome da Tribo</label>
-              <input
-                name="nome"
-                required
-                placeholder="Ex: Tribo Aquila"
-                className="w-full rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
-              />
+              <input name="nome" required placeholder="Ex: Tribo Aquila" className="input-imp" />
             </div>
             <div>
               <label className="mb-1 block text-xs text-stone-400">Exército</label>
-              <select
-                name="exercito_id"
-                required
-                className="w-full rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
-              >
+              <select name="exercito_id" required className="input-imp">
                 {(exercitos ?? []).map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.nome}
@@ -57,14 +49,11 @@ export default async function TriboPage() {
                 ))}
               </select>
             </div>
-            <button
-              type="submit"
-              className="rounded bg-amber-500 px-4 py-2 text-sm font-medium text-[#0b0f19] hover:bg-amber-400"
-            >
+            <button type="submit" className="btn-gold">
               Criar Tribo
             </button>
           </form>
-        </section>
+        </Card>
       </main>
     );
   }
@@ -91,37 +80,29 @@ export default async function TriboPage() {
           <img
             src={tribo.logo_url}
             alt={tribo.nome}
-            className="h-14 w-14 rounded-full border border-amber-500/40 object-cover"
+            className="h-14 w-14 rounded-full border border-gold/40 object-cover"
           />
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-stone-700 text-stone-600">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-imperium-line-strong text-stone-600">
             ?
           </div>
         )}
         <div>
-          <h1 className="font-serif text-xl text-amber-400">{tribo.nome}</h1>
-          <p className="text-xs text-stone-400">Minha Tribo{exercitoNome ? ` · ${exercitoNome}` : ""}</p>
+          <h1 className="font-display text-2xl text-gold-bright">{tribo.nome}</h1>
+          <p className="kicker mt-1">
+            Minha Tribo{exercitoNome ? ` · ${exercitoNome}` : ""}
+          </p>
         </div>
       </div>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Configurações da Tribo
-        </h2>
+      <Card title="Configurações da Tribo">
         <div className="flex flex-wrap gap-8">
           <form action={renomearTribo} className="flex items-end gap-2">
             <div>
               <label className="mb-1 block text-xs text-stone-400">Renomear</label>
-              <input
-                name="nome"
-                defaultValue={tribo.nome}
-                className="rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-sm text-stone-100"
-              />
+              <input name="nome" defaultValue={tribo.nome} className="input-imp text-sm" />
             </div>
-            <button
-              type="submit"
-              className="rounded border border-amber-500/50 px-3 py-2 text-xs text-amber-400 hover:bg-amber-500/10"
-            >
+            <button type="submit" className="btn-outline">
               Salvar nome
             </button>
           </form>
@@ -129,35 +110,20 @@ export default async function TriboPage() {
           <form action={atualizarLogoTribo} className="flex items-end gap-2">
             <div>
               <label className="mb-1 block text-xs text-stone-400">Logo da Tribo</label>
-              <input
-                type="file"
-                name="logo"
-                accept="image/*"
-                required
-                className="text-sm text-stone-300"
-              />
+              <input type="file" name="logo" accept="image/*" required className="text-sm text-stone-300" />
             </div>
-            <button
-              type="submit"
-              className="rounded border border-amber-500/50 px-3 py-2 text-xs text-amber-400 hover:bg-amber-500/10"
-            >
+            <button type="submit" className="btn-outline">
               Enviar logo
             </button>
           </form>
         </div>
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Convidar membro
-        </h2>
+      <Card title="Convidar membro">
         <ConvidarForm />
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Produção coletiva do mês
-        </h2>
+      <Card title="Produção coletiva do mês">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
@@ -168,7 +134,7 @@ export default async function TriboPage() {
           </thead>
           <tbody>
             {FUNNEL_STAGES.map((etapa) => (
-              <tr key={etapa} className="border-t border-stone-800">
+              <tr key={etapa} className="border-t border-imperium-line">
                 <td className="py-2 text-stone-300">{FUNNEL_LABELS[etapa]}</td>
                 <td className="py-2 text-right text-stone-100">
                   {funilColetivo[etapa].realizado}
@@ -178,12 +144,9 @@ export default async function TriboPage() {
             ))}
           </tbody>
         </table>
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Liderados
-        </h2>
+      <Card title="Liderados">
         <div className="grid gap-3 sm:grid-cols-2">
           {(sdrs ?? []).map((sdr) => (
             <MembroCard
@@ -199,7 +162,7 @@ export default async function TriboPage() {
             />
           ))}
         </div>
-      </section>
+      </Card>
     </main>
   );
 }

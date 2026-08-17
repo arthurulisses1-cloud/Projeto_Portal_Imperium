@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { FUNNEL_STAGES, FUNNEL_LABELS, periodoParaDatas, type FunilEtapa } from "@/lib/funil";
 import SimuladorMeta from "./simulador";
+import Card from "@/components/ui/Card";
 
 type Periodo = "hoje" | "semana" | "mes";
 
@@ -89,96 +90,86 @@ export default async function ProducaoPage({
   );
 
   return (
-    <>
-      <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
-        <div>
-          <h1 className="font-serif text-xl text-amber-400">Minha Produção</h1>
-          <p className="text-xs text-stone-400">Funil, conversão e simulador de meta</p>
-        </div>
-        <div className="flex gap-2">
-          {(["hoje", "semana", "mes"] as Periodo[]).map((p) => (
-            <a
-              key={p}
-              href={`/producao?periodo=${p}`}
-              className={`rounded px-3 py-1.5 text-xs ${
-                periodo === p
-                  ? "bg-amber-500 text-[#0b0f19]"
-                  : "border border-stone-700 text-stone-300 hover:border-amber-500"
-              }`}
-            >
-              {p === "hoje" ? "Hoje" : p === "semana" ? "Semana" : "Mês"}
-            </a>
-          ))}
-        </div>
+    <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
+      <div>
+        <h1 className="font-display text-2xl text-gold-bright">Minha Produção</h1>
+        <p className="kicker mt-1">Funil, conversão e simulador de meta</p>
+      </div>
+      <div className="flex gap-2">
+        {(["hoje", "semana", "mes"] as Periodo[]).map((p) => (
+          <a
+            key={p}
+            href={`/producao?periodo=${p}`}
+            className={`rounded px-3 py-1.5 text-xs transition ${
+              periodo === p
+                ? "bg-gold text-imperium-bg"
+                : "border border-imperium-line text-stone-300 hover:border-gold"
+            }`}
+          >
+            {p === "hoje" ? "Hoje" : p === "semana" ? "Semana" : "Mês"}
+          </a>
+        ))}
+      </div>
 
-        <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-          <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-            Funil — realizado x meta
-          </h2>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-                <th className="pb-2">Etapa</th>
-                <th className="pb-2 text-right">Realizado</th>
-                <th className="pb-2 text-right">Meta</th>
-                <th className="pb-2 text-right">Conversão</th>
-                <th className="pb-2 text-right">Esperada</th>
-              </tr>
-            </thead>
-            <tbody>
-              {FUNNEL_STAGES.map((etapa, i) => {
-                const anterior = i > 0 ? totais[FUNNEL_STAGES[i - 1]].realizado : null;
-                const conversao =
-                  anterior && anterior > 0
-                    ? ((totais[etapa].realizado / anterior) * 100).toFixed(0) + "%"
-                    : "—";
-                const taxaEsperada =
-                  i > 0 ? taxaEsperadaMap.get(`${FUNNEL_STAGES[i - 1]}_${etapa}`) : undefined;
-                return (
-                  <tr key={etapa} className="border-t border-stone-800">
-                    <td className="py-2 text-stone-300">{FUNNEL_LABELS[etapa]}</td>
-                    <td className="py-2 text-right text-stone-100">
-                      {totais[etapa].realizado}
-                    </td>
-                    <td className="py-2 text-right text-stone-500">{totais[etapa].meta}</td>
-                    <td className="py-2 text-right text-stone-400">{conversao}</td>
-                    <td className="py-2 text-right text-stone-600">
-                      {taxaEsperada ? `${(taxaEsperada * 100).toFixed(0)}%` : "—"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
+      <Card title="Funil — realizado x meta">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
+              <th className="pb-2">Etapa</th>
+              <th className="pb-2 text-right">Realizado</th>
+              <th className="pb-2 text-right">Meta</th>
+              <th className="pb-2 text-right">Conversão</th>
+              <th className="pb-2 text-right">Esperada</th>
+            </tr>
+          </thead>
+          <tbody>
+            {FUNNEL_STAGES.map((etapa, i) => {
+              const anterior = i > 0 ? totais[FUNNEL_STAGES[i - 1]].realizado : null;
+              const conversao =
+                anterior && anterior > 0
+                  ? ((totais[etapa].realizado / anterior) * 100).toFixed(0) + "%"
+                  : "—";
+              const taxaEsperada =
+                i > 0 ? taxaEsperadaMap.get(`${FUNNEL_STAGES[i - 1]}_${etapa}`) : undefined;
+              return (
+                <tr key={etapa} className="border-t border-imperium-line">
+                  <td className="py-2 text-stone-300">{FUNNEL_LABELS[etapa]}</td>
+                  <td className="py-2 text-right text-stone-100">{totais[etapa].realizado}</td>
+                  <td className="py-2 text-right text-stone-500">{totais[etapa].meta}</td>
+                  <td className="py-2 text-right text-stone-400">{conversao}</td>
+                  <td className="py-2 text-right text-gold-dim">
+                    {taxaEsperada ? `${(taxaEsperada * 100).toFixed(0)}%` : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
 
-        <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-          <h2 className="mb-2 text-sm font-medium uppercase tracking-wide text-stone-400">
-            Ticket médio
-          </h2>
-          <p className="text-2xl text-amber-400">
-            {ticketMedio !== null
-              ? ticketMedio.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-              : "—"}
-          </p>
-          {metaMes && metaMes.meta_ticket_medio > 0 && (
-            <p className="mt-1 text-xs text-stone-500">
-              Meta do mês:{" "}
-              {metaMes.meta_ticket_medio.toLocaleString("pt-BR", {
-                style: "currency",
-                currency: "BRL",
-              })}
-            </p>
-          )}
-        </section>
-
-        <SimuladorMeta totais={totaisMes} />
-
-        <p className="text-center text-xs text-stone-600">
-          Trend de 3–6 meses e diagnóstico de gargalo entram numa próxima etapa,
-          junto com a integração da planilha.
+      <Card title="Ticket médio">
+        <p className="font-display text-2xl text-gold-bright">
+          {ticketMedio !== null
+            ? ticketMedio.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+            : "—"}
         </p>
-      </main>
-    </>
+        {metaMes && metaMes.meta_ticket_medio > 0 && (
+          <p className="mt-1 text-xs text-stone-500">
+            Meta do mês:{" "}
+            {metaMes.meta_ticket_medio.toLocaleString("pt-BR", {
+              style: "currency",
+              currency: "BRL",
+            })}
+          </p>
+        )}
+      </Card>
+
+      <SimuladorMeta totais={totaisMes} />
+
+      <p className="text-center text-xs text-stone-600">
+        Trend de 3–6 meses e diagnóstico de gargalo entram numa próxima etapa, junto com a
+        integração da planilha.
+      </p>
+    </main>
   );
 }

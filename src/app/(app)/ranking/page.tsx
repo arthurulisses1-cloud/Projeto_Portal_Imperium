@@ -9,18 +9,18 @@ function Tabela({ titulo, formato, linhas }: { titulo: string; formato: "num" | 
     return v.toLocaleString("pt-BR");
   }
   return (
-    <div className="rounded-lg border border-stone-800 bg-[#111827] p-4">
-      <h3 className="mb-3 text-xs font-medium uppercase tracking-wide text-stone-400">{titulo}</h3>
+    <div className="card-imp p-4">
+      <h3 className="kicker mb-3">{titulo}</h3>
       {linhas.length === 0 ? (
         <p className="text-xs text-stone-600">Sem dados ainda.</p>
       ) : (
         <ol className="space-y-1">
           {linhas.map((l, i) => (
             <li key={l.nome} className="flex justify-between text-sm">
-              <span className="text-stone-300">
+              <span className={i === 0 ? "text-gold-bright" : "text-stone-300"}>
                 {i + 1}. {l.nome} <span className="text-stone-600">· {l.tribo}</span>
               </span>
-              <span className="text-amber-400">{fmt(l.valor)}</span>
+              <span className={i === 0 ? "text-gold-bright" : "text-gold"}>{fmt(l.valor)}</span>
             </li>
           ))}
         </ol>
@@ -127,12 +127,12 @@ export default async function RankingPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-8 px-6 py-8">
       <div>
-        <h1 className="font-serif text-xl text-amber-400">Ranking</h1>
-        <p className="text-xs text-stone-400">Mês corrente · corte geral do Império</p>
+        <h1 className="font-display text-2xl text-gold-bright">Ranking</h1>
+        <p className="kicker mt-1">Mês corrente · corte geral do Império</p>
       </div>
 
       <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-stone-400">SDR</h2>
+        <h2 className="kicker mb-3">SDR</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Tabela titulo="Tentativas" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "tentativas")} />
           <Tabela titulo="Conexões" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "conexoes")} />
@@ -144,7 +144,7 @@ export default async function RankingPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-stone-400">Closer</h2>
+        <h2 className="kicker mb-3">Closer</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Tabela titulo="Entrevistas" formato="num" linhas={topPorEtapa(idsPorRole.closer, "entrevistas")} />
           <Tabela titulo="Subidos" formato="num" linhas={topPorEtapa(idsPorRole.closer, "subidos")} />

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import Laurel from "@/components/ui/Laurel";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -30,17 +31,24 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-imperium-bg px-4">
+      <div className="pointer-events-none absolute inset-0 bg-laurel-glow" />
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-sm rounded-lg border border-amber-500/20 bg-[#111827] p-8 shadow-xl"
+        className="relative w-full max-w-sm rounded border border-imperium-line bg-imperium-surface p-8 shadow-2xl"
       >
-        <h1 className="mb-1 text-center font-serif text-2xl text-amber-400">
-          Portal Executivo
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-gold/50 text-gold">
+          <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="1.3">
+            <path d="M12 2c1.6 2.1 4.3 3.2 8.4 3.2-2.1 2.1-4.3 3.2-4.3 6.4 0 4.2-2.1 8.5-4.1 9.4-2-.9-4.1-5.2-4.1-9.4 0-3.2-2.2-4.3-4.3-6.4C7.7 5.2 10.4 4.1 12 2Z" />
+          </svg>
+        </div>
+        <h1 className="text-center font-display text-xl tracking-wide text-gold-bright">
+          PORTAL EXECUTIVO
         </h1>
-        <p className="mb-8 text-center text-xs uppercase tracking-widest text-stone-400">
+        <p className="mb-3 text-center text-[11px] uppercase tracking-[0.2em] text-stone-500">
           Matri Bank · Imperium
         </p>
+        <Laurel className="mx-auto mb-6 h-3 w-24 text-gold/40" />
 
         <label className="mb-1 block text-sm text-stone-300">Email</label>
         <input
@@ -48,7 +56,7 @@ export default function LoginPage() {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="mb-4 w-full rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100 outline-none focus:border-amber-500"
+          className="input-imp mb-4"
         />
 
         <label className="mb-1 block text-sm text-stone-300">Senha</label>
@@ -57,21 +65,20 @@ export default function LoginPage() {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="mb-6 w-full rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100 outline-none focus:border-amber-500"
+          className="input-imp mb-6"
         />
 
-        {error && <p className="mb-4 text-sm text-red-400">{error}</p>}
+        {error && <p className="mb-4 text-sm text-wine-bright">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded bg-amber-500 py-2 font-medium text-[#0b0f19] transition hover:bg-amber-400 disabled:opacity-60"
-        >
+        <button type="submit" disabled={loading} className="btn-gold w-full">
           {loading ? "Entrando..." : "Entrar"}
         </button>
 
         <p className="mt-6 text-center text-xs text-stone-500">
           Acesso apenas por convite. Fale com seu Líder ou o Diretor.
+        </p>
+        <p className="mt-4 text-center font-display text-[10px] tracking-[0.3em] text-imperium-line-strong">
+          ESSE QUAM VIDERI
         </p>
       </form>
     </div>

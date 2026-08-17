@@ -38,7 +38,7 @@ export default function ConvidarForm() {
             value={nome}
             onChange={(e) => setNome(e.target.value)}
             required
-            className="rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-sm text-stone-100"
+            className="input-imp text-sm"
           />
         </div>
         <div>
@@ -48,28 +48,24 @@ export default function ConvidarForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-sm text-stone-100"
+            className="input-imp text-sm"
           />
         </div>
-        <button
-          type="submit"
-          disabled={loading}
-          className="rounded bg-amber-500 px-4 py-2 text-sm font-medium text-[#0b0f19] hover:bg-amber-400 disabled:opacity-60"
-        >
+        <button type="submit" disabled={loading} className="btn-gold">
           {loading ? "Criando..." : "Convidar"}
         </button>
       </form>
 
-      {erro && <p className="mt-2 text-sm text-red-400">{erro}</p>}
+      {erro && <p className="mt-2 text-sm text-wine-bright">{erro}</p>}
 
       {resultado && (
         <div className="mt-4 rounded border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm">
           <p className="mb-1 text-emerald-400">Conta criada! Compartilha isso com a pessoa:</p>
           <p className="text-stone-200">
-            Email: <span className="text-amber-400">{resultado.email}</span>
+            Email: <span className="text-gold">{resultado.email}</span>
           </p>
           <p className="text-stone-200">
-            Senha: <span className="text-amber-400">{resultado.senha}</span>
+            Senha: <span className="text-gold">{resultado.senha}</span>
           </p>
           <p className="mt-1 text-xs text-stone-500">
             Essa senha só aparece essa vez — anota antes de sair da tela.

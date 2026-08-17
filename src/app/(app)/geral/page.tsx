@@ -57,14 +57,12 @@ export default async function VisaoGeralPage() {
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       <div>
-        <h1 className="font-serif text-xl text-amber-400">Visão Geral da Firma</h1>
-        <p className="text-xs text-stone-400">Império · todos os Exércitos</p>
+        <h1 className="font-display text-2xl text-gold-bright">Visão Geral da Firma</h1>
+        <p className="kicker mt-1">Império · todos os Exércitos</p>
       </div>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Funil consolidado do mês
-        </h2>
+      <section className="card-imp">
+        <h2 className="kicker mb-4">Funil consolidado do mês</h2>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
@@ -75,7 +73,7 @@ export default async function VisaoGeralPage() {
           </thead>
           <tbody>
             {FUNNEL_STAGES.map((etapa) => (
-              <tr key={etapa} className="border-t border-stone-800">
+              <tr key={etapa} className="border-t border-imperium-line">
                 <td className="py-2 text-stone-300">{FUNNEL_LABELS[etapa]}</td>
                 <td className="py-2 text-right text-stone-100">{totalGeral[etapa].realizado}</td>
                 <td className="py-2 text-right text-stone-500">{totalGeral[etapa].meta}</td>
@@ -85,19 +83,17 @@ export default async function VisaoGeralPage() {
         </table>
       </section>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Exércitos
-        </h2>
+      <section className="card-imp">
+        <h2 className="kicker mb-4">Exércitos</h2>
         <ul className="space-y-2">
           {(exercitos ?? []).map((e) => {
             const legado = e.legado as unknown as { full_name: string } | null;
             return (
-              <li key={e.id} className="flex justify-between border-t border-stone-800 pt-2 text-sm">
+              <li key={e.id} className="flex justify-between border-t border-imperium-line pt-2 text-sm">
                 <span className="text-stone-300">
                   {e.nome} <span className="text-stone-600">· Legado: {legado?.full_name ?? "—"}</span>
                 </span>
-                <span className="text-amber-400">{moeda(pagosPorExercito.get(e.id) ?? 0)}</span>
+                <span className="text-gold-bright">{moeda(pagosPorExercito.get(e.id) ?? 0)}</span>
               </li>
             );
           })}

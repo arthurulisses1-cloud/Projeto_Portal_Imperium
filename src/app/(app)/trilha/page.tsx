@@ -34,8 +34,8 @@ export default async function TrilhaPage() {
   return (
     <main className="mx-auto max-w-2xl space-y-4 px-6 py-8">
       <div>
-        <h1 className="font-serif text-xl text-amber-400">Trilha de Formação</h1>
-        <p className="text-xs text-stone-400">
+        <h1 className="font-display text-2xl text-gold-bright">Trilha de Formação</h1>
+        <p className="mt-1 text-xs text-stone-400">
           Módulos destravam por nível — conteúdo completo (vídeo/PDF) chega numa fase seguinte.
         </p>
       </div>
@@ -48,8 +48,10 @@ export default async function TrilhaPage() {
           return (
             <div
               key={m.id}
-              className={`rounded-lg border p-4 ${
-                travado ? "border-stone-900 opacity-50" : "border-stone-800 bg-[#111827]"
+              className={`rounded border p-4 ${
+                travado
+                  ? "border-imperium-line opacity-50"
+                  : "border-imperium-line bg-imperium-surface"
               }`}
             >
               <div className="flex items-center justify-between">
@@ -66,10 +68,7 @@ export default async function TrilhaPage() {
                 ) : (
                   <form action={marcarModuloConcluido}>
                     <input type="hidden" name="modulo_id" value={m.id} />
-                    <button
-                      type="submit"
-                      className="rounded border border-amber-500/50 px-3 py-1 text-xs text-amber-400 hover:bg-amber-500/10"
-                    >
+                    <button type="submit" className="btn-outline">
                       Marcar concluído
                     </button>
                   </form>

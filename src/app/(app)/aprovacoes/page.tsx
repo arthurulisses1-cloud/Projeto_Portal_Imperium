@@ -17,11 +17,11 @@ export default async function AprovacoesPage() {
   return (
     <main className="mx-auto max-w-2xl space-y-6 px-6 py-8">
       <div>
-        <h1 className="font-serif text-xl text-amber-400">Aprovações de Carreira</h1>
-        <p className="text-xs text-stone-400">Subidas de nível pendentes de aprovação</p>
+        <h1 className="font-display text-2xl text-gold-bright">Aprovações de Carreira</h1>
+        <p className="mt-1 text-xs text-stone-400">Subidas de nível pendentes de aprovação</p>
       </div>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
+      <section className="card-imp">
         {pendentes && pendentes.length > 0 ? (
           <ul className="space-y-4">
             {pendentes.map((p) => {
@@ -29,7 +29,7 @@ export default async function AprovacoesPage() {
               if (!perfil) return null;
               const proximo = NEXT_RANK[perfil.rank];
               return (
-                <li key={p.id} className="border-b border-stone-800 pb-4 last:border-0">
+                <li key={p.id} className="border-b border-imperium-line pb-4 last:border-0">
                   <p className="text-sm text-stone-100">{perfil.full_name}</p>
                   <p className="text-xs text-stone-400">
                     {RANK_LABELS[perfil.rank]} → {proximo ? RANK_LABELS[proximo] : "—"}
@@ -50,7 +50,7 @@ export default async function AprovacoesPage() {
                       type="submit"
                       name="status"
                       value="rejeitado"
-                      className="rounded border border-red-500/50 px-3 py-1 text-xs text-red-400 hover:bg-red-500/10"
+                      className="rounded border border-wine/50 px-3 py-1 text-xs text-wine-bright hover:bg-wine/10"
                     >
                       Rejeitar
                     </button>

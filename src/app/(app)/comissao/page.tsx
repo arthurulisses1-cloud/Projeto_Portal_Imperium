@@ -61,14 +61,12 @@ export default async function ComissaoPage() {
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
       <div>
-        <h1 className="font-serif text-xl text-amber-400">Comissão do Mês</h1>
+        <h1 className="font-display text-2xl text-gold-bright">Comissão do Mês</h1>
         <p className="text-xs text-stone-400">Visão privada — só você e o Diretor veem isso</p>
       </div>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Mês atual
-        </h2>
+      <section className="card-imp">
+        <h2 className="kicker mb-4">Mês atual</h2>
         {mesAtual ? (
           <div className="grid grid-cols-4 gap-4 text-sm">
             <div>
@@ -85,7 +83,7 @@ export default async function ComissaoPage() {
             </div>
             <div>
               <p className="text-stone-500">Total</p>
-              <p className="text-amber-400">{moeda(mesAtual.total)}</p>
+              <p className="text-gold-bright">{moeda(mesAtual.total)}</p>
             </div>
           </div>
         ) : (
@@ -110,7 +108,7 @@ export default async function ComissaoPage() {
               </thead>
               <tbody>
                 {historico.map((h) => (
-                  <tr key={`${h.ano}-${h.mes}`} className="border-t border-stone-800">
+                  <tr key={`${h.ano}-${h.mes}`} className="border-t border-imperium-line">
                     <td className="py-1 text-stone-300">
                       {MESES[h.mes - 1]}/{h.ano}
                     </td>
@@ -128,10 +126,8 @@ export default async function ComissaoPage() {
 
       <SimuladorComissao tiers={tiers ?? []} />
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Extrato do mês
-        </h2>
+      <section className="card-imp">
+        <h2 className="kicker mb-4">Extrato do mês</h2>
         {vendasMes && vendasMes.length > 0 ? (
           <table className="w-full text-sm">
             <thead>
@@ -144,7 +140,7 @@ export default async function ComissaoPage() {
             </thead>
             <tbody>
               {vendasMes.map((v) => (
-                <tr key={v.id} className="border-t border-stone-800">
+                <tr key={v.id} className="border-t border-imperium-line">
                   <td className="py-1 text-stone-300">
                     {new Date(v.data + "T00:00:00").toLocaleDateString("pt-BR")}
                   </td>
@@ -160,46 +156,27 @@ export default async function ComissaoPage() {
         )}
       </section>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Contestação
-        </h2>
+      <section className="card-imp">
+        <h2 className="kicker mb-4">Contestação</h2>
 
         <form action={abrirContestacao} className="mb-6 space-y-3">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-xs text-stone-400">Referência (opcional)</label>
-              <input
-                name="referencia"
-                placeholder="Ex: Venda #4471"
-                className="w-full rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
-              />
+              <input name="referencia" placeholder="Ex: Venda #4471" className="input-imp" />
             </div>
             <div>
               <label className="mb-1 block text-xs text-stone-400">
                 Valor contestado (opcional)
               </label>
-              <input
-                name="valor_contestado"
-                type="number"
-                step="0.01"
-                className="w-full rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
-              />
+              <input name="valor_contestado" type="number" step="0.01" className="input-imp" />
             </div>
           </div>
           <div>
             <label className="mb-1 block text-xs text-stone-400">Motivo</label>
-            <textarea
-              name="motivo"
-              required
-              rows={2}
-              className="w-full rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
-            />
+            <textarea name="motivo" required rows={2} className="input-imp" />
           </div>
-          <button
-            type="submit"
-            className="rounded bg-amber-500 px-4 py-2 text-sm font-medium text-[#0b0f19] hover:bg-amber-400"
-          >
+          <button type="submit" className="btn-gold">
             Abrir contestação
           </button>
         </form>
@@ -207,12 +184,10 @@ export default async function ComissaoPage() {
         {contestacoes && contestacoes.length > 0 && (
           <ul className="space-y-2">
             {contestacoes.map((c) => (
-              <li key={c.id} className="border-t border-stone-800 pt-2 text-sm">
+              <li key={c.id} className="border-t border-imperium-line pt-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-stone-300">{c.referencia ?? "Sem referência"}</span>
-                  <span
-                    className={c.status === "aberto" ? "text-amber-400" : "text-emerald-400"}
-                  >
+                  <span className={c.status === "aberto" ? "text-gold" : "text-emerald-400"}>
                     {STATUS_LABELS[c.status]}
                   </span>
                 </div>

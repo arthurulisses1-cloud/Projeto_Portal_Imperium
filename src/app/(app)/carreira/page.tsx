@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
 import { RANK_ORDER, NEXT_RANK, NEXT_TRANSICAO, BLOCO_LABELS, type Rank } from "@/lib/carreira";
 import { registrarMetaPessoal, escolherLivro, marcarApresentado } from "./actions";
+import Card from "@/components/ui/Card";
+import RankBadge from "@/components/ui/RankBadge";
+import Laurel from "@/components/ui/Laurel";
 
 const STAR_PACE: Record<Rank, { estrelas: number; cheia: number; meia: number }> = {
   legionario: { estrelas: 0, cheia: 0, meia: 0 },
@@ -89,6 +92,10 @@ export default async function CarreiraPage() {
   const escolha = escolhas?.[0];
   const livroEscolhido = livros?.find((l) => l.id === escolha?.livro_id);
 
+  const paceAtual = STAR_PACE[proximoRank ?? "legionario"];
+  const progressoEstrelas =
+    paceAtual.estrelas > 0 ? Math.min(100, (profile.stars_total / paceAtual.estrelas) * 100) : 100;
+
   // ritmo necessário pra meta pessoal
   let ritmo: { semanasRestantes: number; estrelasFaltando: number; vendasPorSemana: number } | null =
     null;
@@ -114,48 +121,59 @@ export default async function CarreiraPage() {
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
       <div>
-        <h1 className="font-serif text-xl text-amber-400">Plano de Carreira</h1>
-        <p className="text-xs text-stone-400">Cursus Honorum</p>
+        <h1 className="font-display text-2xl text-gold-bright">Plano de Carreira</h1>
+        <p className="kicker mt-1">Cursus Honorum</p>
       </div>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <div className="mb-4 flex justify-between">
-          {RANK_ORDER.map((r) => (
-            <div key={r} className="text-center">
+      <Card className="watermark-spqr">
+        <div className="mb-6 flex items-end justify-center gap-3 sm:gap-6">
+          {RANK_ORDER.map((r, i) => {
+            const atual = r === rankAtual;
+            const alcancado = RANK_ORDER.indexOf(r) <= RANK_ORDER.indexOf(rankAtual);
+            return (
               <div
-                className={`mx-auto mb-1 h-3 w-3 rounded-full ${
-                  r === rankAtual ? "bg-amber-400" : "bg-stone-700"
-                }`}
-              />
-              <p
-                className={`text-xs ${
-                  r === rankAtual ? "text-amber-400" : "text-stone-500"
-                }`}
+                key={r}
+                className="flex flex-col items-center gap-2"
+                style={{ marginBottom: `${i * 6}px` }}
               >
-                {RANK_LABELS[r]}
-              </p>
-            </div>
-          ))}
+                <RankBadge rank={r} size={atual ? "lg" : "sm"} active={alcancado} />
+                <p className={`text-[11px] ${atual ? "text-gold-bright" : "text-stone-500"}`}>
+                  {RANK_LABELS[r]}
+                </p>
+              </div>
+            );
+          })}
         </div>
-        <p className="text-center text-xs italic text-stone-500">
+        <Laurel className="mx-auto mb-4 h-3 w-28 text-gold/40" />
+        <p className="text-center font-serif text-base italic text-stone-400">
           &quot;Esse Quam Videri&quot; — Ser, ao invés de parecer. Nenhuma patente é dada por
           completar checklist; é dada porque a pessoa já opera, na prática, como o
           próximo nível.
         </p>
-      </section>
+      </Card>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          {proximoRank
-            ? `Requisitos para ${RANK_LABELS[proximoRank]}`
-            : "Você está no topo do Cursus Honorum"}
-        </h2>
-        <p className="mb-4 text-sm text-stone-300">
-          Estrelas acumuladas: <span className="text-amber-400">{profile.stars_total}</span>
-        </p>
+      <Card
+        title={
+          proximoRank ? `Requisitos para ${RANK_LABELS[proximoRank]}` : "Topo do Cursus Honorum"
+        }
+      >
+        <div className="mb-5">
+          <div className="mb-1 flex justify-between text-xs">
+            <span className="text-stone-400">
+              {profile.stars_total} de {paceAtual.estrelas || "—"} estrelas
+            </span>
+            <span className="text-gold">{progressoEstrelas.toFixed(0)}%</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-imperium-line">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-gold to-gold-bright"
+              style={{ width: `${progressoEstrelas}%` }}
+            />
+          </div>
+        </div>
         {Array.from(criteriosPorBloco.entries()).map(([bloco, itens]) => (
           <div key={bloco} className="mb-4">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-amber-500">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gold">
               Bloco {bloco} — {BLOCO_LABELS[bloco]}
             </p>
             <ul className="space-y-1">
@@ -165,7 +183,7 @@ export default async function CarreiraPage() {
                   {item.tipo === "strikes" && (
                     <span
                       className={
-                        (strikesRecentesTotal ?? 0) === 0 ? "text-emerald-400" : "text-red-400"
+                        (strikesRecentesTotal ?? 0) === 0 ? "text-emerald-400" : "text-wine-bright"
                       }
                     >
                       {strikesRecentesTotal ?? 0} strike(s)
@@ -179,28 +197,21 @@ export default async function CarreiraPage() {
             </ul>
           </div>
         ))}
-      </section>
+      </Card>
 
       {proximoRank && (
-        <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-          <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-            Meta pessoal de médio prazo
-          </h2>
+        <Card title="Meta pessoal de médio prazo">
           {metaAtual ? (
             <div className="text-sm text-stone-300">
               <p>
-                Alvo: <span className="text-amber-400">{RANK_LABELS[metaAtual.nivel_alvo]}</span>{" "}
-                até{" "}
+                Alvo: <span className="text-gold">{RANK_LABELS[metaAtual.nivel_alvo]}</span> até{" "}
                 {new Date(metaAtual.data_alvo + "T00:00:00").toLocaleDateString("pt-BR")}
               </p>
               {ritmo && (
                 <p className="mt-2 text-stone-400">
-                  Faltam {ritmo.estrelasFaltando} estrelas em ~{ritmo.semanasRestantes}{" "}
-                  semanas — ritmo estimado de{" "}
-                  <span className="text-amber-400">
-                    {ritmo.vendasPorSemana.toFixed(1)} vendas/semana
-                  </span>
-                  .
+                  Faltam {ritmo.estrelasFaltando} estrelas em ~{ritmo.semanasRestantes} semanas —
+                  ritmo estimado de{" "}
+                  <span className="text-gold">{ritmo.vendasPorSemana.toFixed(1)} vendas/semana</span>.
                 </p>
               )}
             </div>
@@ -211,7 +222,7 @@ export default async function CarreiraPage() {
                 <select
                   name="nivel_alvo"
                   defaultValue={proximoRank}
-                  className="rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
+                  className="input-imp"
                 >
                   {RANK_ORDER.filter((r) => RANK_ORDER.indexOf(r) > RANK_ORDER.indexOf(rankAtual)).map(
                     (r) => (
@@ -224,29 +235,18 @@ export default async function CarreiraPage() {
               </div>
               <div>
                 <label className="mb-1 block text-xs text-stone-400">Data alvo</label>
-                <input
-                  type="date"
-                  name="data_alvo"
-                  required
-                  className="rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
-                />
+                <input type="date" name="data_alvo" required className="input-imp" />
               </div>
-              <button
-                type="submit"
-                className="rounded bg-amber-500 px-4 py-2 text-sm font-medium text-[#0b0f19] hover:bg-amber-400"
-              >
+              <button type="submit" className="btn-gold">
                 Definir meta
               </button>
             </form>
           )}
-        </section>
+        </Card>
       )}
 
       {proximoRank && (
-        <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-          <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-            Biblioteca — rumo a {RANK_LABELS[proximoRank]}
-          </h2>
+        <Card title={`Biblioteca — rumo a ${RANK_LABELS[proximoRank]}`}>
           {livroEscolhido ? (
             <div className="text-sm">
               <p className="text-stone-100">
@@ -257,10 +257,7 @@ export default async function CarreiraPage() {
               ) : (
                 <form action={marcarApresentado} className="mt-2">
                   <input type="hidden" name="escolha_id" value={escolha!.id} />
-                  <button
-                    type="submit"
-                    className="rounded border border-amber-500 px-3 py-1.5 text-xs text-amber-400 hover:bg-amber-500 hover:text-[#0b0f19]"
-                  >
+                  <button type="submit" className="btn-outline">
                     Marcar apresentação como feita
                   </button>
                 </form>
@@ -274,25 +271,19 @@ export default async function CarreiraPage() {
                   {livro.titulo} — <span className="text-stone-500">{livro.autor}</span>
                 </label>
               ))}
-              <button
-                type="submit"
-                className="rounded bg-amber-500 px-4 py-2 text-sm font-medium text-[#0b0f19] hover:bg-amber-400"
-              >
+              <button type="submit" className="btn-gold">
                 Escolher livro
               </button>
             </form>
           )}
-        </section>
+        </Card>
       )}
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Feedback / PDI
-        </h2>
+      <Card title="Feedback / PDI">
         {pdi && pdi.length > 0 ? (
           <ul className="space-y-3">
             {pdi.map((p) => (
-              <li key={p.id} className="border-b border-stone-800 pb-3 last:border-0">
+              <li key={p.id} className="border-b border-imperium-line pb-3 last:border-0">
                 <p className="text-sm text-stone-100">{p.observacao}</p>
                 {p.plano_acao && <p className="text-xs text-stone-400">{p.plano_acao}</p>}
                 {p.proxima_revisao && (
@@ -307,7 +298,7 @@ export default async function CarreiraPage() {
         ) : (
           <p className="text-sm text-stone-500">Nenhum registro do seu líder ainda.</p>
         )}
-      </section>
+      </Card>
     </main>
   );
 }

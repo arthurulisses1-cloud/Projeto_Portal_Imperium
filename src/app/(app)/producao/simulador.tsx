@@ -31,10 +31,8 @@ export default function SimuladorMeta({ totais }: { totais: Totais }) {
   }
 
   return (
-    <div className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-      <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-        Simulador de meta
-      </h2>
+    <div className="card-imp">
+      <h2 className="kicker mb-4">Simulador de meta</h2>
 
       <label className="mb-1 block text-xs text-stone-400">Dias úteis restantes no mês</label>
       <input
@@ -42,14 +40,12 @@ export default function SimuladorMeta({ totais }: { totais: Totais }) {
         min={1}
         value={diasUteis}
         onChange={(e) => setDiasUteis(Math.max(1, Number(e.target.value) || 1))}
-        className="mb-4 w-32 rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
+        className="input-imp mb-4 w-32"
       />
 
       <p className="mb-4 text-sm text-stone-300">
-        Faltam <span className="text-amber-400">{gapPagos}</span> Pagos pra bater a meta do
-        mês —{" "}
-        <span className="text-amber-400">{pagosPorDia.toFixed(1)}</span> Pagos/dia
-        necessários.
+        Faltam <span className="text-gold">{gapPagos}</span> Pagos pra bater a meta do mês —{" "}
+        <span className="text-gold">{pagosPorDia.toFixed(1)}</span> Pagos/dia necessários.
       </p>
 
       <table className="w-full text-sm">
@@ -61,7 +57,7 @@ export default function SimuladorMeta({ totais }: { totais: Totais }) {
         </thead>
         <tbody>
           {FUNNEL_STAGES.map((stage, i) => (
-            <tr key={stage} className="border-t border-stone-800">
+            <tr key={stage} className="border-t border-imperium-line">
               <td className="py-2 text-stone-300">{FUNNEL_LABELS[stage]}</td>
               <td className="py-2 text-right text-stone-100">
                 {necessarioPorDia[i] !== null ? necessarioPorDia[i]!.toFixed(1) : "—"}
@@ -72,8 +68,8 @@ export default function SimuladorMeta({ totais }: { totais: Totais }) {
       </table>
 
       <p className="mt-3 text-xs text-stone-600">
-        Cálculo usa a taxa de conversão real do mês entre etapas; sem dado
-        realizado ainda, o simulador não tem base pra estimar (aparece &quot;—&quot;).
+        Cálculo usa a taxa de conversão real do mês entre etapas; sem dado realizado ainda, o
+        simulador não tem base pra estimar (aparece &quot;—&quot;).
       </p>
     </div>
   );

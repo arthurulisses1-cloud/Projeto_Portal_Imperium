@@ -45,8 +45,8 @@ export default async function MetasPage({
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
       <div>
-        <h1 className="font-serif text-xl text-amber-400">Metas Mensais</h1>
-        <p className="text-xs text-stone-400">
+        <h1 className="font-display text-2xl text-gold-bright">Metas Mensais</h1>
+        <p className="mt-1 text-xs text-stone-400">
           Meta de crédito, ticket médio e taxas de conversão esperadas
         </p>
       </div>
@@ -55,11 +55,7 @@ export default async function MetasPage({
         <form method="get" className="flex items-end gap-3">
           <div>
             <label className="mb-1 block text-xs text-stone-400">Mês</label>
-            <select
-              name="mes"
-              defaultValue={mes}
-              className="rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-sm text-stone-100"
-            >
+            <select name="mes" defaultValue={mes} className="input-imp text-sm">
               {MESES_LABEL.map((label, i) => (
                 <option key={i} value={i + 1}>
                   {label}
@@ -69,24 +65,16 @@ export default async function MetasPage({
           </div>
           <div>
             <label className="mb-1 block text-xs text-stone-400">Ano</label>
-            <input
-              type="number"
-              name="ano"
-              defaultValue={ano}
-              className="w-24 rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-sm text-stone-100"
-            />
+            <input type="number" name="ano" defaultValue={ano} className="input-imp w-24 text-sm" />
           </div>
-          <button
-            type="submit"
-            className="rounded border border-stone-700 px-3 py-2 text-xs text-stone-300 hover:border-amber-500"
-          >
+          <button type="submit" className="btn-outline">
             Ver
           </button>
         </form>
       </div>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
+      <section className="card-imp">
+        <h2 className="kicker mb-4">
           {MESES_LABEL[mes - 1]}/{ano}
         </h2>
         <form action={salvarMeta} className="space-y-5">
@@ -101,7 +89,7 @@ export default async function MetasPage({
                 name="meta_credito_total"
                 step="0.01"
                 defaultValue={meta?.meta_credito_total ?? 0}
-                className="w-full rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
+                className="input-imp"
               />
             </div>
             <div>
@@ -111,7 +99,7 @@ export default async function MetasPage({
                 name="meta_ticket_medio"
                 step="0.01"
                 defaultValue={meta?.meta_ticket_medio ?? 0}
-                className="w-full rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
+                className="input-imp"
               />
             </div>
           </div>
@@ -142,19 +130,14 @@ export default async function MetasPage({
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="rounded bg-amber-500 px-4 py-2 text-sm font-medium text-[#0b0f19] hover:bg-amber-400"
-          >
+          <button type="submit" className="btn-gold">
             Salvar meta do mês
           </button>
         </form>
       </section>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Divisão automática — Exército → Tribo
-        </h2>
+      <section className="card-imp">
+        <h2 className="kicker mb-4">Divisão automática — Exército → Tribo</h2>
         {metaCredito <= 0 ? (
           <p className="text-sm text-stone-500">Cadastra a meta de crédito acima pra ver a divisão.</p>
         ) : (
@@ -164,10 +147,10 @@ export default async function MetasPage({
               const metaPorTribo =
                 tribosDoExercito.length > 0 ? metaPorExercito / tribosDoExercito.length : 0;
               return (
-                <div key={ex.id} className="border-t border-stone-800 pt-3">
+                <div key={ex.id} className="border-t border-imperium-line pt-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-stone-100">{ex.nome}</span>
-                    <span className="text-amber-400">{moeda(metaPorExercito)}</span>
+                    <span className="text-gold-bright">{moeda(metaPorExercito)}</span>
                   </div>
                   <ul className="mt-2 space-y-1 pl-4">
                     {tribosDoExercito.map((t) => (

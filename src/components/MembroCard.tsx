@@ -22,7 +22,7 @@ export default function MembroCard({
   pagosMes,
 }: Props) {
   return (
-    <div className="rounded border border-stone-800 p-4">
+    <div className="rounded border border-imperium-line bg-imperium-bg/40 p-4">
       <div className="mb-2 flex items-center justify-between">
         <div>
           <p className="text-sm text-stone-100">{nome}</p>
@@ -32,14 +32,14 @@ export default function MembroCard({
       </div>
       <p className="mb-3 text-xs text-stone-400">
         Pagos no mês:{" "}
-        <span className="text-amber-400">
+        <span className="text-gold">
           {pagosMes.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
         </span>
       </p>
 
       <div className="flex flex-wrap gap-3 text-xs">
         <details>
-          <summary className="cursor-pointer text-stone-400 hover:text-amber-400">
+          <summary className="cursor-pointer text-stone-400 hover:text-gold-bright">
             Registrar strike
           </summary>
           <form action={registrarStrikeTime} className="mt-2 space-y-2">
@@ -49,11 +49,11 @@ export default function MembroCard({
               required
               placeholder="Motivo"
               rows={2}
-              className="w-full rounded border border-stone-700 bg-[#0b0f19] px-2 py-1 text-stone-100"
+              className="input-imp px-2 py-1"
             />
             <button
               type="submit"
-              className="rounded border border-red-500/50 px-2 py-1 text-red-400 hover:bg-red-500/10"
+              className="rounded border border-wine/50 px-2 py-1 text-wine-bright hover:bg-wine/10"
             >
               Confirmar
             </button>
@@ -61,7 +61,7 @@ export default function MembroCard({
         </details>
 
         <details>
-          <summary className="cursor-pointer text-stone-400 hover:text-amber-400">
+          <summary className="cursor-pointer text-stone-400 hover:text-gold-bright">
             Registrar PDI
           </summary>
           <form action={registrarPdiTime} className="mt-2 space-y-2">
@@ -71,17 +71,10 @@ export default function MembroCard({
               required
               placeholder="Observação e plano de ação"
               rows={2}
-              className="w-full rounded border border-stone-700 bg-[#0b0f19] px-2 py-1 text-stone-100"
+              className="input-imp px-2 py-1"
             />
-            <input
-              name="proxima_revisao"
-              type="date"
-              className="w-full rounded border border-stone-700 bg-[#0b0f19] px-2 py-1 text-stone-100"
-            />
-            <button
-              type="submit"
-              className="rounded border border-amber-500/50 px-2 py-1 text-amber-400 hover:bg-amber-500/10"
-            >
+            <input name="proxima_revisao" type="date" className="input-imp px-2 py-1" />
+            <button type="submit" className="btn-outline">
               Salvar
             </button>
           </form>

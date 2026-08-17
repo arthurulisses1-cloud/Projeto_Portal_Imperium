@@ -1,6 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
-import { ROLE_LABELS, COMPROMISSO_STATUS_LABELS } from "@/lib/labels";
+import { COMPROMISSO_STATUS_LABELS } from "@/lib/labels";
 import { publicarMural } from "./mural-actions";
+import Card from "@/components/ui/Card";
+import Laurel from "@/components/ui/Laurel";
+import Bussola from "@/components/ui/Bussola";
+import RankBadge from "@/components/ui/RankBadge";
+
+const STATUS_TONE: Record<string, "good" | "warn" | "gold"> = {
+  cumprido: "good",
+  andamento: "gold",
+  nao_cumprido: "warn",
+};
 
 export default async function MuralPage() {
   const supabase = await createClient();
@@ -15,7 +25,7 @@ export default async function MuralPage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "full_name, avatar_emoji, role, rank, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))"
+      "full_name, avatar_emoji, role, rank, stars_total, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))"
     )
     .eq("id", user.id)
     .single();
@@ -34,6 +44,14 @@ export default async function MuralPage() {
     .eq("data", hoje)
     .maybeSingle();
 
+  const inicioMes = hoje.slice(0, 7) + "-01";
+  const { data: vendasMes } = await supabase
+    .from("vendas")
+    .select("valor")
+    .eq("profile_id", user.id)
+    .gte("data", inicioMes);
+  const pagosMes = (vendasMes ?? []).reduce((s, v) => s + Number(v.valor), 0);
+
   const { data: quotes } = await supabase
     .from("sage_quotes")
     .select("texto, fonte")
@@ -45,31 +63,79 @@ export default async function MuralPage() {
   const quote =
     quotes && quotes.length > 0 ? quotes[dayOfYear % quotes.length] : null;
 
-  return (
-    <>
-      <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
-        <h1 className="font-serif text-xl text-amber-400">Mural</h1>
-        {quote && (
-          <section className="rounded-lg border border-amber-500/20 bg-[#111827] p-6 text-center">
-            <p className="mb-2 text-xs uppercase tracking-widest text-amber-500">
-              Conselho do Sábio
-            </p>
-            <p className="font-serif text-lg italic text-stone-100">“{quote.texto}”</p>
-            <p className="mt-2 text-xs text-stone-500">{quote.fonte}</p>
-          </section>
-        )}
+  const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
+  const statusHoje = compromissoHoje
+    ? COMPROMISSO_STATUS_LABELS[compromissoHoje.status]
+    : "Não lançado";
+  const statusTone = compromissoHoje ? STATUS_TONE[compromissoHoje.status] : "muted";
 
-        {(profile?.role === "sdr" || profile?.role === "closer") && (
-        <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-stone-400">
-            Compromisso de hoje
-          </h2>
+  return (
+    <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
+      <div className="flex items-center gap-4">
+        {profile && <RankBadge rank={profile.rank} size="lg" />}
+        <div>
+          <h1 className="font-display text-2xl text-gold-bright">Mural</h1>
+          <p className="text-sm text-stone-400">
+            Salve, {profile?.full_name?.split(" ")[0] ?? "executivo"}.
+          </p>
+        </div>
+      </div>
+
+      <Card>
+        <Bussola
+          items={
+            ehExecutivo
+              ? [
+                  { label: "Estrelas", value: String(profile?.stars_total ?? 0), tone: "gold" },
+                  {
+                    label: "Compromisso hoje",
+                    value: statusHoje,
+                    tone: statusTone as "good" | "warn" | "gold" | "muted",
+                  },
+                  {
+                    label: "Pagos no mês",
+                    value: pagosMes.toLocaleString("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                      maximumFractionDigits: 0,
+                    }),
+                    tone: "gold",
+                  },
+                ]
+              : [
+                  { label: "Estrelas", value: String(profile?.stars_total ?? 0), tone: "gold" },
+                  { label: "Nível", value: profile ? profile.rank.toUpperCase() : "—", tone: "muted" },
+                  {
+                    label: "Pagos no mês",
+                    value: pagosMes.toLocaleString("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                      maximumFractionDigits: 0,
+                    }),
+                    tone: "gold",
+                  },
+                ]
+          }
+        />
+      </Card>
+
+      {quote && (
+        <Card className="watermark-spqr text-center">
+          <p className="kicker mb-3">Conselho do Sábio</p>
+          <p className="font-serif text-xl italic text-stone-100">&quot;{quote.texto}&quot;</p>
+          <Laurel className="mx-auto my-3 h-3 w-24 text-gold/40" />
+          <p className="text-xs text-stone-500">{quote.fonte}</p>
+        </Card>
+      )}
+
+      {ehExecutivo && (
+        <Card title="Compromisso de hoje">
           {compromissoHoje ? (
-            <div className="flex gap-6 text-sm">
+            <div className="grid grid-cols-4 gap-4 text-sm">
               <div>
                 <p className="text-stone-500">Status</p>
-                <p className="text-stone-100">
-                  {COMPROMISSO_STATUS_LABELS[compromissoHoje.status]}
+                <p className={`font-medium ${statusTone === "good" ? "text-emerald-400" : statusTone === "warn" ? "text-wine-bright" : "text-gold"}`}>
+                  {statusHoje}
                 </p>
               </div>
               <div>
@@ -93,78 +159,64 @@ export default async function MuralPage() {
             </div>
           ) : (
             <p className="text-sm text-stone-500">
-              Você ainda não lançou o compromisso de hoje.
+              Você ainda não lançou o compromisso de hoje.{" "}
+              <a href="/compromisso" className="text-gold hover:underline">
+                Lançar agora
+              </a>
             </p>
           )}
-        </section>
-        )}
+        </Card>
+      )}
 
-        {(profile?.role === "closer" || profile?.role === "lider" || profile?.role === "diretor") && (
-          <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-            <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-stone-400">
-              Publicar no Mural
-            </h2>
-            <form action={publicarMural} className="space-y-3">
-              <div className="flex gap-4">
+      {(profile?.role === "closer" || profile?.role === "lider" || profile?.role === "diretor") && (
+        <Card title="Publicar no Mural">
+          <form action={publicarMural} className="space-y-3">
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 text-sm text-stone-300">
+                <input type="radio" name="tipo" value="reconhecimento" defaultChecked />
+                Reconhecimento
+              </label>
+              {(profile?.role === "lider" || profile?.role === "diretor") && (
                 <label className="flex items-center gap-2 text-sm text-stone-300">
-                  <input type="radio" name="tipo" value="reconhecimento" defaultChecked />
-                  Reconhecimento
+                  <input type="radio" name="tipo" value="aviso" />
+                  Aviso
                 </label>
-                {(profile?.role === "lider" || profile?.role === "diretor") && (
-                  <label className="flex items-center gap-2 text-sm text-stone-300">
-                    <input type="radio" name="tipo" value="aviso" />
-                    Aviso
-                  </label>
-                )}
-              </div>
-              <input
-                name="titulo"
-                required
-                placeholder="Título"
-                className="w-full rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
-              />
-              <textarea
-                name="corpo"
-                placeholder="Mensagem (opcional)"
-                rows={2}
-                className="w-full rounded border border-stone-700 bg-[#0b0f19] px-3 py-2 text-stone-100"
-              />
-              <button
-                type="submit"
-                className="rounded bg-amber-500 px-4 py-2 text-sm font-medium text-[#0b0f19] hover:bg-amber-400"
-              >
-                Publicar
-              </button>
-            </form>
-          </section>
-        )}
+              )}
+            </div>
+            <input name="titulo" required placeholder="Título" className="input-imp" />
+            <textarea
+              name="corpo"
+              placeholder="Mensagem (opcional)"
+              rows={2}
+              className="input-imp"
+            />
+            <button type="submit" className="btn-gold">
+              Publicar
+            </button>
+          </form>
+        </Card>
+      )}
 
-        <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-          <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-stone-400">
-            Avisos e reconhecimentos
-          </h2>
-          {muralPosts && muralPosts.length > 0 ? (
-            <ul className="space-y-3">
-              {muralPosts.map((post) => (
-                <li key={post.id} className="border-b border-stone-800 pb-3 last:border-0">
+      <Card title="Avisos e reconhecimentos">
+        {muralPosts && muralPosts.length > 0 ? (
+          <ul className="space-y-3">
+            {muralPosts.map((post) => (
+              <li key={post.id} className="flex gap-3 border-b border-imperium-line pb-3 last:border-0">
+                <span className="mt-0.5 text-gold">{post.tipo === "aviso" ? "📯" : "🏅"}</span>
+                <div>
                   <p className="text-sm text-stone-100">{post.titulo}</p>
                   {post.corpo && <p className="text-xs text-stone-400">{post.corpo}</p>}
                   <p className="mt-1 text-[10px] uppercase tracking-wide text-stone-600">
                     {post.tipo === "aviso" ? "Aviso" : "Reconhecimento"}
                   </p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-stone-500">Nenhum aviso publicado ainda.</p>
-          )}
-        </section>
-
-        <p className="text-center text-xs text-stone-600">
-          Logado como {profile ? ROLE_LABELS[profile.role] : ""} · dados de produção
-          aparecem aqui assim que a integração com o Sheets estiver ligada.
-        </p>
-      </main>
-    </>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-stone-500">Nenhum aviso publicado ainda.</p>
+        )}
+      </Card>
+    </main>
   );
 }

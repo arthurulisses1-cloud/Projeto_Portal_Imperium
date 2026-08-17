@@ -8,6 +8,7 @@ import {
   STATUS_LABEL,
 } from "@/lib/time";
 import MembroCard from "@/components/MembroCard";
+import Card from "@/components/ui/Card";
 
 export default async function ExercitoPage() {
   const supabase = await createClient();
@@ -25,7 +26,7 @@ export default async function ExercitoPage() {
   if (!exercito) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-8">
-        <h1 className="font-serif text-xl text-amber-400">Meu Exército</h1>
+        <h1 className="font-display text-2xl text-gold-bright">Meu Exército</h1>
         <p className="mt-4 text-sm text-stone-500">
           Seu usuário ainda não está vinculado como Legado de nenhum Exército. Peça
           pro Diretor configurar isso na tabela <code>exercitos</code>.
@@ -63,14 +64,11 @@ export default async function ExercitoPage() {
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       <div>
-        <h1 className="font-serif text-xl text-amber-400">Meu Exército</h1>
-        <p className="text-xs text-stone-400">{exercito.nome}</p>
+        <h1 className="font-display text-2xl text-gold-bright">Meu Exército</h1>
+        <p className="kicker mt-1">{exercito.nome}</p>
       </div>
 
-      <section className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-        <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-          Produção coletiva do mês
-        </h2>
+      <Card title="Produção coletiva do mês">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
@@ -81,7 +79,7 @@ export default async function ExercitoPage() {
           </thead>
           <tbody>
             {FUNNEL_STAGES.map((etapa) => (
-              <tr key={etapa} className="border-t border-stone-800">
+              <tr key={etapa} className="border-t border-imperium-line">
                 <td className="py-2 text-stone-300">{FUNNEL_LABELS[etapa]}</td>
                 <td className="py-2 text-right text-stone-100">
                   {funilColetivo[etapa].realizado}
@@ -91,16 +89,13 @@ export default async function ExercitoPage() {
             ))}
           </tbody>
         </table>
-      </section>
+      </Card>
 
       {(tribos ?? []).map((tribo) => {
         const closer = tribo.closer as unknown as { id: string; full_name: string } | null;
         const sdrsDaTribo = (sdrs ?? []).filter((s) => s.tribo_id === tribo.id);
         return (
-          <section key={tribo.id} className="rounded-lg border border-stone-800 bg-[#111827] p-6">
-            <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-stone-400">
-              {tribo.nome}
-            </h2>
+          <Card key={tribo.id} title={tribo.nome}>
             <div className="grid gap-3 sm:grid-cols-2">
               {closer && (
                 <MembroCard
@@ -130,7 +125,7 @@ export default async function ExercitoPage() {
                 />
               ))}
             </div>
-          </section>
+          </Card>
         );
       })}
     </main>
