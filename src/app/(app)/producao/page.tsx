@@ -69,6 +69,25 @@ export default async function ProducaoPage({
       ? vendasPeriodo.reduce((s, v) => s + Number(v.valor), 0) / vendasPeriodo.length
       : null;
 
+  const agora = new Date();
+  const { data: metaMes } = await supabase
+    .from("metas_mensais")
+    .select("id, meta_ticket_medio")
+    .eq("ano", agora.getFullYear())
+    .eq("mes", agora.getMonth() + 1)
+    .maybeSingle();
+
+  const { data: conversoesMeta } = metaMes
+    ? await supabase
+        .from("metas_conversao")
+        .select("etapa_de, etapa_para, taxa_esperada")
+        .eq("meta_mensal_id", metaMes.id)
+    : { data: [] };
+
+  const taxaEsperadaMap = new Map(
+    (conversoesMeta ?? []).map((c) => [`${c.etapa_de}_${c.etapa_para}`, c.taxa_esperada])
+  );
+
   return (
     <>
       <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
@@ -103,6 +122,7 @@ export default async function ProducaoPage({
                 <th className="pb-2 text-right">Realizado</th>
                 <th className="pb-2 text-right">Meta</th>
                 <th className="pb-2 text-right">Conversão</th>
+                <th className="pb-2 text-right">Esperada</th>
               </tr>
             </thead>
             <tbody>
@@ -112,6 +132,8 @@ export default async function ProducaoPage({
                   anterior && anterior > 0
                     ? ((totais[etapa].realizado / anterior) * 100).toFixed(0) + "%"
                     : "—";
+                const taxaEsperada =
+                  i > 0 ? taxaEsperadaMap.get(`${FUNNEL_STAGES[i - 1]}_${etapa}`) : undefined;
                 return (
                   <tr key={etapa} className="border-t border-stone-800">
                     <td className="py-2 text-stone-300">{FUNNEL_LABELS[etapa]}</td>
@@ -120,6 +142,9 @@ export default async function ProducaoPage({
                     </td>
                     <td className="py-2 text-right text-stone-500">{totais[etapa].meta}</td>
                     <td className="py-2 text-right text-stone-400">{conversao}</td>
+                    <td className="py-2 text-right text-stone-600">
+                      {taxaEsperada ? `${(taxaEsperada * 100).toFixed(0)}%` : "—"}
+                    </td>
                   </tr>
                 );
               })}
@@ -136,6 +161,15 @@ export default async function ProducaoPage({
               ? ticketMedio.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
               : "—"}
           </p>
+          {metaMes && metaMes.meta_ticket_medio > 0 && (
+            <p className="mt-1 text-xs text-stone-500">
+              Meta do mês:{" "}
+              {metaMes.meta_ticket_medio.toLocaleString("pt-BR", {
+                style: "currency",
+                currency: "BRL",
+              })}
+            </p>
+          )}
         </section>
 
         <SimuladorMeta totais={totaisMes} />

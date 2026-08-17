@@ -17,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor"] },
   { href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
   { href: "/geral", label: "Visão Geral da Firma", roles: ["diretor"] },
+  { href: "/metas", label: "Metas Mensais", roles: ["diretor"] },
   { href: "/validacao", label: "Fila de Validação", roles: ["diretor"] },
   { href: "/aprovacoes", label: "Aprovações de Carreira", roles: ["diretor"] },
   { href: "/contestacoes", label: "Fila de Contestação", roles: ["diretor"] },
