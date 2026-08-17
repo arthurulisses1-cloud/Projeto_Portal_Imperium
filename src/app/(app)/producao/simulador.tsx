@@ -73,7 +73,7 @@ export default function SimuladorMeta({ totais }: { totais: Totais }) {
 
       <p className="mt-3 text-xs text-stone-600">
         Cálculo usa a taxa de conversão real do mês entre etapas; sem dado
-        realizado ainda, o simulador não tem base pra estimar (aparece "—").
+        realizado ainda, o simulador não tem base pra estimar (aparece &quot;—&quot;).
       </p>
     </div>
   );

@@ -138,7 +138,7 @@ export default async function CarreiraPage() {
           ))}
         </div>
         <p className="text-center text-xs italic text-stone-500">
-          "Esse Quam Videri" — Ser, ao invés de parecer. Nenhuma patente é dada por
+          &quot;Esse Quam Videri&quot; — Ser, ao invés de parecer. Nenhuma patente é dada por
           completar checklist; é dada porque a pessoa já opera, na prática, como o
           próximo nível.
         </p>

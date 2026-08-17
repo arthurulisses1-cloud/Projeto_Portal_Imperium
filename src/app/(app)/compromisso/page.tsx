@@ -145,7 +145,7 @@ export default async function CompromissoPage() {
                 </div>
               </div>
               <p className="mt-4 text-xs text-stone-600">
-                O "realizado" atualiza automaticamente quando a integração com a
+                O &quot;realizado&quot; atualiza automaticamente quando a integração com a
                 planilha estiver ligada. Por enquanto fica em 0.
               </p>
             </div>
