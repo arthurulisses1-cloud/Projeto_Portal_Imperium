@@ -29,6 +29,10 @@ const TRIBO_TAG: Record<string, string> = {
   Templários: "border-templar/50 text-templar bg-templar/10",
   Maximus: "border-maximus/50 text-maximus bg-maximus/10",
 };
+const EXERCITO_CREST: Record<string, string> = {
+  Templários: "/crests/templarios.jpg",
+  Maximus: "/crests/maximus.jpg",
+};
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -59,11 +63,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen">
       <header className="flex items-center justify-between border-b border-imperium-line bg-imperium-surface px-6 py-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-gold/40 text-gold">
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.4">
-              <path d="M12 2c1.6 2.1 4.3 3.2 8.4 3.2-2.1 2.1-4.3 3.2-4.3 6.4 0 4.2-2.1 8.5-4.1 9.4-2-.9-4.1-5.2-4.1-9.4 0-3.2-2.2-4.3-4.3-6.4C7.7 5.2 10.4 4.1 12 2Z" />
-            </svg>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/crests/imperium.jpg"
+            alt="Imperium"
+            className="h-9 w-9 rounded-full border border-gold/40 object-cover"
+          />
           <div>
             <p className="font-display text-sm tracking-wide text-gold-bright">
               PORTAL EXECUTIVO
@@ -85,10 +90,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   {tribo?.nome ? ` · ${tribo.nome}` : ""}
                   {exercitoNome && (
                     <span
-                      className={`rounded-full border px-1.5 py-0.5 text-[10px] ${
+                      className={`inline-flex items-center gap-1 rounded-full border py-0.5 pl-0.5 pr-1.5 text-[10px] ${
                         TRIBO_TAG[exercitoNome] ?? "border-gold/40 text-gold"
                       }`}
                     >
+                      {EXERCITO_CREST[exercitoNome] && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={EXERCITO_CREST[exercitoNome]}
+                          alt={exercitoNome}
+                          className="h-3.5 w-3.5 rounded-full object-cover"
+                        />
+                      )}
                       {exercitoNome}
                     </span>
                   )}

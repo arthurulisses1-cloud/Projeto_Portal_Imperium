@@ -172,7 +172,10 @@ export default async function MuralPage() {
       )}
 
       <Card title="Guerra Civil — Exércitos">
-        <ConfrontoWidget dados={confrontoExercitos} />
+        <ConfrontoWidget
+          dados={confrontoExercitos}
+          crests={{ Templários: "/crests/templarios.jpg", Maximus: "/crests/maximus.jpg" }}
+        />
       </Card>
 
       <Card title="Guerra de Tribos">

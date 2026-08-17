@@ -37,11 +37,12 @@ export default function LoginPage() {
         onSubmit={handleSubmit}
         className="relative w-full max-w-sm rounded border border-imperium-line bg-imperium-surface p-8 shadow-2xl"
       >
-        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-gold/50 text-gold">
-          <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="1.3">
-            <path d="M12 2c1.6 2.1 4.3 3.2 8.4 3.2-2.1 2.1-4.3 3.2-4.3 6.4 0 4.2-2.1 8.5-4.1 9.4-2-.9-4.1-5.2-4.1-9.4 0-3.2-2.2-4.3-4.3-6.4C7.7 5.2 10.4 4.1 12 2Z" />
-          </svg>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/crests/imperium.jpg"
+          alt="Imperium"
+          className="mx-auto mb-4 h-16 w-16 rounded-full border border-gold/50 object-cover"
+        />
         <h1 className="text-center font-display text-xl tracking-wide text-gold-bright">
           PORTAL EXECUTIVO
         </h1>

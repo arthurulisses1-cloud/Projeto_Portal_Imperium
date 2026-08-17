@@ -34,6 +34,10 @@ yarn-error.log*
 # claude code local settings
 .claude/settings.local.json
 
+# arquivos de imagem originais (não otimizados) — as versões usadas pelo
+# site ficam em public/crests, essas aqui só existem no seu computador
+/fotos
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

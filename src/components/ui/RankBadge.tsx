@@ -7,6 +7,15 @@ const SIZES = {
   lg: "h-16 w-16 text-xl",
 };
 
+const CRESTS: Record<string, string> = {
+  legionario: "/crests/legionario.jpg",
+  centuriao: "/crests/centuriao.jpg",
+  tribuno: "/crests/tribuno.jpg",
+  pretor: "/crests/pretor.jpg",
+  legado: "/crests/legado.jpg",
+  diretor: "/crests/imperium.jpg",
+};
+
 export default function RankBadge({
   rank,
   size = "md",
@@ -18,6 +27,18 @@ export default function RankBadge({
 }) {
   const idx = RANK_ORDER.indexOf(rank as Rank);
   const label = rank === "diretor" ? "IMP" : idx >= 0 ? toRoman(idx + 1) : "?";
+  const crest = CRESTS[rank];
+
+  if (active && crest) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={crest}
+        alt={rank}
+        className={`shrink-0 rounded-full border-2 border-gold object-cover ${SIZES[size].split(" ").slice(0, 2).join(" ")}`}
+      />
+    );
+  }
 
   return (
     <div
