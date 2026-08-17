@@ -28,6 +28,11 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isAuthRoute = request.nextUrl.pathname.startsWith("/login");
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
+
+  // rotas de API (ex: /api/sync) cuidam da própria autenticação (chave secreta),
+  // não usam sessão de login normal — o middleware não deve interferir nelas.
+  if (isApiRoute) return response;
 
   if (!user && !isAuthRoute) {
     const url = request.nextUrl.clone();
