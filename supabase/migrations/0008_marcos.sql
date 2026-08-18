@@ -4,6 +4,8 @@
 -- aba de Comissão.
 -- ============================================================
 
+set search_path = public;
+
 create table marcos (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
@@ -14,7 +16,7 @@ create table marcos (
 
 alter table marcos enable row level security;
 create policy marcos_select_all on marcos for select using (true);
-create policy marcos_write on marcos for all using (is_director()) with check (is_director());
+create policy marcos_write on marcos for all using (public.is_director()) with check (public.is_director());
 
 insert into marcos (nome, threshold, icone, ordem) values
 ('Fone gamer Havit', 350000, '🎧', 1),

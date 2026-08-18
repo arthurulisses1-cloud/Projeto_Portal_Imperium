@@ -154,18 +154,43 @@ export default async function CompromissoPage() {
         }
       >
         {historico && historico.length > 0 ? (
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {historico.map((row) => {
               const s = statusLabel(row, false);
               return (
-                <li
-                  key={row.data}
-                  className="flex items-center justify-between border-b border-imperium-line pb-2 text-sm last:border-0"
-                >
-                  <span className="text-stone-300">
-                    {new Date(row.data + "T00:00:00").toLocaleDateString("pt-BR")}
-                  </span>
-                  <span className={s.cor}>{s.texto}</span>
+                <li key={row.data} className="border-b border-imperium-line pb-3 text-sm last:border-0">
+                  <div className="flex items-center justify-between">
+                    <span className="text-stone-300">
+                      {new Date(row.data + "T00:00:00").toLocaleDateString("pt-BR", {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "2-digit",
+                      })}
+                    </span>
+                    <span className={s.cor}>{s.texto}</span>
+                  </div>
+                  {row.lancado && !row.falta && (
+                    <div className="mt-1.5 flex gap-4 text-xs text-stone-500">
+                      <span>
+                        Entrevistas{" "}
+                        <span className={row.entrevistas_real >= row.entrevistas_comp ? "text-emerald-400" : "text-stone-400"}>
+                          {row.entrevistas_real}/{row.entrevistas_comp}
+                        </span>
+                      </span>
+                      <span>
+                        Assinaturas{" "}
+                        <span className={row.assinaturas_real >= row.assinaturas_comp ? "text-emerald-400" : "text-stone-400"}>
+                          {row.assinaturas_real}/{row.assinaturas_comp}
+                        </span>
+                      </span>
+                      <span>
+                        Pagos{" "}
+                        <span className={row.pagos_real >= row.pagos_comp ? "text-emerald-400" : "text-stone-400"}>
+                          {row.pagos_real}/{row.pagos_comp}
+                        </span>
+                      </span>
+                    </div>
+                  )}
                 </li>
               );
             })}

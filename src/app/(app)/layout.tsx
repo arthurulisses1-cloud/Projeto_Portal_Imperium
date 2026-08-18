@@ -5,6 +5,8 @@ import AppNav from "@/components/ui/AppNav";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
 import SidebarRight from "@/components/ui/SidebarRight";
+import AvatarUpload from "@/components/ui/AvatarUpload";
+import { IconLaurel } from "@/components/ui/icons";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor"] },
   { href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
   { href: "/geral", label: "Visão Geral da Firma", roles: ["diretor"] },
+  { href: "/legado", label: "Meu Legado", roles: ["diretor"] },
   { href: "/metas", label: "Metas Mensais", roles: ["diretor"] },
   { href: "/validacao", label: "Fila de Validação", roles: ["diretor"] },
   { href: "/aprovacoes", label: "Aprovações de Carreira", roles: ["diretor"] },
@@ -46,7 +49,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ? await supabase
         .from("profiles")
         .select(
-          "full_name, role, rank, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))"
+          "full_name, role, rank, avatar_url, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))"
         )
         .eq("id", user.id)
         .single()
@@ -67,7 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen">
       {user && (
         <aside className="flex w-56 shrink-0 flex-col border-r border-imperium-line bg-imperium-surface">
-          <div className="flex items-center gap-2 border-b border-imperium-line p-4">
+          <div className="watermark-spqr flex items-center gap-2 border-b border-imperium-line p-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/crests/imperium.jpg"
@@ -76,7 +79,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             />
             <div className="min-w-0">
               <p className="truncate font-display text-xs tracking-wide text-gold-bright">
-                PORTAL EXECUTIVO
+                PRAETORIUM
               </p>
               <p className="truncate text-[9px] uppercase tracking-widest text-stone-500">
                 Matri Bank · Imperium
@@ -84,11 +87,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </div>
 
-          <NoticiasCompactas />
-
           <div className="flex-1 overflow-y-auto p-3">
             <AppNav items={itensVisiveis} />
           </div>
+
+          <NoticiasCompactas />
         </aside>
       )}
 
@@ -98,6 +101,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <>
               <ThemeToggle />
               {profile && <RankBadge rank={profile.rank} size="sm" />}
+              <AvatarUpload avatarUrl={profile?.avatar_url ?? null} nome={profile?.full_name ?? "?"} />
               <div className="text-right">
                 <p className="text-sm text-stone-100">{profile?.full_name ?? user.email}</p>
                 {profile && (
@@ -136,10 +140,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {user && ehExecutivo && <SidebarRight userId={user.id} />}
         </div>
 
-        <footer className="py-6 text-center">
+        <footer className="flex items-center justify-center gap-3 py-6">
+          <IconLaurel className="h-3 w-6 -scale-x-100 text-imperium-line-strong" />
           <p className="font-display text-[11px] tracking-[0.3em] text-imperium-line-strong">
             ESSE QUAM VIDERI
           </p>
+          <IconLaurel className="h-3 w-6 text-imperium-line-strong" />
         </footer>
       </div>
     </div>

@@ -184,6 +184,12 @@ export default async function ComissaoPage() {
         title="Sistema de Marcos"
         right={<span className="text-xs text-stone-500">Produção do ano: {moeda(producaoAno)}</span>}
       >
+        {marcos.length === 0 && (
+          <p className="text-sm text-stone-500">
+            Nenhum marco cadastrado ainda — peça ao Diretor pra rodar a migração de Sistema de
+            Marcos.
+          </p>
+        )}
         <ul className="divide-y divide-imperium-line">
           {marcos.map((m) => (
             <li key={m.id} className="flex items-center gap-4 py-3">

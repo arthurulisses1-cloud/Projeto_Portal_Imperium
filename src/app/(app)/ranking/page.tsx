@@ -2,28 +2,68 @@ import { createClient } from "@/lib/supabase/server";
 
 type Linha = { nome: string; tribo: string; valor: number };
 
+const PODIO_ESTILO: Record<1 | 2 | 3, { alt: string; borda: string; texto: string; medalha: string; nomeCls: string; av: string }> = {
+  1: { alt: "h-16", borda: "border-gold", texto: "text-gold-bright", medalha: "🥇", nomeCls: "text-sm", av: "h-14 w-14 text-base" },
+  2: { alt: "h-11", borda: "border-stone-400", texto: "text-stone-200", medalha: "🥈", nomeCls: "text-xs", av: "h-11 w-11 text-sm" },
+  3: { alt: "h-7", borda: "border-amber-700", texto: "text-amber-500", medalha: "🥉", nomeCls: "text-xs", av: "h-11 w-11 text-sm" },
+};
+
+function iniciais(nome: string) {
+  return nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+}
+
+function PodioCard({ linha, posicao, fmt }: { linha: Linha; posicao: 1 | 2 | 3; fmt: (v: number) => string }) {
+  const e = PODIO_ESTILO[posicao];
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <span className="text-base leading-none">{e.medalha}</span>
+      <div
+        className={`flex items-center justify-center rounded-full border-2 bg-imperium-bg font-display ${e.borda} ${e.texto} ${e.av}`}
+      >
+        {iniciais(linha.nome)}
+      </div>
+      <p className={`max-w-[84px] truncate text-center font-display ${e.nomeCls} ${e.texto}`}>{linha.nome}</p>
+      <p className="max-w-[84px] truncate text-center text-[10px] text-stone-600">{linha.tribo}</p>
+      <p className={`text-[11px] ${e.texto}`}>{fmt(linha.valor)}</p>
+      <div className={`w-16 rounded-t border-x border-t bg-gradient-to-b from-gold/15 to-transparent ${e.borda} ${e.alt}`} />
+    </div>
+  );
+}
+
 function Tabela({ titulo, formato, linhas }: { titulo: string; formato: "num" | "moeda" | "pct"; linhas: Linha[] }) {
   function fmt(v: number) {
-    if (formato === "moeda") return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    if (formato === "moeda") return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
     if (formato === "pct") return `${v.toFixed(0)}%`;
     return v.toLocaleString("pt-BR");
   }
+  const top3 = linhas.slice(0, 3);
+  const resto = linhas.slice(3);
+
   return (
-    <div className="card-imp p-4">
+    <div className="watermark-spqr card-imp p-4">
       <h3 className="kicker mb-3">{titulo}</h3>
       {linhas.length === 0 ? (
         <p className="text-xs text-stone-600">Sem dados ainda.</p>
       ) : (
-        <ol className="space-y-1">
-          {linhas.map((l, i) => (
-            <li key={l.nome} className="flex justify-between text-sm">
-              <span className={i === 0 ? "text-gold-bright" : "text-stone-300"}>
-                {i + 1}. {l.nome} <span className="text-stone-600">· {l.tribo}</span>
-              </span>
-              <span className={i === 0 ? "text-gold-bright" : "text-gold"}>{fmt(l.valor)}</span>
-            </li>
-          ))}
-        </ol>
+        <>
+          <div className="mb-3 flex items-end justify-center gap-4 border-b border-imperium-line pb-3">
+            {top3[1] && <PodioCard linha={top3[1]} posicao={2} fmt={fmt} />}
+            {top3[0] && <PodioCard linha={top3[0]} posicao={1} fmt={fmt} />}
+            {top3[2] && <PodioCard linha={top3[2]} posicao={3} fmt={fmt} />}
+          </div>
+          {resto.length > 0 && (
+            <ol className="space-y-1">
+              {resto.map((l, i) => (
+                <li key={l.nome} className="flex justify-between text-sm">
+                  <span className="text-stone-400">
+                    {i + 4}. {l.nome} <span className="text-stone-600">· {l.tribo}</span>
+                  </span>
+                  <span className="text-stone-300">{fmt(l.valor)}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </>
       )}
     </div>
   );
@@ -137,7 +177,6 @@ export default async function RankingPage() {
           <Tabela titulo="Tentativas" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "tentativas")} />
           <Tabela titulo="Conexões" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "conexoes")} />
           <Tabela titulo="Entrevistas" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "entrevistas")} />
-          <Tabela titulo="Subidos" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "subidos")} />
           <Tabela titulo="Assinados" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "assinaturas")} />
           <Tabela titulo="Pagos (R$)" formato="moeda" linhas={topPagos(idsPorRole.sdr)} />
         </div>
@@ -147,7 +186,6 @@ export default async function RankingPage() {
         <h2 className="kicker mb-3">Closer</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Tabela titulo="Entrevistas" formato="num" linhas={topPorEtapa(idsPorRole.closer, "entrevistas")} />
-          <Tabela titulo="Subidos" formato="num" linhas={topPorEtapa(idsPorRole.closer, "subidos")} />
           <Tabela titulo="Assinados" formato="num" linhas={topPorEtapa(idsPorRole.closer, "assinaturas")} />
           <Tabela titulo="Ticket Médio" formato="moeda" linhas={topTicketMedio(idsPorRole.closer)} />
           <Tabela

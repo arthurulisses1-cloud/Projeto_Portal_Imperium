@@ -44,7 +44,7 @@ export default function LoginPage() {
           className="mx-auto mb-4 h-16 w-16 rounded-full border border-gold/50 object-cover"
         />
         <h1 className="text-center font-display text-xl tracking-wide text-gold-bright">
-          PORTAL EXECUTIVO
+          PRAETORIUM
         </h1>
         <p className="mb-3 text-center text-[11px] uppercase tracking-[0.2em] text-stone-500">
           Matri Bank · Imperium

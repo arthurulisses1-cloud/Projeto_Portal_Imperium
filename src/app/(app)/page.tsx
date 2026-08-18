@@ -1,11 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
-import { publicarMural } from "./mural-actions";
+import MuralForm from "./mural-form";
 import Card from "@/components/ui/Card";
 import Laurel from "@/components/ui/Laurel";
 import RankBadge from "@/components/ui/RankBadge";
 import BarraMeta from "@/components/ui/BarraMeta";
 import ConfrontoWidget from "@/components/ui/Confronto";
-import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito } from "@/lib/guerra";
+import EnquetePoll, { type EnqueteData } from "@/components/ui/EnquetePoll";
+import { IconSwords, IconShield, IconCoin } from "@/components/ui/icons";
+import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
 import { buscarMetaIndividual } from "@/lib/metas";
 
 export default async function MuralPage() {
@@ -59,15 +61,44 @@ export default async function MuralPage() {
   const quote =
     quotes && quotes.length > 0 ? quotes[dayOfYear % quotes.length] : null;
 
-  const [confrontoExercitos, confrontoTribos, topCredito] = await Promise.all([
+  const [confrontoExercitos, confrontoTribos, topCredito, crestsTribos] = await Promise.all([
     buscarConfrontoExercitos(supabase),
     buscarConfrontoTribos(supabase),
     buscarTopCredito(supabase, 5),
+    buscarCrestsTribos(supabase),
   ]);
 
   const { metaCreditoIndividual: metaIndividual } = await buscarMetaIndividual(supabase, user.id);
 
   const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
+
+  // Enquetes: pré-computa opções + votos dos posts do tipo 'enquete' já carregados
+  const enquetePostIds = (muralPosts ?? []).filter((p) => p.tipo === "enquete").map((p) => p.id);
+  const enquetesPorPost = new Map<string, EnqueteData>();
+  if (enquetePostIds.length > 0) {
+    const { data: enquetesRows } = await supabase
+      .from("enquetes")
+      .select("id, mural_post_id")
+      .in("mural_post_id", enquetePostIds);
+    const enqueteIds = (enquetesRows ?? []).map((e) => e.id);
+    const [{ data: opcoesRows }, { data: votosRows }] = await Promise.all([
+      supabase.from("enquete_opcoes").select("id, enquete_id, texto, ordem").in("enquete_id", enqueteIds).order("ordem"),
+      supabase.from("enquete_votos").select("enquete_id, opcao_id, profile_id").in("enquete_id", enqueteIds),
+    ]);
+    for (const e of enquetesRows ?? []) {
+      const opcoes = (opcoesRows ?? [])
+        .filter((o) => o.enquete_id === e.id)
+        .map((o) => ({
+          id: o.id,
+          texto: o.texto,
+          votos: (votosRows ?? []).filter((v) => v.opcao_id === o.id).length,
+        }));
+      const totalVotos = opcoes.reduce((s, o) => s + o.votos, 0);
+      const meuVoto =
+        (votosRows ?? []).find((v) => v.enquete_id === e.id && v.profile_id === user.id)?.opcao_id ?? null;
+      enquetesPorPost.set(e.mural_post_id, { enqueteId: e.id, opcoes, totalVotos, meuVoto });
+    }
+  }
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
@@ -97,18 +128,18 @@ export default async function MuralPage() {
       )}
 
       <div className="grid gap-6 sm:grid-cols-3">
-        <Card title="Guerra Civil">
+        <Card title="Guerra Civil" icon={<IconSwords className="h-4 w-4 text-wine-bright" />}>
           <ConfrontoWidget
             dados={confrontoExercitos}
             crests={{ Templários: "/crests/templarios.jpg", Maximus: "/crests/maximus.jpg" }}
           />
         </Card>
 
-        <Card title="Guerra de Tribos">
-          <ConfrontoWidget dados={confrontoTribos} />
+        <Card title="Guerra de Tribos" icon={<IconShield className="h-4 w-4 text-gold" />}>
+          <ConfrontoWidget dados={confrontoTribos} crests={crestsTribos} />
         </Card>
 
-        <Card title="Ranking de Crédito">
+        <Card title="Ranking de Crédito" icon={<IconCoin className="h-4 w-4 text-gold" />}>
           <ConfrontoWidget dados={topCredito} />
         </Card>
       </div>
@@ -159,30 +190,10 @@ export default async function MuralPage() {
 
       {(profile?.role === "closer" || profile?.role === "lider" || profile?.role === "diretor") && (
         <Card title="Publicar no Mural">
-          <form action={publicarMural} className="space-y-3">
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 text-sm text-stone-300">
-                <input type="radio" name="tipo" value="reconhecimento" defaultChecked />
-                Reconhecimento
-              </label>
-              {(profile?.role === "lider" || profile?.role === "diretor") && (
-                <label className="flex items-center gap-2 text-sm text-stone-300">
-                  <input type="radio" name="tipo" value="aviso" />
-                  Aviso
-                </label>
-              )}
-            </div>
-            <input name="titulo" required placeholder="Título" className="input-imp" />
-            <textarea
-              name="corpo"
-              placeholder="Mensagem (opcional)"
-              rows={2}
-              className="input-imp"
-            />
-            <button type="submit" className="btn-gold">
-              Publicar
-            </button>
-          </form>
+          <MuralForm
+            podeAviso={profile?.role === "lider" || profile?.role === "diretor"}
+            podeEnquete={profile?.role === "diretor"}
+          />
         </Card>
       )}
 
@@ -196,22 +207,34 @@ export default async function MuralPage() {
                   key={post.id}
                   className="flex gap-4 rounded border border-imperium-line bg-imperium-bg/40 p-4"
                 >
-                  <span className="text-2xl">{post.tipo === "aviso" ? "📯" : "🏅"}</span>
+                  <span className="text-2xl">
+                    {post.tipo === "aviso" ? "📯" : post.tipo === "enquete" ? "🗳️" : "🏅"}
+                  </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-display text-base text-gold-bright">{post.titulo}</p>
                       <span className="shrink-0 text-[10px] uppercase tracking-wide text-stone-600">
-                        {post.tipo === "aviso" ? "Aviso" : "Reconhecimento"}
+                        {post.tipo === "aviso" ? "Aviso" : post.tipo === "enquete" ? "Enquete" : "Reconhecimento"}
                       </span>
                     </div>
                     {post.corpo && <p className="mt-1 text-sm text-stone-300">{post.corpo}</p>}
-                    {post.midia_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={post.midia_url}
-                        alt=""
-                        className="mt-3 max-h-64 rounded border border-imperium-line object-cover"
-                      />
+                    {post.midia_url &&
+                      (/\.(mp4|webm|mov|m4v)$/i.test(post.midia_url) ? (
+                        <video
+                          src={post.midia_url}
+                          controls
+                          className="mt-3 max-h-64 rounded border border-imperium-line"
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={post.midia_url}
+                          alt=""
+                          className="mt-3 max-h-64 rounded border border-imperium-line object-cover"
+                        />
+                      ))}
+                    {post.tipo === "enquete" && enquetesPorPost.get(post.id) && (
+                      <EnquetePoll dados={enquetesPorPost.get(post.id)!} />
                     )}
                     <p className="mt-2 text-xs text-stone-600">
                       {autor?.full_name ?? "Gestão"} ·{" "}

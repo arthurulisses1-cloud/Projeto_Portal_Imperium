@@ -1,7 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 import { calcularFunilMeta } from "@/lib/metas";
+import { calcularGargalo, textoGargalo } from "@/lib/gargalo";
 import Card from "@/components/ui/Card";
+import BarraProgresso from "@/components/ui/BarraProgresso";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -12,39 +14,98 @@ function totaisVazios(): FunilTotais {
   return Object.fromEntries(FUNNEL_STAGES.map((e) => [e, 0])) as FunilTotais;
 }
 
-function FunilTabela({ realizado, meta }: { realizado: FunilTotais; meta: Record<FunilEtapa, number | null> }) {
+function FunilDuplo({
+  realizado,
+  meta,
+}: {
+  realizado: FunilTotais;
+  meta: Record<FunilEtapa, number | null>;
+}) {
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-          <th className="pb-2">Etapa</th>
-          <th className="pb-2 text-right">Realizado</th>
-          <th className="pb-2 text-right">Meta</th>
-          <th className="pb-2 text-right">%</th>
-        </tr>
-      </thead>
-      <tbody>
-        {FUNNEL_STAGES.map((etapa) => {
-          const m = meta[etapa];
-          const pct = m && m > 0 ? Math.min(100, (realizado[etapa] / m) * 100) : null;
-          return (
-            <tr key={etapa} className="border-t border-imperium-line">
-              <td className="py-2 text-stone-300">{FUNNEL_LABELS[etapa]}</td>
-              <td className="py-2 text-right text-stone-100">{realizado[etapa]}</td>
-              <td className="py-2 text-right text-stone-500">{m ? Math.round(m) : "—"}</td>
-              <td className={`py-2 text-right ${pct !== null && pct >= 100 ? "text-emerald-400" : "text-gold-dim"}`}>
-                {pct !== null ? `${pct.toFixed(0)}%` : "—"}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div className="grid gap-6 sm:grid-cols-2">
+      <div>
+        <p className="kicker mb-3">Volume</p>
+        <div className="space-y-3">
+          {FUNNEL_STAGES.map((etapa) => {
+            const m = meta[etapa];
+            return (
+              <div key={etapa} className="flex items-center gap-3 text-sm">
+                <span className="w-24 shrink-0 text-stone-400">{FUNNEL_LABELS[etapa]}</span>
+                <BarraProgresso realizado={realizado[etapa]} meta={m ?? 0} />
+                <span className="w-20 shrink-0 text-right text-stone-100">
+                  {realizado[etapa]}/{m ? Math.round(m) : "—"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div>
+        <p className="kicker mb-3">Taxa de conversão</p>
+        <div className="space-y-3">
+          {FUNNEL_STAGES.map((etapa, i) => {
+            const anterior = i > 0 ? realizado[FUNNEL_STAGES[i - 1]] : null;
+            const pct = anterior && anterior > 0 ? (realizado[etapa] / anterior) * 100 : null;
+            return (
+              <div key={etapa} className="flex items-center gap-3 text-sm">
+                <span className="w-24 shrink-0 text-stone-400">{FUNNEL_LABELS[etapa]}</span>
+                <BarraProgresso realizado={pct ?? 0} meta={100} />
+                <span className="w-16 shrink-0 text-right text-stone-100">
+                  {pct !== null ? `${pct.toFixed(0)}%` : "—"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
-export default async function VisaoGeralPage() {
+function Diagnostico({ realizado, taxas }: { realizado: FunilTotais; taxas: Map<string, number> }) {
+  if (taxas.size === 0) {
+    return (
+      <p className="text-sm text-stone-400">
+        Cadastre as taxas de conversão esperadas em &quot;Metas Mensais&quot; pra ver o diagnóstico
+        inteligente deste funil.
+      </p>
+    );
+  }
+  const gargalo = calcularGargalo(realizado, taxas);
+  if (!gargalo) {
+    return <p className="text-sm text-emerald-400">Funil equilibrado — nenhuma etapa abaixo da meta de conversão.</p>;
+  }
+  return (
+    <>
+      <p className="mb-1 flex items-center gap-2 text-sm font-medium text-wine-bright">⚠ Diagnóstico do Funil</p>
+      <p className="text-sm text-stone-300">{textoGargalo(gargalo)}</p>
+    </>
+  );
+}
+
+function AbaLink({ href, ativo, children }: { href: string; ativo: boolean; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      className={`rounded px-3 py-1.5 text-xs uppercase transition ${
+        ativo ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-300 hover:border-gold"
+      }`}
+    >
+      {children}
+    </a>
+  );
+}
+
+export default async function VisaoGeralPage({
+  searchParams,
+}: {
+  searchParams: { visao?: string; exercito?: string; tribo?: string };
+}) {
   const supabase = await createClient();
+
+  const visao = searchParams.visao === "exercito" ? "exercito" : "completo";
+  const exercitoId = searchParams.exercito;
+  const triboId = searchParams.tribo;
 
   const agora = new Date();
   const { data: metaMes } = await supabase
@@ -89,7 +150,6 @@ export default async function VisaoGeralPage() {
       ? await supabase.from("vendas").select("profile_id, valor").in("profile_id", idsTodos).gte("data", inicioMes)
       : { data: [] };
 
-  // profile_id -> {tribo_id, exercito_id}
   const orgPorProfile = new Map<string, { triboId: string | null; exercitoId: string | null }>();
   for (const p of pessoas ?? []) {
     const tribo = p.tribo as unknown as { id: string; exercito_id: string } | null;
@@ -114,10 +174,13 @@ export default async function VisaoGeralPage() {
   }
 
   const pagosPorExercito = new Map<string, number>();
+  const pagosPorTribo = new Map<string, number>();
+  let pagoGeral = 0;
   for (const row of vendasRows ?? []) {
-    const exId = orgPorProfile.get(row.profile_id)?.exercitoId;
-    if (!exId) continue;
-    pagosPorExercito.set(exId, (pagosPorExercito.get(exId) ?? 0) + Number(row.valor));
+    pagoGeral += Number(row.valor);
+    const org = orgPorProfile.get(row.profile_id);
+    if (org?.exercitoId) pagosPorExercito.set(org.exercitoId, (pagosPorExercito.get(org.exercitoId) ?? 0) + Number(row.valor));
+    if (org?.triboId) pagosPorTribo.set(org.triboId, (pagosPorTribo.get(org.triboId) ?? 0) + Number(row.valor));
   }
 
   const metaCredito = metaMes?.meta_credito_total ?? 0;
@@ -128,52 +191,121 @@ export default async function VisaoGeralPage() {
   const metaCreditoPorExercito = numExercitos > 0 ? metaCredito / numExercitos : 0;
   const metaFunilExercito = calcularFunilMeta(metaCreditoPorExercito, metaTicket, taxaMap);
 
+  const exercitoAtual = exercitoId ? (exercitos ?? []).find((e) => e.id === exercitoId) : null;
+  const tribosDoExercito = exercitoId ? (tribos ?? []).filter((t) => t.exercito_id === exercitoId) : [];
+  const numTribosAtual = tribosDoExercito.length;
+  const metaCreditoPorTribo = numTribosAtual > 0 ? metaCreditoPorExercito / numTribosAtual : 0;
+  const metaFunilTribo = calcularFunilMeta(metaCreditoPorTribo, metaTicket, taxaMap);
+  const triboAtual = triboId ? tribosDoExercito.find((t) => t.id === triboId) : null;
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
-      <div>
-        <h1 className="font-display text-2xl text-gold-bright">Visão Geral da Firma</h1>
-        <p className="kicker mt-1">Império · todos os Exércitos</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl text-gold-bright">Visão Geral da Firma</h1>
+          <p className="kicker mt-1">Império · todos os Exércitos</p>
+        </div>
+        <div className="flex gap-2">
+          <AbaLink href="/geral?visao=completo" ativo={visao === "completo"}>
+            Completo
+          </AbaLink>
+          <AbaLink href="/geral?visao=exercito" ativo={visao === "exercito"}>
+            Por Exército
+          </AbaLink>
+        </div>
       </div>
 
-      <Card title="Funil consolidado do mês — Império">
-        {metaCredito <= 0 && (
-          <p className="mb-3 text-xs text-gold-dim">
-            Cadastre a meta de crédito, ticket médio e taxas de conversão em &quot;Metas Mensais&quot; pra
-            ver a meta calculada por etapa.
-          </p>
-        )}
-        <FunilTabela realizado={totalGeral} meta={metaFunilGeral} />
-      </Card>
+      {metaCredito <= 0 && (
+        <p className="text-xs text-gold-dim">
+          Cadastre a meta de crédito, ticket médio e taxas de conversão em &quot;Metas Mensais&quot; pra
+          ver a meta calculada por etapa.
+        </p>
+      )}
 
-      {(exercitos ?? []).map((e) => {
-        const tribosDoExercito = (tribos ?? []).filter((t) => t.exercito_id === e.id);
-        const legado = e.legado as unknown as { full_name: string } | null;
-        const realizadoExercito = totalPorExercito.get(e.id) ?? totaisVazios();
-        const numTribos = tribosDoExercito.length;
-        const metaCreditoTribo = numTribos > 0 ? metaCreditoPorExercito / numTribos : 0;
-        const metaFunilTribo = calcularFunilMeta(metaCreditoTribo, metaTicket, taxaMap);
+      {visao === "completo" && (
+        <>
+          <Card title="Funil consolidado do mês — Império" right={<span className="text-gold-bright">{moeda(pagoGeral)}</span>}>
+            <FunilDuplo realizado={totalGeral} meta={metaFunilGeral} />
+          </Card>
+          <div className="rounded border border-wine/50 bg-wine/10 p-4">
+            <Diagnostico realizado={totalGeral} taxas={taxaMap} />
+          </div>
+        </>
+      )}
 
-        return (
+      {visao === "exercito" && !exercitoAtual && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {(exercitos ?? []).map((e) => {
+            const legado = e.legado as unknown as { full_name: string } | null;
+            return (
+              <a
+                key={e.id}
+                href={`/geral?visao=exercito&exercito=${e.id}`}
+                className="card-imp block p-4 transition hover:border-gold"
+              >
+                <p className="font-display text-lg text-gold-bright">{e.nome}</p>
+                <p className="text-xs text-stone-500">Legado: {legado?.full_name ?? "—"}</p>
+                <p className="mt-2 text-gold">{moeda(pagosPorExercito.get(e.id) ?? 0)}</p>
+              </a>
+            );
+          })}
+        </div>
+      )}
+
+      {visao === "exercito" && exercitoAtual && !triboAtual && (
+        <>
+          <a href="/geral?visao=exercito" className="text-xs text-stone-500 hover:text-gold">
+            ← Voltar aos Exércitos
+          </a>
           <Card
-            key={e.id}
-            title={`${e.nome} · Legado: ${legado?.full_name ?? "—"}`}
-            right={<span className="text-gold-bright">{moeda(pagosPorExercito.get(e.id) ?? 0)}</span>}
+            title={`${exercitoAtual.nome} · Legado: ${(exercitoAtual.legado as unknown as { full_name: string } | null)?.full_name ?? "—"}`}
+            right={<span className="text-gold-bright">{moeda(pagosPorExercito.get(exercitoAtual.id) ?? 0)}</span>}
           >
-            <FunilTabela realizado={realizadoExercito} meta={metaFunilExercito} />
+            <FunilDuplo realizado={totalPorExercito.get(exercitoAtual.id) ?? totaisVazios()} meta={metaFunilExercito} />
+          </Card>
+          <div className="rounded border border-wine/50 bg-wine/10 p-4">
+            <Diagnostico realizado={totalPorExercito.get(exercitoAtual.id) ?? totaisVazios()} taxas={taxaMap} />
+          </div>
 
-            {tribosDoExercito.length > 0 && (
-              <div className="mt-6 space-y-4">
+          {tribosDoExercito.length > 0 && (
+            <div>
+              <p className="kicker mb-3">Tribos de {exercitoAtual.nome}</p>
+              <div className="grid gap-4 sm:grid-cols-2">
                 {tribosDoExercito.map((t) => (
-                  <div key={t.id} className="border-t border-imperium-line pt-4">
-                    <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">{t.nome}</p>
-                    <FunilTabela realizado={totalPorTribo.get(t.id) ?? totaisVazios()} meta={metaFunilTribo} />
-                  </div>
+                  <a
+                    key={t.id}
+                    href={`/geral?visao=exercito&exercito=${exercitoAtual.id}&tribo=${t.id}`}
+                    className="card-imp block p-4 transition hover:border-gold"
+                  >
+                    <p className="font-display text-base text-gold-bright">{t.nome}</p>
+                    <p className="mt-1 text-gold">{moeda(pagosPorTribo.get(t.id) ?? 0)}</p>
+                  </a>
                 ))}
               </div>
-            )}
+            </div>
+          )}
+        </>
+      )}
+
+      {visao === "exercito" && exercitoAtual && triboAtual && (
+        <>
+          <a
+            href={`/geral?visao=exercito&exercito=${exercitoAtual.id}`}
+            className="text-xs text-stone-500 hover:text-gold"
+          >
+            ← Voltar a {exercitoAtual.nome}
+          </a>
+          <Card
+            title={triboAtual.nome}
+            right={<span className="text-gold-bright">{moeda(pagosPorTribo.get(triboAtual.id) ?? 0)}</span>}
+          >
+            <FunilDuplo realizado={totalPorTribo.get(triboAtual.id) ?? totaisVazios()} meta={metaFunilTribo} />
           </Card>
-        );
-      })}
+          <div className="rounded border border-wine/50 bg-wine/10 p-4">
+            <Diagnostico realizado={totalPorTribo.get(triboAtual.id) ?? totaisVazios()} taxas={taxaMap} />
+          </div>
+        </>
+      )}
     </main>
   );
 }

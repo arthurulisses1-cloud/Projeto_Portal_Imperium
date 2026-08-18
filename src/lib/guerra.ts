@@ -47,6 +47,16 @@ export function buscarConfrontoTribos(supabase: SupabaseClient) {
   return pagosMesPorGrupo(supabase, "tribo");
 }
 
+// Mapa nome da Tribo -> logo_url (só as que já subiram uma logo própria em /tribo)
+export async function buscarCrestsTribos(supabase: SupabaseClient): Promise<Record<string, string>> {
+  const { data } = await supabase.from("tribos").select("nome, logo_url").not("logo_url", "is", null);
+  const mapa: Record<string, string> = {};
+  for (const t of data ?? []) {
+    if (t.logo_url) mapa[t.nome] = t.logo_url;
+  }
+  return mapa;
+}
+
 export async function buscarTopCredito(supabase: SupabaseClient, limite = 5): Promise<Confronto[]> {
   const { data: pessoas } = await supabase
     .from("profiles")

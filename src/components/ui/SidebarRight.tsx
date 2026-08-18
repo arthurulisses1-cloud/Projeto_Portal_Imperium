@@ -3,6 +3,7 @@ import { RANK_LABELS } from "@/lib/labels";
 import { STAR_PACE, type Rank } from "@/lib/carreira";
 import { lookupComissao, proximoTier } from "@/lib/comissao";
 import { buscarProgressoMarcos } from "@/lib/marcos";
+import { paraRomano } from "@/lib/numerals";
 import RankBadge from "./RankBadge";
 
 function moeda(v: number) {
@@ -14,7 +15,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("rank, stars_total")
+    .select("rank, stars_total, tribo_id")
     .eq("id", userId)
     .single();
 
@@ -47,9 +48,49 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   const tierAtual = lookupComissao(tiersOrdenados, producaoMes);
   const proximo = proximoTier(tiersOrdenados, producaoMes);
 
+  let membrosTribo: {
+    id: string;
+    nome: string;
+    cargo: string;
+    avatarUrl: string | null;
+    producao: number;
+  }[] = [];
+  let nomeTribo: string | null = null;
+  if (profile.tribo_id) {
+    const [{ data: tribo }, { data: membros }] = await Promise.all([
+      supabase.from("tribos").select("nome").eq("id", profile.tribo_id).single(),
+      supabase
+        .from("profiles")
+        .select("id, full_name, rank, avatar_url")
+        .eq("tribo_id", profile.tribo_id)
+        .in("role", ["sdr", "closer"]),
+    ]);
+    nomeTribo = tribo?.nome ?? null;
+
+    const idsMembros = (membros ?? []).map((m) => m.id);
+    const { data: vendasMembros } =
+      idsMembros.length > 0
+        ? await supabase.from("vendas").select("profile_id, valor").in("profile_id", idsMembros).gte("data", inicioMes)
+        : { data: [] };
+    const producaoPorMembro = new Map<string, number>();
+    for (const v of vendasMembros ?? []) {
+      producaoPorMembro.set(v.profile_id, (producaoPorMembro.get(v.profile_id) ?? 0) + Number(v.valor));
+    }
+
+    membrosTribo = (membros ?? [])
+      .map((m) => ({
+        id: m.id,
+        nome: m.full_name,
+        cargo: RANK_LABELS[m.rank] ?? m.rank,
+        avatarUrl: m.avatar_url,
+        producao: producaoPorMembro.get(m.id) ?? 0,
+      }))
+      .sort((a, b) => b.producao - a.producao);
+  }
+
   return (
     <aside className="hidden w-72 shrink-0 space-y-6 border-l border-imperium-line bg-imperium-surface p-5 xl:block">
-      <div className="text-center">
+      <div className="watermark-spqr text-center">
         <p className="kicker mb-3">Cargo Atual</p>
         <RankBadge rank={rank} size="lg" />
         <p className="mt-2 font-display text-base text-gold-bright">{RANK_LABELS[rank]}</p>
@@ -72,38 +113,48 @@ export default async function SidebarRight({ userId }: { userId: string }) {
 
       <div className="border-t border-imperium-line pt-4">
         <p className="kicker mb-3">Sistema de Marcos</p>
-        <div className="grid grid-cols-3 gap-2">
-          {marcos.map((m) => (
-            <div
-              key={m.id}
-              className={`relative flex aspect-square items-center justify-center rounded-full border text-lg ${
-                m.alcancado
-                  ? "border-gold bg-gold/10"
-                  : "border-imperium-line-strong bg-imperium-bg/40 opacity-50"
-              }`}
-              title={m.nome}
-            >
-              {m.icone}
-              {!m.alcancado && <span className="absolute -bottom-1 -right-1 text-xs">🔒</span>}
-            </div>
-          ))}
-        </div>
+        {marcos.length > 0 ? (
+          <div className="grid grid-cols-3 gap-2">
+            {marcos.map((m) => (
+              <div
+                key={m.id}
+                className={`relative flex aspect-square items-center justify-center rounded-full border text-lg ${
+                  m.alcancado
+                    ? "border-gold bg-gold/10"
+                    : "border-imperium-line-strong bg-imperium-bg/40 opacity-50"
+                }`}
+                title={m.nome}
+              >
+                {m.icone}
+                {!m.alcancado && <span className="absolute -bottom-1 -right-1 text-xs">🔒</span>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-stone-600">Nenhum marco cadastrado ainda.</p>
+        )}
       </div>
 
       {tierAtual && (
         <div className="border-t border-imperium-line pt-4">
           <p className="kicker mb-3">Tabela de Remuneração</p>
-          <div className="mb-2 flex items-end gap-1">
+          <div className="mb-2 flex items-center justify-center gap-1.5">
             {tiersOrdenados.map((t, i) => (
-              <div
+              <span
                 key={t.producao_min}
-                className={`flex-1 rounded-t ${i === tierAtual.tierIdx ? "bg-gold" : "bg-imperium-line"}`}
-                style={{ height: `${16 + i * 6}px` }}
-              />
+                title={moeda(t.producao_min)}
+                className={`flex h-7 w-7 items-center justify-center rounded-full border font-display text-[11px] ${
+                  i === tierAtual.tierIdx
+                    ? "border-gold bg-gold/15 text-gold-bright"
+                    : "border-imperium-line text-stone-500"
+                }`}
+              >
+                {paraRomano(i + 1)}
+              </span>
             ))}
           </div>
           <p className="text-center text-xs text-stone-400">
-            Tier {tierAtual.tierIdx + 1} de {tiersOrdenados.length}
+            Tier {paraRomano(tierAtual.tierIdx + 1)} de {paraRomano(tiersOrdenados.length)}
           </p>
           {proximo ? (
             <p className="mt-1 text-center text-xs text-stone-500">
@@ -118,6 +169,43 @@ export default async function SidebarRight({ userId }: { userId: string }) {
           )}
         </div>
       )}
+
+      <div className="border-t border-imperium-line pt-4">
+        <p className="kicker mb-3">Minha Tribo{nomeTribo ? ` · ${nomeTribo}` : ""}</p>
+        {membrosTribo.length > 0 ? (
+          <ul className="space-y-2.5">
+            {membrosTribo.map((m) => (
+              <li key={m.id} className="flex items-center gap-2.5">
+                {m.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={m.avatarUrl}
+                    alt={m.nome}
+                    className="h-8 w-8 shrink-0 rounded-full border border-imperium-line-strong object-cover"
+                  />
+                ) : (
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-[10px] text-stone-500">
+                    {m.nome
+                      .split(" ")
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((p) => p[0])
+                      .join("")
+                      .toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs text-stone-200">{m.nome}</p>
+                  <p className="text-[10px] text-stone-500">{m.cargo}</p>
+                </div>
+                <span className="shrink-0 text-[10px] text-gold">{moeda(m.producao)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-stone-600">Você ainda não faz parte de uma Tribo.</p>
+        )}
+      </div>
     </aside>
   );
 }

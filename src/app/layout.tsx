@@ -26,7 +26,7 @@ const garamond = Cormorant_Garamond({
 });
 
 export const metadata: Metadata = {
-  title: "Portal Executivo — Matri Bank",
+  title: "Praetorium — Matri Bank",
   description: "Sistema interno de rotina, indicadores e carreira",
 };
 
