@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
 import RankBadge from "@/components/ui/RankBadge";
@@ -6,6 +7,7 @@ import ThemeToggle from "@/components/ui/ThemeToggle";
 import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
 import SidebarRight from "@/components/ui/SidebarRight";
 import AvatarUpload from "@/components/ui/AvatarUpload";
+import VisualizacaoSelector from "@/components/ui/VisualizacaoSelector";
 import { IconLaurel } from "@/components/ui/icons";
 import { EXERCITO_CREST, TRIBO_TAG } from "@/lib/exercito-crests";
 
@@ -55,12 +57,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     | null;
   const exercitoNome = tribo?.exercito?.nome;
 
-  // Diretor vê todas as abas — inclusive as de SDR/Closer/Líder — pra revisar
-  // qualquer tela antes do lançamento sem precisar logar em outra conta.
-  const itensVisiveis =
-    profile?.role === "diretor"
-      ? NAV_ITEMS
-      : NAV_ITEMS.filter((item) => !profile || item.roles.includes(profile.role));
+  // Diretor pode escolher "ver como" outro papel — troca só a lista de abas,
+  // pra revisar qualquer tela antes do lançamento sem logar em outra conta.
+  const cookieStore = await cookies();
+  const papelVisualizado =
+    profile?.role === "diretor" ? cookieStore.get("view_role")?.value || "diretor" : profile?.role;
+
+  const itensVisiveis = NAV_ITEMS.filter(
+    (item) => !profile || item.roles.includes(papelVisualizado ?? profile.role)
+  );
 
   const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
 
@@ -84,6 +89,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </p>
             </div>
           </div>
+
+          {profile?.role === "diretor" && <VisualizacaoSelector atual={papelVisualizado ?? "diretor"} />}
 
           <div className="flex-1 overflow-y-auto p-3">
             <AppNav items={itensVisiveis} />
