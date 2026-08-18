@@ -55,9 +55,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     | null;
   const exercitoNome = tribo?.exercito?.nome;
 
-  const itensVisiveis = NAV_ITEMS.filter(
-    (item) => !profile || item.roles.includes(profile.role)
-  );
+  // Diretor vê todas as abas — inclusive as de SDR/Closer/Líder — pra revisar
+  // qualquer tela antes do lançamento sem precisar logar em outra conta.
+  const itensVisiveis =
+    profile?.role === "diretor"
+      ? NAV_ITEMS
+      : NAV_ITEMS.filter((item) => !profile || item.roles.includes(profile.role));
 
   const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
 

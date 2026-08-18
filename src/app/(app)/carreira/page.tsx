@@ -129,7 +129,9 @@ export default async function CarreiraPage() {
         <div className="mb-6 flex items-start justify-center gap-3 sm:gap-6">
           {RANK_ORDER.map((r, i) => {
             const atual = r === rankAtual;
-            const alcancado = RANK_ORDER.indexOf(r) <= RANK_ORDER.indexOf(rankAtual);
+            const alcancado =
+              (rankAtual as string) === "diretor" ||
+              RANK_ORDER.indexOf(r) <= RANK_ORDER.indexOf(rankAtual);
             return (
               <div key={r} className="flex items-start">
                 {i > 0 && (
