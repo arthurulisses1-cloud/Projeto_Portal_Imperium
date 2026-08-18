@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import SimuladorComissao from "./simulador";
 import { abrirContestacao } from "./actions";
 import { lookupComissao, proximoTier } from "@/lib/comissao";
+import { buscarProgressoMarcos } from "@/lib/marcos";
 import Card from "@/components/ui/Card";
 
 const MESES = [
@@ -58,6 +59,8 @@ export default async function ComissaoPage() {
   const tiersOrdenados = [...(tiers ?? [])].sort((a, b) => a.producao_min - b.producao_min);
   const tierAtual = lookupComissao(tiersOrdenados, producaoRealMes);
   const proximo = proximoTier(tiersOrdenados, producaoRealMes);
+
+  const { marcos, producaoAno } = await buscarProgressoMarcos(supabase, user.id);
 
   const { data: contestacoes } = await supabase
     .from("contestacoes")
@@ -175,6 +178,41 @@ export default async function ComissaoPage() {
             })}
           </tbody>
         </table>
+      </Card>
+
+      <Card
+        title="Sistema de Marcos"
+        right={<span className="text-xs text-stone-500">Produção do ano: {moeda(producaoAno)}</span>}
+      >
+        <ul className="divide-y divide-imperium-line">
+          {marcos.map((m) => (
+            <li key={m.id} className="flex items-center gap-4 py-3">
+              <span
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-lg ${
+                  m.alcancado ? "border-gold bg-gold/10" : "border-imperium-line-strong opacity-60"
+                }`}
+              >
+                {m.icone}
+              </span>
+              <div className="flex-1">
+                <p className="text-sm text-stone-100">{m.nome}</p>
+                <p className="text-xs text-stone-500">
+                  Marco de {moeda(m.threshold)}
+                  {!m.alcancado && ` · faltam ${moeda(m.falta)}`}
+                </p>
+              </div>
+              <span
+                className={`rounded-full border px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${
+                  m.alcancado
+                    ? "border-emerald-500/50 text-emerald-400"
+                    : "border-imperium-line-strong text-stone-500"
+                }`}
+              >
+                {m.alcancado ? "Desbloqueado" : "Bloqueado"}
+              </span>
+            </li>
+          ))}
+        </ul>
       </Card>
 
       <SimuladorComissao tiers={tiers ?? []} />

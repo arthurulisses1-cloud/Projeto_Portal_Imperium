@@ -37,7 +37,7 @@ const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> =
 export default function AppNav({ items }: { items: { href: string; label: string }[] }) {
   const pathname = usePathname();
   return (
-    <nav className="flex gap-1 overflow-x-auto border-b border-imperium-line bg-imperium-bg px-6">
+    <nav className="flex flex-col gap-1">
       {items.map((item) => {
         const Icon = ICONS[item.href] ?? IconScroll;
         const active = pathname === item.href;

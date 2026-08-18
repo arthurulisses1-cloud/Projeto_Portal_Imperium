@@ -1,18 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
-import { RANK_ORDER, NEXT_RANK, NEXT_TRANSICAO, BLOCO_LABELS, type Rank } from "@/lib/carreira";
+import {
+  RANK_ORDER,
+  NEXT_RANK,
+  NEXT_TRANSICAO,
+  BLOCO_LABELS,
+  RANK_SUBTITLE,
+  STAR_PACE,
+  type Rank,
+} from "@/lib/carreira";
 import { registrarMetaPessoal, escolherLivro, marcarApresentado } from "./actions";
 import Card from "@/components/ui/Card";
 import RankBadge from "@/components/ui/RankBadge";
 import Laurel from "@/components/ui/Laurel";
-
-const STAR_PACE: Record<Rank, { estrelas: number; cheia: number; meia: number }> = {
-  legionario: { estrelas: 0, cheia: 0, meia: 0 },
-  centuriao: { estrelas: 6, cheia: 3, meia: 2 },
-  tribuno: { estrelas: 8, cheia: 5, meia: 3 },
-  pretor: { estrelas: 10, cheia: 7, meia: 5 },
-  legado: { estrelas: 12, cheia: 10, meia: 6 },
-};
 
 export default async function CarreiraPage() {
   const supabase = await createClient();
@@ -126,20 +126,20 @@ export default async function CarreiraPage() {
       </div>
 
       <Card className="watermark-spqr">
-        <div className="mb-6 flex items-end justify-center gap-3 sm:gap-6">
-          {RANK_ORDER.map((r, i) => {
+        <div className="relative mb-6 flex items-start justify-center gap-4 sm:gap-8">
+          <div className="absolute left-8 right-8 top-8 -z-0 border-t border-dashed border-imperium-line-strong sm:top-10" />
+          {RANK_ORDER.map((r) => {
             const atual = r === rankAtual;
             const alcancado = RANK_ORDER.indexOf(r) <= RANK_ORDER.indexOf(rankAtual);
             return (
-              <div
-                key={r}
-                className="flex flex-col items-center gap-2"
-                style={{ marginBottom: `${i * 6}px` }}
-              >
-                <RankBadge rank={r} size={atual ? "lg" : "sm"} active={alcancado} />
-                <p className={`text-[11px] ${atual ? "text-gold-bright" : "text-stone-500"}`}>
+              <div key={r} className="relative flex flex-col items-center gap-2">
+                <div className={atual ? "rounded-full shadow-[0_0_18px_rgba(201,162,74,0.5)]" : ""}>
+                  <RankBadge rank={r} size={atual ? "lg" : "md"} active={alcancado} />
+                </div>
+                <p className={`text-xs font-medium ${atual ? "text-gold-bright" : "text-stone-400"}`}>
                   {RANK_LABELS[r]}
                 </p>
+                <p className="text-[10px] text-stone-600">{RANK_SUBTITLE[r]}</p>
               </div>
             );
           })}

@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 
 export type Transicao = { de: FunilEtapa; para: FunilEtapa; label: string };
@@ -38,4 +39,60 @@ export function calcularFunilMeta(
   }
 
   return resultado;
+}
+
+// Meta de crédito individual do mês: meta da firma dividida por Exército →
+// Tribo → membros da Tribo. Também devolve a tabela de taxas de conversão
+// esperadas e a meta de ticket médio, pra reaproveitar em várias telas.
+export async function buscarMetaIndividual(supabase: SupabaseClient, userId: string) {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("tribo_id")
+    .eq("id", userId)
+    .single();
+
+  const agora = new Date();
+  const { data: metaMes } = await supabase
+    .from("metas_mensais")
+    .select("id, meta_credito_total, meta_ticket_medio")
+    .eq("ano", agora.getFullYear())
+    .eq("mes", agora.getMonth() + 1)
+    .maybeSingle();
+
+  const { data: conversoes } = metaMes
+    ? await supabase
+        .from("metas_conversao")
+        .select("etapa_de, etapa_para, taxa_esperada")
+        .eq("meta_mensal_id", metaMes.id)
+    : { data: [] };
+  const taxas = new Map((conversoes ?? []).map((c) => [`${c.etapa_de}_${c.etapa_para}`, c.taxa_esperada]));
+
+  let metaIndividual = 0;
+  if (profile?.tribo_id && metaMes?.meta_credito_total) {
+    const { data: triboRow } = await supabase
+      .from("tribos")
+      .select("id, exercito_id")
+      .eq("id", profile.tribo_id)
+      .single();
+    if (triboRow) {
+      const [{ count: numExercitos }, { count: numTribos }, { count: numMembros }] = await Promise.all([
+        supabase.from("exercitos").select("id", { count: "exact", head: true }),
+        supabase.from("tribos").select("id", { count: "exact", head: true }).eq("exercito_id", triboRow.exercito_id),
+        supabase
+          .from("profiles")
+          .select("id", { count: "exact", head: true })
+          .eq("tribo_id", triboRow.id)
+          .in("role", ["sdr", "closer"]),
+      ]);
+      if (numExercitos && numTribos && numMembros) {
+        metaIndividual = metaMes.meta_credito_total / numExercitos / numTribos / numMembros;
+      }
+    }
+  }
+
+  return {
+    metaCreditoIndividual: metaIndividual,
+    metaTicketMedio: metaMes?.meta_ticket_medio ?? 0,
+    taxas,
+  };
 }

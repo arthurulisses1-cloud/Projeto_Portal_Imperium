@@ -1,19 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import { COMPROMISSO_STATUS_LABELS } from "@/lib/labels";
 import { publicarMural } from "./mural-actions";
 import Card from "@/components/ui/Card";
 import Laurel from "@/components/ui/Laurel";
-import Bussola from "@/components/ui/Bussola";
 import RankBadge from "@/components/ui/RankBadge";
 import BarraMeta from "@/components/ui/BarraMeta";
 import ConfrontoWidget from "@/components/ui/Confronto";
 import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito } from "@/lib/guerra";
-
-const STATUS_TONE: Record<string, "good" | "warn" | "gold"> = {
-  cumprido: "good",
-  andamento: "gold",
-  nao_cumprido: "warn",
-};
+import { buscarMetaIndividual } from "@/lib/metas";
 
 export default async function MuralPage() {
   const supabase = await createClient();
@@ -35,9 +28,9 @@ export default async function MuralPage() {
 
   const { data: muralPosts } = await supabase
     .from("mural_posts")
-    .select("id, tipo, titulo, corpo, created_at")
+    .select("id, tipo, titulo, corpo, midia_url, created_at, autor:profiles!mural_posts_autor_id_fkey(full_name)")
     .order("created_at", { ascending: false })
-    .limit(5);
+    .limit(8);
 
   const hoje = new Date().toISOString().slice(0, 10);
   const { data: compromissoHoje } = await supabase
@@ -72,48 +65,9 @@ export default async function MuralPage() {
     buscarTopCredito(supabase, 5),
   ]);
 
-  // meta individual: meta de crédito da firma dividida por Exército → Tribo → membros da Tribo
-  let metaIndividual = 0;
-  const triboId = (profile?.tribo as unknown as { id?: string } | null)?.id;
-  if (triboId) {
-    const { data: triboRow } = await supabase
-      .from("tribos")
-      .select("id, exercito_id")
-      .eq("id", triboId)
-      .single();
-    if (triboRow) {
-      const agora = new Date();
-      const [{ data: metaMes }, { count: numExercitos }, { count: numTribos }, { count: numMembros }] =
-        await Promise.all([
-          supabase
-            .from("metas_mensais")
-            .select("meta_credito_total")
-            .eq("ano", agora.getFullYear())
-            .eq("mes", agora.getMonth() + 1)
-            .maybeSingle(),
-          supabase.from("exercitos").select("id", { count: "exact", head: true }),
-          supabase
-            .from("tribos")
-            .select("id", { count: "exact", head: true })
-            .eq("exercito_id", triboRow.exercito_id),
-          supabase
-            .from("profiles")
-            .select("id", { count: "exact", head: true })
-            .eq("tribo_id", triboRow.id)
-            .in("role", ["sdr", "closer"]),
-        ]);
-      const metaCredito = metaMes?.meta_credito_total ?? 0;
-      if (metaCredito > 0 && numExercitos && numTribos && numMembros) {
-        metaIndividual = metaCredito / numExercitos / numTribos / numMembros;
-      }
-    }
-  }
+  const { metaCreditoIndividual: metaIndividual } = await buscarMetaIndividual(supabase, user.id);
 
   const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
-  const statusHoje = compromissoHoje
-    ? COMPROMISSO_STATUS_LABELS[compromissoHoje.status]
-    : "Não lançado";
-  const statusTone = compromissoHoje ? STATUS_TONE[compromissoHoje.status] : "muted";
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
@@ -127,64 +81,11 @@ export default async function MuralPage() {
         </div>
       </div>
 
-      <Card>
-        <Bussola
-          items={
-            ehExecutivo
-              ? [
-                  { label: "Estrelas", value: String(profile?.stars_total ?? 0), tone: "gold" },
-                  {
-                    label: "Compromisso hoje",
-                    value: statusHoje,
-                    tone: statusTone as "good" | "warn" | "gold" | "muted",
-                  },
-                  {
-                    label: "Pagos no mês",
-                    value: pagosMes.toLocaleString("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                      maximumFractionDigits: 0,
-                    }),
-                    tone: "gold",
-                  },
-                ]
-              : [
-                  { label: "Estrelas", value: String(profile?.stars_total ?? 0), tone: "gold" },
-                  { label: "Nível", value: profile ? profile.rank.toUpperCase() : "—", tone: "muted" },
-                  {
-                    label: "Pagos no mês",
-                    value: pagosMes.toLocaleString("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                      maximumFractionDigits: 0,
-                    }),
-                    tone: "gold",
-                  },
-                ]
-          }
-        />
-      </Card>
-
       {ehExecutivo && metaIndividual > 0 && (
         <Card title="Meta do mês">
           <BarraMeta realizado={pagosMes} meta={metaIndividual} />
         </Card>
       )}
-
-      <Card title="Guerra Civil — Exércitos">
-        <ConfrontoWidget
-          dados={confrontoExercitos}
-          crests={{ Templários: "/crests/templarios.jpg", Maximus: "/crests/maximus.jpg" }}
-        />
-      </Card>
-
-      <Card title="Guerra de Tribos">
-        <ConfrontoWidget dados={confrontoTribos} />
-      </Card>
-
-      <Card title="Ranking Individual de Crédito — Top 5">
-        <ConfrontoWidget dados={topCredito} />
-      </Card>
 
       {quote && (
         <Card className="watermark-spqr text-center">
@@ -195,14 +96,35 @@ export default async function MuralPage() {
         </Card>
       )}
 
+      <div className="grid gap-6 sm:grid-cols-3">
+        <Card title="Guerra Civil">
+          <ConfrontoWidget
+            dados={confrontoExercitos}
+            crests={{ Templários: "/crests/templarios.jpg", Maximus: "/crests/maximus.jpg" }}
+          />
+        </Card>
+
+        <Card title="Guerra de Tribos">
+          <ConfrontoWidget dados={confrontoTribos} />
+        </Card>
+
+        <Card title="Ranking de Crédito">
+          <ConfrontoWidget dados={topCredito} />
+        </Card>
+      </div>
+
       {ehExecutivo && (
         <Card title="Compromisso de hoje">
           {compromissoHoje ? (
             <div className="grid grid-cols-4 gap-4 text-sm">
               <div>
                 <p className="text-stone-500">Status</p>
-                <p className={`font-medium ${statusTone === "good" ? "text-emerald-400" : statusTone === "warn" ? "text-wine-bright" : "text-gold"}`}>
-                  {statusHoje}
+                <p className="font-medium text-gold">
+                  {compromissoHoje.status === "cumprido"
+                    ? "Cumprido"
+                    : compromissoHoje.status === "nao_cumprido"
+                      ? "Não cumprido"
+                      : "Em andamento"}
                 </p>
               </div>
               <div>
@@ -264,21 +186,41 @@ export default async function MuralPage() {
         </Card>
       )}
 
-      <Card title="Avisos e reconhecimentos">
+      <Card title="Avisos e Reconhecimentos">
         {muralPosts && muralPosts.length > 0 ? (
-          <ul className="space-y-3">
-            {muralPosts.map((post) => (
-              <li key={post.id} className="flex gap-3 border-b border-imperium-line pb-3 last:border-0">
-                <span className="mt-0.5 text-gold">{post.tipo === "aviso" ? "📯" : "🏅"}</span>
-                <div>
-                  <p className="text-sm text-stone-100">{post.titulo}</p>
-                  {post.corpo && <p className="text-xs text-stone-400">{post.corpo}</p>}
-                  <p className="mt-1 text-[10px] uppercase tracking-wide text-stone-600">
-                    {post.tipo === "aviso" ? "Aviso" : "Reconhecimento"}
-                  </p>
-                </div>
-              </li>
-            ))}
+          <ul className="space-y-4">
+            {muralPosts.map((post) => {
+              const autor = post.autor as unknown as { full_name: string } | null;
+              return (
+                <li
+                  key={post.id}
+                  className="flex gap-4 rounded border border-imperium-line bg-imperium-bg/40 p-4"
+                >
+                  <span className="text-2xl">{post.tipo === "aviso" ? "📯" : "🏅"}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-display text-base text-gold-bright">{post.titulo}</p>
+                      <span className="shrink-0 text-[10px] uppercase tracking-wide text-stone-600">
+                        {post.tipo === "aviso" ? "Aviso" : "Reconhecimento"}
+                      </span>
+                    </div>
+                    {post.corpo && <p className="mt-1 text-sm text-stone-300">{post.corpo}</p>}
+                    {post.midia_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={post.midia_url}
+                        alt=""
+                        className="mt-3 max-h-64 rounded border border-imperium-line object-cover"
+                      />
+                    )}
+                    <p className="mt-2 text-xs text-stone-600">
+                      {autor?.full_name ?? "Gestão"} ·{" "}
+                      {new Date(post.created_at).toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="text-sm text-stone-500">Nenhum aviso publicado ainda.</p>

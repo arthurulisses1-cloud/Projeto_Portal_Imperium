@@ -1,9 +1,28 @@
 import { createClient } from "@/lib/supabase/server";
 import { FUNNEL_STAGES, FUNNEL_LABELS, periodoParaDatas, type FunilEtapa } from "@/lib/funil";
+import { buscarMetaIndividual, calcularFunilMeta } from "@/lib/metas";
+import { buscarFunilColetivo } from "@/lib/time";
+import { calcularGargalo, textoGargalo } from "@/lib/gargalo";
 import SimuladorMeta from "./simulador";
 import Card from "@/components/ui/Card";
 
 type Periodo = "hoje" | "semana" | "mes";
+
+function moeda(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+}
+
+function BarraProgresso({ realizado, meta }: { realizado: number; meta: number }) {
+  const pct = meta > 0 ? Math.min(100, (realizado / meta) * 100) : 0;
+  return (
+    <div className="h-2 flex-1 overflow-hidden rounded-full bg-imperium-line">
+      <div
+        className="h-full rounded-full bg-gradient-to-r from-gold to-gold-bright"
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
 
 export default async function ProducaoPage({
   searchParams,
@@ -20,6 +39,12 @@ export default async function ProducaoPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("tribo_id")
+    .eq("id", user.id)
+    .single();
 
   const { inicio, fim } = periodoParaDatas(periodo);
 
@@ -40,7 +65,7 @@ export default async function ProducaoPage({
     totais[etapa].meta += linha.meta;
   }
 
-  // Mês inteiro sempre, independente do filtro de período — o simulador é sobre a meta do mês
+  // Mês inteiro sempre, independente do filtro de período — meta/simulador/gargalo são sobre o mês
   const { inicio: inicioMes, fim: fimMes } = periodoParaDatas("mes");
   const { data: linhasMes } = await supabase
     .from("producao_funil")
@@ -65,111 +90,136 @@ export default async function ProducaoPage({
     .gte("data", inicio)
     .lte("data", fim);
 
-  const ticketMedio =
-    vendasPeriodo && vendasPeriodo.length > 0
-      ? vendasPeriodo.reduce((s, v) => s + Number(v.valor), 0) / vendasPeriodo.length
-      : null;
+  const valorPago = (vendasPeriodo ?? []).reduce((s, v) => s + Number(v.valor), 0);
+  const ticketMedio = vendasPeriodo && vendasPeriodo.length > 0 ? valorPago / vendasPeriodo.length : null;
 
-  const agora = new Date();
-  const { data: metaMes } = await supabase
-    .from("metas_mensais")
-    .select("id, meta_ticket_medio")
-    .eq("ano", agora.getFullYear())
-    .eq("mes", agora.getMonth() + 1)
-    .maybeSingle();
+  const { metaCreditoIndividual, metaTicketMedio, taxas } = await buscarMetaIndividual(supabase, user.id);
+  const metaFunilIndividual = calcularFunilMeta(metaCreditoIndividual, metaTicketMedio, taxas);
 
-  const { data: conversoesMeta } = metaMes
-    ? await supabase
-        .from("metas_conversao")
-        .select("etapa_de, etapa_para, taxa_esperada")
-        .eq("meta_mensal_id", metaMes.id)
-    : { data: [] };
+  // meta de crédito prorateada pro período selecionado (mês inteiro = 100%)
+  const hoje = new Date();
+  const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  const fatorPeriodo = periodo === "hoje" ? 1 / diasNoMes : periodo === "semana" ? 7 / diasNoMes : 1;
+  const metaCreditoPeriodo = metaCreditoIndividual * fatorPeriodo;
+  const pctMeta = metaCreditoPeriodo > 0 ? (valorPago / metaCreditoPeriodo) * 100 : null;
 
-  const taxaEsperadaMap = new Map(
-    (conversoesMeta ?? []).map((c) => [`${c.etapa_de}_${c.etapa_para}`, c.taxa_esperada])
-  );
+  // Diagnóstico de gargalo — sempre sobre o mês inteiro
+  let realizadoTribo: Record<FunilEtapa, number> | undefined;
+  if (profile?.tribo_id) {
+    const { data: membros } = await supabase.from("profiles").select("id").eq("tribo_id", profile.tribo_id);
+    const coletivo = await buscarFunilColetivo(supabase, (membros ?? []).map((m) => m.id));
+    realizadoTribo = Object.fromEntries(
+      FUNNEL_STAGES.map((e) => [e, coletivo[e].realizado])
+    ) as Record<FunilEtapa, number>;
+  }
+  const realizadoMesSimples = Object.fromEntries(
+    FUNNEL_STAGES.map((e) => [e, totaisMes[e].realizado])
+  ) as Record<FunilEtapa, number>;
+  const gargalo = calcularGargalo(realizadoMesSimples, taxas, realizadoTribo);
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
-      <div>
-        <h1 className="font-display text-2xl text-gold-bright">Minha Produção</h1>
-        <p className="kicker mt-1">Funil, conversão e simulador de meta</p>
-      </div>
-      <div className="flex gap-2">
-        {(["hoje", "semana", "mes"] as Periodo[]).map((p) => (
-          <a
-            key={p}
-            href={`/producao?periodo=${p}`}
-            className={`rounded px-3 py-1.5 text-xs transition ${
-              periodo === p
-                ? "bg-gold text-imperium-bg"
-                : "border border-imperium-line text-stone-300 hover:border-gold"
-            }`}
-          >
-            {p === "hoje" ? "Hoje" : p === "semana" ? "Semana" : "Mês"}
-          </a>
-        ))}
+    <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-2xl text-gold-bright">Minha Produção</h1>
+          <p className="text-sm italic text-stone-500">O campo de batalha — realizado × meta</p>
+        </div>
+        <div className="flex gap-2">
+          {(["hoje", "semana", "mes"] as Periodo[]).map((p) => (
+            <a
+              key={p}
+              href={`/producao?periodo=${p}`}
+              className={`rounded px-3 py-1.5 text-xs uppercase transition ${
+                periodo === p
+                  ? "bg-gold text-imperium-bg"
+                  : "border border-imperium-line text-stone-300 hover:border-gold"
+              }`}
+            >
+              {p === "hoje" ? "Hoje" : p === "semana" ? "Semana" : "Mês"}
+            </a>
+          ))}
+        </div>
       </div>
 
-      <Card title="Funil — realizado x meta">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="pb-2">Etapa</th>
-              <th className="pb-2 text-right">Realizado</th>
-              <th className="pb-2 text-right">Meta</th>
-              <th className="pb-2 text-right">Conversão</th>
-              <th className="pb-2 text-right">Esperada</th>
-            </tr>
-          </thead>
-          <tbody>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <p className="kicker mb-2">Valor pago no período</p>
+          <p className="font-display text-2xl text-gold-bright">{moeda(valorPago)}</p>
+          {pctMeta !== null && (
+            <p className="mt-1 text-xs text-emerald-400">
+              {pctMeta.toFixed(0)}% da meta ({moeda(metaCreditoPeriodo)})
+            </p>
+          )}
+        </Card>
+        <Card>
+          <p className="kicker mb-2">Ticket médio</p>
+          <p className="font-display text-2xl text-gold-bright">
+            {ticketMedio !== null ? moeda(ticketMedio) : "—"}
+          </p>
+        </Card>
+        <Card>
+          <p className="kicker mb-2">Pagos (qtd) no período</p>
+          <p className="font-display text-2xl text-gold-bright">{totais.pagos.realizado}</p>
+          {metaFunilIndividual.pagos && (
+            <p className="mt-1 text-xs text-stone-500">
+              meta {Math.round(metaFunilIndividual.pagos * fatorPeriodo)}
+            </p>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        <Card title="Volume">
+          <div className="space-y-3">
+            {FUNNEL_STAGES.map((etapa) => (
+              <div key={etapa} className="flex items-center gap-3 text-sm">
+                <span className="w-24 shrink-0 text-stone-400">{FUNNEL_LABELS[etapa]}</span>
+                <BarraProgresso realizado={totais[etapa].realizado} meta={totais[etapa].meta} />
+                <span className="w-16 shrink-0 text-right text-stone-100">
+                  {totais[etapa].realizado}/{totais[etapa].meta}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card title="Taxa de conversão (%)">
+          <div className="space-y-3">
             {FUNNEL_STAGES.map((etapa, i) => {
               const anterior = i > 0 ? totais[FUNNEL_STAGES[i - 1]].realizado : null;
-              const conversao =
-                anterior && anterior > 0
-                  ? ((totais[etapa].realizado / anterior) * 100).toFixed(0) + "%"
-                  : "—";
-              const taxaEsperada =
-                i > 0 ? taxaEsperadaMap.get(`${FUNNEL_STAGES[i - 1]}_${etapa}`) : undefined;
+              const pct = anterior && anterior > 0 ? (totais[etapa].realizado / anterior) * 100 : null;
               return (
-                <tr key={etapa} className="border-t border-imperium-line">
-                  <td className="py-2 text-stone-300">{FUNNEL_LABELS[etapa]}</td>
-                  <td className="py-2 text-right text-stone-100">{totais[etapa].realizado}</td>
-                  <td className="py-2 text-right text-stone-500">{totais[etapa].meta}</td>
-                  <td className="py-2 text-right text-stone-400">{conversao}</td>
-                  <td className="py-2 text-right text-gold-dim">
-                    {taxaEsperada ? `${(taxaEsperada * 100).toFixed(0)}%` : "—"}
-                  </td>
-                </tr>
+                <div key={etapa} className="flex items-center gap-3 text-sm">
+                  <span className="w-24 shrink-0 text-stone-400">{FUNNEL_LABELS[etapa]}</span>
+                  <BarraProgresso realizado={pct ?? 0} meta={100} />
+                  <span className="w-16 shrink-0 text-right text-stone-100">
+                    {pct !== null ? `${pct.toFixed(0)}%` : "—"}
+                  </span>
+                </div>
               );
             })}
-          </tbody>
-        </table>
-      </Card>
+          </div>
+        </Card>
+      </div>
 
-      <Card title="Ticket médio">
-        <p className="font-display text-2xl text-gold-bright">
-          {ticketMedio !== null
-            ? ticketMedio.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-            : "—"}
-        </p>
-        {metaMes && metaMes.meta_ticket_medio > 0 && (
-          <p className="mt-1 text-xs text-stone-500">
-            Meta do mês:{" "}
-            {metaMes.meta_ticket_medio.toLocaleString("pt-BR", {
-              style: "currency",
-              currency: "BRL",
-            })}
+      {gargalo && (
+        <div className="rounded border border-wine/50 bg-wine/10 p-4">
+          <p className="mb-1 flex items-center gap-2 text-sm font-medium text-wine-bright">
+            ⚠ Diagnóstico de Gargalo
           </p>
-        )}
-      </Card>
+          <p className="text-sm text-stone-300">{textoGargalo(gargalo)}</p>
+          {gargalo.moduloTrilha && (
+            <p className="mt-2 text-xs text-stone-400">
+              📘 Módulo recomendado: <span className="text-gold">{gargalo.moduloTrilha}</span> —{" "}
+              <a href="/trilha" className="text-gold hover:underline">
+                abrir na Trilha →
+              </a>
+            </p>
+          )}
+        </div>
+      )}
 
       <SimuladorMeta totais={totaisMes} />
-
-      <p className="text-center text-xs text-stone-600">
-        Trend de 3–6 meses e diagnóstico de gargalo entram numa próxima etapa, junto com a
-        integração da planilha.
-      </p>
     </main>
   );
 }

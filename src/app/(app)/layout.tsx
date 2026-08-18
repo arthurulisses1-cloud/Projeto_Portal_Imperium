@@ -3,6 +3,8 @@ import { RANK_LABELS } from "@/lib/labels";
 import RankBadge from "@/components/ui/RankBadge";
 import AppNav from "@/components/ui/AppNav";
 import ThemeToggle from "@/components/ui/ThemeToggle";
+import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
+import SidebarRight from "@/components/ui/SidebarRight";
 
 export const dynamic = "force-dynamic";
 
@@ -59,71 +61,87 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     (item) => !profile || item.roles.includes(profile.role)
   );
 
+  const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
+
   return (
-    <div className="min-h-screen">
-      <header className="flex items-center justify-between border-b border-imperium-line bg-imperium-surface px-6 py-3">
-        <div className="flex items-center gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/crests/imperium.jpg"
-            alt="Imperium"
-            className="h-9 w-9 rounded-full border border-gold/40 object-cover"
-          />
-          <div>
-            <p className="font-display text-sm tracking-wide text-gold-bright">
-              PORTAL EXECUTIVO
-            </p>
-            <p className="text-[11px] uppercase tracking-widest text-stone-500">
-              Matri Bank · Imperium
-            </p>
-          </div>
-        </div>
-        {user && (
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-            {profile && <RankBadge rank={profile.rank} size="sm" />}
-            <div className="text-right">
-              <p className="text-sm text-stone-100">{profile?.full_name ?? user.email}</p>
-              {profile && (
-                <p className="flex items-center justify-end gap-1.5 text-xs text-stone-500">
-                  {RANK_LABELS[profile.rank]}
-                  {tribo?.nome ? ` · ${tribo.nome}` : ""}
-                  {exercitoNome && (
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full border py-0.5 pl-0.5 pr-1.5 text-[10px] ${
-                        TRIBO_TAG[exercitoNome] ?? "border-gold/40 text-gold"
-                      }`}
-                    >
-                      {EXERCITO_CREST[exercitoNome] && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={EXERCITO_CREST[exercitoNome]}
-                          alt={exercitoNome}
-                          className="h-3.5 w-3.5 rounded-full object-cover"
-                        />
-                      )}
-                      {exercitoNome}
-                    </span>
-                  )}
-                </p>
-              )}
+    <div className="flex min-h-screen">
+      {user && (
+        <aside className="flex w-56 shrink-0 flex-col border-r border-imperium-line bg-imperium-surface">
+          <div className="flex items-center gap-2 border-b border-imperium-line p-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/crests/imperium.jpg"
+              alt="Imperium"
+              className="h-9 w-9 shrink-0 rounded-full border border-gold/40 object-cover"
+            />
+            <div className="min-w-0">
+              <p className="truncate font-display text-xs tracking-wide text-gold-bright">
+                PORTAL EXECUTIVO
+              </p>
+              <p className="truncate text-[9px] uppercase tracking-widest text-stone-500">
+                Matri Bank · Imperium
+              </p>
             </div>
-            <form action="/auth/signout" method="post">
-              <button className="btn-outline">Sair</button>
-            </form>
           </div>
-        )}
-      </header>
 
-      {user && <AppNav items={itensVisiveis} />}
+          <NoticiasCompactas />
 
-      {children}
+          <div className="flex-1 overflow-y-auto p-3">
+            <AppNav items={itensVisiveis} />
+          </div>
+        </aside>
+      )}
 
-      <footer className="mt-16 pb-8 text-center">
-        <p className="font-display text-[11px] tracking-[0.3em] text-imperium-line-strong">
-          ESSE QUAM VIDERI
-        </p>
-      </footer>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-end gap-3 border-b border-imperium-line bg-imperium-surface px-6 py-3">
+          {user && (
+            <>
+              <ThemeToggle />
+              {profile && <RankBadge rank={profile.rank} size="sm" />}
+              <div className="text-right">
+                <p className="text-sm text-stone-100">{profile?.full_name ?? user.email}</p>
+                {profile && (
+                  <p className="flex items-center justify-end gap-1.5 text-xs text-stone-500">
+                    {RANK_LABELS[profile.rank]}
+                    {tribo?.nome ? ` · ${tribo.nome}` : ""}
+                    {exercitoNome && (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border py-0.5 pl-0.5 pr-1.5 text-[10px] ${
+                          TRIBO_TAG[exercitoNome] ?? "border-gold/40 text-gold"
+                        }`}
+                      >
+                        {EXERCITO_CREST[exercitoNome] && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={EXERCITO_CREST[exercitoNome]}
+                            alt={exercitoNome}
+                            className="h-3.5 w-3.5 rounded-full object-cover"
+                          />
+                        )}
+                        {exercitoNome}
+                      </span>
+                    )}
+                  </p>
+                )}
+              </div>
+              <form action="/auth/signout" method="post">
+                <button className="btn-outline">Sair</button>
+              </form>
+            </>
+          )}
+        </header>
+
+        <div className="flex flex-1">
+          <div className="min-w-0 flex-1">{children}</div>
+          {user && ehExecutivo && <SidebarRight userId={user.id} />}
+        </div>
+
+        <footer className="py-6 text-center">
+          <p className="font-display text-[11px] tracking-[0.3em] text-imperium-line-strong">
+            ESSE QUAM VIDERI
+          </p>
+        </footer>
+      </div>
     </div>
   );
 }
