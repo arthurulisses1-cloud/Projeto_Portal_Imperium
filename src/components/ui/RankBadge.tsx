@@ -28,15 +28,25 @@ export default function RankBadge({
   const idx = RANK_ORDER.indexOf(rank as Rank);
   const label = rank === "diretor" ? "IMP" : idx >= 0 ? toRoman(idx + 1) : "?";
   const crest = CRESTS[rank];
+  const dim = SIZES[size].split(" ").slice(0, 2).join(" ");
 
-  if (active && crest) {
+  if (crest) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={crest}
-        alt={rank}
-        className={`shrink-0 rounded-full border-2 border-gold object-cover ${SIZES[size].split(" ").slice(0, 2).join(" ")}`}
-      />
+      <div className={`relative shrink-0 ${dim}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={crest}
+          alt={rank}
+          className={`h-full w-full rounded-full border-2 object-cover ${
+            active ? "border-gold" : "border-imperium-line-strong grayscale opacity-50"
+          }`}
+        />
+        {!active && (
+          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/30 text-xs">
+            🔒
+          </span>
+        )}
+      </div>
     );
   }
 

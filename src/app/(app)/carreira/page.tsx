@@ -126,20 +126,30 @@ export default async function CarreiraPage() {
       </div>
 
       <Card className="watermark-spqr">
-        <div className="relative mb-6 flex items-start justify-center gap-4 sm:gap-8">
-          <div className="absolute left-8 right-8 top-8 -z-0 border-t border-dashed border-imperium-line-strong sm:top-10" />
-          {RANK_ORDER.map((r) => {
+        <div className="mb-6 flex items-start justify-center gap-3 sm:gap-6">
+          {RANK_ORDER.map((r, i) => {
             const atual = r === rankAtual;
             const alcancado = RANK_ORDER.indexOf(r) <= RANK_ORDER.indexOf(rankAtual);
             return (
-              <div key={r} className="relative flex flex-col items-center gap-2">
-                <div className={atual ? "rounded-full shadow-[0_0_18px_rgba(201,162,74,0.5)]" : ""}>
-                  <RankBadge rank={r} size={atual ? "lg" : "md"} active={alcancado} />
+              <div key={r} className="flex items-start">
+                {i > 0 && (
+                  <div
+                    className={`mt-8 h-px w-4 shrink-0 sm:w-8 ${
+                      RANK_ORDER.indexOf(r) <= RANK_ORDER.indexOf(rankAtual)
+                        ? "bg-gold/60"
+                        : "border-t border-dashed border-imperium-line-strong"
+                    }`}
+                  />
+                )}
+                <div className="flex flex-col items-center gap-2">
+                  <div className={atual ? "rounded-full shadow-[0_0_18px_rgba(201,162,74,0.5)]" : ""}>
+                    <RankBadge rank={r} size="lg" active={alcancado} />
+                  </div>
+                  <p className={`text-xs font-medium ${atual ? "text-gold-bright" : "text-stone-400"}`}>
+                    {RANK_LABELS[r]}
+                  </p>
+                  <p className="text-[10px] text-stone-600">{RANK_SUBTITLE[r]}</p>
                 </div>
-                <p className={`text-xs font-medium ${atual ? "text-gold-bright" : "text-stone-400"}`}>
-                  {RANK_LABELS[r]}
-                </p>
-                <p className="text-[10px] text-stone-600">{RANK_SUBTITLE[r]}</p>
               </div>
             );
           })}

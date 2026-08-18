@@ -128,3 +128,45 @@ export async function convidarMembro(formData: FormData) {
   revalidatePath("/tribo");
   return { email, senha };
 }
+
+export async function deixarFeedback(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const sdrId = String(formData.get("sdr_id"));
+  const texto = String(formData.get("texto") ?? "").trim();
+  if (!texto) throw new Error("Escreva o feedback.");
+
+  const { error } = await supabase.from("feedbacks_sdr").insert({
+    sdr_id: sdrId,
+    closer_id: user.id,
+    texto,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/tribo");
+}
+
+export async function registrarPerda(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const motivo = String(formData.get("motivo") ?? "").trim();
+  const observacao = String(formData.get("observacao") ?? "").trim();
+  const data = String(formData.get("data") ?? "") || new Date().toISOString().slice(0, 10);
+  if (!motivo) throw new Error("Selecione o motivo.");
+
+  const { error } = await supabase.from("perdas").insert({
+    profile_id: user.id,
+    motivo,
+    observacao: observacao || null,
+    data,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/tribo");
+}

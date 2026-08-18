@@ -106,6 +106,28 @@ export default async function ProducaoPage({
   ) as Record<FunilEtapa, number>;
   const gargalo = calcularGargalo(realizadoMesSimples, taxas, realizadoTribo);
 
+  // Melhor dia da semana pra prospecção — últimos 90 dias, tentativas → conexões
+  const noventaDiasAtras = new Date();
+  noventaDiasAtras.setDate(noventaDiasAtras.getDate() - 90);
+  const { data: linhasProspeccao } = await supabase
+    .from("producao_funil")
+    .select("data, etapa, realizado")
+    .eq("profile_id", user.id)
+    .in("etapa", ["tentativas", "conexoes"])
+    .gte("data", noventaDiasAtras.toISOString().slice(0, 10));
+
+  const DIA_LABEL = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+  const porDiaSemana = Array.from({ length: 7 }, () => ({ tentativas: 0, conexoes: 0 }));
+  for (const row of linhasProspeccao ?? []) {
+    const diaSemana = new Date(row.data + "T00:00:00").getDay();
+    if (row.etapa === "tentativas") porDiaSemana[diaSemana].tentativas += row.realizado;
+    else porDiaSemana[diaSemana].conexoes += row.realizado;
+  }
+  const ranqueDias = porDiaSemana
+    .map((d, i) => ({ dia: DIA_LABEL[i], ...d, taxa: d.tentativas > 0 ? (d.conexoes / d.tentativas) * 100 : 0 }))
+    .filter((d) => d.tentativas > 0)
+    .sort((a, b) => b.taxa - a.taxa);
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       <div className="flex items-center justify-between">
@@ -190,6 +212,27 @@ export default async function ProducaoPage({
           </div>
         </Card>
       </div>
+
+      {ranqueDias.length > 0 && (
+        <Card title="Melhor dia pra prospectar" right={<span className="text-xs text-stone-500">Últimos 90 dias</span>}>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {ranqueDias.map((d, i) => (
+              <div
+                key={d.dia}
+                className={`rounded border p-3 text-center ${
+                  i === 0 ? "border-gold bg-gold/10" : "border-imperium-line"
+                }`}
+              >
+                <p className={`text-xs ${i === 0 ? "text-gold-bright" : "text-stone-400"}`}>{d.dia}</p>
+                <p className={`mt-1 font-display text-lg ${i === 0 ? "text-gold-bright" : "text-stone-200"}`}>
+                  {d.taxa.toFixed(0)}%
+                </p>
+                <p className="text-[10px] text-stone-600">{d.conexoes}/{d.tentativas} conexões</p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {gargalo && (
         <div className="rounded border border-wine/50 bg-wine/10 p-4">

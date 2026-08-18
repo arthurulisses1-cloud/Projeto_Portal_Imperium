@@ -42,6 +42,37 @@ export default async function MetasPage({
   const numExercitos = exercitos?.length ?? 0;
   const metaPorExercito = numExercitos > 0 ? metaCredito / numExercitos : 0;
 
+  // ---------- Evolução mês a mês (últimos 6 meses com meta cadastrada) ----------
+  const { data: historicoMetas } = await supabase
+    .from("metas_mensais")
+    .select("ano, mes, meta_credito_total")
+    .order("ano", { ascending: false })
+    .order("mes", { ascending: false })
+    .limit(6);
+
+  const historicoOrdenado = [...(historicoMetas ?? [])].reverse();
+  const inicioHistorico = historicoOrdenado.length
+    ? `${historicoOrdenado[0].ano}-${String(historicoOrdenado[0].mes).padStart(2, "0")}-01`
+    : null;
+  const { data: vendasHistorico } = inicioHistorico
+    ? await supabase.from("vendas").select("valor, data").gte("data", inicioHistorico)
+    : { data: [] };
+  const pagoPorMes = new Map<string, number>();
+  for (const v of vendasHistorico ?? []) {
+    const chave = v.data.slice(0, 7);
+    pagoPorMes.set(chave, (pagoPorMes.get(chave) ?? 0) + Number(v.valor));
+  }
+  const evolucao = historicoOrdenado.map((h) => {
+    const chave = `${h.ano}-${String(h.mes).padStart(2, "0")}`;
+    const realizado = pagoPorMes.get(chave) ?? 0;
+    return {
+      label: `${MESES_LABEL[h.mes - 1].slice(0, 3)}/${h.ano}`,
+      meta: h.meta_credito_total,
+      realizado,
+      pct: h.meta_credito_total > 0 ? (realizado / h.meta_credito_total) * 100 : null,
+    };
+  });
+
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
       <div>
@@ -169,6 +200,38 @@ export default async function MetasPage({
           </div>
         )}
       </section>
+
+      {evolucao.length > 0 && (
+        <section className="card-imp">
+          <h2 className="kicker mb-4">Evolução mês a mês</h2>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
+                <th className="pb-2">Mês</th>
+                <th className="pb-2 text-right">Meta</th>
+                <th className="pb-2 text-right">Realizado</th>
+                <th className="pb-2 text-right">%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {evolucao.map((e) => (
+                <tr key={e.label} className="border-t border-imperium-line">
+                  <td className="py-2 text-stone-300">{e.label}</td>
+                  <td className="py-2 text-right text-stone-500">{moeda(e.meta)}</td>
+                  <td className="py-2 text-right text-stone-100">{moeda(e.realizado)}</td>
+                  <td
+                    className={`py-2 text-right ${
+                      e.pct !== null && e.pct >= 100 ? "text-emerald-400" : "text-gold-dim"
+                    }`}
+                  >
+                    {e.pct !== null ? `${e.pct.toFixed(0)}%` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
     </main>
   );
 }

@@ -5,6 +5,7 @@ export type MarcoProgresso = {
   nome: string;
   threshold: number;
   icone: string;
+  imagemUrl: string | null;
   alcancado: boolean;
   falta: number;
 };
@@ -19,7 +20,7 @@ export async function buscarProgressoMarcos(
   const inicioAno = `${new Date().getFullYear()}-01-01`;
 
   const [{ data: marcosRows }, { data: vendasAno }] = await Promise.all([
-    supabase.from("marcos").select("id, nome, threshold, icone").order("ordem"),
+    supabase.from("marcos").select("id, nome, threshold, icone, imagem_url").order("ordem"),
     supabase.from("vendas").select("valor").eq("profile_id", profileId).gte("data", inicioAno),
   ]);
 
@@ -30,6 +31,7 @@ export async function buscarProgressoMarcos(
     nome: m.nome,
     threshold: m.threshold,
     icone: m.icone,
+    imagemUrl: m.imagem_url,
     alcancado: producaoAno >= m.threshold,
     falta: Math.max(0, m.threshold - producaoAno),
   }));

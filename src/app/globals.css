@@ -114,6 +114,10 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+  .watermark-spqr {
+    position: relative;
+    overflow: hidden;
+  }
   .watermark-spqr::after {
     content: "S· P· Q· R";
     position: absolute;

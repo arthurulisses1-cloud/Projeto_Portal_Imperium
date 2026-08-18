@@ -15,15 +15,22 @@ function iniciais(nome: string) {
 function PodioCard({ linha, posicao, fmt }: { linha: Linha; posicao: 1 | 2 | 3; fmt: (v: number) => string }) {
   const e = PODIO_ESTILO[posicao];
   return (
-    <div className="flex flex-col items-center gap-1">
+    <div className="flex w-24 flex-col items-center gap-1">
       <span className="text-base leading-none">{e.medalha}</span>
       <div
         className={`flex items-center justify-center rounded-full border-2 bg-imperium-bg font-display ${e.borda} ${e.texto} ${e.av}`}
       >
         {iniciais(linha.nome)}
       </div>
-      <p className={`max-w-[84px] truncate text-center font-display ${e.nomeCls} ${e.texto}`}>{linha.nome}</p>
-      <p className="max-w-[84px] truncate text-center text-[10px] text-stone-600">{linha.tribo}</p>
+      <p
+        className={`line-clamp-2 h-8 w-full text-center font-display leading-tight ${e.nomeCls} ${e.texto}`}
+        title={linha.nome}
+      >
+        {linha.nome}
+      </p>
+      <p className="w-full truncate text-center text-[10px] text-stone-600" title={linha.tribo}>
+        {linha.tribo}
+      </p>
       <p className={`text-[11px] ${e.texto}`}>{fmt(linha.valor)}</p>
       <div className={`w-16 rounded-t border-x border-t bg-gradient-to-b from-gold/15 to-transparent ${e.borda} ${e.alt}`} />
     </div>
@@ -166,9 +173,14 @@ export default async function RankingPage() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-8 px-6 py-8">
-      <div>
-        <h1 className="font-display text-2xl text-gold-bright">Ranking</h1>
-        <p className="kicker mt-1">Mês corrente · corte geral do Império</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-2xl text-gold-bright">Ranking</h1>
+          <p className="kicker mt-1">Mês corrente · corte geral do Império</p>
+        </div>
+        <a href="/api/export/ranking" className="btn-outline text-xs">
+          Exportar CSV
+        </a>
       </div>
 
       <section>

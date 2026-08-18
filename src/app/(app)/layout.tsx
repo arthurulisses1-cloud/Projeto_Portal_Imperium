@@ -7,6 +7,7 @@ import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
 import SidebarRight from "@/components/ui/SidebarRight";
 import AvatarUpload from "@/components/ui/AvatarUpload";
 import { IconLaurel } from "@/components/ui/icons";
+import { EXERCITO_CREST, TRIBO_TAG } from "@/lib/exercito-crests";
 
 export const dynamic = "force-dynamic";
 
@@ -17,27 +18,21 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer"] },
   { href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
   { href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
+  { href: "/tarefas", label: "Follow-ups", roles: ["closer"] },
   { href: "/exercito", label: "Meu Exército", roles: ["lider"] },
   { href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
   { href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider"] },
   { href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor"] },
   { href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
+  { href: "/central", label: "Central de Notificações", roles: ["diretor"] },
   { href: "/geral", label: "Visão Geral da Firma", roles: ["diretor"] },
   { href: "/legado", label: "Meu Legado", roles: ["diretor"] },
+  { href: "/auditoria", label: "Auditoria", roles: ["diretor"] },
   { href: "/metas", label: "Metas Mensais", roles: ["diretor"] },
   { href: "/validacao", label: "Fila de Validação", roles: ["diretor"] },
   { href: "/aprovacoes", label: "Aprovações de Carreira", roles: ["diretor"] },
   { href: "/contestacoes", label: "Fila de Contestação", roles: ["diretor"] },
 ];
-
-const TRIBO_TAG: Record<string, string> = {
-  Templários: "border-templar/50 text-templar bg-templar/10",
-  Maximus: "border-maximus/50 text-maximus bg-maximus/10",
-};
-const EXERCITO_CREST: Record<string, string> = {
-  Templários: "/crests/templarios.jpg",
-  Maximus: "/crests/maximus.jpg",
-};
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();

@@ -112,6 +112,15 @@ export default async function MuralPage() {
         </div>
       </div>
 
+      {ehExecutivo && !compromissoHoje && new Date().getHours() >= 14 && (
+        <div className="rounded border border-wine/50 bg-wine/10 px-4 py-3 text-sm text-wine-bright">
+          ⚠ Você ainda não lançou o compromisso de hoje.{" "}
+          <a href="/compromisso" className="underline hover:text-gold-bright">
+            Lançar agora
+          </a>
+        </div>
+      )}
+
       {ehExecutivo && metaIndividual > 0 && (
         <Card title="Meta do mês">
           <BarraMeta realizado={pagosMes} meta={metaIndividual} />

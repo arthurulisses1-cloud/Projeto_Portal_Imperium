@@ -9,8 +9,14 @@ import {
 } from "@/lib/time";
 import MembroCard from "@/components/MembroCard";
 import ConvidarForm from "./convidar-form";
-import { criarTribo, renomearTribo, atualizarLogoTribo } from "./actions";
+import { criarTribo, renomearTribo, atualizarLogoTribo, deixarFeedback, registrarPerda } from "./actions";
 import Card from "@/components/ui/Card";
+
+const MOTIVOS_PERDA = ["Preço", "Timing", "Perfil fora do ICP", "Concorrência", "Sumiu/não respondeu", "Outro"];
+
+function moeda(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+}
 
 export default async function TriboPage() {
   const supabase = await createClient();
@@ -71,6 +77,22 @@ export default async function TriboPage() {
     buscarFunilColetivo(supabase, idsSdrs),
   ]);
 
+  const rankingTribo = (sdrs ?? [])
+    .map((s) => ({ id: s.id, nome: s.full_name, valor: pagosMap.get(s.id) ?? 0 }))
+    .sort((a, b) => b.valor - a.valor);
+
+  const { data: perdas } = await supabase
+    .from("perdas")
+    .select("id, motivo, observacao, data")
+    .eq("profile_id", user.id)
+    .order("data", { ascending: false })
+    .limit(10);
+
+  const contagemMotivos = new Map<string, number>();
+  for (const p of perdas ?? []) {
+    contagemMotivos.set(p.motivo, (contagemMotivos.get(p.motivo) ?? 0) + 1);
+  }
+
   const exercitoNome = (tribo.exercito as unknown as { nome: string } | null)?.nome;
 
   return (
@@ -123,6 +145,21 @@ export default async function TriboPage() {
         <ConvidarForm />
       </Card>
 
+      {rankingTribo.length > 0 && (
+        <Card title="Ranking da Tribo">
+          <ol className="space-y-1.5">
+            {rankingTribo.map((r, i) => (
+              <li key={r.id} className="flex justify-between text-sm">
+                <span className={i === 0 ? "text-gold-bright" : "text-stone-300"}>
+                  {i + 1}. {r.nome}
+                </span>
+                <span className={i === 0 ? "text-gold-bright" : "text-stone-400"}>{moeda(r.valor)}</span>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      )}
+
       <Card title="Produção coletiva do mês">
         <table className="w-full text-sm">
           <thead>
@@ -149,19 +186,95 @@ export default async function TriboPage() {
       <Card title="Liderados">
         <div className="grid gap-3 sm:grid-cols-2">
           {(sdrs ?? []).map((sdr) => (
-            <MembroCard
-              key={sdr.id}
-              id={sdr.id}
-              nome={sdr.full_name}
-              cargo="SDR"
-              compromissoStatus={
-                STATUS_LABEL[compromissoMap.get(sdr.id)?.status ?? "não lançado"]
-              }
-              compromissoCor={STATUS_COR[compromissoMap.get(sdr.id)?.status ?? "não lançado"]}
-              pagosMes={pagosMap.get(sdr.id) ?? 0}
-            />
+            <div key={sdr.id} className="space-y-2">
+              <MembroCard
+                id={sdr.id}
+                nome={sdr.full_name}
+                cargo="SDR"
+                compromissoStatus={
+                  STATUS_LABEL[compromissoMap.get(sdr.id)?.status ?? "não lançado"]
+                }
+                compromissoCor={STATUS_COR[compromissoMap.get(sdr.id)?.status ?? "não lançado"]}
+                pagosMes={pagosMap.get(sdr.id) ?? 0}
+              />
+              <details className="rounded border border-imperium-line bg-imperium-bg/40 px-3 py-2 text-xs">
+                <summary className="cursor-pointer text-stone-400 hover:text-gold-bright">
+                  Deixar feedback
+                </summary>
+                <form action={deixarFeedback} className="mt-2 space-y-2">
+                  <input type="hidden" name="sdr_id" value={sdr.id} />
+                  <textarea
+                    name="texto"
+                    required
+                    placeholder="Ex: entrevista muito bem qualificada essa semana"
+                    rows={2}
+                    className="input-imp px-2 py-1"
+                  />
+                  <button type="submit" className="btn-outline px-2 py-1 text-xs">
+                    Enviar
+                  </button>
+                </form>
+              </details>
+            </div>
           ))}
         </div>
+      </Card>
+
+      <Card title="Motivos de Perda" right={<span className="text-xs text-stone-500">Diagnóstico qualitativo</span>}>
+        <form action={registrarPerda} className="mb-4 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-xs text-stone-400">Motivo</label>
+            <select name="motivo" required className="input-imp text-sm">
+              {MOTIVOS_PERDA.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-stone-400">Data</label>
+            <input type="date" name="data" defaultValue={new Date().toISOString().slice(0, 10)} className="input-imp text-sm" />
+          </div>
+          <div className="min-w-[180px] flex-1">
+            <label className="mb-1 block text-xs text-stone-400">Observação (opcional)</label>
+            <input name="observacao" className="input-imp text-sm" />
+          </div>
+          <button type="submit" className="btn-outline">
+            Registrar
+          </button>
+        </form>
+
+        {contagemMotivos.size > 0 && (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {Array.from(contagemMotivos.entries())
+              .sort((a, b) => b[1] - a[1])
+              .map(([motivo, qtd]) => (
+                <span
+                  key={motivo}
+                  className="rounded-full border border-wine/40 bg-wine/10 px-3 py-1 text-xs text-wine-bright"
+                >
+                  {motivo} · {qtd}
+                </span>
+              ))}
+          </div>
+        )}
+
+        {perdas && perdas.length > 0 ? (
+          <ul className="space-y-1.5">
+            {perdas.map((p) => (
+              <li key={p.id} className="flex justify-between border-t border-imperium-line pt-1.5 text-xs">
+                <span className="text-stone-300">
+                  {p.motivo}
+                  {p.observacao ? ` — ${p.observacao}` : ""}
+                </span>
+                <span className="text-stone-600">{new Date(p.data + "T00:00:00").toLocaleDateString("pt-BR")}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-stone-600">Nenhuma perda registrada ainda.</p>
+        )}
       </Card>
     </main>
   );

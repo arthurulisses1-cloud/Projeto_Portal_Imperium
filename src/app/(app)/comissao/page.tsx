@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import SimuladorComissao from "./simulador";
+import SimuladorVendaRapida from "./simulador-rapido";
 import { abrirContestacao } from "./actions";
 import { lookupComissao, proximoTier } from "@/lib/comissao";
 import { buscarProgressoMarcos } from "@/lib/marcos";
@@ -178,6 +179,10 @@ export default async function ComissaoPage() {
             })}
           </tbody>
         </table>
+
+        <div className="mt-4">
+          <SimuladorVendaRapida tiers={tiersOrdenados} producaoAtual={producaoRealMes} />
+        </div>
       </Card>
 
       <Card
@@ -190,35 +195,48 @@ export default async function ComissaoPage() {
             Marcos.
           </p>
         )}
-        <ul className="divide-y divide-imperium-line">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {marcos.map((m) => (
-            <li key={m.id} className="flex items-center gap-4 py-3">
-              <span
-                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-lg ${
-                  m.alcancado ? "border-gold bg-gold/10" : "border-imperium-line-strong opacity-60"
-                }`}
-              >
-                {m.icone}
-              </span>
-              <div className="flex-1">
+            <div
+              key={m.id}
+              className={`overflow-hidden rounded-lg border ${
+                m.alcancado ? "border-gold" : "border-imperium-line-strong"
+              }`}
+            >
+              <div className={`relative aspect-video ${m.alcancado ? "" : "grayscale"}`}>
+                {m.imagemUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={m.imagemUrl} alt={m.nome} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-imperium-bg/60 text-3xl">
+                    {m.icone}
+                  </div>
+                )}
+                {!m.alcancado && (
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-2xl">
+                    🔒
+                  </span>
+                )}
+                <span
+                  className={`absolute right-2 top-2 rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide ${
+                    m.alcancado
+                      ? "border-emerald-500/50 bg-imperium-bg/80 text-emerald-400"
+                      : "border-imperium-line-strong bg-imperium-bg/80 text-stone-400"
+                  }`}
+                >
+                  {m.alcancado ? "Desbloqueado" : "Bloqueado"}
+                </span>
+              </div>
+              <div className="p-3">
                 <p className="text-sm text-stone-100">{m.nome}</p>
                 <p className="text-xs text-stone-500">
                   Marco de {moeda(m.threshold)}
                   {!m.alcancado && ` · faltam ${moeda(m.falta)}`}
                 </p>
               </div>
-              <span
-                className={`rounded-full border px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${
-                  m.alcancado
-                    ? "border-emerald-500/50 text-emerald-400"
-                    : "border-imperium-line-strong text-stone-500"
-                }`}
-              >
-                {m.alcancado ? "Desbloqueado" : "Bloqueado"}
-              </span>
-            </li>
+            </div>
           ))}
-        </ul>
+        </div>
       </Card>
 
       <SimuladorComissao tiers={tiers ?? []} />

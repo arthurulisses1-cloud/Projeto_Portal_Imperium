@@ -212,6 +212,9 @@ export default async function VisaoGeralPage({
           <AbaLink href="/geral?visao=exercito" ativo={visao === "exercito"}>
             Por Exército
           </AbaLink>
+          <a href="/api/export/geral" className="btn-outline text-xs">
+            Exportar CSV
+          </a>
         </div>
       </div>
 
