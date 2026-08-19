@@ -6,15 +6,17 @@ import type { FunilEtapa } from "@/lib/funil";
 // A aba "Dados" empilha 7 blocos (um por métrica), cada um com:
 // [linha de rótulo] [cabeçalho "Execultivos" + uma coluna por dia] [uma linha por pessoa] [linha "Total"]
 // Ordem confirmada: Tentativas, Alôs API, Conexão API, Alô Vônix, Conexão Vônix, Entrevistas, Entrevistas Inbound.
-// Alôs e Conexões somam API + Vônix na mesma etapa. Entrevistas Inbound fica de fora por enquanto
-// (ainda não sabemos se soma em cima de "Entrevistas" ou é um conjunto disjunto de pessoas).
+// Alôs e Conexões somam API + Vônix na mesma etapa. O bloco de Entrevistas fica de fora (null) — só
+// reflete o SDR que agendou; a etapa "entrevistas" vem da aba dedicada (SDR + Closer), ver sync/entrevistas.ts.
+// Entrevistas Inbound também fica de fora por enquanto (ainda não sabemos se soma em cima de
+// "Entrevistas" ou é um conjunto disjunto de pessoas).
 const BLOCO_ETAPA: (FunilEtapa | null)[] = [
   "tentativas",
   "alos",
   "conexoes",
   "alos",
   "conexoes",
-  "entrevistas",
+  null,
   null,
 ];
 

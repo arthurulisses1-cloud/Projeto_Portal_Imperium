@@ -68,7 +68,7 @@ export async function buscarAssinado(): Promise<{
       acumularFunil(nomeNormalizado, data, "assinaturas");
       if (pago) acumularFunil(nomeNormalizado, data, "pagos");
 
-      if (valor > 0) {
+      if (pago && valor > 0) {
         vendas.push({
           nomeNormalizado,
           data,

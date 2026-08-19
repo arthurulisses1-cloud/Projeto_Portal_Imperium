@@ -3,7 +3,6 @@ export const FUNNEL_STAGES = [
   "alos",
   "conexoes",
   "entrevistas",
-  "subidos",
   "assinaturas",
   "pagos",
 ] as const;
@@ -15,7 +14,6 @@ export const FUNNEL_LABELS: Record<FunilEtapa, string> = {
   alos: "Alôs",
   conexoes: "Conexões",
   entrevistas: "Entrevistas",
-  subidos: "Subidos",
   assinaturas: "Assinaturas",
   pagos: "Pagos",
 };

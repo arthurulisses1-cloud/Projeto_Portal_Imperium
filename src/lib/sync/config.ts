@@ -8,6 +8,7 @@ export const SHEET_PUB_ID =
 export const SHEET_GIDS = {
   dados: "18738261",
   assinado: "115745497",
+  entrevistas: "1119762693",
 } as const;
 
 export function csvUrl(gid: string) {

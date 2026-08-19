@@ -9,7 +9,6 @@ const STAGE_TO_TRILHA: Partial<Record<FunilEtapa, string>> = {
   alos: "Fundamentos de Prospecção",
   conexoes: "Objeções em Ligação Fria",
   entrevistas: "Condução de Entrevista",
-  subidos: "Condução de Entrevista",
   assinaturas: "Fechamento Consultivo",
   pagos: "Fechamento Consultivo",
 };

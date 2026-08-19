@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buscarProducaoDados } from "@/lib/sync/dados";
 import { buscarAssinado } from "@/lib/sync/assinado";
+import { buscarEntrevistas } from "@/lib/sync/entrevistas";
 import { normalizarNome } from "@/lib/sync/parse";
 
 export const maxDuration = 60;
@@ -60,6 +61,34 @@ export async function GET(request: Request) {
       .from("producao_funil")
       .upsert(batch, { onConflict: "profile_id,data,etapa" });
     if (error) throw new Error("Erro gravando funil (Dados): " + error.message);
+    funilLinhasGravadas += batch.length;
+  }
+
+  // ---------- aba Entrevistas: funil (entrevistas, SDR + Closer) ----------
+  const entrevistas = await buscarEntrevistas();
+  const funilRowsEntrevistas = entrevistas.linhas
+    .map((l) => {
+      const profileId = nomeParaId.get(l.nomeNormalizado);
+      if (!profileId) {
+        unmatched.add(l.nomeNormalizado);
+        return null;
+      }
+      return {
+        profile_id: profileId,
+        data: l.data,
+        etapa: l.etapa,
+        realizado: l.realizado,
+        meta: 0,
+        synced_at: new Date().toISOString(),
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  for (const batch of chunk(funilRowsEntrevistas, 1000)) {
+    const { error } = await supabase
+      .from("producao_funil")
+      .upsert(batch, { onConflict: "profile_id,data,etapa" });
+    if (error) throw new Error("Erro gravando funil (Entrevistas): " + error.message);
     funilLinhasGravadas += batch.length;
   }
 
@@ -140,7 +169,7 @@ export async function GET(request: Request) {
   });
 
   await supabase.from("sync_log").insert({
-    fonte: "google_sheets:dados+assinado",
+    fonte: "google_sheets:dados+assinado+entrevistas",
     status: "ok",
     detalhe,
   });
