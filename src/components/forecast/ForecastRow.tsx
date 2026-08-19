@@ -50,6 +50,8 @@ export default function ForecastRow({ op }: { op: ForecastOp }) {
             <option value="">—</option>
             <option value="aguardando_pagamento">{STATUS_MANUAL_LABELS.aguardando_pagamento}</option>
             <option value="resolvendo_pendencia">{STATUS_MANUAL_LABELS.resolvendo_pendencia}</option>
+            <option value="analise_juridico">{STATUS_MANUAL_LABELS.analise_juridico}</option>
+            <option value="esfriou">{STATUS_MANUAL_LABELS.esfriou}</option>
           </select>
         ) : (
           <span className="text-xs text-stone-500">

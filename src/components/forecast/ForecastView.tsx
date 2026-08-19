@@ -52,14 +52,18 @@ export default function ForecastView({
     let pago = 0,
       aguardando = 0,
       pendencia = 0,
+      juridico = 0,
+      esfriou = 0,
       naoClassificado = 0;
     for (const o of opsFiltradas) {
       if (o.status === "PAGO") pago += o.valor;
       else if (o.statusManual === "aguardando_pagamento") aguardando += o.valor;
       else if (o.statusManual === "resolvendo_pendencia") pendencia += o.valor;
+      else if (o.statusManual === "analise_juridico") juridico += o.valor;
+      else if (o.statusManual === "esfriou") esfriou += o.valor;
       else if (o.status === "ASSINADO" || o.status === "REANÁLISE") naoClassificado += o.valor;
     }
-    return { pago, aguardando, pendencia, naoClassificado };
+    return { pago, aguardando, pendencia, juridico, esfriou, naoClassificado };
   }, [opsFiltradas]);
 
   const statusOrdenados = ["PAGO", "ASSINADO", "REANÁLISE", "CAIU", "DESISTIU"].filter((s) => porStatus.has(s));
@@ -97,7 +101,7 @@ export default function ForecastView({
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <Card>
           <p className="kicker mb-2">Já pago</p>
           <p className="font-display text-xl text-emerald-400">{moeda(resumo.pago)}</p>
@@ -110,6 +114,14 @@ export default function ForecastView({
         <Card>
           <p className="kicker mb-2">Em resolução de pendência</p>
           <p className="font-display text-xl text-wine-bright">{moeda(resumo.pendencia)}</p>
+        </Card>
+        <Card>
+          <p className="kicker mb-2">Análise Jurídico</p>
+          <p className="font-display text-xl text-stone-200">{moeda(resumo.juridico)}</p>
+        </Card>
+        <Card>
+          <p className="kicker mb-2">Esfriou</p>
+          <p className="font-display text-xl text-stone-400">{moeda(resumo.esfriou)}</p>
         </Card>
         <Card>
           <p className="kicker mb-2">Ainda não classificado</p>

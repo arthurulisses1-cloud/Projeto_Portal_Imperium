@@ -55,10 +55,15 @@ export async function salvarStatusForecast(formData: FormData) {
 
   const operacaoId = String(formData.get("operacao_id"));
   const statusManualRaw = String(formData.get("status_manual") ?? "");
-  const statusManual: StatusManual | null =
-    statusManualRaw === "resolvendo_pendencia" || statusManualRaw === "aguardando_pagamento"
-      ? statusManualRaw
-      : null;
+  const STATUS_MANUAL_VALIDOS = new Set<StatusManual>([
+    "resolvendo_pendencia",
+    "aguardando_pagamento",
+    "analise_juridico",
+    "esfriou",
+  ]);
+  const statusManual: StatusManual | null = STATUS_MANUAL_VALIDOS.has(statusManualRaw as StatusManual)
+    ? (statusManualRaw as StatusManual)
+    : null;
   const observacao = String(formData.get("observacao") ?? "").trim();
 
   const admin = createAdminClient();
@@ -86,6 +91,7 @@ const MOTIVOS_VALIDOS = new Set<MotivoQueda>([
   "curatelado",
   "criminal",
   "processual",
+  "honorarios",
   "outro",
 ]);
 

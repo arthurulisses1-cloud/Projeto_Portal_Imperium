@@ -1,8 +1,10 @@
-export type StatusManual = "resolvendo_pendencia" | "aguardando_pagamento";
+export type StatusManual = "resolvendo_pendencia" | "aguardando_pagamento" | "analise_juridico" | "esfriou";
 
 export const STATUS_MANUAL_LABELS: Record<StatusManual, string> = {
   resolvendo_pendencia: "Resolvendo Pendência",
   aguardando_pagamento: "Aguardando Pagamento",
+  analise_juridico: "Análise Jurídico",
+  esfriou: "Esfriou",
 };
 
 export type MotivoQueda =
@@ -12,6 +14,7 @@ export type MotivoQueda =
   | "curatelado"
   | "criminal"
   | "processual"
+  | "honorarios"
   | "outro";
 
 // Desistência e Outro pedem observação (por isso o "[obs]" no rótulo) — as
@@ -23,6 +26,7 @@ export const MOTIVO_QUEDA_LABELS: Record<MotivoQueda, string> = {
   curatelado: "Curatelado",
   criminal: "Antecedente criminal",
   processual: "Questão processual",
+  honorarios: "Honorários",
   outro: "Outro",
 };
 export const MOTIVO_QUEDA_PEDE_OBS: Set<MotivoQueda> = new Set<MotivoQueda>(["desistencia", "outro"]);
