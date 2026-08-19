@@ -698,6 +698,11 @@ function PanelForecast({ C }: { C: ReturnType<typeof compute> }) {
   const mx = Math.max(...days.map(([, v]) => v.cred), 1);
   const slice = days.length > 24 ? days.slice(-24) : days;
 
+  const resolvendo = C.ops.filter((o) => o.statusManual === "resolvendo_pendencia");
+  const aguardando = C.ops.filter((o) => o.statusManual === "aguardando_pagamento");
+  const somaResolvendo = resolvendo.reduce((s, o) => s + o.valor, 0);
+  const somaAguardando = aguardando.reduce((s, o) => s + o.valor, 0);
+
   return (
     <div>
       <div className="wd-grid3">
@@ -707,6 +712,12 @@ function PanelForecast({ C }: { C: ReturnType<typeof compute> }) {
           <div className="wd-bigsub">{duRest ? `${SM(falta / duRest)} por dia útil restante` : "período encerrado"}</div></div>
         <div className="wd-card"><h3>Ritmo atual entrega</h3><div className="wd-big" style={{ color: proj >= meta.v ? "var(--go)" : "var(--bad)" }}>{SM(proj)}</div>
           <div className="wd-bigsub">{meta.v ? `${proj >= meta.v ? "supera" : "fica abaixo d"}a meta em ${SM(Math.abs(proj - meta.v))}` : "—"}</div></div>
+      </div>
+      <div className="wd-grid2" style={{ marginTop: 13 }}>
+        <div className="wd-card"><h3>Resolvendo pendência</h3><div className="wd-big" style={{ color: "var(--flame)" }}>{SM(somaResolvendo)}</div>
+          <div className="wd-bigsub">{resolvendo.length} operaç{resolvendo.length === 1 ? "ão" : "ões"} marcada{resolvendo.length === 1 ? "" : "s"} no Forecast</div></div>
+        <div className="wd-card"><h3>Aguardando pagamento</h3><div className="wd-big" style={{ color: "var(--go)" }}>{SM(somaAguardando)}</div>
+          <div className="wd-bigsub">{aguardando.length} operaç{aguardando.length === 1 ? "ão" : "ões"} · já contam em &quot;Finalizando pagamentos&quot;</div></div>
       </div>
       <div className="wd-grid2" style={{ marginTop: 13 }}>
         <div className="wd-card">

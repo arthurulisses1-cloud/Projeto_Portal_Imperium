@@ -3,7 +3,10 @@
 import { useMemo, useState } from "react";
 import Card from "@/components/ui/Card";
 import ForecastRow from "./ForecastRow";
+import ForecastRowQueda from "./ForecastRowQueda";
 import { STATUS_SHEET_LABELS, STATUS_SHEET_COR, type ForecastOp } from "@/lib/forecast";
+
+type Aba = "assinaturas" | "pagos" | "quedas";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -19,11 +22,25 @@ export default function ForecastView({
   tribos: { chave: string; label: string }[];
 }) {
   const [triboFiltro, setTriboFiltro] = useState<string | null>(null);
+  const [aba, setAba] = useState<Aba>("assinaturas");
 
   const opsFiltradas = useMemo(() => {
     if (!triboFiltro) return ops;
     return ops.filter((o) => o.sdrTribo === triboFiltro || o.closerTribo === triboFiltro);
   }, [ops, triboFiltro]);
+
+  // Assinaturas = ainda em aberto (ASSINADO/REANÁLISE); Pagos = liquidado;
+  // Quedas = CAIU/DESISTIU, com o motivo pra registrar.
+  const opsAssinaturas = useMemo(
+    () => opsFiltradas.filter((o) => o.status === "ASSINADO" || o.status === "REANÁLISE"),
+    [opsFiltradas]
+  );
+  const opsPagos = useMemo(() => opsFiltradas.filter((o) => o.status === "PAGO"), [opsFiltradas]);
+  const opsQuedas = useMemo(
+    () => opsFiltradas.filter((o) => o.status === "CAIU" || o.status === "DESISTIU"),
+    [opsFiltradas]
+  );
+  const opsDaAba = aba === "assinaturas" ? opsAssinaturas : aba === "pagos" ? opsPagos : opsQuedas;
 
   const porStatus = useMemo(() => {
     const mapa = new Map<string, number>();
@@ -122,7 +139,32 @@ export default function ForecastView({
         </div>
       </Card>
 
-      <Card title="Assinaturas do mês">
+      <Card
+        title={
+          aba === "assinaturas" ? "Assinaturas do mês" : aba === "pagos" ? "Pagos do mês" : "Quedas do mês"
+        }
+        right={
+          <div className="flex gap-1.5">
+            {(
+              [
+                ["assinaturas", `Assinaturas (${opsAssinaturas.length})`],
+                ["pagos", `Pagos (${opsPagos.length})`],
+                ["quedas", `Quedas (${opsQuedas.length})`],
+              ] as [Aba, string][]
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setAba(v)}
+                className={`rounded px-2.5 py-1 text-[10px] uppercase transition ${
+                  aba === v ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-400 hover:border-gold"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        }
+      >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -133,21 +175,30 @@ export default function ForecastView({
                 <th className="pb-2 pr-3">Closer</th>
                 <th className="pb-2 pr-3 text-right">Valor</th>
                 <th className="pb-2 pr-3">Status planilha</th>
-                <th className="pb-2 pr-3">Status manual</th>
-                <th className="pb-2">Observação</th>
+                {aba === "quedas" ? (
+                  <>
+                    <th className="pb-2 pr-3">Motivo</th>
+                    <th className="pb-2">Observação</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="pb-2 pr-3">Status manual</th>
+                    <th className="pb-2">Observação</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
-              {opsFiltradas.length === 0 && (
+              {opsDaAba.length === 0 && (
                 <tr>
                   <td colSpan={8} className="py-4 text-center text-stone-600">
-                    Nenhuma assinatura neste recorte.
+                    Nada neste recorte.
                   </td>
                 </tr>
               )}
-              {opsFiltradas.map((op) => (
-                <ForecastRow key={op.id} op={op} />
-              ))}
+              {opsDaAba.map((op) =>
+                aba === "quedas" ? <ForecastRowQueda key={op.id} op={op} /> : <ForecastRow key={op.id} op={op} />
+              )}
             </tbody>
           </table>
         </div>

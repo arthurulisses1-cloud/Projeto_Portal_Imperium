@@ -168,6 +168,14 @@ function passaStatus(o: WeeklyOp, status: WeeklyState["status"]): boolean {
   return true;
 }
 
+// "Crédito" = assinado e ainda válido (ou já pago) — CAIU/DESISTIU não contam,
+// mesmo na visão "all". Isso é só pra somas de crédito (tot.cred, cred por
+// pessoa/time/origem/dia/mês); tot.caiu/nCaiu (Taxa de queda) continuam
+// vindo do conjunto CHEIO, sem esse filtro — senão a métrica de queda zera.
+function contaComoCredito(o: WeeklyOp): boolean {
+  return o.status !== "CAIU" && o.status !== "DESISTIU";
+}
+
 export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
   const { from, to, team, person, origem, status } = S;
   const passOp = (o: WeeklyOp, useTeam: boolean, usePerson: boolean) => {
@@ -260,21 +268,25 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
   }
 
   const baseOps = dataset.ops.filter((o) => passOp(o, false, false));
-  const people = buildPeople(true, true, ops);
+  const opsCred = ops.filter(contaComoCredito);
+  const people = buildPeople(true, true, opsCred);
 
-  const agg = (arr: WeeklyOp[]) => ({
+  // `arr` já deve vir sem CAIU/DESISTIU pra cred/n/pago/nPago; caiu/nCaiu
+  // são passados à parte, calculados sobre o conjunto CHEIO (ver contaComoCredito).
+  const agg = (arr: WeeklyOp[], arrCheio: WeeklyOp[] = arr) => ({
     cred: arr.reduce((s, o) => s + o.valor, 0),
     n: arr.length,
     pago: arr.filter((o) => o.status === "PAGO").reduce((s, o) => s + o.valor, 0),
     nPago: arr.filter((o) => o.status === "PAGO").length,
-    caiu: arr.filter((o) => o.status === "CAIU").reduce((s, o) => s + o.valor, 0),
-    nCaiu: arr.filter((o) => o.status === "CAIU").length,
+    caiu: arrCheio.filter((o) => o.status === "CAIU").reduce((s, o) => s + o.valor, 0),
+    nCaiu: arrCheio.filter((o) => o.status === "CAIU").length,
   });
-  const tot = agg(ops);
+  const tot = agg(opsCred, ops);
 
   const byTeam: Record<string, ComputedTeam> = {};
   for (const tm of dataset.teams) {
-    const a = agg(baseOps.filter((o) => o.time === tm));
+    const opsTeamCheio = baseOps.filter((o) => o.time === tm);
+    const a = agg(opsTeamCheio.filter(contaComoCredito), opsTeamCheio);
     const basePeople = buildPeople(false, false, baseOps);
     const pl = Object.entries(basePeople)
       .filter(([id]) => dataset.people[id]?.time === tm)
@@ -306,6 +318,7 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
     if (team && o.time !== team) continue;
     if (person && o.sdrId !== person && o.closerId !== person) continue;
     if (!passaStatus(o, status)) continue;
+    if (!contaComoCredito(o)) continue;
     const key = o.origem || "Sem origem";
     (byOrigem[key] = byOrigem[key] || { cred: 0, n: 0 });
     byOrigem[key].cred += o.valor;
@@ -313,7 +326,7 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
   }
 
   const byDay: Record<string, { cred: number; n: number }> = {};
-  for (const o of ops) {
+  for (const o of opsCred) {
     (byDay[o.data] = byDay[o.data] || { cred: 0, n: 0 });
     byDay[o.data].cred += o.valor;
     byDay[o.data].n++;
@@ -325,6 +338,7 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
     if (person && o.sdrId !== person && o.closerId !== person) continue;
     if (origem && o.origem !== origem) continue;
     if (!passaStatus(o, status)) continue;
+    if (!contaComoCredito(o)) continue;
     const m = +o.data.slice(5, 7);
     (byMonth[m] = byMonth[m] || { cred: 0, n: 0 });
     byMonth[m].cred += o.valor;

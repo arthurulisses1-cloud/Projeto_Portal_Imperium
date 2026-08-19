@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 
 type Linha = { nome: string; tribo: string; valor: number };
 
@@ -92,14 +93,20 @@ export default async function RankingPage() {
 
   const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
 
-  const { data: funilRows } =
+  // Paginado — essa query (todo mundo x todas as etapas no mês) já passa de
+  // 700 linhas e cresce todo dia; sem isso o Supabase corta em 1000 sem erro.
+  const funilRows =
     todosIds.length > 0
-      ? await supabase
-          .from("producao_funil")
-          .select("profile_id, etapa, realizado, papel")
-          .in("profile_id", todosIds)
-          .gte("data", inicioMes)
-      : { data: [] };
+      ? await buscarTudoPaginado<{ profile_id: string; etapa: string; realizado: number; papel: string }>(
+          (from, to) =>
+            supabase
+              .from("producao_funil")
+              .select("profile_id, etapa, realizado, papel")
+              .in("profile_id", todosIds)
+              .gte("data", inicioMes)
+              .range(from, to)
+        )
+      : [];
 
   const { data: vendasRows } =
     todosIds.length > 0
@@ -117,7 +124,7 @@ export default async function RankingPage() {
   }
 
   const funilPorPessoa = { sdr: new Map<string, Record<string, number>>(), closer: new Map<string, Record<string, number>>() };
-  for (const row of funilRows ?? []) {
+  for (const row of funilRows) {
     for (const alvo of ["sdr", "closer"] as const) {
       if (!contaComoPapel(row.papel, alvo)) continue;
       const mapa = funilPorPessoa[alvo];

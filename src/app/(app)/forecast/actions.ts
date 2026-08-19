@@ -2,30 +2,17 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
-import { podeEditarOperacao, type StatusManual } from "@/lib/forecast";
+import { podeEditarOperacao, MOTIVO_QUEDA_PEDE_OBS, type StatusManual, type MotivoQueda } from "@/lib/forecast";
 
-export async function salvarStatusForecast(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Não autenticado.");
-
-  const { data: meProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+// Não confia no "podeEditar" que já veio calculado pra tela — reconfere aqui
+// com dados frescos do banco antes de gravar. Usado tanto pro status manual
+// (Resolvendo Pendência/Aguardando Pagamento) quanto pro motivo de queda.
+async function exigirPermissaoOperacao(admin: SupabaseClient, userId: string, operacaoId: string) {
+  const { data: meProfile } = await admin.from("profiles").select("role").eq("id", userId).single();
   if (!meProfile) throw new Error("Perfil não encontrado.");
 
-  const operacaoId = String(formData.get("operacao_id"));
-  const statusManualRaw = String(formData.get("status_manual") ?? "");
-  const statusManual: StatusManual | null =
-    statusManualRaw === "resolvendo_pendencia" || statusManualRaw === "aguardando_pagamento"
-      ? statusManualRaw
-      : null;
-  const observacao = String(formData.get("observacao") ?? "").trim();
-
-  // Não confia no "podeEditar" que já veio calculado pra tela — reconfere
-  // aqui com dados frescos do banco antes de gravar.
-  const admin = createAdminClient();
   const { data: op } = await admin
     .from("weekly_operacoes")
     .select("id, sdr_profile_id, closer_profile_id")
@@ -35,7 +22,7 @@ export async function salvarStatusForecast(formData: FormData) {
 
   let exercitoLideradoId: string | null = null;
   if (meProfile.role === "lider") {
-    const { data: ex } = await admin.from("exercitos").select("id").eq("legado_id", user.id).maybeSingle();
+    const { data: ex } = await admin.from("exercitos").select("id").eq("legado_id", userId).maybeSingle();
     exercitoLideradoId = ex?.id ?? null;
   }
 
@@ -49,7 +36,7 @@ export async function salvarStatusForecast(formData: FormData) {
   );
 
   const permitido = podeEditarOperacao(
-    { id: user.id, role: meProfile.role, exercitoLideradoId },
+    { id: userId, role: meProfile.role, exercitoLideradoId },
     {
       closerProfileId: op.closer_profile_id,
       sdrExercitoId: op.sdr_profile_id ? exercitoPorProfileId.get(op.sdr_profile_id) ?? null : null,
@@ -57,6 +44,25 @@ export async function salvarStatusForecast(formData: FormData) {
     }
   );
   if (!permitido) throw new Error("Você não tem permissão pra editar esta operação.");
+}
+
+export async function salvarStatusForecast(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const operacaoId = String(formData.get("operacao_id"));
+  const statusManualRaw = String(formData.get("status_manual") ?? "");
+  const statusManual: StatusManual | null =
+    statusManualRaw === "resolvendo_pendencia" || statusManualRaw === "aguardando_pagamento"
+      ? statusManualRaw
+      : null;
+  const observacao = String(formData.get("observacao") ?? "").trim();
+
+  const admin = createAdminClient();
+  await exigirPermissaoOperacao(admin, user.id, operacaoId);
 
   const { error } = await admin
     .from("weekly_operacoes")
@@ -65,6 +71,50 @@ export async function salvarStatusForecast(formData: FormData) {
       observacao: observacao || null,
       status_manual_por: user.id,
       status_manual_em: new Date().toISOString(),
+    })
+    .eq("id", operacaoId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/forecast");
+  revalidatePath("/weekly");
+}
+
+const MOTIVOS_VALIDOS = new Set<MotivoQueda>([
+  "desistencia",
+  "divida",
+  "vendido",
+  "curatelado",
+  "criminal",
+  "processual",
+  "outro",
+]);
+
+export async function salvarMotivoQueda(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const operacaoId = String(formData.get("operacao_id"));
+  const motivoRaw = String(formData.get("motivo_queda") ?? "");
+  const motivo: MotivoQueda | null = MOTIVOS_VALIDOS.has(motivoRaw as MotivoQueda) ? (motivoRaw as MotivoQueda) : null;
+  if (!motivo) throw new Error("Selecione um motivo.");
+  const obs = String(formData.get("motivo_queda_obs") ?? "").trim();
+  if (MOTIVO_QUEDA_PEDE_OBS.has(motivo) && !obs) {
+    throw new Error("Esse motivo precisa de uma observação.");
+  }
+
+  const admin = createAdminClient();
+  await exigirPermissaoOperacao(admin, user.id, operacaoId);
+
+  const { error } = await admin
+    .from("weekly_operacoes")
+    .update({
+      motivo_queda: motivo,
+      motivo_queda_obs: obs || null,
+      motivo_queda_por: user.id,
+      motivo_queda_em: new Date().toISOString(),
     })
     .eq("id", operacaoId);
   if (error) throw new Error(error.message);

@@ -69,6 +69,28 @@ export async function alternarAtivo(formData: FormData) {
   revalidatePath("/legado");
 }
 
+export async function confirmarResgateMarco(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const profileId = String(formData.get("profile_id"));
+  const marcoId = String(formData.get("marco_id"));
+  const competencia = new Date().toISOString().slice(0, 7) + "-01";
+
+  // RLS (marcos_resgates_insert_diretor) já exige Diretor; a constraint
+  // unique(profile_id, marco_id) barra resgatar o mesmo marco 2x, e
+  // unique(profile_id, competencia) barra mais de 1 resgate no mesmo mês.
+  const { error } = await supabase
+    .from("marcos_resgates")
+    .insert({ profile_id: profileId, marco_id: marcoId, competencia, registrado_por: user.id });
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/legado");
+}
+
 export async function salvarAdmissao(formData: FormData) {
   const supabase = await createClient();
   const {

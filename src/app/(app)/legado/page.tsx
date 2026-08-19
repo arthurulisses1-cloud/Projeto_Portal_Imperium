@@ -4,7 +4,8 @@ import { FUNNEL_STAGES, type FunilEtapa } from "@/lib/funil";
 import { calcularGargalo } from "@/lib/gargalo";
 import { gerarParecer } from "@/lib/oraculo";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
-import { salvarAdmissao, salvarNascimento, alternarAtivo } from "./actions";
+import { salvarAdmissao, salvarNascimento, alternarAtivo, confirmarResgateMarco } from "./actions";
+import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -51,17 +52,51 @@ export default async function LegadoPage({
   const taxaMap = new Map((conversoes ?? []).map((c) => [`${c.etapa_de}_${c.etapa_para}`, c.taxa_esperada]));
   const metaTicketMedio = metaMes?.meta_ticket_medio ?? 0;
 
-  const [{ data: funilRows }, { data: vendasRows }, { data: vendasTrimestre }] = await Promise.all([
+  // producao_funil facilmente passa de 1000 linhas nesse recorte (6 etapas x
+  // ~20 pessoas x dias do mês) — sem paginar, o Supabase corta em silêncio e
+  // gente aparecia com funil zerado no card.
+  const funilRowsPromise =
     ids.length > 0
-      ? supabase.from("producao_funil").select("profile_id, etapa, realizado, papel").in("profile_id", ids).gte("data", inicioMes)
-      : Promise.resolve({ data: [] }),
+      ? buscarTudoPaginado<{ profile_id: string; etapa: string; realizado: number; papel: string }>((from, to) =>
+          supabase
+            .from("producao_funil")
+            .select("profile_id, etapa, realizado, papel")
+            .in("profile_id", ids)
+            .gte("data", inicioMes)
+            .range(from, to)
+        )
+      : Promise.resolve([]);
+
+  const [funilRows, { data: vendasRows }, { data: vendasTrimestre }, { data: marcosCat }, { data: resgatesTodos }] = await Promise.all([
+    funilRowsPromise,
     ids.length > 0
       ? supabase.from("vendas").select("profile_id, valor, papel").in("profile_id", ids).gte("data", inicioMes)
       : Promise.resolve({ data: [] }),
     ids.length > 0
       ? supabase.from("vendas").select("profile_id, valor, data, papel").in("profile_id", ids).gte("data", inicioTrimestre)
       : Promise.resolve({ data: [] }),
+    supabase.from("marcos").select("id, nome, threshold, icone").order("ordem"),
+    ids.length > 0
+      ? supabase.from("marcos_resgates").select("profile_id, marco_id, competencia").in("profile_id", ids)
+      : Promise.resolve({ data: [] }),
   ]);
+
+  // Produção pessoal do mês SEM o filtro de papel da tela (marco é sobre a
+  // produção total da pessoa, não sobre o recorte SDR/Closer que o Diretor
+  // escolheu ver) — mesma base de src/lib/marcos.ts.
+  const producaoMesTotalPorPessoa = new Map<string, number>();
+  for (const row of vendasRows ?? []) {
+    producaoMesTotalPorPessoa.set(row.profile_id, (producaoMesTotalPorPessoa.get(row.profile_id) ?? 0) + Number(row.valor));
+  }
+  function marcosElegiveis(profileId: string): { id: string; nome: string }[] {
+    const producao = producaoMesTotalPorPessoa.get(profileId) ?? 0;
+    const resgatesPessoa = (resgatesTodos ?? []).filter((r) => r.profile_id === profileId);
+    if (resgatesPessoa.some((r) => r.competencia === inicioMes)) return []; // já usou o resgate do mês
+    const idsResgatados = new Set(resgatesPessoa.map((r) => r.marco_id));
+    return (marcosCat ?? [])
+      .filter((m) => !idsResgatados.has(m.id) && producao >= m.threshold)
+      .map((m) => ({ id: m.id, nome: m.nome }));
+  }
 
   // "ambos" (fez os dois papéis na mesma venda/entrevista) conta em qualquer
   // filtro — só "sdr" ou "closer" puros ficam de fora do outro lado.
@@ -71,7 +106,7 @@ export default async function LegadoPage({
   }
 
   const funilPorPessoa = new Map<string, Record<FunilEtapa, number>>();
-  for (const row of funilRows ?? []) {
+  for (const row of funilRows) {
     if (!contaComoPapel(row.papel)) continue;
     if (!funilPorPessoa.has(row.profile_id)) {
       funilPorPessoa.set(row.profile_id, Object.fromEntries(FUNNEL_STAGES.map((e) => [e, 0])) as Record<FunilEtapa, number>);
@@ -169,6 +204,7 @@ export default async function LegadoPage({
           const gargalo = calcularGargalo(funilPessoa, taxaMap);
           const parecer = gerarParecer({ gargalo, ticketMedio, metaTicketMedio, pctMeta: null });
           const inativo = p.ativo === false;
+          const elegiveis = marcosElegiveis(p.id);
 
           return (
             <div
@@ -243,6 +279,30 @@ export default async function LegadoPage({
                   <p className="text-gold-bright">{moeda(pago)}</p>
                 </div>
               </div>
+
+              {elegiveis.length > 0 && (
+                <div className="mt-4 rounded border border-gold/40 bg-gold/5 p-2.5">
+                  <p className="mb-1.5 text-[10px] uppercase tracking-wide text-gold">
+                    🎁 Marco batido este mês — confirmar resgate
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {elegiveis.map((m) => (
+                      <form key={m.id} action={confirmarResgateMarco}>
+                        <input type="hidden" name="profile_id" value={p.id} />
+                        <input type="hidden" name="marco_id" value={m.id} />
+                        <button type="submit" className="btn-outline px-2 py-1 text-xs">
+                          Confirmar: {m.nome}
+                        </button>
+                      </form>
+                    ))}
+                  </div>
+                  {elegiveis.length > 1 && (
+                    <p className="mt-1.5 text-[10px] text-stone-500">
+                      Só dá pra confirmar um por mês — escolha um dos {elegiveis.length}.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="mt-4 rounded border border-imperium-line bg-imperium-bg/40 p-2.5">
                 <p className="mb-1.5 text-[10px] uppercase tracking-wide text-stone-500">Parecer do Oráculo</p>

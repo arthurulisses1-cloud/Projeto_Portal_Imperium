@@ -61,7 +61,7 @@ export default async function ComissaoPage() {
   const tierAtual = lookupComissao(tiersOrdenados, producaoRealMes);
   const proximo = proximoTier(tiersOrdenados, producaoRealMes);
 
-  const { marcos, producaoAno } = await buscarProgressoMarcos(supabase, meId);
+  const { marcos } = await buscarProgressoMarcos(supabase, meId);
 
   const { data: contestacoes } = await supabase
     .from("contestacoes")
@@ -187,7 +187,7 @@ export default async function ComissaoPage() {
 
       <Card
         title="Sistema de Marcos"
-        right={<span className="text-xs text-stone-500">Produção do ano: {moeda(producaoAno)}</span>}
+        right={<span className="text-xs text-stone-500">Produção do mês: {moeda(producaoRealMes)}</span>}
       >
         {marcos.length === 0 && (
           <p className="text-sm text-stone-500">
@@ -200,10 +200,10 @@ export default async function ComissaoPage() {
             <div
               key={m.id}
               className={`overflow-hidden rounded-lg border ${
-                m.alcancado ? "border-gold" : "border-imperium-line-strong"
+                m.alcancado ? "border-gold" : m.elegivel ? "border-gold/50 border-dashed" : "border-imperium-line-strong"
               }`}
             >
-              <div className={`relative aspect-video ${m.alcancado ? "" : "grayscale"}`}>
+              <div className={`relative aspect-video ${m.alcancado || m.elegivel ? "" : "grayscale"}`}>
                 {m.imagemUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={m.imagemUrl} alt={m.nome} className="h-full w-full object-cover" />
@@ -212,7 +212,7 @@ export default async function ComissaoPage() {
                     {m.icone}
                   </div>
                 )}
-                {!m.alcancado && (
+                {!m.alcancado && !m.elegivel && (
                   <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-2xl">
                     🔒
                   </span>
@@ -221,17 +221,20 @@ export default async function ComissaoPage() {
                   className={`absolute right-2 top-2 rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide ${
                     m.alcancado
                       ? "border-emerald-500/50 bg-imperium-bg/80 text-emerald-400"
-                      : "border-imperium-line-strong bg-imperium-bg/80 text-stone-400"
+                      : m.elegivel
+                        ? "border-gold/50 bg-imperium-bg/80 text-gold"
+                        : "border-imperium-line-strong bg-imperium-bg/80 text-stone-400"
                   }`}
                 >
-                  {m.alcancado ? "Desbloqueado" : "Bloqueado"}
+                  {m.alcancado ? "Desbloqueado" : m.elegivel ? "Disponível este mês" : "Bloqueado"}
                 </span>
               </div>
               <div className="p-3">
                 <p className="text-sm text-stone-100">{m.nome}</p>
                 <p className="text-xs text-stone-500">
                   Marco de {moeda(m.threshold)}
-                  {!m.alcancado && ` · faltam ${moeda(m.falta)}`}
+                  {!m.alcancado && !m.elegivel && ` · faltam ${moeda(m.falta)}`}
+                  {m.elegivel && " · fale com o Diretor pra confirmar o resgate"}
                 </p>
               </div>
             </div>

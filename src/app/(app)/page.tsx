@@ -11,6 +11,8 @@ import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, busc
 import { buscarMetaIndividual } from "@/lib/metas";
 import { buscarCampanhasAtivas, type CampanhaComProgresso } from "@/lib/campanhas";
 import { FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
+import { RANK_LABELS } from "@/lib/labels";
+import { EXERCITO_CREST } from "@/lib/exercito-crests";
 
 export default async function MuralPage() {
   const supabase = await createClient();
@@ -79,6 +81,22 @@ export default async function MuralPage() {
   // no Mural" + Campanhas — Closer/SDR mantêm tudo na coluna única de sempre.
   const temLateral = profile?.role === "lider" || profile?.role === "diretor";
 
+  // Central de Notificações: Diretor vê a firma inteira (sem escopo), Líder só
+  // o próprio Exército, Closer só a própria Tribo. Líder não tem tribo_id (lidera
+  // o Exército inteiro, não uma Tribo) — resolve via exercitos.legado_id.
+  const triboAtual = profile?.tribo as unknown as { id: string; nome: string; exercito: { nome: string } | null } | null;
+  let escopoCentral: { tipo: "exercito"; exercitoId: string } | { tipo: "tribo"; triboId: string } | null = null;
+  let nomeExercitoLiderado: string | null = null;
+  if (profile?.role === "lider") {
+    const { data: exercitoLiderado } = await supabase.from("exercitos").select("id, nome").eq("legado_id", user.id).maybeSingle();
+    if (exercitoLiderado) {
+      escopoCentral = { tipo: "exercito", exercitoId: exercitoLiderado.id };
+      nomeExercitoLiderado = exercitoLiderado.nome;
+    }
+  } else if (profile?.role === "closer" && triboAtual?.id) {
+    escopoCentral = { tipo: "tribo", triboId: triboAtual.id };
+  }
+
   // Enquetes: pré-computa opções + votos dos posts do tipo 'enquete' já carregados
   const enquetePostIds = (muralPosts ?? []).filter((p) => p.tipo === "enquete").map((p) => p.id);
   const enquetesPorPost = new Map<string, EnqueteData>();
@@ -134,7 +152,9 @@ export default async function MuralPage() {
         </p>
       </div>
 
-      {profile?.role === "diretor" && <CentralNotificacoes />}
+      {(profile?.role === "diretor" || profile?.role === "lider" || profile?.role === "closer") && (
+        <CentralNotificacoes escopo={escopoCentral} />
+      )}
 
       {ehExecutivo && !compromissoHoje && new Date().getHours() >= 14 && (
         <div className="rounded border border-wine/50 bg-wine/10 px-4 py-3 text-sm text-wine-bright">
@@ -286,13 +306,44 @@ export default async function MuralPage() {
 
     {temLateral && (
       <aside className="hidden w-80 shrink-0 space-y-6 lg:block">
+        {profile?.role === "lider" && (
+          <Card title="Cargo Atual">
+            <div className="flex items-center gap-3">
+              {nomeExercitoLiderado && EXERCITO_CREST[nomeExercitoLiderado] ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={EXERCITO_CREST[nomeExercitoLiderado]}
+                  alt={nomeExercitoLiderado}
+                  className="h-12 w-12 shrink-0 rounded-full border border-gold/40 object-cover"
+                />
+              ) : (
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-gold/40 bg-imperium-bg text-lg text-gold">
+                  🛡
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="truncate font-display text-base text-gold-bright">
+                  {RANK_LABELS[profile.rank] ?? profile.rank}
+                </p>
+                <p className="truncate text-xs text-stone-500">
+                  {nomeExercitoLiderado ? `Legado do Exército ${nomeExercitoLiderado}` : "Exército não definido"}
+                </p>
+                <p className="mt-0.5 text-xs tracking-wide text-gold">
+                  {"★".repeat(profile.stars_total ?? 0)}
+                  <span className="text-imperium-line-strong">{"★".repeat(Math.max(0, 6 - (profile.stars_total ?? 0)))}</span>
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
+
         <Card title="Publicar no Mural">
           <MuralForm podeAviso={true} podeEnquete={profile?.role === "diretor"} />
         </Card>
 
         {campanhasAtivas.length > 0 && <CampanhasCard campanhas={campanhasAtivas} compact />}
 
-        {profile?.role === "diretor" && (
+        {temLateral && (
           <a
             href="/campanhas"
             className="block rounded border border-imperium-line px-3 py-2 text-center text-xs text-gold transition hover:border-gold hover:bg-gold/10"
@@ -307,9 +358,70 @@ export default async function MuralPage() {
 }
 
 function CampanhasCard({ campanhas, compact = false }: { campanhas: CampanhaComProgresso[]; compact?: boolean }) {
+  // Na lateral do Mural (compact), cada campanha vira UMA linha resumida —
+  // sem banner grande nem lista completa de participantes, que era o que
+  // deixava o layout de 3 colunas cramped. A visão cheia (grid, tela única)
+  // continua com o card completo de sempre.
+  if (compact) {
+    return (
+      <Card title="Campanhas do mês">
+        <ul className="space-y-2.5">
+          {campanhas.map((c) => {
+            const metricaLabel = c.metrica === "credito" ? "R$" : FUNNEL_LABELS[c.metrica as FunilEtapa] ?? c.metrica;
+            const fmt = (v: number) =>
+              c.metrica === "credito"
+                ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
+                : `${v} ${metricaLabel}`;
+            const max = Math.max(...c.participantes.map((p) => p.valor), c.metaValor ?? 0, 1);
+            const lider = c.participantes[0];
+            const resto = c.participantes.length - 1;
+
+            return (
+              <li key={c.id} className="rounded border border-gold/20 p-2.5">
+                <div className="flex items-center gap-2">
+                  {c.imagemUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={c.imagemUrl} alt="" className="h-8 w-8 shrink-0 rounded object-cover" />
+                  ) : (
+                    <span className="text-base">🏆</span>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs text-gold-bright">{c.titulo}</p>
+                    <p className="truncate text-[9px] uppercase tracking-wide text-stone-600">
+                      até {new Date(c.dataFim + "T00:00:00").toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+                </div>
+
+                {lider && (
+                  <div className="mt-2">
+                    <div className="mb-1 flex items-center justify-between text-[10px]">
+                      <span className="truncate text-stone-300">
+                        {c.alvo !== "geral" && "👑 "}
+                        {lider.label}
+                      </span>
+                      <span className="shrink-0 text-stone-500">{fmt(lider.valor)}</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-imperium-line">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-gold to-gold-bright"
+                        style={{ width: `${Math.min(100, (lider.valor / max) * 100)}%` }}
+                      />
+                    </div>
+                    {resto > 0 && <p className="mt-1 text-[9px] text-stone-600">+{resto} participante{resto === 1 ? "" : "s"}</p>}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+    );
+  }
+
   return (
     <Card title="Campanhas do mês">
-      <div className={compact ? "space-y-4" : "grid gap-4 sm:grid-cols-2"}>
+      <div className="grid gap-4 sm:grid-cols-2">
         {campanhas.map((c) => {
           const metricaLabel = c.metrica === "credito" ? "R$" : FUNNEL_LABELS[c.metrica as FunilEtapa] ?? c.metrica;
           const fmt = (v: number) =>

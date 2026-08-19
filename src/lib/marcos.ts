@@ -6,35 +6,57 @@ export type MarcoProgresso = {
   threshold: number;
   icone: string;
   imagemUrl: string | null;
+  // Já resgatado alguma vez (registro permanente em marcos_resgates) — o
+  // troféu fica "aberto" pra sempre, independente do mês corrente.
   alcancado: boolean;
+  resgatadoEm: string | null;
+  // Bateu o threshold NESTE mês, ainda não foi resgatado, e a pessoa ainda
+  // não usou o resgate do mês em outro marco (só 1 resgate/mês/pessoa).
+  elegivel: boolean;
   falta: number;
 };
 
-// Produção acumulada = soma de vendas desde 1º de janeiro do ano corrente.
-// Os marcos (R$350k a R$2M) são muito maiores que a produção de um mês só,
-// então a leitura é sempre "ano corrente", não "mês corrente".
+// Produção do MÊS CORRENTE (não mais soma acumulada do ano — essa era a
+// causa de gente aparecer "batendo marco" sem ter batido nada no mês, só
+// por acúmulo ao longo do ano). Cada marco só pode ser resgatado uma vez na
+// vida por pessoa, e no máximo um resgate por pessoa por mês (ver
+// marcos_resgates, migration 0026) — quem confirma o resgate é o Diretor.
 export async function buscarProgressoMarcos(
   supabase: SupabaseClient,
   profileId: string
-): Promise<{ marcos: MarcoProgresso[]; producaoAno: number }> {
-  const inicioAno = `${new Date().getFullYear()}-01-01`;
+): Promise<{ marcos: MarcoProgresso[]; producaoMes: number }> {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const inicioMes = hoje.slice(0, 7) + "-01";
+  const competenciaAtual = inicioMes;
 
-  const [{ data: marcosRows }, { data: vendasAno }] = await Promise.all([
+  const [{ data: marcosRows }, { data: vendasMes }, { data: resgates }] = await Promise.all([
     supabase.from("marcos").select("id, nome, threshold, icone, imagem_url").order("ordem"),
-    supabase.from("vendas").select("valor").eq("profile_id", profileId).gte("data", inicioAno),
+    supabase.from("vendas").select("valor").eq("profile_id", profileId).gte("data", inicioMes),
+    supabase.from("marcos_resgates").select("marco_id, competencia, criado_em").eq("profile_id", profileId),
   ]);
 
-  const producaoAno = (vendasAno ?? []).reduce((s, v) => s + Number(v.valor), 0);
+  const producaoMes = (vendasMes ?? []).reduce((s, v) => s + Number(v.valor), 0);
 
-  const marcos = (marcosRows ?? []).map((m) => ({
-    id: m.id,
-    nome: m.nome,
-    threshold: m.threshold,
-    icone: m.icone,
-    imagemUrl: m.imagem_url,
-    alcancado: producaoAno >= m.threshold,
-    falta: Math.max(0, m.threshold - producaoAno),
-  }));
+  const resgatePorMarco = new Map((resgates ?? []).map((r) => [r.marco_id, r]));
+  // Já usou o resgate do mês corrente em algum outro marco?
+  const jaResgatouEsteMes = (resgates ?? []).some((r) => r.competencia === competenciaAtual);
 
-  return { marcos, producaoAno };
+  const marcos = (marcosRows ?? []).map((m) => {
+    const resgate = resgatePorMarco.get(m.id);
+    const alcancado = !!resgate;
+    const elegivel = !alcancado && !jaResgatouEsteMes && producaoMes >= m.threshold;
+    return {
+      id: m.id,
+      nome: m.nome,
+      threshold: m.threshold,
+      icone: m.icone,
+      imagemUrl: m.imagem_url,
+      alcancado,
+      resgatadoEm: resgate?.criado_em ?? null,
+      elegivel,
+      falta: Math.max(0, m.threshold - producaoMes),
+    };
+  });
+
+  return { marcos, producaoMes };
 }

@@ -5,16 +5,29 @@ function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
-// Antes era a aba "/central" — agora embutido direto no Mural do Diretor
-// pra não poluir a navegação com uma aba a mais.
-export default async function CentralNotificacoes() {
+// Antes era a aba "/central" — agora embutido direto no Mural, escopado por
+// quem tá vendo: Diretor vê a firma inteira, Líder só o próprio Exército,
+// Closer só a própria Tribo (via `escopo`; sem escopo = sem filtro extra).
+type Escopo = { tipo: "exercito"; exercitoId: string } | { tipo: "tribo"; triboId: string } | null;
+
+export default async function CentralNotificacoes({ escopo = null }: { escopo?: Escopo }) {
   const supabase = await createClient();
 
-  const { data: pessoas } = await supabase
+  const { data: pessoasRaw } = await supabase
     .from("profiles")
-    .select("id, full_name, role, data_admissao")
-    .in("role", ["sdr", "closer"]);
-  const ids = (pessoas ?? []).map((p) => p.id);
+    .select("id, full_name, role, data_admissao, tribo:tribos!profiles_tribo_id_fkey(id, exercito_id)")
+    .in("role", ["sdr", "closer"])
+    .eq("ativo", true);
+
+  const pessoas = (pessoasRaw ?? [])
+    .filter((p) => {
+      if (!escopo) return true;
+      const tribo = p.tribo as unknown as { id: string; exercito_id: string } | null;
+      if (escopo.tipo === "tribo") return tribo?.id === escopo.triboId;
+      return tribo?.exercito_id === escopo.exercitoId;
+    })
+    .map((p) => ({ id: p.id, full_name: p.full_name, role: p.role, data_admissao: p.data_admissao }));
+  const ids = pessoas.map((p) => p.id);
 
   const hoje = new Date().toISOString().slice(0, 10);
 
@@ -25,24 +38,31 @@ export default async function CentralNotificacoes() {
   const naoLancaram = (pessoas ?? []).filter((p) => !lancouHoje.has(p.id));
 
   const { data: marcos } = await supabase.from("marcos").select("nome, threshold, icone").order("ordem");
-  const inicioAno = `${new Date().getFullYear()}-01-01`;
-  const { data: vendasAno } = ids.length
-    ? await supabase.from("vendas").select("profile_id, valor").in("profile_id", ids).gte("data", inicioAno)
+  // Mesma base que buscarProgressoMarcos (src/lib/marcos.ts): mês corrente,
+  // não acumulado do ano — os thresholds são metas de UM mês.
+  const inicioMesMarcos = hoje.slice(0, 7) + "-01";
+  const { data: vendasMesMarcos } = ids.length
+    ? await supabase.from("vendas").select("profile_id, valor").in("profile_id", ids).gte("data", inicioMesMarcos)
     : { data: [] };
-  const producaoAnoPorPessoa = new Map<string, number>();
-  for (const v of vendasAno ?? []) {
-    producaoAnoPorPessoa.set(v.profile_id, (producaoAnoPorPessoa.get(v.profile_id) ?? 0) + Number(v.valor));
+  const producaoMesPorPessoa = new Map<string, number>();
+  for (const v of vendasMesMarcos ?? []) {
+    producaoMesPorPessoa.set(v.profile_id, (producaoMesPorPessoa.get(v.profile_id) ?? 0) + Number(v.valor));
   }
+  // "Perto" de verdade = já fez pelo menos 70% do menor marco ainda não
+  // batido no mês — sem esse corte, a lista sempre mostrava as 5 pessoas
+  // MENOS LONGE (mesmo estando a 50-80% de distância), o que não é "perto"
+  // de nada na prática.
   const pertoDeMarco = (pessoas ?? [])
     .map((p) => {
-      const producao = producaoAnoPorPessoa.get(p.id) ?? 0;
+      const producao = producaoMesPorPessoa.get(p.id) ?? 0;
       const proximo = (marcos ?? [])
         .filter((m) => producao < m.threshold)
         .sort((a, b) => a.threshold - b.threshold)[0];
       if (!proximo) return null;
-      return { id: p.id, nome: p.full_name, marco: proximo.nome, icone: proximo.icone, falta: proximo.threshold - producao };
+      return { id: p.id, nome: p.full_name, marco: proximo.nome, icone: proximo.icone, falta: proximo.threshold - producao, threshold: proximo.threshold };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)
+    .filter((x) => x.falta <= x.threshold * 0.3)
     .sort((a, b) => a.falta - b.falta)
     .slice(0, 5);
 

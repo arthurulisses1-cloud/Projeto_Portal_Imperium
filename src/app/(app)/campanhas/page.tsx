@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 import CampanhaForm from "./campanha-form";
 import { excluirCampanha } from "./actions";
 import { buscarCampanhasAtivas } from "@/lib/campanhas";
@@ -6,6 +7,13 @@ import Card from "@/components/ui/Card";
 
 export default async function CampanhasPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: profile } = user
+    ? await supabase.from("profiles").select("role").eq("id", user.id).single()
+    : { data: null };
+  if (profile?.role !== "lider" && profile?.role !== "diretor") redirect("/");
 
   const { data: pessoas } = await supabase
     .from("profiles")

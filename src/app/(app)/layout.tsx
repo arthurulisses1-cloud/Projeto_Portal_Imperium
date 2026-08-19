@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import AppNav, { type NavEntry } from "@/components/ui/AppNav";
 import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
@@ -106,7 +106,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     return rest;
   });
 
-  const ehExecutivo = papelVisualizado === "sdr" || papelVisualizado === "closer";
+  const ehExecutivo = papelVisualizado === "sdr" || papelVisualizado === "closer" || papelVisualizado === "lider";
+  // O Mural já tem a própria lateral (Publicar no Mural + Campanhas, pra
+  // líder/diretor) e é a tela mais carregada do site — empilhar a SidebarRight
+  // global em cima disso vira 3-4 colunas espremidas. Some só nessa rota;
+  // nas outras páginas ela continua normalmente.
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const naMural = pathname === "/";
 
   const pendencias =
     user && profile
@@ -179,7 +185,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         <div className="flex flex-1">
           <div className="min-w-0 flex-1">{children}</div>
-          {user && ehExecutivo && <SidebarRight userId={previewPessoa?.id ?? user.id} />}
+          {user && ehExecutivo && !naMural && <SidebarRight userId={previewPessoa?.id ?? user.id} />}
         </div>
 
         <footer className="flex items-center justify-center gap-3 py-6">

@@ -38,17 +38,25 @@ async function pagosMesPorGrupo(
 
   const exercitoPorLegadoId = new Map((exercitos ?? []).map((e) => [e.legado_id, e.nome]));
 
-  const grupoPorProfile = new Map<string, string>();
+  // Pro agrupamento por Tribo, a CHAVE precisa ser namespaced por Exército
+  // ("Exército|Tribo") — existem Tribos com o MESMO NOME em Exércitos
+  // diferentes (ex.: "Inbound" no Maximus e "Inbound" nos Templários), e sem
+  // isso a produção das duas se mistura numa única barra na Guerra de Tribos.
+  const grupoPorProfile = new Map<string, { chave: string; nome: string; exercitoNome: string | null }>();
   for (const p of pessoas ?? []) {
     const tribo = p.tribo as unknown as { nome: string; exercito: { nome: string } | null } | null;
-    const chave =
-      agrupar === "exercito"
-        ? tribo?.exercito?.nome ?? exercitoPorLegadoId.get(p.id)
-        : tribo?.nome;
-    if (chave) grupoPorProfile.set(p.id, chave);
+    if (agrupar === "exercito") {
+      const nome = tribo?.exercito?.nome ?? exercitoPorLegadoId.get(p.id);
+      if (nome) grupoPorProfile.set(p.id, { chave: nome, nome, exercitoNome: null });
+    } else {
+      if (tribo?.nome) {
+        const exercitoNome = tribo.exercito?.nome ?? null;
+        grupoPorProfile.set(p.id, { chave: `${exercitoNome ?? "?"}|${tribo.nome}`, nome: tribo.nome, exercitoNome });
+      }
+    }
   }
 
-  const totais = new Map<string, number>();
+  const totais = new Map<string, { nome: string; exercitoNome: string | null; valor: number }>();
   let foraDoGrupo = 0;
   for (const o of ops) {
     // Time do negócio = time do Closer, com fallback pro SDR — mesma regra da Weekly de Receita.
@@ -63,11 +71,21 @@ async function pagosMesPorGrupo(
       foraDoGrupo += Number(o.valor);
       continue;
     }
-    totais.set(grupo, (totais.get(grupo) ?? 0) + Number(o.valor));
+    const atual = totais.get(grupo.chave);
+    totais.set(grupo.chave, { nome: grupo.nome, exercitoNome: grupo.exercitoNome, valor: (atual?.valor ?? 0) + Number(o.valor) });
   }
 
-  const resultado = Array.from(totais.entries())
-    .map(([nome, valor]) => ({ nome, valor }))
+  // Só desambigua o nome exibido (acrescenta "(Exército)") quando duas
+  // entradas diferentes têm o mesmo nome de Tribo — no caso comum (nomes
+  // únicos) mantém o nome puro, sem mudar o visual de hoje.
+  const contagemPorNome = new Map<string, number>();
+  Array.from(totais.values()).forEach(({ nome }) => contagemPorNome.set(nome, (contagemPorNome.get(nome) ?? 0) + 1));
+
+  const resultado = Array.from(totais.values())
+    .map(({ nome, exercitoNome, valor }) => ({
+      nome: (contagemPorNome.get(nome) ?? 0) > 1 && exercitoNome ? `${nome} (${exercitoNome})` : nome,
+      valor,
+    }))
     .sort((a, b) => b.valor - a.valor);
 
   // Sempre por último — é uma categoria de acerto de contas, não um
@@ -86,12 +104,17 @@ export function buscarConfrontoTribos(supabase: SupabaseClient) {
   return pagosMesPorGrupo(supabase, "tribo");
 }
 
-// Mapa nome da Tribo -> logo_url (só as que já subiram uma logo própria em /tribo)
+// Mapa nome da Tribo -> logo_url (só as que já subiram uma logo própria em /tribo).
+// Inclui também a chave desambiguada "Tribo (Exército)" — pagosMesPorGrupo usa
+// esse formato quando duas Tribos de Exércitos diferentes têm o mesmo nome.
 export async function buscarCrestsTribos(supabase: SupabaseClient): Promise<Record<string, string>> {
-  const { data } = await supabase.from("tribos").select("nome, logo_url").not("logo_url", "is", null);
+  const { data } = await supabase.from("tribos").select("nome, logo_url, exercito:exercitos(nome)").not("logo_url", "is", null);
   const mapa: Record<string, string> = {};
   for (const t of data ?? []) {
-    if (t.logo_url) mapa[t.nome] = t.logo_url;
+    if (!t.logo_url) continue;
+    mapa[t.nome] = t.logo_url;
+    const exercitoNome = (t.exercito as unknown as { nome: string } | null)?.nome;
+    if (exercitoNome) mapa[`${t.nome} (${exercitoNome})`] = t.logo_url;
   }
   return mapa;
 }

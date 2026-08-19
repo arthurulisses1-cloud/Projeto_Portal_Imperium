@@ -5,6 +5,28 @@ export const STATUS_MANUAL_LABELS: Record<StatusManual, string> = {
   aguardando_pagamento: "Aguardando Pagamento",
 };
 
+export type MotivoQueda =
+  | "desistencia"
+  | "divida"
+  | "vendido"
+  | "curatelado"
+  | "criminal"
+  | "processual"
+  | "outro";
+
+// Desistência e Outro pedem observação (por isso o "[obs]" no rótulo) — as
+// demais são objetivas o bastante pra não precisar de texto livre.
+export const MOTIVO_QUEDA_LABELS: Record<MotivoQueda, string> = {
+  desistencia: "Desistência",
+  divida: "Dívida",
+  vendido: "Vendido (comprou de outro lugar)",
+  curatelado: "Curatelado",
+  criminal: "Antecedente criminal",
+  processual: "Questão processual",
+  outro: "Outro",
+};
+export const MOTIVO_QUEDA_PEDE_OBS: Set<MotivoQueda> = new Set<MotivoQueda>(["desistencia", "outro"]);
+
 export const STATUS_SHEET_LABELS: Record<string, string> = {
   PAGO: "Pago",
   CAIU: "Caiu",
@@ -35,6 +57,8 @@ export type ForecastOp = {
   status: string;
   statusManual: StatusManual | null;
   observacao: string | null;
+  motivoQueda: MotivoQueda | null;
+  motivoQuedaObs: string | null;
   podeEditar: boolean;
 };
 

@@ -3,12 +3,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
+async function exigirLiderOuDiretor(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", userId).single();
+  if (profile?.role !== "lider" && profile?.role !== "diretor") {
+    throw new Error("Só Líder ou Diretor podem gerenciar campanhas.");
+  }
+}
+
 export async function criarCampanha(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Não autenticado.");
+  await exigirLiderOuDiretor(supabase, user.id);
 
   const titulo = String(formData.get("titulo") ?? "").trim();
   const descricao = String(formData.get("descricao") ?? "").trim();
@@ -67,6 +75,12 @@ export async function criarCampanha(formData: FormData) {
 
 export async function excluirCampanha(formData: FormData) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+  await exigirLiderOuDiretor(supabase, user.id);
+
   const id = String(formData.get("id"));
   const { error } = await supabase.from("campanhas").delete().eq("id", id);
   if (error) throw new Error(error.message);

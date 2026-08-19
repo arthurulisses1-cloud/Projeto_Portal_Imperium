@@ -2,6 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
+  // Repassa o pathname num header pra páginas/layouts Server Component
+  // saberem em que rota estão sem precisar virar Client Component
+  // (usado pra não duplicar a lateral direita no Mural, que já tem a sua própria).
+  request.headers.set("x-pathname", request.nextUrl.pathname);
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

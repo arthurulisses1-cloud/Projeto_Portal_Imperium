@@ -38,15 +38,34 @@ export default async function ForecastPage() {
   const inicioMes = hoje.toISOString().slice(0, 7) + "-01";
   const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().slice(0, 10);
 
-  const [{ data: opRows }, { data: exercitos }] = await Promise.all([
+  // As colunas motivo_queda/motivo_queda_obs vêm da migration 0028 — se ela
+  // ainda não rodou nesse banco, o select com essas colunas falha (Postgres
+  // rejeita coluna inexistente) e a página INTEIRA ficava em branco, porque
+  // o erro do PostgREST vira `data: null` e o resto do código já assume
+  // `(opRows ?? [])`. Tenta com as colunas novas primeiro; se der erro,
+  // refaz sem elas — assim a página nunca quebra por causa da migration
+  // pendente, só perde a aba de motivo de queda até ela rodar.
+  const [opsRes, { data: exercitos }] = await Promise.all([
     supabase
       .from("weekly_operacoes")
-      .select("id, data, cliente, sdr_profile_id, closer_profile_id, valor, status, status_manual, observacao")
+      .select(
+        "id, data, cliente, sdr_profile_id, closer_profile_id, valor, status, status_manual, observacao, motivo_queda, motivo_queda_obs"
+      )
       .gte("data", inicioMes)
       .lte("data", fimMes)
       .order("data", { ascending: false }),
     supabase.from("exercitos").select("id, nome"),
   ]);
+  let opRows = opsRes.data;
+  if (opsRes.error) {
+    const fallback = await supabase
+      .from("weekly_operacoes")
+      .select("id, data, cliente, sdr_profile_id, closer_profile_id, valor, status, status_manual, observacao")
+      .gte("data", inicioMes)
+      .lte("data", fimMes)
+      .order("data", { ascending: false });
+    opRows = (fallback.data ?? []).map((o) => ({ ...o, motivo_queda: null, motivo_queda_obs: null }));
+  }
 
   const nomeExercitoPorId = new Map((exercitos ?? []).map((e) => [e.id, e.nome]));
 
@@ -96,6 +115,8 @@ export default async function ForecastPage() {
       status: o.status,
       statusManual: o.status_manual,
       observacao: o.observacao,
+      motivoQueda: o.motivo_queda,
+      motivoQuedaObs: o.motivo_queda_obs,
       podeEditar: podeEditarOperacao(
         { id: meId, role: meRole, exercitoLideradoId },
         {

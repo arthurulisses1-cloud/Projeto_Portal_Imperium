@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
 import WeeklyDashboard from "@/components/weekly/WeeklyDashboard";
 import type { WeeklyDataset, WeeklyOp, PersonInfo } from "@/lib/weekly-compute";
+import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 
 export default async function WeeklyPage() {
   const supabase = await createClient();
@@ -87,16 +88,26 @@ export default async function WeeklyPage() {
   }
 
   // funil do ano corrente, somado entre papéis (visão de atividade, não de comissão)
+  // — paginado porque isso facilmente passa de 1000 linhas (todo mundo x 4
+  // etapas x ~250 dias úteis no ano), e o Supabase corta em 1000 por padrão
+  // sem erro nenhum. Sem paginação, a maioria das pessoas aparecia com
+  // tentativas/entrevistas zeradas simplesmente porque a linha delas nunca
+  // chegava a voltar da query.
   const inicioAno = `${hoje.getFullYear()}-01-01`;
-  const { data: funilRows } =
+  const funilRows =
     idsPessoas.length > 0
-      ? await supabase
-          .from("producao_funil")
-          .select("profile_id, data, etapa, realizado")
-          .in("profile_id", idsPessoas)
-          .in("etapa", ["tentativas", "alos", "conexoes", "entrevistas"])
-          .gte("data", inicioAno)
-      : { data: [] };
+      ? await buscarTudoPaginado<{ profile_id: string; data: string; etapa: string; realizado: number }>(
+          (from, to) =>
+            supabase
+              .from("producao_funil")
+              .select("profile_id, data, etapa, realizado")
+              .in("profile_id", idsPessoas)
+              .in("etapa", ["tentativas", "alos", "conexoes", "entrevistas"])
+              .gte("data", inicioAno)
+              .order("data")
+              .range(from, to)
+        )
+      : [];
 
   const exercitoNomePorLegadoId = new Map((exercitos ?? []).map((e) => [e.legado_id, e.nome]));
 
@@ -116,7 +127,7 @@ export default async function WeeklyPage() {
     };
   }
   const ETAPA_IDX: Record<string, 0 | 1 | 2 | 3> = { tentativas: 0, alos: 1, conexoes: 2, entrevistas: 3 };
-  for (const row of funilRows ?? []) {
+  for (const row of funilRows) {
     const pessoa = people[row.profile_id];
     if (!pessoa) continue;
     if (!pessoa.d[row.data]) pessoa.d[row.data] = [0, 0, 0, 0];
@@ -124,17 +135,33 @@ export default async function WeeklyPage() {
     if (idx !== undefined) pessoa.d[row.data][idx] += row.realizado;
   }
 
-  // operações (aba Assinado, 1:1) do ano corrente
-  const { data: opRows } = await supabase
-    .from("weekly_operacoes")
-    .select(
-      "id, data, sdr_profile_id, closer_profile_id, cliente, valor, faturamento, produto, origem, status, status_manual"
-    )
-    .gte("data", inicioAno)
-    .order("data");
+  // operações (aba Assinado, 1:1) do ano corrente — também paginado, mesma
+  // razão do funil (já passa de 300 linhas e só cresce mês a mês).
+  const opRows = await buscarTudoPaginado<{
+    id: string;
+    data: string;
+    sdr_profile_id: string | null;
+    closer_profile_id: string | null;
+    cliente: string | null;
+    valor: number;
+    faturamento: number;
+    produto: string | null;
+    origem: string | null;
+    status: string;
+    status_manual: "resolvendo_pendencia" | "aguardando_pagamento" | null;
+  }>((from, to) =>
+    supabase
+      .from("weekly_operacoes")
+      .select(
+        "id, data, sdr_profile_id, closer_profile_id, cliente, valor, faturamento, produto, origem, status, status_manual"
+      )
+      .gte("data", inicioAno)
+      .order("data")
+      .range(from, to)
+  );
 
   const nomePorId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name]));
-  const ops: WeeklyOp[] = (opRows ?? []).map((o) => {
+  const ops: WeeklyOp[] = opRows.map((o) => {
     const sdrTime = o.sdr_profile_id ? people[o.sdr_profile_id]?.time ?? null : null;
     const closerTime = o.closer_profile_id ? people[o.closer_profile_id]?.time ?? null : null;
     return {
