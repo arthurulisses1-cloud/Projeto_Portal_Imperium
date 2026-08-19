@@ -99,7 +99,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-3 border-b border-imperium-line bg-imperium-surface px-6 py-3">
           {user && (
-            <UserMenu avatarUrl={profile?.avatar_url ?? null} nome={profile?.full_name ?? user.email ?? "?"} />
+            <UserMenu
+              avatarUrl={profile?.avatar_url ?? null}
+              nome={profile?.full_name ?? user.email ?? "?"}
+              role={profile?.role}
+            />
           )}
         </header>
 

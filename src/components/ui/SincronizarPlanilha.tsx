@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { dispararSyncManual } from "@/app/(app)/gestao/actions";
 
-export default function SincronizarPlanilha() {
+export default function SincronizarPlanilha({ compact = false }: { compact?: boolean }) {
   const [isPending, startTransition] = useTransition();
   const [resultado, setResultado] = useState<{
     funilLinhasGravadas: number;
@@ -23,6 +23,25 @@ export default function SincronizarPlanilha() {
         setErro(e instanceof Error ? e.message : "Erro desconhecido ao sincronizar.");
       }
     });
+  }
+
+  if (compact) {
+    return (
+      <div>
+        <button onClick={handleClick} disabled={isPending} className="btn-gold w-full py-1.5 text-xs">
+          {isPending ? "Sincronizando..." : "Sincronizar planilha"}
+        </button>
+        {erro && <p className="mt-1.5 text-[11px] text-wine-bright">{erro}</p>}
+        {resultado && (
+          <p className="mt-1.5 text-[11px] text-emerald-400">
+            {resultado.funilLinhasGravadas} linhas de funil, {resultado.vendasInseridas} vendas
+            {resultado.naoEncontrados.length > 0 && (
+              <span className="text-gold-dim"> · {resultado.naoEncontrados.length} nome(s) não bateram</span>
+            )}
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (

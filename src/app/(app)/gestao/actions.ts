@@ -15,6 +15,19 @@ async function exigirDiretor() {
   return supabase;
 }
 
+async function exigirLiderOuDiretor() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  if (profile?.role !== "diretor" && profile?.role !== "lider") {
+    throw new Error("Só líderes e o Diretor podem fazer isso.");
+  }
+  return supabase;
+}
+
 export async function atualizarCargo(formData: FormData) {
   const supabase = await exigirDiretor();
   const profileId = String(formData.get("profile_id"));
@@ -66,7 +79,7 @@ export async function salvarNomesPlanilha(formData: FormData) {
 }
 
 export async function dispararSyncManual() {
-  await exigirDiretor();
+  await exigirLiderOuDiretor();
   const resultado = await runSync();
 
   revalidatePath("/");
@@ -77,6 +90,7 @@ export async function dispararSyncManual() {
   revalidatePath("/comissao");
   revalidatePath("/geral");
   revalidatePath("/legado");
+  revalidatePath("/weekly");
 
   return resultado;
 }

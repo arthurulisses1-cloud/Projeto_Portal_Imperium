@@ -3,12 +3,21 @@
 import { useState, useTransition } from "react";
 import { uploadAvatarAction, atualizarNome } from "@/app/(app)/avatar-actions";
 import ThemeToggle from "./ThemeToggle";
+import SincronizarPlanilha from "./SincronizarPlanilha";
 
 function iniciais(nome: string) {
   return nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 }
 
-export default function UserMenu({ avatarUrl, nome }: { avatarUrl: string | null; nome: string }) {
+export default function UserMenu({
+  avatarUrl,
+  nome,
+  role,
+}: {
+  avatarUrl: string | null;
+  nome: string;
+  role?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState(false);
   const [novoNome, setNovoNome] = useState(nome);
@@ -61,6 +70,15 @@ export default function UserMenu({ avatarUrl, nome }: { avatarUrl: string | null
             <div className="mb-3 flex justify-center">
               <ThemeToggle />
             </div>
+
+            {(role === "diretor" || role === "lider") && (
+              <div className="border-t border-imperium-line pt-3">
+                <p className="mb-1.5 text-[10px] uppercase tracking-wide text-stone-500">
+                  Planilha
+                </p>
+                <SincronizarPlanilha compact />
+              </div>
+            )}
 
             <div className="border-t border-imperium-line pt-3">
               {!editando ? (
