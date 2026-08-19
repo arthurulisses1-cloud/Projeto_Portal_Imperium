@@ -46,6 +46,23 @@ export type SyncResultado = {
 
 export async function runSync(): Promise<SyncResultado> {
   const supabase = createAdminClient();
+  try {
+    return await executarSync(supabase);
+  } catch (e) {
+    // Sem isso, um sync que quebra no meio do caminho não deixa nenhum
+    // rastro em sync_log — só dá pra saber o motivo raspando o log do
+    // servidor. Grava o erro e relança pra quem chamou ver o mesmo erro de sempre.
+    const mensagem = e instanceof Error ? e.message : String(e);
+    await supabase.from("sync_log").insert({
+      fonte: "google_sheets:dados+assinado+entrevistas",
+      status: "erro",
+      detalhe: mensagem,
+    });
+    throw e;
+  }
+}
+
+async function executarSync(supabase: ReturnType<typeof createAdminClient>): Promise<SyncResultado> {
   const unmatched = new Set<string>();
   let vendasInseridas = 0;
   let funilLinhasGravadas = 0;
