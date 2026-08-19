@@ -71,13 +71,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="watermark-spqr flex items-center gap-2 border-b border-imperium-line p-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/crests/imperium.jpg"
-              alt="Imperium"
+              src="/crests/senatus.webp"
+              alt="Senatus"
               className="h-9 w-9 shrink-0 rounded-full border border-gold/40 object-cover"
             />
             <div className="min-w-0">
               <p className="truncate font-display text-xs tracking-wide text-gold-bright">
-                PRAETORIUM
+                SENATUS
               </p>
               <p className="truncate text-[9px] uppercase tracking-widest text-stone-500">
                 Matri Bank · Imperium

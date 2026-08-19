@@ -26,7 +26,7 @@ const garamond = Cormorant_Garamond({
 });
 
 export const metadata: Metadata = {
-  title: "Praetorium — Matri Bank",
+  title: "SENATUS — Matri Bank",
   description: "Sistema interno de rotina, indicadores e carreira",
 };
 
