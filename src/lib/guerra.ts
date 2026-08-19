@@ -49,18 +49,34 @@ async function pagosMesPorGrupo(
   }
 
   const totais = new Map<string, number>();
+  let foraDoGrupo = 0;
   for (const o of ops) {
     // Time do negócio = time do Closer, com fallback pro SDR — mesma regra da Weekly de Receita.
     const grupo =
       (o.closer_profile_id && grupoPorProfile.get(o.closer_profile_id)) ||
       (o.sdr_profile_id && grupoPorProfile.get(o.sdr_profile_id));
-    if (!grupo) continue;
+    if (!grupo) {
+      // Ninguém dos dois lados pertence a uma Tribo/Exército resolvível (ex.:
+      // Legado do Exército fechou sozinho, sem SDR de nenhuma Tribo envolvido).
+      // Não descarta o valor — sem isso a soma da Guerra de Tribos fica menor
+      // que a da Guerra Civil, que é a mesma grana vista de outro corte.
+      foraDoGrupo += Number(o.valor);
+      continue;
+    }
     totais.set(grupo, (totais.get(grupo) ?? 0) + Number(o.valor));
   }
 
-  return Array.from(totais.entries())
+  const resultado = Array.from(totais.entries())
     .map(([nome, valor]) => ({ nome, valor }))
     .sort((a, b) => b.valor - a.valor);
+
+  // Sempre por último — é uma categoria de acerto de contas, não um
+  // concorrente de verdade, então nunca deve ganhar a coroa de 1º lugar.
+  if (foraDoGrupo > 0) {
+    resultado.push({ nome: agrupar === "exercito" ? "Fora dos Exércitos" : "Fora das Tribos", valor: foraDoGrupo });
+  }
+
+  return resultado;
 }
 
 export function buscarConfrontoExercitos(supabase: SupabaseClient) {
