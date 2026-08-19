@@ -9,7 +9,13 @@ type EntrevistaRow = {
   Closer?: string;
 };
 
-export type ProducaoLinha = { nomeNormalizado: string; data: string; etapa: FunilEtapa; realizado: number };
+export type ProducaoLinha = {
+  nomeNormalizado: string;
+  data: string;
+  etapa: FunilEtapa;
+  realizado: number;
+  papel: "sdr" | "closer" | "ambos";
+};
 
 export async function buscarEntrevistas(): Promise<{
   linhas: ProducaoLinha[];
@@ -24,21 +30,29 @@ export async function buscarEntrevistas(): Promise<{
   const acumulado = new Map<string, ProducaoLinha>();
   const nomesEncontrados = new Set<string>();
 
+  function acumular(nomeNormalizado: string, data: string, papel: "sdr" | "closer" | "ambos") {
+    nomesEncontrados.add(nomeNormalizado);
+    const chave = `${nomeNormalizado}|${data}|${papel}`;
+    const existente = acumulado.get(chave);
+    if (existente) existente.realizado += 1;
+    else acumulado.set(chave, { nomeNormalizado, data, etapa: "entrevistas", realizado: 1, papel });
+  }
+
   for (const row of rows) {
     const data = parseDataBR(row["Carimbo de data/hora"] ?? "");
     if (!data) continue;
 
-    // SDR agenda, Closer conduz — cada um vê a mesma entrevista no próprio funil;
-    // não duplica porque são pessoas (profiles) diferentes contando o mesmo evento.
-    const pessoas = [row.SDR, row.Closer].filter((n): n is string => !!n && n.trim() !== "");
-    for (const pessoaRaw of Array.from(new Set(pessoas))) {
-      const nomeNormalizado = normalizarNome(pessoaRaw);
-      nomesEncontrados.add(nomeNormalizado);
+    // SDR agenda, Closer conduz — cada um entra na própria produção com o papel
+    // que exerceu. Quando é a mesma pessoa nos dois papéis (fez tudo sozinha),
+    // vira um único registro "ambos" pra não contar a mesma entrevista 2x.
+    const sdrNorm = row.SDR && row.SDR.trim() ? normalizarNome(row.SDR) : null;
+    const closerNorm = row.Closer && row.Closer.trim() ? normalizarNome(row.Closer) : null;
 
-      const chave = `${nomeNormalizado}|${data}`;
-      const existente = acumulado.get(chave);
-      if (existente) existente.realizado += 1;
-      else acumulado.set(chave, { nomeNormalizado, data, etapa: "entrevistas", realizado: 1 });
+    if (sdrNorm && closerNorm && sdrNorm === closerNorm) {
+      acumular(sdrNorm, data, "ambos");
+    } else {
+      if (sdrNorm) acumular(sdrNorm, data, "sdr");
+      if (closerNorm) acumular(closerNorm, data, "closer");
     }
   }
 

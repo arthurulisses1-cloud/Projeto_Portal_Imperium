@@ -23,10 +23,15 @@ export async function runSync(): Promise<SyncResultado> {
   let funilLinhasGravadas = 0;
 
   // ---------- mapa nome normalizado -> profile_id ----------
-  const { data: profiles } = await supabase.from("profiles").select("id, full_name");
+  // nome_planilha (setado manualmente em Meu Legado) tem prioridade sobre
+  // full_name, pra cobrir casos onde o nome na planilha diverge do cadastro.
+  const { data: profiles } = await supabase.from("profiles").select("id, full_name, nome_planilha");
   const nomeParaId = new Map<string, string>();
   for (const p of profiles ?? []) {
     nomeParaId.set(normalizarNome(p.full_name), p.id);
+  }
+  for (const p of profiles ?? []) {
+    if (p.nome_planilha) nomeParaId.set(normalizarNome(p.nome_planilha), p.id);
   }
 
   // ---------- aba Dados: funil (tentativas/alôs/conexões) ----------
@@ -43,6 +48,7 @@ export async function runSync(): Promise<SyncResultado> {
         data: l.data,
         etapa: l.etapa,
         realizado: l.realizado,
+        papel: l.papel,
         meta: 0,
         synced_at: new Date().toISOString(),
       };
@@ -52,7 +58,7 @@ export async function runSync(): Promise<SyncResultado> {
   for (const batch of chunk(funilRowsDados, 1000)) {
     const { error } = await supabase
       .from("producao_funil")
-      .upsert(batch, { onConflict: "profile_id,data,etapa" });
+      .upsert(batch, { onConflict: "profile_id,data,etapa,papel" });
     if (error) throw new Error("Erro gravando funil (Dados): " + error.message);
     funilLinhasGravadas += batch.length;
   }
@@ -71,6 +77,7 @@ export async function runSync(): Promise<SyncResultado> {
         data: l.data,
         etapa: l.etapa,
         realizado: l.realizado,
+        papel: l.papel,
         meta: 0,
         synced_at: new Date().toISOString(),
       };
@@ -80,7 +87,7 @@ export async function runSync(): Promise<SyncResultado> {
   for (const batch of chunk(funilRowsEntrevistas, 1000)) {
     const { error } = await supabase
       .from("producao_funil")
-      .upsert(batch, { onConflict: "profile_id,data,etapa" });
+      .upsert(batch, { onConflict: "profile_id,data,etapa,papel" });
     if (error) throw new Error("Erro gravando funil (Entrevistas): " + error.message);
     funilLinhasGravadas += batch.length;
   }
@@ -100,6 +107,7 @@ export async function runSync(): Promise<SyncResultado> {
         data: l.data,
         etapa: l.etapa,
         realizado: l.realizado,
+        papel: l.papel,
         meta: 0,
         synced_at: new Date().toISOString(),
       };
@@ -109,7 +117,7 @@ export async function runSync(): Promise<SyncResultado> {
   for (const batch of chunk(funilRowsAssinado, 1000)) {
     const { error } = await supabase
       .from("producao_funil")
-      .upsert(batch, { onConflict: "profile_id,data,etapa" });
+      .upsert(batch, { onConflict: "profile_id,data,etapa,papel" });
     if (error) throw new Error("Erro gravando funil (Assinado): " + error.message);
     funilLinhasGravadas += batch.length;
   }
@@ -129,6 +137,7 @@ export async function runSync(): Promise<SyncResultado> {
         origem: v.origem,
         multiplicador: v.multiplicador,
         cliente: v.cliente,
+        papel: v.papel,
         synced_at: new Date().toISOString(),
       };
     })

@@ -79,15 +79,15 @@ function Tabela({ titulo, formato, linhas }: { titulo: string; formato: "num" | 
 export default async function RankingPage() {
   const supabase = await createClient();
 
+  // Sem filtro por role do perfil: líderes que entram como SDR ou Closer numa
+  // venda/entrevista específica também precisam aparecer no ranking certo —
+  // quem manda é o papel exercido naquele registro (producao_funil.papel /
+  // vendas.papel), não o cargo fixo da pessoa.
   const { data: pessoas } = await supabase
     .from("profiles")
-    .select("id, full_name, role, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))")
-    .in("role", ["sdr", "closer"]);
+    .select("id, full_name, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))")
+    .neq("role", "diretor");
 
-  const idsPorRole = {
-    sdr: (pessoas ?? []).filter((p) => p.role === "sdr").map((p) => p.id),
-    closer: (pessoas ?? []).filter((p) => p.role === "closer").map((p) => p.id),
-  };
   const todosIds = (pessoas ?? []).map((p) => p.id);
 
   const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
@@ -96,29 +96,47 @@ export default async function RankingPage() {
     todosIds.length > 0
       ? await supabase
           .from("producao_funil")
-          .select("profile_id, etapa, realizado")
+          .select("profile_id, etapa, realizado, papel")
           .in("profile_id", todosIds)
           .gte("data", inicioMes)
       : { data: [] };
 
   const { data: vendasRows } =
     todosIds.length > 0
-      ? await supabase.from("vendas").select("profile_id, valor").in("profile_id", todosIds).gte("data", inicioMes)
+      ? await supabase
+          .from("vendas")
+          .select("profile_id, valor, papel")
+          .in("profile_id", todosIds)
+          .gte("data", inicioMes)
       : { data: [] };
 
-  const funilPorPessoa = new Map<string, Record<string, number>>();
-  for (const row of funilRows ?? []) {
-    if (!funilPorPessoa.has(row.profile_id)) funilPorPessoa.set(row.profile_id, {});
-    const bucket = funilPorPessoa.get(row.profile_id)!;
-    bucket[row.etapa] = (bucket[row.etapa] ?? 0) + row.realizado;
+  // "ambos" (a pessoa foi SDR e Closer na mesma venda/entrevista) conta cheio
+  // nos dois lados — cada mapa é a visão "produção nesse papel".
+  function contaComoPapel(papel: string, alvo: "sdr" | "closer") {
+    return papel === alvo || papel === "ambos";
   }
 
-  const vendasPorPessoa = new Map<string, { total: number; qtd: number }>();
+  const funilPorPessoa = { sdr: new Map<string, Record<string, number>>(), closer: new Map<string, Record<string, number>>() };
+  for (const row of funilRows ?? []) {
+    for (const alvo of ["sdr", "closer"] as const) {
+      if (!contaComoPapel(row.papel, alvo)) continue;
+      const mapa = funilPorPessoa[alvo];
+      if (!mapa.has(row.profile_id)) mapa.set(row.profile_id, {});
+      const bucket = mapa.get(row.profile_id)!;
+      bucket[row.etapa] = (bucket[row.etapa] ?? 0) + row.realizado;
+    }
+  }
+
+  const vendasPorPessoa = { sdr: new Map<string, { total: number; qtd: number }>(), closer: new Map<string, { total: number; qtd: number }>() };
   for (const row of vendasRows ?? []) {
-    const acc = vendasPorPessoa.get(row.profile_id) ?? { total: 0, qtd: 0 };
-    acc.total += Number(row.valor);
-    acc.qtd += 1;
-    vendasPorPessoa.set(row.profile_id, acc);
+    for (const alvo of ["sdr", "closer"] as const) {
+      if (!contaComoPapel(row.papel, alvo)) continue;
+      const mapa = vendasPorPessoa[alvo];
+      const acc = mapa.get(row.profile_id) ?? { total: 0, qtd: 0 };
+      acc.total += Number(row.valor);
+      acc.qtd += 1;
+      mapa.set(row.profile_id, acc);
+    }
   }
 
   function nomeETribo(id: string) {
@@ -127,40 +145,36 @@ export default async function RankingPage() {
     return { nome: p.full_name, tribo: tribo?.exercito?.nome ?? tribo?.nome ?? "—" };
   }
 
-  function topPorEtapa(ids: string[], etapa: string, n = 10): Linha[] {
-    return ids
-      .map((id) => ({ id, valor: funilPorPessoa.get(id)?.[etapa] ?? 0 }))
+  function topPorEtapa(papel: "sdr" | "closer", etapa: string, n = 10): Linha[] {
+    return Array.from(funilPorPessoa[papel].entries())
+      .map(([id, bucket]) => ({ id, valor: bucket[etapa] ?? 0 }))
       .filter((x) => x.valor > 0)
       .sort((a, b) => b.valor - a.valor)
       .slice(0, n)
       .map((x) => ({ ...nomeETribo(x.id), valor: x.valor }));
   }
 
-  function topPagos(ids: string[], n = 10): Linha[] {
-    return ids
-      .map((id) => ({ id, valor: vendasPorPessoa.get(id)?.total ?? 0 }))
+  function topPagos(papel: "sdr" | "closer", n = 10): Linha[] {
+    return Array.from(vendasPorPessoa[papel].entries())
+      .map(([id, v]) => ({ id, valor: v.total }))
       .filter((x) => x.valor > 0)
       .sort((a, b) => b.valor - a.valor)
       .slice(0, n)
       .map((x) => ({ ...nomeETribo(x.id), valor: x.valor }));
   }
 
-  function topTicketMedio(ids: string[], n = 10): Linha[] {
-    return ids
-      .map((id) => {
-        const v = vendasPorPessoa.get(id);
-        return { id, valor: v && v.qtd > 0 ? v.total / v.qtd : 0 };
-      })
+  function topTicketMedio(papel: "sdr" | "closer", n = 10): Linha[] {
+    return Array.from(vendasPorPessoa[papel].entries())
+      .map(([id, v]) => ({ id, valor: v.qtd > 0 ? v.total / v.qtd : 0 }))
       .filter((x) => x.valor > 0)
       .sort((a, b) => b.valor - a.valor)
       .slice(0, n)
       .map((x) => ({ ...nomeETribo(x.id), valor: x.valor }));
   }
 
-  function topConversao(ids: string[], n = 10): Linha[] {
-    return ids
-      .map((id) => {
-        const f = funilPorPessoa.get(id) ?? {};
+  function topConversao(papel: "sdr" | "closer", n = 10): Linha[] {
+    return Array.from(funilPorPessoa[papel].entries())
+      .map(([id, f]) => {
         const entrevistas = f["entrevistas"] ?? 0;
         const assinaturas = f["assinaturas"] ?? 0;
         return { id, valor: entrevistas > 0 ? (assinaturas / entrevistas) * 100 : 0 };
@@ -186,24 +200,24 @@ export default async function RankingPage() {
       <section>
         <h2 className="kicker mb-3">SDR</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Tabela titulo="Entrevistas" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "entrevistas")} />
-          <Tabela titulo="Assinados" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "assinaturas")} />
-          <Tabela titulo="Pagos (R$)" formato="moeda" linhas={topPagos(idsPorRole.sdr)} />
+          <Tabela titulo="Entrevistas" formato="num" linhas={topPorEtapa("sdr", "entrevistas")} />
+          <Tabela titulo="Assinados" formato="num" linhas={topPorEtapa("sdr", "assinaturas")} />
+          <Tabela titulo="Pagos (R$)" formato="moeda" linhas={topPagos("sdr")} />
         </div>
       </section>
 
       <section>
         <h2 className="kicker mb-3">Closer</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Tabela titulo="Entrevistas" formato="num" linhas={topPorEtapa(idsPorRole.closer, "entrevistas")} />
-          <Tabela titulo="Assinados" formato="num" linhas={topPorEtapa(idsPorRole.closer, "assinaturas")} />
-          <Tabela titulo="Ticket Médio" formato="moeda" linhas={topTicketMedio(idsPorRole.closer)} />
+          <Tabela titulo="Entrevistas" formato="num" linhas={topPorEtapa("closer", "entrevistas")} />
+          <Tabela titulo="Assinados" formato="num" linhas={topPorEtapa("closer", "assinaturas")} />
+          <Tabela titulo="Ticket Médio" formato="moeda" linhas={topTicketMedio("closer")} />
           <Tabela
             titulo="Conversão Entrevista → Assinado"
             formato="pct"
-            linhas={topConversao(idsPorRole.closer)}
+            linhas={topConversao("closer")}
           />
-          <Tabela titulo="Pagos (R$)" formato="moeda" linhas={topPagos(idsPorRole.closer)} />
+          <Tabela titulo="Pagos (R$)" formato="moeda" linhas={topPagos("closer")} />
         </div>
       </section>
     </main>

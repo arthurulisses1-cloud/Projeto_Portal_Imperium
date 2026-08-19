@@ -20,9 +20,16 @@ export type VendaLinha = {
   origem: string | null;
   multiplicador: number;
   cliente: string | null;
+  papel: "sdr" | "closer" | "ambos";
 };
 
-export type ProducaoLinha = { nomeNormalizado: string; data: string; etapa: FunilEtapa; realizado: number };
+export type ProducaoLinha = {
+  nomeNormalizado: string;
+  data: string;
+  etapa: FunilEtapa;
+  realizado: number;
+  papel: "sdr" | "closer" | "ambos";
+};
 
 export async function buscarAssinado(): Promise<{
   vendas: VendaLinha[];
@@ -43,11 +50,11 @@ export async function buscarAssinado(): Promise<{
   let menorData: string | null = null;
   let maiorData: string | null = null;
 
-  function acumularFunil(nomeNormalizado: string, data: string, etapa: FunilEtapa) {
-    const chave = `${nomeNormalizado}|${data}|${etapa}`;
+  function acumularFunil(nomeNormalizado: string, data: string, etapa: FunilEtapa, papel: "sdr" | "closer" | "ambos") {
+    const chave = `${nomeNormalizado}|${data}|${etapa}|${papel}`;
     const existente = funilAcumulado.get(chave);
     if (existente) existente.realizado += 1;
-    else funilAcumulado.set(chave, { nomeNormalizado, data, etapa, realizado: 1 });
+    else funilAcumulado.set(chave, { nomeNormalizado, data, etapa, realizado: 1, papel });
   }
 
   for (const row of rows) {
@@ -56,17 +63,29 @@ export async function buscarAssinado(): Promise<{
 
     const valor = parseMoedaBR(row["CRÉDITO"] ?? "");
     const pago = (row.STATUS ?? "").trim().toUpperCase() === "PAGO";
-    const pessoas = [row.SDR, row.CLOSER].filter((n): n is string => !!n && n.trim() !== "");
 
     if (!menorData || data < menorData) menorData = data;
     if (!maiorData || data > maiorData) maiorData = data;
 
-    for (const pessoaRaw of Array.from(new Set(pessoas))) {
-      const nomeNormalizado = normalizarNome(pessoaRaw);
+    // SDR e Closer entram separados na própria produção. Quando é a mesma
+    // pessoa nos dois papéis (fechou sozinha, sem outro SDR envolvido), vira
+    // um único registro "ambos" — não duplica o mesmo pago pra ela.
+    const sdrNorm = row.SDR && row.SDR.trim() ? normalizarNome(row.SDR) : null;
+    const closerNorm = row.CLOSER && row.CLOSER.trim() ? normalizarNome(row.CLOSER) : null;
+
+    const creditos: { nomeNormalizado: string; papel: "sdr" | "closer" | "ambos" }[] = [];
+    if (sdrNorm && closerNorm && sdrNorm === closerNorm) {
+      creditos.push({ nomeNormalizado: sdrNorm, papel: "ambos" });
+    } else {
+      if (sdrNorm) creditos.push({ nomeNormalizado: sdrNorm, papel: "sdr" });
+      if (closerNorm) creditos.push({ nomeNormalizado: closerNorm, papel: "closer" });
+    }
+
+    for (const { nomeNormalizado, papel } of creditos) {
       nomesEncontrados.add(nomeNormalizado);
 
-      acumularFunil(nomeNormalizado, data, "assinaturas");
-      if (pago) acumularFunil(nomeNormalizado, data, "pagos");
+      acumularFunil(nomeNormalizado, data, "assinaturas", papel);
+      if (pago) acumularFunil(nomeNormalizado, data, "pagos", papel);
 
       if (pago && valor > 0) {
         vendas.push({
@@ -76,6 +95,7 @@ export async function buscarAssinado(): Promise<{
           origem: row.ORIGEM || null,
           multiplicador: multiplicadorPorValor(valor),
           cliente: row.CLIENTE?.trim() || null,
+          papel,
         });
       }
     }

@@ -20,7 +20,13 @@ const BLOCO_ETAPA: (FunilEtapa | null)[] = [
   null,
 ];
 
-export type ProducaoLinha = { nomeNormalizado: string; data: string; etapa: FunilEtapa; realizado: number };
+export type ProducaoLinha = {
+  nomeNormalizado: string;
+  data: string;
+  etapa: FunilEtapa;
+  realizado: number;
+  papel: "sdr" | "closer" | "ambos";
+};
 
 export async function buscarProducaoDados(): Promise<{
   linhas: ProducaoLinha[];
@@ -65,11 +71,12 @@ export async function buscarProducaoDados(): Promise<{
 
         const [dia, mes, ano] = dataStr.split("/");
         const data = `${ano}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
+        // Tentativas/Alôs/Conexões são prospecção pura — sempre papel SDR.
         const chave = `${nomeNormalizado}|${data}|${etapa}`;
 
         const existente = acumulado.get(chave);
         if (existente) existente.realizado += valor;
-        else acumulado.set(chave, { nomeNormalizado, data, etapa, realizado: valor });
+        else acumulado.set(chave, { nomeNormalizado, data, etapa, realizado: valor, papel: "sdr" });
       }
     }
   }

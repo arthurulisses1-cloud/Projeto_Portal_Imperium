@@ -4,7 +4,7 @@ import { FUNNEL_STAGES, type FunilEtapa } from "@/lib/funil";
 import { calcularGargalo } from "@/lib/gargalo";
 import { gerarParecer } from "@/lib/oraculo";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
-import { salvarAdmissao, salvarNascimento, alternarAtivo } from "./actions";
+import { salvarAdmissao, salvarNascimento, alternarAtivo, salvarNomePlanilha } from "./actions";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -25,7 +25,7 @@ export default async function LegadoPage({
   let query = supabase
     .from("profiles")
     .select(
-      "id, full_name, rank, avatar_url, data_admissao, data_nascimento, ativo, tribo:tribos!profiles_tribo_id_fkey(nome, logo_url, exercito:exercitos(nome))"
+      "id, full_name, rank, avatar_url, data_admissao, data_nascimento, ativo, nome_planilha, tribo:tribos!profiles_tribo_id_fkey(nome, logo_url, exercito:exercitos(nome))"
     )
     .in("role", ["sdr", "closer"])
     .order("full_name");
@@ -256,6 +256,29 @@ export default async function LegadoPage({
                   </button>
                 </form>
               </div>
+
+              <form action={salvarNomePlanilha} className="mt-3 flex items-end gap-2">
+                <input type="hidden" name="profile_id" value={p.id} />
+                <div className="flex-1">
+                  <label className="mb-1 block text-[10px] uppercase tracking-wide text-stone-500">
+                    Nome na planilha
+                  </label>
+                  <input
+                    type="text"
+                    name="nome_planilha"
+                    defaultValue={p.nome_planilha ?? ""}
+                    placeholder={p.full_name}
+                    className="input-imp w-full px-2 py-1 text-xs"
+                  />
+                </div>
+                <button type="submit" className="btn-outline px-2 py-1 text-xs">
+                  Salvar
+                </button>
+              </form>
+              <p className="mt-1 text-[10px] text-stone-600">
+                Preencha só se o nome na planilha do Google Sheets for diferente do cadastro — a sync
+                passa a usar esse nome pra achar essa pessoa.
+              </p>
 
               <form action={alternarAtivo} className="mt-3">
                 <input type="hidden" name="profile_id" value={p.id} />
