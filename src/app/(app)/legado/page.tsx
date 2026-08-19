@@ -4,7 +4,7 @@ import { FUNNEL_STAGES, type FunilEtapa } from "@/lib/funil";
 import { calcularGargalo } from "@/lib/gargalo";
 import { gerarParecer } from "@/lib/oraculo";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
-import { salvarAdmissao, salvarNascimento, alternarAtivo, salvarNomePlanilha } from "./actions";
+import { salvarAdmissao, salvarNascimento, alternarAtivo } from "./actions";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -17,15 +17,17 @@ function iniciais(nome: string) {
 export default async function LegadoPage({
   searchParams,
 }: {
-  searchParams: { filtro?: string };
+  searchParams: { filtro?: string; papel?: string };
 }) {
   const supabase = await createClient();
   const filtro = searchParams.filtro === "todos" ? "todos" : "ativos";
+  const papelFiltro: "tudo" | "sdr" | "closer" =
+    searchParams.papel === "sdr" || searchParams.papel === "closer" ? searchParams.papel : "tudo";
 
   let query = supabase
     .from("profiles")
     .select(
-      "id, full_name, rank, avatar_url, data_admissao, data_nascimento, ativo, nome_planilha, tribo:tribos!profiles_tribo_id_fkey(nome, logo_url, exercito:exercitos(nome))"
+      "id, full_name, rank, avatar_url, data_admissao, data_nascimento, ativo, tribo:tribos!profiles_tribo_id_fkey(nome, logo_url, exercito:exercitos(nome))"
     )
     .in("role", ["sdr", "closer"])
     .order("full_name");
@@ -51,18 +53,26 @@ export default async function LegadoPage({
 
   const [{ data: funilRows }, { data: vendasRows }, { data: vendasTrimestre }] = await Promise.all([
     ids.length > 0
-      ? supabase.from("producao_funil").select("profile_id, etapa, realizado").in("profile_id", ids).gte("data", inicioMes)
+      ? supabase.from("producao_funil").select("profile_id, etapa, realizado, papel").in("profile_id", ids).gte("data", inicioMes)
       : Promise.resolve({ data: [] }),
     ids.length > 0
-      ? supabase.from("vendas").select("profile_id, valor").in("profile_id", ids).gte("data", inicioMes)
+      ? supabase.from("vendas").select("profile_id, valor, papel").in("profile_id", ids).gte("data", inicioMes)
       : Promise.resolve({ data: [] }),
     ids.length > 0
-      ? supabase.from("vendas").select("profile_id, valor, data").in("profile_id", ids).gte("data", inicioTrimestre)
+      ? supabase.from("vendas").select("profile_id, valor, data, papel").in("profile_id", ids).gte("data", inicioTrimestre)
       : Promise.resolve({ data: [] }),
   ]);
 
+  // "ambos" (fez os dois papéis na mesma venda/entrevista) conta em qualquer
+  // filtro — só "sdr" ou "closer" puros ficam de fora do outro lado.
+  function contaComoPapel(papel: string): boolean {
+    if (papelFiltro === "tudo") return true;
+    return papel === papelFiltro || papel === "ambos";
+  }
+
   const funilPorPessoa = new Map<string, Record<FunilEtapa, number>>();
   for (const row of funilRows ?? []) {
+    if (!contaComoPapel(row.papel)) continue;
     if (!funilPorPessoa.has(row.profile_id)) {
       funilPorPessoa.set(row.profile_id, Object.fromEntries(FUNNEL_STAGES.map((e) => [e, 0])) as Record<FunilEtapa, number>);
     }
@@ -71,6 +81,7 @@ export default async function LegadoPage({
 
   const pagoPorPessoa = new Map<string, { total: number; qtd: number }>();
   for (const row of vendasRows ?? []) {
+    if (!contaComoPapel(row.papel)) continue;
     const acc = pagoPorPessoa.get(row.profile_id) ?? { total: 0, qtd: 0 };
     acc.total += Number(row.valor);
     acc.qtd += 1;
@@ -81,6 +92,7 @@ export default async function LegadoPage({
   const mesAtualStr = hoje.toISOString().slice(0, 7);
   const pagoMesAnteriorPorPessoa = new Map<string, number>();
   for (const row of vendasTrimestre ?? []) {
+    if (!contaComoPapel(row.papel)) continue;
     if (row.data.slice(0, 7) === mesAtualStr) continue;
     pagoMesAnteriorPorPessoa.set(row.profile_id, (pagoMesAnteriorPorPessoa.get(row.profile_id) ?? 0) + Number(row.valor));
   }
@@ -101,9 +113,9 @@ export default async function LegadoPage({
           <h1 className="font-display text-2xl text-gold-bright">Meu Legado</h1>
           <p className="kicker mt-1">Cada legionário sob seu comando · produção do mês</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <a
-            href="/legado?filtro=ativos"
+            href={`/legado?filtro=ativos&papel=${papelFiltro}`}
             className={`rounded px-3 py-1.5 text-xs uppercase transition ${
               filtro === "ativos" ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-300 hover:border-gold"
             }`}
@@ -111,12 +123,37 @@ export default async function LegadoPage({
             Ativos
           </a>
           <a
-            href="/legado?filtro=todos"
+            href={`/legado?filtro=todos&papel=${papelFiltro}`}
             className={`rounded px-3 py-1.5 text-xs uppercase transition ${
               filtro === "todos" ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-300 hover:border-gold"
             }`}
           >
             Todos
+          </a>
+          <span className="mx-1 self-center text-stone-700">·</span>
+          <a
+            href={`/legado?filtro=${filtro}&papel=tudo`}
+            className={`rounded px-3 py-1.5 text-xs uppercase transition ${
+              papelFiltro === "tudo" ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-300 hover:border-gold"
+            }`}
+          >
+            Tudo
+          </a>
+          <a
+            href={`/legado?filtro=${filtro}&papel=sdr`}
+            className={`rounded px-3 py-1.5 text-xs uppercase transition ${
+              papelFiltro === "sdr" ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-300 hover:border-gold"
+            }`}
+          >
+            Só SDR
+          </a>
+          <a
+            href={`/legado?filtro=${filtro}&papel=closer`}
+            className={`rounded px-3 py-1.5 text-xs uppercase transition ${
+              papelFiltro === "closer" ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-300 hover:border-gold"
+            }`}
+          >
+            Só Closer
           </a>
         </div>
       </div>
@@ -256,29 +293,6 @@ export default async function LegadoPage({
                   </button>
                 </form>
               </div>
-
-              <form action={salvarNomePlanilha} className="mt-3 flex items-end gap-2">
-                <input type="hidden" name="profile_id" value={p.id} />
-                <div className="flex-1">
-                  <label className="mb-1 block text-[10px] uppercase tracking-wide text-stone-500">
-                    Nome na planilha
-                  </label>
-                  <input
-                    type="text"
-                    name="nome_planilha"
-                    defaultValue={p.nome_planilha ?? ""}
-                    placeholder={p.full_name}
-                    className="input-imp w-full px-2 py-1 text-xs"
-                  />
-                </div>
-                <button type="submit" className="btn-outline px-2 py-1 text-xs">
-                  Salvar
-                </button>
-              </form>
-              <p className="mt-1 text-[10px] text-stone-600">
-                Preencha só se o nome na planilha do Google Sheets for diferente do cadastro — a sync
-                passa a usar esse nome pra achar essa pessoa.
-              </p>
 
               <form action={alternarAtivo} className="mt-3">
                 <input type="hidden" name="profile_id" value={p.id} />

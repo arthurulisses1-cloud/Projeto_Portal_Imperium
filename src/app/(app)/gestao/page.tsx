@@ -1,9 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS, ROLE_LABELS } from "@/lib/labels";
 import { RANK_ORDER } from "@/lib/carreira";
+import { listarNomesPlanilha } from "@/lib/sync/nomes";
 import { atualizarCargo, atualizarTribo, atualizarLegado } from "./actions";
 import Card from "@/components/ui/Card";
 import SincronizarPlanilha from "@/components/ui/SincronizarPlanilha";
+import SeletorNomesPlanilha from "@/components/ui/SeletorNomesPlanilha";
 
 const ROLES = ["sdr", "closer", "lider", "diretor"] as const;
 const RANKS = [...RANK_ORDER, "diretor"] as const;
@@ -13,7 +15,7 @@ export default async function GestaoPage() {
 
   const { data: pessoas } = await supabase
     .from("profiles")
-    .select("id, full_name, role, rank, tribo_id")
+    .select("id, full_name, role, rank, tribo_id, nomes_planilha")
     .order("full_name");
 
   const { data: tribos } = await supabase
@@ -27,6 +29,7 @@ export default async function GestaoPage() {
     .order("nome");
 
   const lideres = (pessoas ?? []).filter((p) => p.role === "lider");
+  const nomesPlanilha = await listarNomesPlanilha();
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
@@ -128,6 +131,22 @@ export default async function GestaoPage() {
                       </span>
                     )}
                   </div>
+
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-stone-500">
+                      Nomes na planilha ({(p.nomes_planilha ?? []).length})
+                    </summary>
+                    <p className="mb-2 mt-2 text-[10px] text-stone-600">
+                      Marque toda grafia que aparece na planilha do Google Sheets referente a essa
+                      pessoa (ex.: variações de maiúscula/minúscula) — a sync passa a casar qualquer
+                      uma delas com esse perfil.
+                    </p>
+                    <SeletorNomesPlanilha
+                      profileId={p.id}
+                      opcoes={nomesPlanilha}
+                      selecionados={p.nomes_planilha ?? []}
+                    />
+                  </details>
                 </div>
               );
             })}

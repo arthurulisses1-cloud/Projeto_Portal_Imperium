@@ -69,25 +69,6 @@ export async function alternarAtivo(formData: FormData) {
   revalidatePath("/legado");
 }
 
-export async function salvarNomePlanilha(formData: FormData) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Não autenticado.");
-
-  const profileId = String(formData.get("profile_id"));
-  const nomePlanilha = String(formData.get("nome_planilha") ?? "").trim();
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({ nome_planilha: nomePlanilha || null })
-    .eq("id", profileId);
-  if (error) throw new Error(error.message);
-
-  revalidatePath("/legado");
-}
-
 export async function salvarAdmissao(formData: FormData) {
   const supabase = await createClient();
   const {

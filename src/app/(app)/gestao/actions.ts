@@ -52,6 +52,19 @@ export async function atualizarLegado(formData: FormData) {
   revalidatePath("/gestao");
 }
 
+export async function salvarNomesPlanilha(formData: FormData) {
+  const supabase = await exigirDiretor();
+  const profileId = String(formData.get("profile_id"));
+  const nomes = formData.getAll("nomes_planilha").map(String).filter((n) => n.trim() !== "");
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ nomes_planilha: nomes.length > 0 ? nomes : null })
+    .eq("id", profileId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/gestao");
+}
+
 export async function dispararSyncManual() {
   await exigirDiretor();
   const resultado = await runSync();

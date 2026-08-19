@@ -23,15 +23,17 @@ export async function runSync(): Promise<SyncResultado> {
   let funilLinhasGravadas = 0;
 
   // ---------- mapa nome normalizado -> profile_id ----------
-  // nome_planilha (setado manualmente em Meu Legado) tem prioridade sobre
-  // full_name, pra cobrir casos onde o nome na planilha diverge do cadastro.
-  const { data: profiles } = await supabase.from("profiles").select("id, full_name, nome_planilha");
+  // nomes_planilha (setado manualmente em Gestão de Pessoas) tem prioridade
+  // sobre full_name, pra cobrir grafias da planilha que divergem do cadastro.
+  const { data: profiles } = await supabase.from("profiles").select("id, full_name, nomes_planilha");
   const nomeParaId = new Map<string, string>();
   for (const p of profiles ?? []) {
     nomeParaId.set(normalizarNome(p.full_name), p.id);
   }
   for (const p of profiles ?? []) {
-    if (p.nome_planilha) nomeParaId.set(normalizarNome(p.nome_planilha), p.id);
+    for (const alias of p.nomes_planilha ?? []) {
+      if (alias) nomeParaId.set(normalizarNome(alias), p.id);
+    }
   }
 
   // ---------- aba Dados: funil (tentativas/alôs/conexões) ----------
