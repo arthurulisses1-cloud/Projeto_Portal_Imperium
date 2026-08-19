@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { runSync } from "@/lib/sync/run";
 
 async function exigirDiretor() {
   const supabase = await createClient();
@@ -49,4 +50,20 @@ export async function atualizarLegado(formData: FormData) {
     .eq("id", exercitoId);
   if (error) throw new Error(error.message);
   revalidatePath("/gestao");
+}
+
+export async function dispararSyncManual() {
+  await exigirDiretor();
+  const resultado = await runSync();
+
+  revalidatePath("/");
+  revalidatePath("/producao");
+  revalidatePath("/tribo");
+  revalidatePath("/exercito");
+  revalidatePath("/ranking");
+  revalidatePath("/comissao");
+  revalidatePath("/geral");
+  revalidatePath("/legado");
+
+  return resultado;
 }

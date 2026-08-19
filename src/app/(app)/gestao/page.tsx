@@ -3,6 +3,7 @@ import { RANK_LABELS, ROLE_LABELS } from "@/lib/labels";
 import { RANK_ORDER } from "@/lib/carreira";
 import { atualizarCargo, atualizarTribo, atualizarLegado } from "./actions";
 import Card from "@/components/ui/Card";
+import SincronizarPlanilha from "@/components/ui/SincronizarPlanilha";
 
 const ROLES = ["sdr", "closer", "lider", "diretor"] as const;
 const RANKS = [...RANK_ORDER, "diretor"] as const;
@@ -33,6 +34,10 @@ export default async function GestaoPage() {
         <h1 className="font-display text-2xl text-gold-bright">Gestão de Pessoas</h1>
         <p className="kicker mt-1">Cargo, Tribo e Exército de cada membro — acesso total do Diretor</p>
       </div>
+
+      <Card title="Sincronização com a Planilha">
+        <SincronizarPlanilha />
+      </Card>
 
       <Card title="Exércitos e seus Legados">
         <div className="grid gap-3 sm:grid-cols-2">
