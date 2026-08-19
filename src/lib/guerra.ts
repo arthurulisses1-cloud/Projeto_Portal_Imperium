@@ -23,15 +23,28 @@ async function pagosMesPorGrupo(
   );
   if (idsEnvolvidos.length === 0) return [];
 
-  const { data: pessoas } = await supabase
-    .from("profiles")
-    .select("id, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))")
-    .in("id", idsEnvolvidos);
+  const [{ data: pessoas }, { data: exercitos }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))")
+      .in("id", idsEnvolvidos),
+    // Legado do Exército não tem Tribo própria — sem isso, uma venda fechada
+    // por ele (sozinho ou com um SDR de time diferente) some da Guerra Civil
+    // ou vai pro time errado (do parceiro), em vez do time que ele lidera.
+    agrupar === "exercito"
+      ? supabase.from("exercitos").select("nome, legado_id").in("legado_id", idsEnvolvidos)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const exercitoPorLegadoId = new Map((exercitos ?? []).map((e) => [e.legado_id, e.nome]));
 
   const grupoPorProfile = new Map<string, string>();
   for (const p of pessoas ?? []) {
     const tribo = p.tribo as unknown as { nome: string; exercito: { nome: string } | null } | null;
-    const chave = agrupar === "exercito" ? tribo?.exercito?.nome : tribo?.nome;
+    const chave =
+      agrupar === "exercito"
+        ? tribo?.exercito?.nome ?? exercitoPorLegadoId.get(p.id)
+        : tribo?.nome;
     if (chave) grupoPorProfile.set(p.id, chave);
   }
 
