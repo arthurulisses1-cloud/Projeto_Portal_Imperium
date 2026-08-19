@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { buscarProducaoDados } from "./dados";
 import { buscarAssinado } from "./assinado";
 import { buscarEntrevistas } from "./entrevistas";
+import { buscarOperacoes } from "./weekly";
 import { normalizarNome } from "./parse";
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -163,6 +164,33 @@ export async function runSync(): Promise<SyncResultado> {
     const { error } = await supabase.from("vendas").insert(batch);
     if (error) throw new Error("Erro gravando vendas: " + error.message);
     vendasInseridas += batch.length;
+  }
+
+  // ---------- Aba Assinado (de novo, sem filtro): espelho pra Weekly de Receita ----------
+  const operacoes = await buscarOperacoes();
+  const weeklyRows = operacoes.linhas.map((l) => ({
+    data: l.data,
+    sdr_profile_id: l.sdrNormalizado ? nomeParaId.get(l.sdrNormalizado) ?? null : null,
+    closer_profile_id: l.closerNormalizado ? nomeParaId.get(l.closerNormalizado) ?? null : null,
+    cliente: l.cliente,
+    valor: l.valor,
+    faturamento: l.faturamento,
+    produto: l.produto,
+    origem: l.origem,
+    status: l.status,
+    synced_at: new Date().toISOString(),
+  }));
+  if (operacoes.menorData && operacoes.maiorData) {
+    const { error } = await supabase
+      .from("weekly_operacoes")
+      .delete()
+      .gte("data", operacoes.menorData)
+      .lte("data", operacoes.maiorData);
+    if (error) throw new Error("Erro limpando weekly_operacoes antigas: " + error.message);
+  }
+  for (const batch of chunk(weeklyRows, 1000)) {
+    const { error } = await supabase.from("weekly_operacoes").insert(batch);
+    if (error) throw new Error("Erro gravando weekly_operacoes: " + error.message);
   }
 
   const detalhe = JSON.stringify({

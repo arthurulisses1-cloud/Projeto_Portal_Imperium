@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
   { href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider"] },
   { href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor"] },
+  { href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor"] },
   { href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
   { href: "/central", label: "Central de Notificações", roles: ["diretor"] },
   { href: "/geral", label: "Visão Geral da Firma", roles: ["diretor"] },
