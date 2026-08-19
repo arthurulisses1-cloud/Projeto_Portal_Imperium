@@ -6,6 +6,7 @@ import type { FunilEtapa } from "@/lib/funil";
 type AssinadoRow = {
   SDR?: string;
   CLOSER?: string;
+  CLIENTE?: string;
   "CRÉDITO"?: string;
   DATA?: string;
   ORIGEM?: string;
@@ -18,6 +19,7 @@ export type VendaLinha = {
   valor: number;
   origem: string | null;
   multiplicador: number;
+  cliente: string | null;
 };
 
 export type ProducaoLinha = { nomeNormalizado: string; data: string; etapa: FunilEtapa; realizado: number };
@@ -73,6 +75,7 @@ export async function buscarAssinado(): Promise<{
           valor,
           origem: row.ORIGEM || null,
           multiplicador: multiplicadorPorValor(valor),
+          cliente: row.CLIENTE?.trim() || null,
         });
       }
     }

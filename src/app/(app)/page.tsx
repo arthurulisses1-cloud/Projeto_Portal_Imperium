@@ -2,13 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import MuralForm from "./mural-form";
 import Card from "@/components/ui/Card";
 import Laurel from "@/components/ui/Laurel";
-import RankBadge from "@/components/ui/RankBadge";
 import BarraMeta from "@/components/ui/BarraMeta";
 import ConfrontoWidget from "@/components/ui/Confronto";
 import EnquetePoll, { type EnqueteData } from "@/components/ui/EnquetePoll";
 import { IconSwords, IconShield, IconCoin } from "@/components/ui/icons";
 import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
 import { buscarMetaIndividual } from "@/lib/metas";
+import { buscarCampanhasAtivas } from "@/lib/campanhas";
+import { FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 
 export default async function MuralPage() {
   const supabase = await createClient();
@@ -23,7 +24,7 @@ export default async function MuralPage() {
   const { data: profile } = await supabase
     .from("profiles")
     .select(
-      "full_name, avatar_emoji, role, rank, stars_total, tribo:tribos!profiles_tribo_id_fkey(id, nome, exercito:exercitos(nome))"
+      "full_name, avatar_emoji, avatar_url, role, rank, stars_total, tribo:tribos!profiles_tribo_id_fkey(id, nome, exercito:exercitos(nome))"
     )
     .eq("id", user.id)
     .single();
@@ -70,6 +71,8 @@ export default async function MuralPage() {
 
   const { metaCreditoIndividual: metaIndividual } = await buscarMetaIndividual(supabase, user.id);
 
+  const campanhasAtivas = await buscarCampanhasAtivas(supabase);
+
   const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
 
   // Enquetes: pré-computa opções + votos dos posts do tipo 'enquete' já carregados
@@ -103,13 +106,27 @@ export default async function MuralPage() {
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       <div className="flex items-center gap-4">
-        {profile && <RankBadge rank={profile.rank} size="lg" />}
-        <div>
-          <h1 className="font-display text-2xl text-gold-bright">Mural</h1>
-          <p className="text-sm text-stone-400">
-            Salve, {profile?.full_name?.split(" ")[0] ?? "executivo"}.
-          </p>
-        </div>
+        {profile?.avatar_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={profile.avatar_url}
+            alt={profile.full_name}
+            className="h-20 w-20 shrink-0 rounded-full border-2 border-gold/50 object-cover"
+          />
+        ) : (
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-2 border-gold/50 bg-imperium-bg font-display text-2xl text-gold">
+            {(profile?.full_name ?? "?")
+              .split(" ")
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((p: string) => p[0])
+              .join("")
+              .toUpperCase()}
+          </div>
+        )}
+        <p className="font-display text-2xl text-gold-bright">
+          Salve, {profile?.full_name?.split(" ")[0] ?? "executivo"}.
+        </p>
       </div>
 
       {ehExecutivo && !compromissoHoje && new Date().getHours() >= 14 && (
@@ -129,7 +146,7 @@ export default async function MuralPage() {
 
       {quote && (
         <Card className="watermark-spqr text-center">
-          <p className="kicker mb-3">Conselho do Sábio</p>
+          <p className="kicker mb-3">Oráculo</p>
           <p className="font-serif text-xl italic text-stone-100">&quot;{quote.texto}&quot;</p>
           <Laurel className="mx-auto my-3 h-3 w-24 text-gold/40" />
           <p className="text-xs text-stone-500">{quote.fonte}</p>
@@ -152,6 +169,62 @@ export default async function MuralPage() {
           <ConfrontoWidget dados={topCredito} />
         </Card>
       </div>
+
+      {campanhasAtivas.length > 0 && (
+        <Card title="Campanhas do mês">
+          <div className="grid gap-4 sm:grid-cols-2">
+            {campanhasAtivas.map((c) => {
+              const metricaLabel = c.metrica === "credito" ? "R$" : FUNNEL_LABELS[c.metrica as FunilEtapa] ?? c.metrica;
+              const fmt = (v: number) =>
+                c.metrica === "credito"
+                  ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
+                  : `${v} ${metricaLabel}`;
+              const max = Math.max(...c.participantes.map((p) => p.valor), c.metaValor ?? 0, 1);
+
+              return (
+                <div key={c.id} className="overflow-hidden rounded-lg border border-gold/30">
+                  {c.imagemUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={c.imagemUrl} alt={c.titulo} className="h-32 w-full object-cover" />
+                  )}
+                  <div className="p-3">
+                    <p className="font-display text-base text-gold-bright">{c.titulo}</p>
+                    {c.descricao && <p className="mt-1 text-xs text-stone-400">{c.descricao}</p>}
+                    <p className="mt-1 text-[10px] uppercase tracking-wide text-stone-600">
+                      até {new Date(c.dataFim + "T00:00:00").toLocaleDateString("pt-BR")}
+                    </p>
+
+                    <div className="mt-3 space-y-2">
+                      {c.participantes.map((p, i) => (
+                        <div key={p.refId}>
+                          <div className="mb-1 flex items-center justify-between text-xs">
+                            <span className={i === 0 && c.alvo !== "geral" ? "text-gold-bright" : "text-stone-300"}>
+                              {i === 0 && c.alvo !== "geral" && "👑 "}
+                              {p.label}
+                            </span>
+                            <span className="text-stone-400">
+                              {fmt(p.valor)}
+                              {c.metaValor ? ` / ${fmt(c.metaValor)}` : ""}
+                            </span>
+                          </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-imperium-line">
+                            <div
+                              className={`h-full rounded-full ${
+                                i === 0 ? "bg-gradient-to-r from-gold to-gold-bright" : "bg-wine"
+                              }`}
+                              style={{ width: `${Math.min(100, (p.valor / max) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       {ehExecutivo && (
         <Card title="Compromisso de hoje">
@@ -214,7 +287,8 @@ export default async function MuralPage() {
               return (
                 <li
                   key={post.id}
-                  className="flex gap-4 rounded border border-imperium-line bg-imperium-bg/40 p-4"
+                  id={`post-${post.id}`}
+                  className="flex gap-4 rounded border border-imperium-line bg-imperium-bg/40 p-4 scroll-mt-20"
                 >
                   <span className="text-2xl">
                     {post.tipo === "aviso" ? "📯" : post.tipo === "enquete" ? "🗳️" : "🏅"}

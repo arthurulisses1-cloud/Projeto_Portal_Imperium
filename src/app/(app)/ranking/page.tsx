@@ -186,8 +186,6 @@ export default async function RankingPage() {
       <section>
         <h2 className="kicker mb-3">SDR</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Tabela titulo="Tentativas" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "tentativas")} />
-          <Tabela titulo="Conexões" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "conexoes")} />
           <Tabela titulo="Entrevistas" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "entrevistas")} />
           <Tabela titulo="Assinados" formato="num" linhas={topPorEtapa(idsPorRole.sdr, "assinaturas")} />
           <Tabela titulo="Pagos (R$)" formato="moeda" linhas={topPagos(idsPorRole.sdr)} />

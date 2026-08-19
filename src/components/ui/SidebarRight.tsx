@@ -137,7 +137,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
 
       {quote && (
         <div className="border-t border-imperium-line pt-4 text-center">
-          <p className="kicker mb-2">Conselhos do Sábio</p>
+          <p className="kicker mb-2">Oráculo</p>
           <p className="font-serif text-sm italic text-stone-300">&quot;{quote.texto}&quot;</p>
           <p className="mt-1 text-[10px] text-stone-600">{quote.fonte}</p>
         </div>

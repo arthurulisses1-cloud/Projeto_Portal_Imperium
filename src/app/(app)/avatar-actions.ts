@@ -28,3 +28,19 @@ export async function uploadAvatarAction(formData: FormData) {
 
   revalidatePath("/", "layout");
 }
+
+export async function atualizarNome(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const nome = String(formData.get("full_name") ?? "").trim();
+  if (!nome) return;
+
+  const { error } = await supabase.from("profiles").update({ full_name: nome }).eq("id", user.id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/", "layout");
+}

@@ -51,7 +51,7 @@ export default async function ComissaoPage() {
   const inicioMes = agora.toISOString().slice(0, 7) + "-01";
   const { data: vendasMes } = await supabase
     .from("vendas")
-    .select("id, data, valor, origem, multiplicador")
+    .select("id, data, valor, origem, multiplicador, cliente")
     .eq("profile_id", user.id)
     .gte("data", inicioMes)
     .order("data", { ascending: false });
@@ -248,6 +248,7 @@ export default async function ComissaoPage() {
             <thead>
               <tr className="text-left text-xs text-stone-500">
                 <th className="pb-1">Data</th>
+                <th className="pb-1">Cliente</th>
                 <th className="pb-1">Origem</th>
                 <th className="pb-1 text-right">Valor</th>
                 <th className="pb-1 text-right">Multiplicador</th>
@@ -259,6 +260,7 @@ export default async function ComissaoPage() {
                   <td className="py-1 text-stone-300">
                     {new Date(v.data + "T00:00:00").toLocaleDateString("pt-BR")}
                   </td>
+                  <td className="py-1 text-stone-300">{v.cliente ?? "—"}</td>
                   <td className="py-1 text-stone-400">{v.origem ?? "—"}</td>
                   <td className="py-1 text-right text-stone-100">{moeda(Number(v.valor))}</td>
                   <td className="py-1 text-right text-stone-400">×{v.multiplicador}</td>

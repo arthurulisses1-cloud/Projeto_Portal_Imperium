@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { FUNNEL_STAGES, FUNNEL_LABELS, periodoParaDatas, type FunilEtapa } from "@/lib/funil";
 import { buscarMetaIndividual, calcularFunilMeta } from "@/lib/metas";
 import { buscarFunilColetivo } from "@/lib/time";
-import { calcularGargalo, textoGargalo } from "@/lib/gargalo";
+import { calcularGargalo } from "@/lib/gargalo";
+import { gerarParecer } from "@/lib/oraculo";
 import SimuladorMeta from "./simulador";
 import Card from "@/components/ui/Card";
 import BarraProgresso from "@/components/ui/BarraProgresso";
@@ -234,22 +235,39 @@ export default async function ProducaoPage({
         </Card>
       )}
 
-      {gargalo && (
-        <div className="rounded border border-wine/50 bg-wine/10 p-4">
-          <p className="mb-1 flex items-center gap-2 text-sm font-medium text-wine-bright">
-            ⚠ Diagnóstico de Gargalo
-          </p>
-          <p className="text-sm text-stone-300">{textoGargalo(gargalo)}</p>
-          {gargalo.moduloTrilha && (
-            <p className="mt-2 text-xs text-stone-400">
-              📘 Módulo recomendado: <span className="text-gold">{gargalo.moduloTrilha}</span> —{" "}
-              <a href="/trilha" className="text-gold hover:underline">
-                abrir na Trilha →
-              </a>
-            </p>
+      <Card title="Parecer do Oráculo">
+        <ul className="space-y-2.5">
+          {gerarParecer({ gargalo, ticketMedio, metaTicketMedio, pctMeta }).map(
+            (item, i) => (
+              <li
+                key={i}
+                className={`flex items-start gap-2 text-sm ${
+                  item.tom === "alerta"
+                    ? "text-wine-bright"
+                    : item.tom === "elogio"
+                      ? "text-emerald-400"
+                      : "text-stone-300"
+                }`}
+              >
+                <span className="mt-0.5 shrink-0">
+                  {item.tom === "alerta" ? "⚠" : item.tom === "elogio" ? "✓" : "📘"}
+                </span>
+                <span>
+                  {item.texto}
+                  {item.texto.includes("Trilha de Formação") && (
+                    <>
+                      {" "}
+                      <a href="/trilha" className="text-gold hover:underline">
+                        abrir na Trilha →
+                      </a>
+                    </>
+                  )}
+                </span>
+              </li>
+            )
           )}
-        </div>
-      )}
+        </ul>
+      </Card>
 
       <SimuladorMeta totais={totaisMes} />
     </main>

@@ -18,7 +18,11 @@ function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
-export default async function TriboPage() {
+export default async function TriboPage({
+  searchParams,
+}: {
+  searchParams: { membro?: string };
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -76,6 +80,15 @@ export default async function TriboPage() {
     buscarPagosMes(supabase, idsSdrs),
     buscarFunilColetivo(supabase, idsSdrs),
   ]);
+
+  const membroSelecionado =
+    searchParams.membro && idsSdrs.includes(searchParams.membro) ? searchParams.membro : null;
+  const nomeMembroSelecionado = membroSelecionado
+    ? (sdrs ?? []).find((s) => s.id === membroSelecionado)?.full_name
+    : null;
+  const funilExibido = membroSelecionado
+    ? await buscarFunilColetivo(supabase, [membroSelecionado])
+    : funilColetivo;
 
   const rankingTribo = (sdrs ?? [])
     .map((s) => ({ id: s.id, nome: s.full_name, valor: pagosMap.get(s.id) ?? 0 }))
@@ -160,7 +173,34 @@ export default async function TriboPage() {
         </Card>
       )}
 
-      <Card title="Produção coletiva do mês">
+      <Card
+        title={membroSelecionado ? `Produção do mês — ${nomeMembroSelecionado}` : "Produção coletiva do mês"}
+        right={
+          <div className="flex gap-2 text-xs">
+            <a
+              href="/tribo"
+              className={`rounded px-2 py-1 uppercase transition ${
+                !membroSelecionado ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-300 hover:border-gold"
+              }`}
+            >
+              Coletiva
+            </a>
+            {(sdrs ?? []).map((s) => (
+              <a
+                key={s.id}
+                href={`/tribo?membro=${s.id}`}
+                className={`rounded px-2 py-1 uppercase transition ${
+                  membroSelecionado === s.id
+                    ? "bg-gold text-imperium-bg"
+                    : "border border-imperium-line text-stone-300 hover:border-gold"
+                }`}
+              >
+                {s.full_name.split(" ")[0]}
+              </a>
+            ))}
+          </div>
+        }
+      >
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
@@ -174,9 +214,9 @@ export default async function TriboPage() {
               <tr key={etapa} className="border-t border-imperium-line">
                 <td className="py-2 text-stone-300">{FUNNEL_LABELS[etapa]}</td>
                 <td className="py-2 text-right text-stone-100">
-                  {funilColetivo[etapa].realizado}
+                  {funilExibido[etapa].realizado}
                 </td>
-                <td className="py-2 text-right text-stone-500">{funilColetivo[etapa].meta}</td>
+                <td className="py-2 text-right text-stone-500">{funilExibido[etapa].meta}</td>
               </tr>
             ))}
           </tbody>

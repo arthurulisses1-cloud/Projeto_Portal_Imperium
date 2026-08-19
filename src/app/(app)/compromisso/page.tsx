@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { registrarCompromisso } from "./actions";
+import { marcarFaltaTime } from "@/app/(app)/exercito/actions";
 import Card from "@/components/ui/Card";
 import { buscarMetaIndividual, calcularFunilMeta } from "@/lib/metas";
 import { calcularStreak, cumpriuCompromisso, type StreakRow } from "@/lib/streak";
@@ -105,6 +106,57 @@ export default async function CompromissoPage() {
     }
   }
 
+  // Compromisso agregado da Tribo (só pra Closer)
+  type MembroTribo = {
+    id: string;
+    nome: string;
+    avatarUrl: string | null;
+    row: CompromissoRow | null;
+  };
+  let membrosTribo: MembroTribo[] = [];
+  let agregadoTribo: {
+    entrevistas_comp: number;
+    entrevistas_real: number;
+    assinaturas_comp: number;
+    assinaturas_real: number;
+    pagos_comp: number;
+    pagos_real: number;
+  } | null = null;
+
+  if (profile?.role === "closer" && profile.tribo_id) {
+    const { data: sdrs } = await supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url")
+      .eq("tribo_id", profile.tribo_id)
+      .eq("role", "sdr");
+
+    const idsTribo = [user.id, ...(sdrs ?? []).map((s) => s.id)];
+    const { data: comprosHoje } = await supabase
+      .from("compromissos")
+      .select("*")
+      .in("profile_id", idsTribo)
+      .eq("data", hoje);
+    const comproPorId = new Map((comprosHoje ?? []).map((r) => [r.profile_id, r as CompromissoRow]));
+
+    const { data: euProfile } = await supabase.from("profiles").select("full_name, avatar_url").eq("id", user.id).single();
+
+    membrosTribo = [
+      { id: user.id, nome: `${euProfile?.full_name ?? "Você"} (você)`, avatarUrl: euProfile?.avatar_url ?? null, row: comproPorId.get(user.id) ?? null },
+      ...(sdrs ?? []).map((s) => ({ id: s.id, nome: s.full_name, avatarUrl: s.avatar_url, row: comproPorId.get(s.id) ?? null })),
+    ];
+
+    agregadoTribo = { entrevistas_comp: 0, entrevistas_real: 0, assinaturas_comp: 0, assinaturas_real: 0, pagos_comp: 0, pagos_real: 0 };
+    for (const m of membrosTribo) {
+      if (!m.row) continue;
+      agregadoTribo.entrevistas_comp += m.row.entrevistas_comp;
+      agregadoTribo.entrevistas_real += m.row.entrevistas_real;
+      agregadoTribo.assinaturas_comp += m.row.assinaturas_comp;
+      agregadoTribo.assinaturas_real += m.row.assinaturas_real;
+      agregadoTribo.pagos_comp += m.row.pagos_comp;
+      agregadoTribo.pagos_real += m.row.pagos_real;
+    }
+  }
+
   // Feedback do Closer (só pra SDR)
   let feedbacks: { id: string; texto: string; created_at: string }[] = [];
   if (profile?.role === "sdr") {
@@ -131,7 +183,75 @@ export default async function CompromissoPage() {
         )}
       </div>
 
-      <Card title="Hoje">
+      {agregadoTribo && (
+        <Card
+          title="Compromisso da Tribo (hoje)"
+          right={<span className="text-xs text-stone-500">soma de todos os membros</span>}
+        >
+          <div className="mb-4 grid grid-cols-3 gap-4 text-sm">
+            <div>
+              <p className="text-stone-500">Entrevistas</p>
+              <p className="text-stone-100">
+                {agregadoTribo.entrevistas_real}/{agregadoTribo.entrevistas_comp}
+              </p>
+            </div>
+            <div>
+              <p className="text-stone-500">Assinaturas</p>
+              <p className="text-stone-100">
+                {agregadoTribo.assinaturas_real}/{agregadoTribo.assinaturas_comp}
+              </p>
+            </div>
+            <div>
+              <p className="text-stone-500">Pagos</p>
+              <p className="text-stone-100">
+                {agregadoTribo.pagos_real}/{agregadoTribo.pagos_comp}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {membrosTribo.map((m) => {
+              const status = m.row
+                ? statusLabel(m.row, true)
+                : { texto: "Pendente", cor: "text-stone-500" };
+              const jaAusente = m.row?.falta;
+              return (
+                <div
+                  key={m.id}
+                  className="flex items-center gap-3 rounded border border-imperium-line bg-imperium-bg/40 p-3"
+                >
+                  {m.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={m.avatarUrl}
+                      alt={m.nome}
+                      className="h-10 w-10 shrink-0 rounded-full border border-imperium-line-strong object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-xs text-stone-500">
+                      {m.nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-stone-200">{m.nome}</p>
+                    <p className={`text-xs ${status.cor}`}>{status.texto}</p>
+                  </div>
+                  {!jaAusente && (
+                    <form action={marcarFaltaTime}>
+                      <input type="hidden" name="profile_id" value={m.id} />
+                      <button type="submit" className="shrink-0 text-[10px] text-stone-600 hover:text-wine-bright">
+                        Falta
+                      </button>
+                    </form>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      <Card title={profile?.role === "closer" ? "Meu compromisso individual (opcional)" : "Hoje"}>
         {!hojeRow ? (
           <form action={registrarCompromisso} className="space-y-4">
             <p className="text-sm text-stone-400">

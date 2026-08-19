@@ -17,9 +17,14 @@ export default async function NoticiasCompactas() {
       <p className="kicker mb-2 px-2">Notícias</p>
       <ul className="space-y-1.5">
         {posts.map((p) => (
-          <li key={p.id} className="flex items-start gap-1.5 rounded px-2 py-1 text-xs text-stone-400">
-            <span className="mt-0.5 shrink-0">{p.tipo === "aviso" ? "📯" : "🏅"}</span>
-            <span className="line-clamp-2">{p.titulo}</span>
+          <li key={p.id}>
+            <a
+              href={`/#post-${p.id}`}
+              className="flex items-start gap-1.5 rounded px-2 py-1 text-xs text-stone-400 transition hover:bg-imperium-raised hover:text-gold-bright"
+            >
+              <span className="mt-0.5 shrink-0">{p.tipo === "aviso" ? "📯" : p.tipo === "enquete" ? "🗳️" : "🏅"}</span>
+              <span className="line-clamp-2">{p.titulo}</span>
+            </a>
           </li>
         ))}
       </ul>

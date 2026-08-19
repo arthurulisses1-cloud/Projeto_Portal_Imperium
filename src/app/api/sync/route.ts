@@ -106,6 +106,7 @@ export async function GET(request: Request) {
         data: v.data,
         origem: v.origem,
         multiplicador: v.multiplicador,
+        cliente: v.cliente,
         synced_at: new Date().toISOString(),
       };
     })

@@ -34,21 +34,33 @@ const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> =
   "/contestacoes": IconScales,
 };
 
-export default function AppNav({ items }: { items: { href: string; label: string }[] }) {
+export default function AppNav({
+  items,
+  pendencias,
+}: {
+  items: { href: string; label: string }[];
+  pendencias?: Record<string, number>;
+}) {
   const pathname = usePathname();
   return (
     <nav className="flex flex-col gap-1">
       {items.map((item) => {
         const Icon = ICONS[item.href] ?? IconScroll;
         const active = pathname === item.href;
+        const pendente = pendencias?.[item.href] ?? 0;
         return (
           <Link
             key={item.href}
             href={item.href}
-            className={`nav-link whitespace-nowrap ${active ? "nav-link-active" : ""}`}
+            className={`nav-link relative whitespace-nowrap ${active ? "nav-link-active" : ""}`}
           >
             <Icon className="h-3.5 w-3.5" />
-            {item.label}
+            <span className="flex-1">{item.label}</span>
+            {pendente > 0 && (
+              <span className="flex h-4 min-w-[1rem] shrink-0 items-center justify-center rounded-full bg-wine px-1 text-[9px] font-medium text-stone-100">
+                {pendente}
+              </span>
+            )}
           </Link>
         );
       })}

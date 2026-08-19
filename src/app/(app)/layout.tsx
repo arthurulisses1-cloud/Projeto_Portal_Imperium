@@ -1,15 +1,12 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { RANK_LABELS } from "@/lib/labels";
-import RankBadge from "@/components/ui/RankBadge";
 import AppNav from "@/components/ui/AppNav";
-import ThemeToggle from "@/components/ui/ThemeToggle";
 import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
 import SidebarRight from "@/components/ui/SidebarRight";
-import AvatarUpload from "@/components/ui/AvatarUpload";
+import UserMenu from "@/components/ui/UserMenu";
 import VisualizacaoSelector from "@/components/ui/VisualizacaoSelector";
 import { IconLaurel } from "@/components/ui/icons";
-import { EXERCITO_CREST, TRIBO_TAG } from "@/lib/exercito-crests";
+import { buscarPendencias } from "@/lib/pendencias";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +27,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/geral", label: "Visão Geral da Firma", roles: ["diretor"] },
   { href: "/legado", label: "Meu Legado", roles: ["diretor"] },
   { href: "/auditoria", label: "Auditoria", roles: ["diretor"] },
+  { href: "/gestao", label: "Gestão de Pessoas", roles: ["diretor"] },
+  { href: "/campanhas", label: "Campanhas", roles: ["diretor"] },
   { href: "/metas", label: "Metas Mensais", roles: ["diretor"] },
   { href: "/validacao", label: "Fila de Validação", roles: ["diretor"] },
   { href: "/aprovacoes", label: "Aprovações de Carreira", roles: ["diretor"] },
@@ -45,17 +44,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: profile } = user
     ? await supabase
         .from("profiles")
-        .select(
-          "full_name, role, rank, avatar_url, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))"
-        )
+        .select("full_name, role, rank, avatar_url, tribo_id")
         .eq("id", user.id)
         .single()
     : { data: null };
-
-  const tribo = profile?.tribo as unknown as
-    | { nome: string; exercito: { nome: string } | null }
-    | null;
-  const exercitoNome = tribo?.exercito?.nome;
 
   // Diretor pode escolher "ver como" outro papel — troca só a lista de abas,
   // pra revisar qualquer tela antes do lançamento sem logar em outra conta.
@@ -69,10 +61,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
 
+  const pendencias =
+    user && profile ? await buscarPendencias(supabase, user.id, profile.role, profile.tribo_id) : {};
+
   return (
     <div className="flex min-h-screen">
       {user && (
-        <aside className="flex w-56 shrink-0 flex-col border-r border-imperium-line bg-imperium-surface">
+        <aside className="flex w-56 shrink-0 flex-col overflow-y-auto border-r border-imperium-line bg-imperium-surface">
           <div className="watermark-spqr flex items-center gap-2 border-b border-imperium-line p-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -92,8 +87,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
           {profile?.role === "diretor" && <VisualizacaoSelector atual={papelVisualizado ?? "diretor"} />}
 
-          <div className="flex-1 overflow-y-auto p-3">
-            <AppNav items={itensVisiveis} />
+          <div className="overflow-y-auto p-3">
+            <AppNav items={itensVisiveis} pendencias={pendencias} />
           </div>
 
           <NoticiasCompactas />
@@ -103,40 +98,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-3 border-b border-imperium-line bg-imperium-surface px-6 py-3">
           {user && (
-            <>
-              <ThemeToggle />
-              {profile && <RankBadge rank={profile.rank} size="sm" />}
-              <AvatarUpload avatarUrl={profile?.avatar_url ?? null} nome={profile?.full_name ?? "?"} />
-              <div className="text-right">
-                <p className="text-sm text-stone-100">{profile?.full_name ?? user.email}</p>
-                {profile && (
-                  <p className="flex items-center justify-end gap-1.5 text-xs text-stone-500">
-                    {RANK_LABELS[profile.rank]}
-                    {tribo?.nome ? ` · ${tribo.nome}` : ""}
-                    {exercitoNome && (
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full border py-0.5 pl-0.5 pr-1.5 text-[10px] ${
-                          TRIBO_TAG[exercitoNome] ?? "border-gold/40 text-gold"
-                        }`}
-                      >
-                        {EXERCITO_CREST[exercitoNome] && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={EXERCITO_CREST[exercitoNome]}
-                            alt={exercitoNome}
-                            className="h-3.5 w-3.5 rounded-full object-cover"
-                          />
-                        )}
-                        {exercitoNome}
-                      </span>
-                    )}
-                  </p>
-                )}
-              </div>
-              <form action="/auth/signout" method="post">
-                <button className="btn-outline">Sair</button>
-              </form>
-            </>
+            <UserMenu avatarUrl={profile?.avatar_url ?? null} nome={profile?.full_name ?? user.email ?? "?"} />
           )}
         </header>
 

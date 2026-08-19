@@ -72,6 +72,28 @@ export default async function CarreiraPage() {
     .eq("profile_id", user.id)
     .order("created_at", { ascending: false });
 
+  const { data: estrelasEventos } = await supabase
+    .from("estrelas_eventos")
+    .select("tipo, quantidade, semana_ref, motivo")
+    .eq("profile_id", user.id)
+    .not("semana_ref", "is", null)
+    .order("semana_ref", { ascending: false })
+    .limit(40);
+
+  const porSemana = new Map<string, { cheias: number; meias: number; penalidade: number }>();
+  for (const e of estrelasEventos ?? []) {
+    const semana = e.semana_ref as string;
+    const bucket = porSemana.get(semana) ?? { cheias: 0, meias: 0, penalidade: 0 };
+    if (e.tipo === "cheia") bucket.cheias += Number(e.quantidade);
+    else if (e.tipo === "meia") bucket.meias += Number(e.quantidade);
+    else bucket.penalidade += Number(e.quantidade);
+    porSemana.set(semana, bucket);
+  }
+  const extratoSemanal = Array.from(porSemana.entries())
+    .map(([semana, v]) => ({ semana, ...v, total: v.cheias + v.meias * 0.5 - v.penalidade }))
+    .sort((a, b) => (a.semana < b.semana ? 1 : -1))
+    .slice(0, 8);
+
   const { data: livros } = proximoRank
     ? await supabase
         .from("biblioteca_livros")
@@ -111,6 +133,9 @@ export default async function CarreiraPage() {
     const vendasPorSemana = (estrelasFaltando / semanasRestantes) * pace.cheia;
     ritmo = { semanasRestantes, estrelasFaltando, vendasPorSemana };
   }
+
+  const metaSemanalEstrelas =
+    ritmo && ritmo.semanasRestantes > 0 ? ritmo.estrelasFaltando / ritmo.semanasRestantes : null;
 
   const criteriosPorBloco = new Map<number, Criterio[]>();
   for (const c of (criterios ?? []) as Criterio[]) {
@@ -339,6 +364,51 @@ export default async function CarreiraPage() {
           )}
         </Card>
       )}
+
+      <Card
+        title="Extrato Semanal de Estrelas"
+        right={
+          metaSemanalEstrelas !== null && (
+            <span className="text-xs text-stone-500">
+              ritmo necessário: {metaSemanalEstrelas.toFixed(1)}★/semana
+            </span>
+          )
+        }
+      >
+        {extratoSemanal.length > 0 ? (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
+                <th className="pb-2">Semana</th>
+                <th className="pb-2 text-right">Cheias</th>
+                <th className="pb-2 text-right">Meias</th>
+                <th className="pb-2 text-right">Total</th>
+                <th className="pb-2 text-right">Bateu a meta?</th>
+              </tr>
+            </thead>
+            <tbody>
+              {extratoSemanal.map((s) => {
+                const bateu = metaSemanalEstrelas === null || s.total >= metaSemanalEstrelas;
+                return (
+                  <tr key={s.semana} className="border-t border-imperium-line">
+                    <td className="py-2 text-stone-300">
+                      {new Date(s.semana + "T00:00:00").toLocaleDateString("pt-BR")}
+                    </td>
+                    <td className="py-2 text-right text-gold">{s.cheias}</td>
+                    <td className="py-2 text-right text-gold-dim">{s.meias}</td>
+                    <td className="py-2 text-right text-stone-100">{s.total}</td>
+                    <td className={`py-2 text-right ${bateu ? "text-emerald-400" : "text-wine-bright"}`}>
+                      {metaSemanalEstrelas === null ? "—" : bateu ? "Sim" : `faltam ${(metaSemanalEstrelas - s.total).toFixed(1)}`}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <p className="text-sm text-stone-500">Nenhuma estrela registrada ainda.</p>
+        )}
+      </Card>
 
       <Card title="Feedback / PDI">
         {pdi && pdi.length > 0 ? (
