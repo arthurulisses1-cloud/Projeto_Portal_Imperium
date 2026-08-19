@@ -84,6 +84,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .from("profiles")
       .select("id, full_name, role, tribo_id")
       .in("role", ["sdr", "closer", "lider"])
+      .eq("ativo", true)
       .order("full_name");
     pessoasPreview = (pessoas ?? []).map((p) => ({ id: p.id, nome: p.full_name, role: p.role }));
     if (previewProfileId) {
