@@ -1,17 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
 import WeeklyDashboard from "@/components/weekly/WeeklyDashboard";
+import { getViewerContext } from "@/lib/preview";
 import type { WeeklyDataset, WeeklyOp, PersonInfo } from "@/lib/weekly-compute";
 
 export default async function MinhaProducaoLiderPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const viewer = await getViewerContext(supabase);
+  if (!viewer) return null;
+  const meId = viewer.effectiveId;
 
-  const { data: meProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (!meProfile || meProfile.role !== "lider") {
+  if (viewer.effectiveRole !== "lider") {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>
@@ -23,7 +22,7 @@ export default async function MinhaProducaoLiderPage() {
   const { data: meuExercito } = await supabase
     .from("exercitos")
     .select("id, nome")
-    .eq("legado_id", user.id)
+    .eq("legado_id", meId)
     .maybeSingle();
 
   if (!meuExercito) {
@@ -194,7 +193,7 @@ export default async function MinhaProducaoLiderPage() {
     <WeeklyDashboard
       dataset={dataset}
       anoAtual={hoje.getFullYear()}
-      eyebrow={`Minha Produção · ${meuExercito.nome}`}
+      eyebrow={`Minha Produção · ${meuExercito.nome}${viewer.isPreview ? ` · pré-visualizando como ${viewer.effectiveNome}` : ""}`}
       titulo="Painel do Exército"
       rotuloEquipe="Tribo"
     />

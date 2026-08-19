@@ -4,6 +4,7 @@ import SimuladorVendaRapida from "./simulador-rapido";
 import { abrirContestacao } from "./actions";
 import { lookupComissao, proximoTier } from "@/lib/comissao";
 import { buscarProgressoMarcos } from "@/lib/marcos";
+import { getViewerContext } from "@/lib/preview";
 import Card from "@/components/ui/Card";
 
 const MESES = [
@@ -18,15 +19,14 @@ const STATUS_LABELS: Record<string, string> = { aberto: "Aberta", resolvido: "Re
 
 export default async function ComissaoPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const viewer = await getViewerContext(supabase);
+  if (!viewer) return null;
+  const meId = viewer.effectiveId;
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("rank")
-    .eq("id", user.id)
+    .eq("id", meId)
     .single();
 
   const { data: tiers } = await supabase
@@ -39,7 +39,7 @@ export default async function ComissaoPage() {
   const { data: historico } = await supabase
     .from("comissao_mensal")
     .select("ano, mes, producao_realizada, fixo, variavel, total")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .order("ano", { ascending: false })
     .order("mes", { ascending: false })
     .limit(6);
@@ -52,7 +52,7 @@ export default async function ComissaoPage() {
   const { data: vendasMes } = await supabase
     .from("vendas")
     .select("id, data, valor, origem, multiplicador, cliente")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .gte("data", inicioMes)
     .order("data", { ascending: false });
 
@@ -61,12 +61,12 @@ export default async function ComissaoPage() {
   const tierAtual = lookupComissao(tiersOrdenados, producaoRealMes);
   const proximo = proximoTier(tiersOrdenados, producaoRealMes);
 
-  const { marcos, producaoAno } = await buscarProgressoMarcos(supabase, user.id);
+  const { marcos, producaoAno } = await buscarProgressoMarcos(supabase, meId);
 
   const { data: contestacoes } = await supabase
     .from("contestacoes")
     .select("id, referencia, valor_contestado, motivo, status, resposta, created_at")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .order("created_at", { ascending: false });
 
   return (

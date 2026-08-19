@@ -11,6 +11,7 @@ import MembroCard from "@/components/MembroCard";
 import ConvidarForm from "./convidar-form";
 import { criarTribo, renomearTribo, atualizarLogoTribo, deixarFeedback, registrarPerda } from "./actions";
 import Card from "@/components/ui/Card";
+import { getViewerContext } from "@/lib/preview";
 
 const MOTIVOS_PERDA = ["Preço", "Timing", "Perfil fora do ICP", "Concorrência", "Sumiu/não respondeu", "Outro"];
 
@@ -24,15 +25,14 @@ export default async function TriboPage({
   searchParams: { membro?: string };
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const viewer = await getViewerContext(supabase);
+  if (!viewer) return null;
+  const meId = viewer.effectiveId;
 
   const { data: tribo } = await supabase
     .from("tribos")
     .select("id, nome, logo_url, exercito:exercitos(nome)")
-    .eq("closer_id", user.id)
+    .eq("closer_id", meId)
     .maybeSingle();
 
   if (!tribo) {
@@ -97,7 +97,7 @@ export default async function TriboPage({
   const { data: perdas } = await supabase
     .from("perdas")
     .select("id, motivo, observacao, data")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .order("data", { ascending: false })
     .limit(10);
 

@@ -9,6 +9,7 @@ import {
 } from "@/lib/time";
 import MembroCard from "@/components/MembroCard";
 import Card from "@/components/ui/Card";
+import { getViewerContext } from "@/lib/preview";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -16,15 +17,14 @@ function moeda(v: number) {
 
 export default async function ExercitoPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const viewer = await getViewerContext(supabase);
+  if (!viewer) return null;
+  const meId = viewer.effectiveId;
 
   const { data: exercito } = await supabase
     .from("exercitos")
     .select("id, nome")
-    .eq("legado_id", user.id)
+    .eq("legado_id", meId)
     .maybeSingle();
 
   if (!exercito) {

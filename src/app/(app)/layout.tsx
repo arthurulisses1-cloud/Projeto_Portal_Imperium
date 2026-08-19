@@ -5,6 +5,8 @@ import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
 import SidebarRight from "@/components/ui/SidebarRight";
 import UserMenu from "@/components/ui/UserMenu";
 import VisualizacaoSelector from "@/components/ui/VisualizacaoSelector";
+import PreviewPessoaSelector from "@/components/ui/PreviewPessoaSelector";
+import { limparPreview } from "./preview-actions";
 import { IconLaurel } from "@/components/ui/icons";
 import { buscarPendencias } from "@/lib/pendencias";
 
@@ -68,11 +70,33 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         .single()
     : { data: null };
 
-  // Diretor pode escolher "ver como" outro papel — troca só a lista de abas,
-  // pra revisar qualquer tela antes do lançamento sem logar em outra conta.
   const cookieStore = await cookies();
+
+  // Diretor pode pré-visualizar como uma pessoa real específica — sem senha,
+  // sem logar em outra conta (ver src/lib/preview.ts). Isso tem prioridade
+  // sobre o "ver como <papel genérico>" de baixo, porque é mais específico:
+  // dirige a navegação inteira (abas) E os dados das telas pessoais.
+  const previewProfileId = profile?.role === "diretor" ? cookieStore.get("preview_profile_id")?.value ?? null : null;
+  let pessoasPreview: { id: string; nome: string; role: string }[] = [];
+  let previewPessoa: { id: string; nome: string; role: string; tribo_id: string | null } | null = null;
+  if (profile?.role === "diretor") {
+    const { data: pessoas } = await supabase
+      .from("profiles")
+      .select("id, full_name, role, tribo_id")
+      .in("role", ["sdr", "closer", "lider"])
+      .order("full_name");
+    pessoasPreview = (pessoas ?? []).map((p) => ({ id: p.id, nome: p.full_name, role: p.role }));
+    if (previewProfileId) {
+      const encontrada = (pessoas ?? []).find((p) => p.id === previewProfileId);
+      if (encontrada) previewPessoa = { id: encontrada.id, nome: encontrada.full_name, role: encontrada.role, tribo_id: encontrada.tribo_id };
+    }
+  }
+
+  // Diretor também pode escolher "ver como" um papel genérico (sem pessoa
+  // específica) — só troca a lista de abas, pra revisar rápido.
   const papelVisualizado =
-    profile?.role === "diretor" ? cookieStore.get("view_role")?.value || "diretor" : profile?.role;
+    previewPessoa?.role ??
+    (profile?.role === "diretor" ? cookieStore.get("view_role")?.value || "diretor" : profile?.role);
 
   const itensVisiveis: NavEntry[] = NAV_ITEMS.filter(
     (item) => !profile || item.roles.includes(papelVisualizado ?? profile.role)
@@ -82,10 +106,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     return rest;
   });
 
-  const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
+  const ehExecutivo = papelVisualizado === "sdr" || papelVisualizado === "closer";
 
   const pendencias =
-    user && profile ? await buscarPendencias(supabase, user.id, profile.role, profile.tribo_id) : {};
+    user && profile
+      ? await buscarPendencias(
+          supabase,
+          previewPessoa?.id ?? user.id,
+          previewPessoa?.role ?? profile.role,
+          previewPessoa?.tribo_id ?? profile.tribo_id
+        )
+      : {};
 
   return (
     <div className="flex min-h-screen">
@@ -108,7 +139,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </div>
 
-          {profile?.role === "diretor" && <VisualizacaoSelector atual={papelVisualizado ?? "diretor"} />}
+          {profile?.role === "diretor" && (
+            <>
+              <VisualizacaoSelector atual={papelVisualizado ?? "diretor"} />
+              <PreviewPessoaSelector pessoas={pessoasPreview} atual={previewProfileId} />
+            </>
+          )}
 
           <div className="overflow-y-auto p-3">
             <AppNav items={itensVisiveis} pendencias={pendencias} />
@@ -119,6 +155,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
+        {previewPessoa && (
+          <div className="flex items-center justify-between gap-3 border-b border-gold/40 bg-gold/10 px-6 py-2 text-xs text-gold-bright">
+            <span>
+              👁 Pré-visualizando como <b>{previewPessoa.nome}</b> — os dados nas telas pessoais são dela(e), não seus.
+            </span>
+            <form action={limparPreview}>
+              <button type="submit" className="rounded border border-gold/40 px-2 py-1 text-[10px] uppercase hover:bg-gold/20">
+                Sair da pré-visualização
+              </button>
+            </form>
+          </div>
+        )}
         <header className="flex items-center justify-end gap-3 border-b border-imperium-line bg-imperium-surface px-6 py-3">
           {user && (
             <UserMenu
@@ -131,7 +179,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         <div className="flex flex-1">
           <div className="min-w-0 flex-1">{children}</div>
-          {user && ehExecutivo && <SidebarRight userId={user.id} />}
+          {user && ehExecutivo && <SidebarRight userId={previewPessoa?.id ?? user.id} />}
         </div>
 
         <footer className="flex items-center justify-center gap-3 py-6">

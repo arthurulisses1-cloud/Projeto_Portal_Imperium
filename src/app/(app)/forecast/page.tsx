@@ -1,16 +1,16 @@
 import { createClient } from "@/lib/supabase/server";
 import ForecastView from "@/components/forecast/ForecastView";
 import { podeEditarOperacao, type ForecastOp } from "@/lib/forecast";
+import { getViewerContext } from "@/lib/preview";
 
 export default async function ForecastPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const viewer = await getViewerContext(supabase);
+  if (!viewer) return null;
+  const meId = viewer.effectiveId;
+  const meRole = viewer.effectiveRole;
 
-  const { data: meProfile } = await supabase.from("profiles").select("id, role").eq("id", user.id).single();
-  if (!meProfile || !["closer", "lider", "diretor"].includes(meProfile.role)) {
+  if (!["closer", "lider", "diretor"].includes(meRole)) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>
@@ -24,11 +24,11 @@ export default async function ForecastPage() {
   // Se for líder, descobre qual Exército ele lidera.
   let exercitoLideradoId: string | null = null;
   let exercitoLideradoNome: string | null = null;
-  if (meProfile.role === "lider") {
+  if (meRole === "lider") {
     const { data: ex } = await supabase
       .from("exercitos")
       .select("id, nome")
-      .eq("legado_id", user.id)
+      .eq("legado_id", meId)
       .maybeSingle();
     exercitoLideradoId = ex?.id ?? null;
     exercitoLideradoNome = ex?.nome ?? null;
@@ -97,7 +97,7 @@ export default async function ForecastPage() {
       statusManual: o.status_manual,
       observacao: o.observacao,
       podeEditar: podeEditarOperacao(
-        { id: user.id, role: meProfile.role, exercitoLideradoId },
+        { id: meId, role: meRole, exercitoLideradoId },
         {
           closerProfileId: o.closer_profile_id,
           sdrExercitoId: sdr?.exercitoId ?? null,
@@ -110,9 +110,9 @@ export default async function ForecastPage() {
   // Escopo por papel: closer só vê os próprios (como closer); líder só vê o
   // próprio Exército (como SDR ou Closer); Diretor vê tudo.
   let ops: ForecastOp[];
-  if (meProfile.role === "closer") {
-    ops = todasOps.filter((o) => o.closerId === user.id);
-  } else if (meProfile.role === "lider" && exercitoLideradoId) {
+  if (meRole === "closer") {
+    ops = todasOps.filter((o) => o.closerId === meId);
+  } else if (meRole === "lider" && exercitoLideradoId) {
     ops = (opRows ?? [])
       .map((o, i) => ({ raw: o, computed: todasOps[i] }))
       .filter(({ raw }) => {
@@ -136,20 +136,21 @@ export default async function ForecastPage() {
     .sort()
     .map((chave) => {
       const [exercitoNome, triboNome] = chave.split("|");
-      return { chave, label: meProfile.role === "diretor" ? `${exercitoNome} · ${triboNome}` : triboNome };
+      return { chave, label: meRole === "diretor" ? `${exercitoNome} · ${triboNome}` : triboNome };
     });
+
+  const escopoBase =
+    meRole === "closer"
+      ? "Seus assinados do mês"
+      : meRole === "lider"
+        ? `${exercitoLideradoNome ?? "Seu Exército"} · todas as tribos`
+        : "Império inteiro";
 
   return (
     <ForecastView
       ops={ops}
-      escopoLabel={
-        meProfile.role === "closer"
-          ? "Seus assinados do mês"
-          : meProfile.role === "lider"
-            ? `${exercitoLideradoNome ?? "Seu Exército"} · todas as tribos`
-            : "Império inteiro"
-      }
-      tribos={meProfile.role === "closer" ? [] : tribosFiltro}
+      escopoLabel={viewer.isPreview ? `${escopoBase} (pré-visualizando como ${viewer.effectiveNome})` : escopoBase}
+      tribos={meRole === "closer" ? [] : tribosFiltro}
     />
   );
 }

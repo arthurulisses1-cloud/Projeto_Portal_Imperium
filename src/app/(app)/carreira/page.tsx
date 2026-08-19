@@ -13,18 +13,18 @@ import { registrarMetaPessoal, escolherLivro, marcarApresentado } from "./action
 import Card from "@/components/ui/Card";
 import RankBadge from "@/components/ui/RankBadge";
 import Laurel from "@/components/ui/Laurel";
+import { getViewerContext } from "@/lib/preview";
 
 export default async function CarreiraPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const viewer = await getViewerContext(supabase);
+  if (!viewer) return null;
+  const meId = viewer.effectiveId;
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, rank, stars_total")
-    .eq("id", user.id)
+    .eq("id", meId)
     .single();
 
   if (!profile) return null;
@@ -55,12 +55,12 @@ export default async function CarreiraPage() {
   const { count: strikesRecentesTotal } = await supabase
     .from("strikes")
     .select("id", { count: "exact", head: true })
-    .eq("profile_id", user.id);
+    .eq("profile_id", meId);
 
   const { data: metas } = await supabase
     .from("metas_pessoais")
     .select("id, nivel_alvo, data_alvo, created_at")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .order("created_at", { ascending: false })
     .limit(1);
 
@@ -69,13 +69,13 @@ export default async function CarreiraPage() {
   const { data: pdi } = await supabase
     .from("pdi_registros")
     .select("id, observacao, plano_acao, proxima_revisao, created_at")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .order("created_at", { ascending: false });
 
   const { data: estrelasEventos } = await supabase
     .from("estrelas_eventos")
     .select("tipo, quantidade, semana_ref, motivo")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .not("semana_ref", "is", null)
     .order("semana_ref", { ascending: false })
     .limit(40);
@@ -108,7 +108,7 @@ export default async function CarreiraPage() {
       ? await supabase
           .from("biblioteca_escolhas")
           .select("id, livro_id, apresentado")
-          .eq("profile_id", user.id)
+          .eq("profile_id", meId)
           .in("livro_id", livroIds)
       : { data: [] };
   const escolha = escolhas?.[0];

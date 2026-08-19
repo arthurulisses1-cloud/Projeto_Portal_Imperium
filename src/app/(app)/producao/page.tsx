@@ -7,6 +7,7 @@ import { gerarParecer } from "@/lib/oraculo";
 import SimuladorMeta from "./simulador";
 import Card from "@/components/ui/Card";
 import BarraProgresso from "@/components/ui/BarraProgresso";
+import { getViewerContext } from "@/lib/preview";
 
 type Periodo = "hoje" | "semana" | "mes";
 type Visao = "total" | "individual" | "tribo";
@@ -26,15 +27,14 @@ export default async function ProducaoPage({
       : "mes";
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const viewer = await getViewerContext(supabase);
+  if (!viewer) return null;
+  const meId = viewer.effectiveId;
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("role, tribo_id")
-    .eq("id", user.id)
+    .eq("id", meId)
     .single();
 
   const ehCloser = profile?.role === "closer";
@@ -52,7 +52,7 @@ export default async function ProducaoPage({
   // "Produção via tribo" agrega todo mundo da própria Tribo (é o time que o
   // closer lidera); "individual" isola só o que ele fechou sozinho (papel
   // "ambos" — sem SDR envolvido); "total" é a produção dele com qualquer papel.
-  let idsProducao = [user.id];
+  let idsProducao = [meId];
   let papelFiltro: string | null = null;
   if (visao === "individual") papelFiltro = "ambos";
   if (visao === "tribo" && profile?.tribo_id) {
@@ -62,7 +62,7 @@ export default async function ProducaoPage({
       .eq("tribo_id", profile.tribo_id)
       .in("role", ["sdr", "closer"]);
     idsProducao = (membrosTribo ?? []).map((m) => m.id);
-    if (idsProducao.length === 0) idsProducao = [user.id];
+    if (idsProducao.length === 0) idsProducao = [meId];
   }
 
   const { inicio, fim } = periodoParaDatas(periodo);
@@ -91,7 +91,7 @@ export default async function ProducaoPage({
   const { data: linhasMes } = await supabase
     .from("producao_funil")
     .select("etapa, realizado, meta")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .gte("data", inicioMes)
     .lte("data", fimMes);
 
@@ -124,7 +124,7 @@ export default async function ProducaoPage({
     const { data: opsFechadas } = await supabase
       .from("weekly_operacoes")
       .select("sdr_profile_id, valor, status")
-      .eq("closer_profile_id", user.id)
+      .eq("closer_profile_id", meId)
       .gte("data", inicio)
       .lte("data", fim);
     const idsFora = (opsFechadas ?? [])
@@ -142,7 +142,7 @@ export default async function ProducaoPage({
     }
   }
 
-  const { metaCreditoIndividual, metaTicketMedio, taxas } = await buscarMetaIndividual(supabase, user.id);
+  const { metaCreditoIndividual, metaTicketMedio, taxas } = await buscarMetaIndividual(supabase, meId);
   const metaFunilIndividual = calcularFunilMeta(metaCreditoIndividual, metaTicketMedio, taxas);
 
   // meta de crédito prorateada pro período selecionado (mês inteiro = 100%)
@@ -172,7 +172,7 @@ export default async function ProducaoPage({
   const { data: linhasProspeccao } = await supabase
     .from("producao_funil")
     .select("data, etapa, realizado")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .in("etapa", ["tentativas", "conexoes"])
     .gte("data", noventaDiasAtras.toISOString().slice(0, 10));
 
