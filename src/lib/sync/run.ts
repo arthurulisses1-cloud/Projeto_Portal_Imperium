@@ -11,6 +11,33 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+type FunilRow = {
+  profile_id: string;
+  data: string;
+  etapa: string;
+  realizado: number;
+  papel: string;
+  meta: number;
+  synced_at: string;
+};
+
+// Com apelidos em Gestão de Pessoas, duas grafias diferentes da planilha
+// (ex.: nome certo + variação/erro de digitação cadastrada como alias) podem
+// resolver pro mesmo profile_id no mesmo dia/etapa/papel — gerando duas
+// linhas com a MESMA chave de conflito na mesma leva do upsert, o que o
+// Postgres rejeita ("ON CONFLICT DO UPDATE command cannot affect row a
+// second time"). Mescla somando `realizado` antes de gravar.
+function mesclarFunil(linhas: FunilRow[]): FunilRow[] {
+  const porChave = new Map<string, FunilRow>();
+  for (const l of linhas) {
+    const chave = `${l.profile_id}|${l.data}|${l.etapa}|${l.papel}`;
+    const existente = porChave.get(chave);
+    if (existente) existente.realizado += l.realizado;
+    else porChave.set(chave, { ...l });
+  }
+  return Array.from(porChave.values());
+}
+
 export type SyncResultado = {
   funilLinhasGravadas: number;
   vendasInseridas: number;
@@ -57,8 +84,9 @@ export async function runSync(): Promise<SyncResultado> {
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
+  const funilRowsDadosMesclado = mesclarFunil(funilRowsDados);
 
-  for (const batch of chunk(funilRowsDados, 1000)) {
+  for (const batch of chunk(funilRowsDadosMesclado, 1000)) {
     const { error } = await supabase
       .from("producao_funil")
       .upsert(batch, { onConflict: "profile_id,data,etapa,papel" });
@@ -86,8 +114,9 @@ export async function runSync(): Promise<SyncResultado> {
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
+  const funilRowsEntrevistasMesclado = mesclarFunil(funilRowsEntrevistas);
 
-  for (const batch of chunk(funilRowsEntrevistas, 1000)) {
+  for (const batch of chunk(funilRowsEntrevistasMesclado, 1000)) {
     const { error } = await supabase
       .from("producao_funil")
       .upsert(batch, { onConflict: "profile_id,data,etapa,papel" });
@@ -116,8 +145,9 @@ export async function runSync(): Promise<SyncResultado> {
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
+  const funilRowsAssinadoMesclado = mesclarFunil(funilRowsAssinado);
 
-  for (const batch of chunk(funilRowsAssinado, 1000)) {
+  for (const batch of chunk(funilRowsAssinadoMesclado, 1000)) {
     const { error } = await supabase
       .from("producao_funil")
       .upsert(batch, { onConflict: "profile_id,data,etapa,papel" });
