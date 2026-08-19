@@ -9,6 +9,7 @@ import Card from "@/components/ui/Card";
 import BarraProgresso from "@/components/ui/BarraProgresso";
 
 type Periodo = "hoje" | "semana" | "mes";
+type Visao = "total" | "individual" | "tribo";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -17,7 +18,7 @@ function moeda(v: number) {
 export default async function ProducaoPage({
   searchParams,
 }: {
-  searchParams: { periodo?: string };
+  searchParams: { periodo?: string; visao?: string };
 }) {
   const periodo: Periodo =
     searchParams.periodo === "hoje" || searchParams.periodo === "semana"
@@ -32,18 +33,48 @@ export default async function ProducaoPage({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("tribo_id")
+    .select("role, tribo_id")
     .eq("id", user.id)
     .single();
 
+  const ehCloser = profile?.role === "closer";
+  const visao: Visao =
+    ehCloser && (searchParams.visao === "individual" || searchParams.visao === "tribo")
+      ? searchParams.visao
+      : "total";
+
+  // Closer só se importa do funil a partir de Entrevistas — tentativas/alôs/
+  // conexões são atividade de SDR e não aparecem pra ele.
+  const etapasVisiveis: readonly FunilEtapa[] = ehCloser
+    ? FUNNEL_STAGES.filter((e) => e !== "tentativas" && e !== "alos" && e !== "conexoes")
+    : FUNNEL_STAGES;
+
+  // "Produção via tribo" agrega todo mundo da própria Tribo (é o time que o
+  // closer lidera); "individual" isola só o que ele fechou sozinho (papel
+  // "ambos" — sem SDR envolvido); "total" é a produção dele com qualquer papel.
+  let idsProducao = [user.id];
+  let papelFiltro: string | null = null;
+  if (visao === "individual") papelFiltro = "ambos";
+  if (visao === "tribo" && profile?.tribo_id) {
+    const { data: membrosTribo } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("tribo_id", profile.tribo_id)
+      .in("role", ["sdr", "closer"]);
+    idsProducao = (membrosTribo ?? []).map((m) => m.id);
+    if (idsProducao.length === 0) idsProducao = [user.id];
+  }
+
   const { inicio, fim } = periodoParaDatas(periodo);
 
-  const { data: linhas } = await supabase
+  let queryLinhas = supabase
     .from("producao_funil")
     .select("etapa, realizado, meta")
-    .eq("profile_id", user.id)
+    .in("profile_id", idsProducao)
     .gte("data", inicio)
     .lte("data", fim);
+  if (papelFiltro) queryLinhas = queryLinhas.eq("papel", papelFiltro);
+  const { data: linhas } = await queryLinhas;
 
   const totais = Object.fromEntries(
     FUNNEL_STAGES.map((etapa) => [etapa, { realizado: 0, meta: 0 }])
@@ -73,15 +104,43 @@ export default async function ProducaoPage({
     totaisMes[etapa].meta += linha.meta;
   }
 
-  const { data: vendasPeriodo } = await supabase
+  let queryVendas = supabase
     .from("vendas")
     .select("valor")
-    .eq("profile_id", user.id)
+    .in("profile_id", idsProducao)
     .gte("data", inicio)
     .lte("data", fim);
+  if (papelFiltro) queryVendas = queryVendas.eq("papel", papelFiltro);
+  const { data: vendasPeriodo } = await queryVendas;
 
   const valorPago = (vendasPeriodo ?? []).reduce((s, v) => s + Number(v.valor), 0);
   const ticketMedio = vendasPeriodo && vendasPeriodo.length > 0 ? valorPago / vendasPeriodo.length : null;
+
+  // Sinaliza quando o closer fechou pra alguém fora da própria Tribo — esse
+  // crédito já está contado no total da Tribo (ele é membro dela), isso é só
+  // um aviso de transparência, não muda a soma.
+  let fechosForaDaTribo: { qtd: number; valor: number } | null = null;
+  if (visao === "tribo" && profile?.tribo_id) {
+    const { data: opsFechadas } = await supabase
+      .from("weekly_operacoes")
+      .select("sdr_profile_id, valor, status")
+      .eq("closer_profile_id", user.id)
+      .gte("data", inicio)
+      .lte("data", fim);
+    const idsFora = (opsFechadas ?? [])
+      .filter((o) => o.sdr_profile_id)
+      .map((o) => o.sdr_profile_id as string);
+    if (idsFora.length > 0) {
+      const { data: sdrsEnvolvidos } = await supabase.from("profiles").select("id, tribo_id").in("id", idsFora);
+      const triboPorSdr = new Map((sdrsEnvolvidos ?? []).map((s) => [s.id, s.tribo_id]));
+      const fora = (opsFechadas ?? []).filter(
+        (o) => o.sdr_profile_id && triboPorSdr.get(o.sdr_profile_id) !== profile.tribo_id && o.status === "PAGO"
+      );
+      if (fora.length > 0) {
+        fechosForaDaTribo = { qtd: fora.length, valor: fora.reduce((s, o) => s + Number(o.valor), 0) };
+      }
+    }
+  }
 
   const { metaCreditoIndividual, metaTicketMedio, taxas } = await buscarMetaIndividual(supabase, user.id);
   const metaFunilIndividual = calcularFunilMeta(metaCreditoIndividual, metaTicketMedio, taxas);
@@ -136,11 +195,11 @@ export default async function ProducaoPage({
           <h1 className="font-display text-2xl text-gold-bright">Minha Produção</h1>
           <p className="text-sm italic text-stone-500">O campo de batalha — realizado × meta</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           {(["hoje", "semana", "mes"] as Periodo[]).map((p) => (
             <a
               key={p}
-              href={`/producao?periodo=${p}`}
+              href={`/producao?periodo=${p}&visao=${visao}`}
               className={`rounded px-3 py-1.5 text-xs uppercase transition ${
                 periodo === p
                   ? "bg-gold text-imperium-bg"
@@ -150,8 +209,33 @@ export default async function ProducaoPage({
               {p === "hoje" ? "Hoje" : p === "semana" ? "Semana" : "Mês"}
             </a>
           ))}
+          {ehCloser && (
+            <>
+              <span className="mx-1 self-center text-stone-700">·</span>
+              {(["total", "individual", "tribo"] as Visao[]).map((v) => (
+                <a
+                  key={v}
+                  href={`/producao?periodo=${periodo}&visao=${v}`}
+                  className={`rounded px-3 py-1.5 text-xs uppercase transition ${
+                    visao === v
+                      ? "bg-gold text-imperium-bg"
+                      : "border border-imperium-line text-stone-300 hover:border-gold"
+                  }`}
+                >
+                  {v === "total" ? "Produção total" : v === "individual" ? "Produção individual" : "Produção via tribo"}
+                </a>
+              ))}
+            </>
+          )}
         </div>
       </div>
+
+      {fechosForaDaTribo && (
+        <div className="rounded border border-gold/40 bg-gold/10 px-4 py-2.5 text-xs text-gold-dim">
+          ⚠ Inclui {fechosForaDaTribo.qtd} fechamento(s) seu(s) fora da própria Tribo neste período (
+          {moeda(fechosForaDaTribo.valor)}) — já contado no total da Tribo, mas não é pipeline orgânico dela.
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>
@@ -183,7 +267,7 @@ export default async function ProducaoPage({
       <div className="grid gap-6 sm:grid-cols-2">
         <Card title="Volume">
           <div className="space-y-3">
-            {FUNNEL_STAGES.map((etapa) => (
+            {etapasVisiveis.map((etapa) => (
               <div key={etapa} className="flex items-center gap-3 text-sm">
                 <span className="w-24 shrink-0 text-stone-400">{FUNNEL_LABELS[etapa]}</span>
                 <BarraProgresso realizado={totais[etapa].realizado} meta={totais[etapa].meta} />
@@ -197,8 +281,8 @@ export default async function ProducaoPage({
 
         <Card title="Taxa de conversão (%)">
           <div className="space-y-3">
-            {FUNNEL_STAGES.map((etapa, i) => {
-              const anterior = i > 0 ? totais[FUNNEL_STAGES[i - 1]].realizado : null;
+            {etapasVisiveis.map((etapa, i) => {
+              const anterior = i > 0 ? totais[etapasVisiveis[i - 1]].realizado : null;
               const pct = anterior && anterior > 0 ? (totais[etapa].realizado / anterior) * 100 : null;
               return (
                 <div key={etapa} className="flex items-center gap-3 text-sm">
@@ -214,7 +298,7 @@ export default async function ProducaoPage({
         </Card>
       </div>
 
-      {ranqueDias.length > 0 && (
+      {!ehCloser && ranqueDias.length > 0 && (
         <Card title="Melhor dia pra prospectar" right={<span className="text-xs text-stone-500">Últimos 90 dias</span>}>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {ranqueDias.map((d, i) => (

@@ -28,6 +28,7 @@ function lastDayOfMonth(y: number, m: number) {
 }
 
 type Preset = { label: string; from: string; to: string };
+type StatusFiltro = WeeklyState["status"];
 
 function buildPresets(ano: number, mesAtual: number, lastData: string): Record<string, Preset> {
   const mesAnteriorNum = mesAtual === 1 ? 12 : mesAtual - 1;
@@ -72,7 +73,19 @@ function Icon({ d, size = 15 }: { d: string; size?: number }) {
   );
 }
 
-export default function WeeklyDashboard({ dataset, anoAtual }: { dataset: WeeklyDataset; anoAtual: number }) {
+export default function WeeklyDashboard({
+  dataset,
+  anoAtual,
+  eyebrow = "Weekly de Receita · Império",
+  titulo = "Painel de Comando",
+  rotuloEquipe = "Equipe",
+}: {
+  dataset: WeeklyDataset;
+  anoAtual: number;
+  eyebrow?: string;
+  titulo?: string;
+  rotuloEquipe?: string;
+}) {
   const [skin, setSkin] = useState<"imperium" | "matri">("imperium");
   const [matriTheme, setMatriTheme] = useState<"dark" | "light">("dark");
   const [tab, setTab] = useState<"p1" | "p2" | "p3" | "p4" | "p5">("p1");
@@ -83,7 +96,7 @@ export default function WeeklyDashboard({ dataset, anoAtual }: { dataset: Weekly
   const [team, setTeam] = useState<string | null>(null);
   const [person, setPerson] = useState<string | null>(null);
   const [origem, setOrigem] = useState<string | null>(null);
-  const [status, setStatus] = useState<"all" | "PAGO">("all");
+  const [status, setStatus] = useState<StatusFiltro>("all");
 
   useEffect(() => {
     const savedSkin = window.localStorage.getItem("weekly-skin");
@@ -149,8 +162,8 @@ export default function WeeklyDashboard({ dataset, anoAtual }: { dataset: Weekly
         <div className="wd-wrap">
           <header className="wd-head">
             <div className="wd-htitle">
-              <div className="wd-eyebrow">Weekly de Receita · Império</div>
-              <div className="wd-title">Painel de Comando</div>
+              <div className="wd-eyebrow">{eyebrow}</div>
+              <div className="wd-title">{titulo}</div>
               <div className="wd-sub">
                 {scopeLabel} · <b>{dbr(from)} a {dbr(to)}</b> · <b>{C.duDec}</b> de {C.duTot} dias úteis
               </div>
@@ -191,6 +204,7 @@ export default function WeeklyDashboard({ dataset, anoAtual }: { dataset: Weekly
             }}
             status={status}
             setStatus={setStatus}
+            rotuloEquipe={rotuloEquipe}
           />
 
           <Chips team={team} person={person ? dataset.people[person]?.nome ?? null : null} origem={origem} status={status} onClear={limparFiltro} />
@@ -239,7 +253,7 @@ export default function WeeklyDashboard({ dataset, anoAtual }: { dataset: Weekly
 
 function FiltroBar({
   presets, periodKey, setPeriodKey, customFrom, customTo, setCustomFrom, setCustomTo,
-  teams, team, setTeam, status, setStatus,
+  teams, team, setTeam, status, setStatus, rotuloEquipe,
 }: {
   presets: Record<string, Preset>;
   periodKey: string;
@@ -251,8 +265,9 @@ function FiltroBar({
   teams: string[];
   team: string | null;
   setTeam: (t: string | null) => void;
-  status: "all" | "PAGO";
-  setStatus: (s: "all" | "PAGO") => void;
+  status: StatusFiltro;
+  setStatus: (s: StatusFiltro) => void;
+  rotuloEquipe: string;
 }) {
   return (
     <div className="wd-fbar">
@@ -276,7 +291,7 @@ function FiltroBar({
         )}
       </div>
       <div className="wd-fg">
-        <label>Equipe</label>
+        <label>{rotuloEquipe}</label>
         <div className="wd-seg">
           <button aria-pressed={!team} onClick={() => setTeam(null)}>Todas</button>
           {teams.map((t) => (
@@ -288,6 +303,7 @@ function FiltroBar({
         <label>Status</label>
         <div className="wd-seg">
           <button aria-pressed={status === "all"} onClick={() => setStatus("all")}>Assinado + pago</button>
+          <button aria-pressed={status === "QUASE_CERTO"} onClick={() => setStatus("QUASE_CERTO")}>Finalizando pagamentos</button>
           <button aria-pressed={status === "PAGO"} onClick={() => setStatus("PAGO")}>Somente pago</button>
         </div>
       </div>
@@ -301,14 +317,15 @@ function Chips({
   team: string | null;
   person: string | null;
   origem: string | null;
-  status: "all" | "PAGO";
+  status: StatusFiltro;
   onClear: (f: "team" | "person" | "origem" | "status" | "all") => void;
 }) {
   const itens: [string, string, "team" | "person" | "origem" | "status"][] = [];
   if (team) itens.push(["Equipe", team, "team"]);
   if (person) itens.push(["Pessoa", person, "person"]);
   if (origem) itens.push(["Origem", origem, "origem"]);
-  if (status !== "all") itens.push(["Status", "Somente pagos", "status"]);
+  if (status === "PAGO") itens.push(["Status", "Somente pagos", "status"]);
+  if (status === "QUASE_CERTO") itens.push(["Status", "Finalizando pagamentos", "status"]);
 
   if (itens.length === 0) {
     return (

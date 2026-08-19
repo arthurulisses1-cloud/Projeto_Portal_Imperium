@@ -5,7 +5,9 @@ function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
-export default async function CentralPage() {
+// Antes era a aba "/central" — agora embutido direto no Mural do Diretor
+// pra não poluir a navegação com uma aba a mais.
+export default async function CentralNotificacoes() {
   const supabase = await createClient();
 
   const { data: pessoas } = await supabase
@@ -16,14 +18,12 @@ export default async function CentralPage() {
 
   const hoje = new Date().toISOString().slice(0, 10);
 
-  // ---------- Quem não lançou compromisso hoje ----------
   const { data: compromissosHoje } = ids.length
     ? await supabase.from("compromissos").select("profile_id, lancado").eq("data", hoje).in("profile_id", ids)
     : { data: [] };
   const lancouHoje = new Set((compromissosHoje ?? []).filter((c) => c.lancado).map((c) => c.profile_id));
   const naoLancaram = (pessoas ?? []).filter((p) => !lancouHoje.has(p.id));
 
-  // ---------- Perto de bater um Marco ----------
   const { data: marcos } = await supabase.from("marcos").select("nome, threshold, icone").order("ordem");
   const inicioAno = `${new Date().getFullYear()}-01-01`;
   const { data: vendasAno } = ids.length
@@ -46,7 +46,6 @@ export default async function CentralPage() {
     .sort((a, b) => a.falta - b.falta)
     .slice(0, 5);
 
-  // ---------- Aniversário de empresa (próximos 7 dias) ----------
   const agora = new Date();
   const aniversarios = (pessoas ?? [])
     .filter((p) => p.data_admissao)
@@ -63,69 +62,58 @@ export default async function CentralPage() {
     .filter((a) => a.dias >= 0 && a.dias <= 7)
     .sort((a, b) => a.dias - b.dias);
 
+  if (naoLancaram.length === 0 && pertoDeMarco.length === 0 && aniversarios.length === 0) return null;
+
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
-      <div>
-        <h1 className="font-display text-2xl text-gold-bright">Central de Notificações</h1>
-        <p className="kicker mt-1">O que precisa da sua atenção hoje</p>
+    <Card title="Central de Notificações" right={<span className="text-xs text-stone-500">o que precisa da sua atenção</span>}>
+      <div className="space-y-5">
+        {naoLancaram.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">
+              Não lançaram o compromisso hoje ({naoLancaram.length})
+            </p>
+            <ul className="flex flex-wrap gap-2">
+              {naoLancaram.map((p) => (
+                <li key={p.id} className="rounded-full border border-wine/40 bg-wine/10 px-3 py-1 text-xs text-wine-bright">
+                  {p.full_name}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {pertoDeMarco.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Perto de bater um Marco</p>
+            <ul className="space-y-1.5">
+              {pertoDeMarco.map((m) => (
+                <li key={m.id} className="flex items-center justify-between text-sm">
+                  <span className="text-stone-200">
+                    {m.icone} {m.nome} → {m.marco}
+                  </span>
+                  <span className="text-gold">faltam {moeda(m.falta)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {aniversarios.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Aniversário de empresa (próximos 7 dias)</p>
+            <ul className="space-y-1.5">
+              {aniversarios.map((a) => (
+                <li key={a.id} className="flex items-center justify-between text-sm">
+                  <span className="text-stone-200">🎉 {a.nome}</span>
+                  <span className="text-gold">
+                    {a.anos} {a.anos === 1 ? "ano" : "anos"} — {a.dias === 0 ? "hoje" : `em ${a.dias}d`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
-
-      <Card
-        title="Não lançaram o compromisso hoje"
-        right={<span className="text-xs text-stone-500">{naoLancaram.length}</span>}
-      >
-        {naoLancaram.length > 0 ? (
-          <ul className="flex flex-wrap gap-2">
-            {naoLancaram.map((p) => (
-              <li
-                key={p.id}
-                className="rounded-full border border-wine/40 bg-wine/10 px-3 py-1 text-xs text-wine-bright"
-              >
-                {p.full_name}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-emerald-400">Todo mundo já lançou hoje.</p>
-        )}
-      </Card>
-
-      <Card title="Perto de bater um Marco">
-        {pertoDeMarco.length > 0 ? (
-          <ul className="space-y-2">
-            {pertoDeMarco.map((m) => (
-              <li key={m.id} className="flex items-center justify-between text-sm">
-                <span className="text-stone-200">
-                  {m.icone} {m.nome} → {m.marco}
-                </span>
-                <span className="text-gold">faltam {moeda(m.falta)}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-stone-500">Nenhum marco cadastrado ou ninguém perto ainda.</p>
-        )}
-      </Card>
-
-      <Card title="Aniversário de empresa (próximos 7 dias)">
-        {aniversarios.length > 0 ? (
-          <ul className="space-y-2">
-            {aniversarios.map((a) => (
-              <li key={a.id} className="flex items-center justify-between text-sm">
-                <span className="text-stone-200">🎉 {a.nome}</span>
-                <span className="text-gold">
-                  {a.anos} {a.anos === 1 ? "ano" : "anos"} — {a.dias === 0 ? "hoje" : `em ${a.dias}d`}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-stone-500">
-            Nenhum nos próximos 7 dias (ou a data de admissão ainda não foi cadastrada em &quot;Meu
-            Legado&quot;).
-          </p>
-        )}
-      </Card>
-    </main>
+    </Card>
   );
 }

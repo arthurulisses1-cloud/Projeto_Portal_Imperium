@@ -3,7 +3,7 @@ import { RANK_LABELS } from "@/lib/labels";
 import WeeklyDashboard from "@/components/weekly/WeeklyDashboard";
 import type { WeeklyDataset, WeeklyOp, PersonInfo } from "@/lib/weekly-compute";
 
-export default async function WeeklyPage() {
+export default async function MinhaProducaoLiderPage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -11,41 +11,56 @@ export default async function WeeklyPage() {
   if (!user) return null;
 
   const { data: meProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (!meProfile || (meProfile.role !== "lider" && meProfile.role !== "diretor")) {
+  if (!meProfile || meProfile.role !== "lider") {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>
+        <p className="mt-2 text-sm text-stone-400">Esta é a visão de produção dos líderes de Exército.</p>
+      </main>
+    );
+  }
+
+  const { data: meuExercito } = await supabase
+    .from("exercitos")
+    .select("id, nome")
+    .eq("legado_id", user.id)
+    .maybeSingle();
+
+  if (!meuExercito) {
+    return (
+      <main className="mx-auto max-w-2xl px-6 py-16 text-center">
+        <h1 className="font-display text-xl text-gold-bright">Sem Exército vinculado</h1>
         <p className="mt-2 text-sm text-stone-400">
-          A Weekly de Receita é uma visão exclusiva dos líderes e da Diretoria.
+          Peça ao Diretor pra te vincular como Legado de um Exército em Gestão de Pessoas.
         </p>
       </main>
     );
   }
 
-  const [{ data: exercitos }, { data: tribos }, { data: pessoas }] = await Promise.all([
-    supabase.from("exercitos").select("id, nome, legado_id").order("nome"),
-    supabase.from("tribos").select("id, exercito_id"),
-    supabase
-      .from("profiles")
-      .select("id, full_name, role, rank, ativo, stars_total, tribo_id")
-      .neq("role", "diretor")
-      .order("full_name"),
-  ]);
+  const { data: tribos } = await supabase
+    .from("tribos")
+    .select("id, nome, closer_id")
+    .eq("exercito_id", meuExercito.id)
+    .order("nome");
+  const triboIds = (tribos ?? []).map((t) => t.id);
 
-  const nomeExercitoPorId = new Map((exercitos ?? []).map((e) => [e.id, e.nome]));
-  const exercitoIdPorTribo = new Map((tribos ?? []).map((t) => [t.id, t.exercito_id]));
-  const nomeExercitoPorTriboId = new Map(
-    (tribos ?? []).map((t) => [t.id, nomeExercitoPorId.get(t.exercito_id) ?? null])
-  );
+  const { data: pessoas } =
+    triboIds.length > 0
+      ? await supabase
+          .from("profiles")
+          .select("id, full_name, role, rank, ativo, stars_total, tribo_id")
+          .neq("role", "diretor")
+          .in("tribo_id", triboIds)
+      : { data: [] };
 
-  const teams = (exercitos ?? []).map((e) => e.nome);
+  const nomeTriboPorId = new Map((tribos ?? []).map((t) => [t.id, t.nome]));
+  const nomePorProfileId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name]));
+
   const liderPorTime: Record<string, string> = {};
-  for (const e of exercitos ?? []) {
-    const lider = (pessoas ?? []).find((p) => p.id === e.legado_id);
-    liderPorTime[e.nome] = lider?.full_name ?? "—";
+  for (const t of tribos ?? []) {
+    liderPorTime[t.nome] = t.closer_id ? nomePorProfileId.get(t.closer_id) ?? "—" : "—";
   }
 
-  // meta individual: meta do mês corrente dividida por Exército -> Tribo -> membros
   const hoje = new Date();
   const { data: metaMesAtual } = await supabase
     .from("metas_mensais")
@@ -53,11 +68,8 @@ export default async function WeeklyPage() {
     .eq("ano", hoje.getFullYear())
     .eq("mes", hoje.getMonth() + 1)
     .maybeSingle();
+  const { count: numExercitos } = await supabase.from("exercitos").select("id", { count: "exact", head: true });
 
-  const tribosPorExercito = new Map<string, number>();
-  for (const t of tribos ?? []) {
-    tribosPorExercito.set(t.exercito_id, (tribosPorExercito.get(t.exercito_id) ?? 0) + 1);
-  }
   const membrosPorTribo = new Map<string, number>();
   for (const p of pessoas ?? []) {
     if (!p.tribo_id || (p.role !== "sdr" && p.role !== "closer")) continue;
@@ -66,16 +78,11 @@ export default async function WeeklyPage() {
   function metaIndividual(p: { tribo_id: string | null; role: string }): number {
     if (!p.tribo_id || (p.role !== "sdr" && p.role !== "closer")) return 0;
     const metaTotal = metaMesAtual?.meta_credito_total ?? 0;
-    if (!metaTotal) return 0;
-    const exercitoId = exercitoIdPorTribo.get(p.tribo_id);
-    if (!exercitoId) return 0;
-    const numExercitos = (exercitos ?? []).length || 1;
-    const numTribos = tribosPorExercito.get(exercitoId) || 1;
+    if (!metaTotal || !numExercitos) return 0;
     const numMembros = membrosPorTribo.get(p.tribo_id) || 1;
-    return metaTotal / numExercitos / numTribos / numMembros;
+    return metaTotal / numExercitos / (tribos?.length || 1) / numMembros;
   }
 
-  // últimas vendas pagas por pessoa ("dias sem pago")
   const idsPessoas = (pessoas ?? []).map((p) => p.id);
   const { data: ultimasVendas } =
     idsPessoas.length > 0
@@ -86,7 +93,6 @@ export default async function WeeklyPage() {
     if (!ultimoPagoPorPessoa.has(v.profile_id)) ultimoPagoPorPessoa.set(v.profile_id, v.data);
   }
 
-  // funil do ano corrente, somado entre papéis (visão de atividade, não de comissão)
   const inicioAno = `${hoje.getFullYear()}-01-01`;
   const { data: funilRows } =
     idsPessoas.length > 0
@@ -98,14 +104,11 @@ export default async function WeeklyPage() {
           .gte("data", inicioAno)
       : { data: [] };
 
-  const exercitoNomePorLegadoId = new Map((exercitos ?? []).map((e) => [e.legado_id, e.nome]));
-
   const people: Record<string, PersonInfo> = {};
   for (const p of pessoas ?? []) {
-    const timeViaTribo = p.tribo_id ? nomeExercitoPorTriboId.get(p.tribo_id) ?? null : null;
     people[p.id] = {
       nome: p.full_name,
-      time: timeViaTribo ?? exercitoNomePorLegadoId.get(p.id) ?? null,
+      time: p.tribo_id ? nomeTriboPorId.get(p.tribo_id) ?? null : null,
       rank: RANK_LABELS[p.rank] ?? p.rank,
       role: p.role,
       ativo: p.ativo,
@@ -124,7 +127,8 @@ export default async function WeeklyPage() {
     if (idx !== undefined) pessoa.d[row.data][idx] += row.realizado;
   }
 
-  // operações (aba Assinado, 1:1) do ano corrente
+  // Operações do Exército inteiro: pertence a uma Tribo se o SDR ou o Closer
+  // (preferindo o Closer, mesma regra da Weekly) for membro de uma Tribo daqui.
   const { data: opRows } = await supabase
     .from("weekly_operacoes")
     .select(
@@ -133,45 +137,49 @@ export default async function WeeklyPage() {
     .gte("data", inicioAno)
     .order("data");
 
-  const nomePorId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name]));
-  const ops: WeeklyOp[] = (opRows ?? []).map((o) => {
+  const ops: WeeklyOp[] = (opRows ?? []).flatMap((o): WeeklyOp[] => {
     const sdrTime = o.sdr_profile_id ? people[o.sdr_profile_id]?.time ?? null : null;
     const closerTime = o.closer_profile_id ? people[o.closer_profile_id]?.time ?? null : null;
-    return {
-      id: o.id,
-      data: o.data,
-      sdrId: o.sdr_profile_id,
-      sdrNome: o.sdr_profile_id ? nomePorId.get(o.sdr_profile_id) ?? null : null,
-      closerId: o.closer_profile_id,
-      closerNome: o.closer_profile_id ? nomePorId.get(o.closer_profile_id) ?? null : null,
-      time: closerTime ?? sdrTime,
-      valor: Number(o.valor),
-      faturamento: Number(o.faturamento),
-      origem: o.origem,
-      produto: o.produto,
-      status: o.status,
-      statusManual: o.status_manual,
-      cliente: o.cliente,
-    };
+    const time = closerTime ?? sdrTime;
+    if (!time) return [];
+    return [
+      {
+        id: o.id,
+        data: o.data,
+        sdrId: o.sdr_profile_id,
+        sdrNome: o.sdr_profile_id ? nomePorProfileId.get(o.sdr_profile_id) ?? null : null,
+        closerId: o.closer_profile_id,
+        closerNome: o.closer_profile_id ? nomePorProfileId.get(o.closer_profile_id) ?? null : null,
+        time,
+        valor: Number(o.valor),
+        faturamento: Number(o.faturamento),
+        origem: o.origem,
+        produto: o.produto,
+        status: o.status,
+        statusManual: o.status_manual,
+        cliente: o.cliente,
+      },
+    ];
   });
 
   const lastData = ops.length > 0 ? ops[ops.length - 1].data : hoje.toISOString().slice(0, 10);
 
-  // metas por mês (Império e por Exército — divisão igual entre exércitos)
   const { data: metasAno } = await supabase
     .from("metas_mensais")
     .select("mes, meta_credito_total")
     .eq("ano", hoje.getFullYear());
   const metaImp: Record<number, number> = {};
   const metaTeam: Record<string, Record<number, number>> = {};
-  for (const tm of teams) metaTeam[tm] = {};
+  const nomesTribos = (tribos ?? []).map((t) => t.nome);
+  for (const tm of nomesTribos) metaTeam[tm] = {};
   for (const m of metasAno ?? []) {
-    metaImp[m.mes] = Number(m.meta_credito_total);
-    for (const tm of teams) metaTeam[tm][m.mes] = Number(m.meta_credito_total) / (teams.length || 1);
+    const metaExercito = Number(m.meta_credito_total) / (numExercitos || 1);
+    metaImp[m.mes] = metaExercito;
+    for (const tm of nomesTribos) metaTeam[tm][m.mes] = metaExercito / (nomesTribos.length || 1);
   }
 
   const dataset: WeeklyDataset = {
-    teams,
+    teams: nomesTribos,
     liderPorTime,
     ops,
     people,
@@ -182,5 +190,13 @@ export default async function WeeklyPage() {
     mesReferenciaMeta: hoje.getMonth() + 1,
   };
 
-  return <WeeklyDashboard dataset={dataset} anoAtual={hoje.getFullYear()} />;
+  return (
+    <WeeklyDashboard
+      dataset={dataset}
+      anoAtual={hoje.getFullYear()}
+      eyebrow={`Minha Produção · ${meuExercito.nome}`}
+      titulo="Painel do Exército"
+      rotuloEquipe="Tribo"
+    />
+  );
 }

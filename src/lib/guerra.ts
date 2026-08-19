@@ -2,14 +2,31 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type Confronto = { nome: string; valor: number };
 
+// Usa weekly_operacoes (uma linha por venda real, com SDR+Closer juntos) em
+// vez de `vendas` — `vendas` credita SDR e Closer em linhas separadas, cada
+// uma com o valor cheio, então somar por time duplicaria o crédito sempre
+// que os dois forem do mesmo Exército/Tribo (o caso comum).
 async function pagosMesPorGrupo(
   supabase: SupabaseClient,
   agrupar: "exercito" | "tribo"
 ): Promise<Confronto[]> {
+  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
+  const { data: ops } = await supabase
+    .from("weekly_operacoes")
+    .select("sdr_profile_id, closer_profile_id, valor")
+    .eq("status", "PAGO")
+    .gte("data", inicioMes);
+  if (!ops || ops.length === 0) return [];
+
+  const idsEnvolvidos = Array.from(
+    new Set(ops.flatMap((o) => [o.sdr_profile_id, o.closer_profile_id]).filter((x): x is string => !!x))
+  );
+  if (idsEnvolvidos.length === 0) return [];
+
   const { data: pessoas } = await supabase
     .from("profiles")
     .select("id, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))")
-    .in("role", ["sdr", "closer"]);
+    .in("id", idsEnvolvidos);
 
   const grupoPorProfile = new Map<string, string>();
   for (const p of pessoas ?? []) {
@@ -18,21 +35,14 @@ async function pagosMesPorGrupo(
     if (chave) grupoPorProfile.set(p.id, chave);
   }
 
-  const ids = Array.from(grupoPorProfile.keys());
-  if (ids.length === 0) return [];
-
-  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
-  const { data: vendas } = await supabase
-    .from("vendas")
-    .select("profile_id, valor")
-    .in("profile_id", ids)
-    .gte("data", inicioMes);
-
   const totais = new Map<string, number>();
-  for (const v of vendas ?? []) {
-    const grupo = grupoPorProfile.get(v.profile_id);
+  for (const o of ops) {
+    // Time do negócio = time do Closer, com fallback pro SDR — mesma regra da Weekly de Receita.
+    const grupo =
+      (o.closer_profile_id && grupoPorProfile.get(o.closer_profile_id)) ||
+      (o.sdr_profile_id && grupoPorProfile.get(o.sdr_profile_id));
     if (!grupo) continue;
-    totais.set(grupo, (totais.get(grupo) ?? 0) + Number(v.valor));
+    totais.set(grupo, (totais.get(grupo) ?? 0) + Number(o.valor));
   }
 
   return Array.from(totais.entries())

@@ -5,10 +5,11 @@ import Laurel from "@/components/ui/Laurel";
 import BarraMeta from "@/components/ui/BarraMeta";
 import ConfrontoWidget from "@/components/ui/Confronto";
 import EnquetePoll, { type EnqueteData } from "@/components/ui/EnquetePoll";
+import CentralNotificacoes from "@/components/CentralNotificacoes";
 import { IconSwords, IconShield, IconCoin } from "@/components/ui/icons";
 import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
 import { buscarMetaIndividual } from "@/lib/metas";
-import { buscarCampanhasAtivas } from "@/lib/campanhas";
+import { buscarCampanhasAtivas, type CampanhaComProgresso } from "@/lib/campanhas";
 import { FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 
 export default async function MuralPage() {
@@ -74,6 +75,9 @@ export default async function MuralPage() {
   const campanhasAtivas = await buscarCampanhasAtivas(supabase);
 
   const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
+  // Líder e Diretor ganham uma lateral direita própria no Mural com "Publicar
+  // no Mural" + Campanhas — Closer/SDR mantêm tudo na coluna única de sempre.
+  const temLateral = profile?.role === "lider" || profile?.role === "diretor";
 
   // Enquetes: pré-computa opções + votos dos posts do tipo 'enquete' já carregados
   const enquetePostIds = (muralPosts ?? []).filter((p) => p.tipo === "enquete").map((p) => p.id);
@@ -104,7 +108,8 @@ export default async function MuralPage() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
+    <div className={`mx-auto flex gap-6 px-6 py-8 ${temLateral ? "max-w-6xl" : "max-w-4xl"}`}>
+    <main className="min-w-0 flex-1 space-y-6">
       <div className="flex items-center gap-4">
         {profile?.avatar_url ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -128,6 +133,8 @@ export default async function MuralPage() {
           Salve, {profile?.full_name?.split(" ")[0] ?? "executivo"}.
         </p>
       </div>
+
+      {profile?.role === "diretor" && <CentralNotificacoes />}
 
       {ehExecutivo && !compromissoHoje && new Date().getHours() >= 14 && (
         <div className="rounded border border-wine/50 bg-wine/10 px-4 py-3 text-sm text-wine-bright">
@@ -170,61 +177,7 @@ export default async function MuralPage() {
         </Card>
       </div>
 
-      {campanhasAtivas.length > 0 && (
-        <Card title="Campanhas do mês">
-          <div className="grid gap-4 sm:grid-cols-2">
-            {campanhasAtivas.map((c) => {
-              const metricaLabel = c.metrica === "credito" ? "R$" : FUNNEL_LABELS[c.metrica as FunilEtapa] ?? c.metrica;
-              const fmt = (v: number) =>
-                c.metrica === "credito"
-                  ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
-                  : `${v} ${metricaLabel}`;
-              const max = Math.max(...c.participantes.map((p) => p.valor), c.metaValor ?? 0, 1);
-
-              return (
-                <div key={c.id} className="overflow-hidden rounded-lg border border-gold/30">
-                  {c.imagemUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={c.imagemUrl} alt={c.titulo} className="h-32 w-full object-cover" />
-                  )}
-                  <div className="p-3">
-                    <p className="font-display text-base text-gold-bright">{c.titulo}</p>
-                    {c.descricao && <p className="mt-1 text-xs text-stone-400">{c.descricao}</p>}
-                    <p className="mt-1 text-[10px] uppercase tracking-wide text-stone-600">
-                      até {new Date(c.dataFim + "T00:00:00").toLocaleDateString("pt-BR")}
-                    </p>
-
-                    <div className="mt-3 space-y-2">
-                      {c.participantes.map((p, i) => (
-                        <div key={p.refId}>
-                          <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className={i === 0 && c.alvo !== "geral" ? "text-gold-bright" : "text-stone-300"}>
-                              {i === 0 && c.alvo !== "geral" && "👑 "}
-                              {p.label}
-                            </span>
-                            <span className="text-stone-400">
-                              {fmt(p.valor)}
-                              {c.metaValor ? ` / ${fmt(c.metaValor)}` : ""}
-                            </span>
-                          </div>
-                          <div className="h-2 overflow-hidden rounded-full bg-imperium-line">
-                            <div
-                              className={`h-full rounded-full ${
-                                i === 0 ? "bg-gradient-to-r from-gold to-gold-bright" : "bg-wine"
-                              }`}
-                              style={{ width: `${Math.min(100, (p.valor / max) * 100)}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      )}
+      {!temLateral && campanhasAtivas.length > 0 && <CampanhasCard campanhas={campanhasAtivas} />}
 
       {ehExecutivo && (
         <Card title="Compromisso de hoje">
@@ -270,12 +223,9 @@ export default async function MuralPage() {
         </Card>
       )}
 
-      {(profile?.role === "closer" || profile?.role === "lider" || profile?.role === "diretor") && (
+      {!temLateral && profile?.role === "closer" && (
         <Card title="Publicar no Mural">
-          <MuralForm
-            podeAviso={profile?.role === "lider" || profile?.role === "diretor"}
-            podeEnquete={profile?.role === "diretor"}
-          />
+          <MuralForm podeAviso={false} podeEnquete={false} />
         </Card>
       )}
 
@@ -333,5 +283,83 @@ export default async function MuralPage() {
         )}
       </Card>
     </main>
+
+    {temLateral && (
+      <aside className="hidden w-80 shrink-0 space-y-6 lg:block">
+        <Card title="Publicar no Mural">
+          <MuralForm podeAviso={true} podeEnquete={profile?.role === "diretor"} />
+        </Card>
+
+        {campanhasAtivas.length > 0 && <CampanhasCard campanhas={campanhasAtivas} compact />}
+
+        {profile?.role === "diretor" && (
+          <a
+            href="/campanhas"
+            className="block rounded border border-imperium-line px-3 py-2 text-center text-xs text-gold transition hover:border-gold hover:bg-gold/10"
+          >
+            + Gerenciar campanhas
+          </a>
+        )}
+      </aside>
+    )}
+    </div>
+  );
+}
+
+function CampanhasCard({ campanhas, compact = false }: { campanhas: CampanhaComProgresso[]; compact?: boolean }) {
+  return (
+    <Card title="Campanhas do mês">
+      <div className={compact ? "space-y-4" : "grid gap-4 sm:grid-cols-2"}>
+        {campanhas.map((c) => {
+          const metricaLabel = c.metrica === "credito" ? "R$" : FUNNEL_LABELS[c.metrica as FunilEtapa] ?? c.metrica;
+          const fmt = (v: number) =>
+            c.metrica === "credito"
+              ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
+              : `${v} ${metricaLabel}`;
+          const max = Math.max(...c.participantes.map((p) => p.valor), c.metaValor ?? 0, 1);
+
+          return (
+            <div key={c.id} className="overflow-hidden rounded-lg border border-gold/30">
+              {c.imagemUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={c.imagemUrl} alt={c.titulo} className="h-32 w-full object-cover" />
+              )}
+              <div className="p-3">
+                <p className="font-display text-base text-gold-bright">{c.titulo}</p>
+                {c.descricao && <p className="mt-1 text-xs text-stone-400">{c.descricao}</p>}
+                <p className="mt-1 text-[10px] uppercase tracking-wide text-stone-600">
+                  até {new Date(c.dataFim + "T00:00:00").toLocaleDateString("pt-BR")}
+                </p>
+
+                <div className="mt-3 space-y-2">
+                  {c.participantes.map((p, i) => (
+                    <div key={p.refId}>
+                      <div className="mb-1 flex items-center justify-between text-xs">
+                        <span className={i === 0 && c.alvo !== "geral" ? "text-gold-bright" : "text-stone-300"}>
+                          {i === 0 && c.alvo !== "geral" && "👑 "}
+                          {p.label}
+                        </span>
+                        <span className="text-stone-400">
+                          {fmt(p.valor)}
+                          {c.metaValor ? ` / ${fmt(c.metaValor)}` : ""}
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-imperium-line">
+                        <div
+                          className={`h-full rounded-full ${
+                            i === 0 ? "bg-gradient-to-r from-gold to-gold-bright" : "bg-wine"
+                          }`}
+                          style={{ width: `${Math.min(100, (p.valor / max) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }

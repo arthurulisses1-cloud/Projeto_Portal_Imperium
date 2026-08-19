@@ -15,6 +15,7 @@ type AssinadoRow = {
 };
 
 export type OperacaoLinha = {
+  chaveNatural: string;
   data: string;
   sdrNormalizado: string | null;
   closerNormalizado: string | null;
@@ -42,6 +43,7 @@ export async function buscarOperacoes(): Promise<{
   const linhas: OperacaoLinha[] = [];
   let menorData: string | null = null;
   let maiorData: string | null = null;
+  const ocorrencias = new Map<string, number>();
 
   for (const row of rows) {
     const data = parseDataBR(row.DATA ?? "");
@@ -52,11 +54,26 @@ export async function buscarOperacoes(): Promise<{
     if (!menorData || data < menorData) menorData = data;
     if (!maiorData || data > maiorData) maiorData = data;
 
+    const sdrNormalizado = row.SDR && row.SDR.trim() ? normalizarNome(row.SDR) : null;
+    const closerNormalizado = row.CLOSER && row.CLOSER.trim() ? normalizarNome(row.CLOSER) : null;
+    const cliente = row.CLIENTE?.trim() || null;
+
+    // Chave natural: a planilha não tem um ID confiável por linha (a coluna
+    // ID só existe em ~10% das linhas). Duas operações reais idênticas em
+    // todos esses campos (raro, mas acontece) ganham um sufixo de ocorrência
+    // pra não colidir — o importante é ficar ESTÁVEL entre execuções do sync,
+    // pra não perder o status manual/observação preenchidos no Forecast.
+    const chaveBase = `${data}|${sdrNormalizado ?? ""}|${closerNormalizado ?? ""}|${valor}|${normalizarNome(cliente ?? "")}`;
+    const n = (ocorrencias.get(chaveBase) ?? 0) + 1;
+    ocorrencias.set(chaveBase, n);
+    const chaveNatural = n > 1 ? `${chaveBase}#${n}` : chaveBase;
+
     linhas.push({
+      chaveNatural,
       data,
-      sdrNormalizado: row.SDR && row.SDR.trim() ? normalizarNome(row.SDR) : null,
-      closerNormalizado: row.CLOSER && row.CLOSER.trim() ? normalizarNome(row.CLOSER) : null,
-      cliente: row.CLIENTE?.trim() || null,
+      sdrNormalizado,
+      closerNormalizado,
+      cliente,
       valor,
       faturamento: parseMoedaBR(row.FATURAMENTO ?? ""),
       produto: row.PRODUTO?.trim() || null,

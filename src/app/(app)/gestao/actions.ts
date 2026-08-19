@@ -88,9 +88,10 @@ export async function dispararSyncManual() {
   revalidatePath("/exercito");
   revalidatePath("/ranking");
   revalidatePath("/comissao");
-  revalidatePath("/geral");
   revalidatePath("/legado");
   revalidatePath("/weekly");
+  revalidatePath("/minha-producao");
+  revalidatePath("/forecast");
 
   return resultado;
 }

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import AppNav from "@/components/ui/AppNav";
+import AppNav, { type NavEntry } from "@/components/ui/AppNav";
 import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
 import SidebarRight from "@/components/ui/SidebarRight";
 import UserMenu from "@/components/ui/UserMenu";
@@ -10,30 +10,48 @@ import { buscarPendencias } from "@/lib/pendencias";
 
 export const dynamic = "force-dynamic";
 
-type NavItem = { href: string; label: string; roles: string[] };
+type NavConfigEntry = (NavEntry | { type: "group"; label: string; items: { href: string; label: string }[] }) & {
+  roles: string[];
+};
 
-const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Mural", roles: ["sdr", "closer", "lider", "diretor"] },
-  { href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer"] },
-  { href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
-  { href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
-  { href: "/tarefas", label: "Follow-ups", roles: ["closer"] },
-  { href: "/exercito", label: "Meu Exército", roles: ["lider"] },
-  { href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
-  { href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider"] },
-  { href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor"] },
-  { href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor"] },
-  { href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
-  { href: "/central", label: "Central de Notificações", roles: ["diretor"] },
-  { href: "/geral", label: "Visão Geral da Firma", roles: ["diretor"] },
-  { href: "/legado", label: "Meu Legado", roles: ["diretor"] },
-  { href: "/auditoria", label: "Auditoria", roles: ["diretor"] },
-  { href: "/gestao", label: "Gestão de Pessoas", roles: ["diretor"] },
-  { href: "/campanhas", label: "Campanhas", roles: ["diretor"] },
-  { href: "/metas", label: "Metas Mensais", roles: ["diretor"] },
-  { href: "/validacao", label: "Fila de Validação", roles: ["diretor"] },
-  { href: "/aprovacoes", label: "Aprovações de Carreira", roles: ["diretor"] },
-  { href: "/contestacoes", label: "Fila de Contestação", roles: ["diretor"] },
+// Central de Notificações agora vive dentro do Mural (não é mais aba própria);
+// Visão Geral da Firma saiu (a Weekly de Receita cobre o mesmo terreno);
+// Campanhas virou um atalho na lateral do Mural em vez de aba fixa.
+const NAV_ITEMS: NavConfigEntry[] = [
+  { type: "link", href: "/", label: "Mural", roles: ["sdr", "closer", "lider", "diretor"] },
+  { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer"] },
+  { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
+  { type: "link", href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
+  { type: "link", href: "/tarefas", label: "Follow-ups", roles: ["closer"] },
+  { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
+  { type: "link", href: "/minha-producao", label: "Minha Produção", roles: ["lider"] },
+  { type: "link", href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
+  { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider"] },
+  { type: "link", href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor"] },
+  { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor"] },
+  { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor"] },
+  { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
+  { type: "link", href: "/auditoria", label: "Auditoria", roles: ["diretor"] },
+  {
+    type: "group",
+    label: "Pessoas",
+    roles: ["diretor"],
+    items: [
+      { href: "/legado", label: "Meu Legado" },
+      { href: "/gestao", label: "Gestão de Pessoas" },
+    ],
+  },
+  { type: "link", href: "/metas", label: "Metas Mensais", roles: ["diretor"] },
+  {
+    type: "group",
+    label: "Validações",
+    roles: ["diretor"],
+    items: [
+      { href: "/validacao", label: "Fila de Validação" },
+      { href: "/aprovacoes", label: "Aprovações de Carreira" },
+      { href: "/contestacoes", label: "Fila de Contestação" },
+    ],
+  },
 ];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -56,9 +74,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const papelVisualizado =
     profile?.role === "diretor" ? cookieStore.get("view_role")?.value || "diretor" : profile?.role;
 
-  const itensVisiveis = NAV_ITEMS.filter(
+  const itensVisiveis: NavEntry[] = NAV_ITEMS.filter(
     (item) => !profile || item.roles.includes(papelVisualizado ?? profile.role)
-  );
+  ).map((entry) => {
+    const { roles, ...rest } = entry;
+    void roles;
+    return rest;
+  });
 
   const ehExecutivo = profile?.role === "sdr" || profile?.role === "closer";
 

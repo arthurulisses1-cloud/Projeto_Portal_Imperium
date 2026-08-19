@@ -15,6 +15,7 @@ export type WeeklyOp = {
   origem: string | null;
   produto: string | null;
   status: string; // PAGO | CAIU | REANÁLISE | ASSINADO | DESISTIU
+  statusManual: "resolvendo_pendencia" | "aguardando_pagamento" | null;
   cliente: string | null;
 };
 
@@ -30,13 +31,16 @@ export type PersonInfo = {
   d: Record<string, [number, number, number, number]>; // data -> [tentativas, alos, conexoes, entrevistas]
 };
 
+// "all" = assinado + pago (tudo); "PAGO" = só liquidado; "QUASE_CERTO" =
+// pago + marcado "aguardando pagamento" no Forecast — a régua de "tô
+// fechando esse mês", sem contar o que ainda tá em resolução de pendência.
 export type WeeklyState = {
   from: string;
   to: string;
   team: string | null;
   person: string | null; // profile id
   origem: string | null;
-  status: "all" | "PAGO";
+  status: "all" | "PAGO" | "QUASE_CERTO";
 };
 
 export type WeeklyDataset = {
@@ -158,6 +162,12 @@ export type Computed = {
   duRest: number;
 };
 
+function passaStatus(o: WeeklyOp, status: WeeklyState["status"]): boolean {
+  if (status === "PAGO") return o.status === "PAGO";
+  if (status === "QUASE_CERTO") return o.status === "PAGO" || o.statusManual === "aguardando_pagamento";
+  return true;
+}
+
 export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
   const { from, to, team, person, origem, status } = S;
   const passOp = (o: WeeklyOp, useTeam: boolean, usePerson: boolean) => {
@@ -165,7 +175,7 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
     if (useTeam && team && o.time !== team) return false;
     if (usePerson && person && o.sdrId !== person && o.closerId !== person) return false;
     if (origem && o.origem !== origem) return false;
-    if (status === "PAGO" && o.status !== "PAGO") return false;
+    if (!passaStatus(o, status)) return false;
     return true;
   };
 
@@ -295,7 +305,7 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
     if (o.data < from || o.data > to) continue;
     if (team && o.time !== team) continue;
     if (person && o.sdrId !== person && o.closerId !== person) continue;
-    if (status === "PAGO" && o.status !== "PAGO") continue;
+    if (!passaStatus(o, status)) continue;
     const key = o.origem || "Sem origem";
     (byOrigem[key] = byOrigem[key] || { cred: 0, n: 0 });
     byOrigem[key].cred += o.valor;
@@ -314,7 +324,7 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
     if (team && o.time !== team) continue;
     if (person && o.sdrId !== person && o.closerId !== person) continue;
     if (origem && o.origem !== origem) continue;
-    if (status === "PAGO" && o.status !== "PAGO") continue;
+    if (!passaStatus(o, status)) continue;
     const m = +o.data.slice(5, 7);
     (byMonth[m] = byMonth[m] || { cred: 0, n: 0 });
     byMonth[m].cred += o.valor;

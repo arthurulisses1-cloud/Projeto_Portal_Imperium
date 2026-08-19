@@ -196,9 +196,12 @@ export async function runSync(): Promise<SyncResultado> {
     vendasInseridas += batch.length;
   }
 
-  // ---------- Aba Assinado (de novo, sem filtro): espelho pra Weekly de Receita ----------
+  // ---------- Aba Assinado (de novo, sem filtro): espelho pra Weekly/Forecast ----------
+  // Upsert por chave_natural (não apaga+recria) pra preservar status_manual/
+  // observacao que o closer/líder preenche no Forecast — ver migration 0024.
   const operacoes = await buscarOperacoes();
   const weeklyRows = operacoes.linhas.map((l) => ({
+    chave_natural: l.chaveNatural,
     data: l.data,
     sdr_profile_id: l.sdrNormalizado ? nomeParaId.get(l.sdrNormalizado) ?? null : null,
     closer_profile_id: l.closerNormalizado ? nomeParaId.get(l.closerNormalizado) ?? null : null,
@@ -210,16 +213,10 @@ export async function runSync(): Promise<SyncResultado> {
     status: l.status,
     synced_at: new Date().toISOString(),
   }));
-  if (operacoes.menorData && operacoes.maiorData) {
+  for (const batch of chunk(weeklyRows, 1000)) {
     const { error } = await supabase
       .from("weekly_operacoes")
-      .delete()
-      .gte("data", operacoes.menorData)
-      .lte("data", operacoes.maiorData);
-    if (error) throw new Error("Erro limpando weekly_operacoes antigas: " + error.message);
-  }
-  for (const batch of chunk(weeklyRows, 1000)) {
-    const { error } = await supabase.from("weekly_operacoes").insert(batch);
+      .upsert(batch, { onConflict: "chave_natural" });
     if (error) throw new Error("Erro gravando weekly_operacoes: " + error.message);
   }
 
