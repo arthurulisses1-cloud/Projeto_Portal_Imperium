@@ -9,7 +9,6 @@ import { getViewerContext } from "@/lib/preview";
 import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
 import { RANK_LABELS } from "@/lib/labels";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
-import Card from "@/components/ui/Card";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
 
 const MESES = [
@@ -187,110 +186,126 @@ export default async function ComissaoPage() {
         )}
       </section>
 
-      <Card title={`Tabela de comissão · ${rankLabel}`}>
-        <Table>
-          <thead>
-            <tr>
-              <Th>Produção mín.</Th>
-              <Th align="right">Fixo</Th>
-              <Th align="right">% SDR</Th>
-              <Th align="right">% Closer</Th>
-              <Th align="right">% Gestão</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {tiers.map((t, i) => {
-              const ativo = remuneracao?.tierIdx === i;
-              return (
-                <Tr key={t.producao_min} active={ativo}>
-                  <Td className={ativo ? "text-gold-bright" : "text-stone-300"}>
-                    {moeda(t.producao_min)} {ativo && "← você está aqui"}
-                  </Td>
-                  <Td align="right" className="text-stone-100">{moeda(t.fixo)}</Td>
-                  <Td align="right" className={papelPrincipal === "sdr" ? "text-gold" : "text-stone-500"}>
-                    {t.pct_sdr}%
-                  </Td>
-                  <Td align="right" className={papelPrincipal === "closer" ? "text-gold" : "text-stone-500"}>
-                    {t.pct_closer}%
-                  </Td>
-                  <Td align="right" className={papelPrincipal === "gestao" ? "text-gold" : "text-stone-500"}>
-                    {t.pct_gestao}%
-                  </Td>
-                </Tr>
-              );
-            })}
-          </tbody>
-        </Table>
-        <p className="mt-2 text-[11px] text-stone-600">
-          Coluna destacada em dourado = papel principal do seu cargo (define o tier). As outras duas
-          rendem comissão à parte sempre que você atua nesse papel numa venda, sem mudar seu tier.
-        </p>
-
-        {papelPrincipal !== "gestao" && (
-          <div className="mt-4">
-            <SimuladorVendaRapida tiers={tiers} producaoAtual={producaoPrincipal} papel={papelPrincipal} />
-          </div>
-        )}
-      </Card>
-
-      <Card
-        title="Sistema de Marcos"
-        right={<span className="text-xs text-stone-500">Produção do mês: {moeda(producaoTotal)}</span>}
-      >
-        {marcos.length === 0 && (
-          <p className="text-sm text-stone-500">
-            Nenhum marco cadastrado ainda — peça ao Diretor pra rodar a migração de Sistema de
-            Marcos.
+      {/* Tabela de tier, simuladores e marcos: consulta ocasional, não o que
+          se checa todo dia — colapsados por padrão pra não competir de
+          igual pra igual com "Mês atual"/"Extrato", que são o que importa
+          na maioria das visitas. */}
+      <details className="card-imp group">
+        <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
+          <span>Tabela de comissão · {rankLabel} e simuladores</span>
+          <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
+        </summary>
+        <div className="mt-4">
+          <Table>
+            <thead>
+              <tr>
+                <Th>Produção mín.</Th>
+                <Th align="right">Fixo</Th>
+                <Th align="right">% SDR</Th>
+                <Th align="right">% Closer</Th>
+                <Th align="right">% Gestão</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {tiers.map((t, i) => {
+                const ativo = remuneracao?.tierIdx === i;
+                return (
+                  <Tr key={t.producao_min} active={ativo}>
+                    <Td className={ativo ? "text-gold-bright" : "text-stone-300"}>
+                      {moeda(t.producao_min)} {ativo && "← você está aqui"}
+                    </Td>
+                    <Td align="right" className="text-stone-100">{moeda(t.fixo)}</Td>
+                    <Td align="right" className={papelPrincipal === "sdr" ? "text-gold" : "text-stone-500"}>
+                      {t.pct_sdr}%
+                    </Td>
+                    <Td align="right" className={papelPrincipal === "closer" ? "text-gold" : "text-stone-500"}>
+                      {t.pct_closer}%
+                    </Td>
+                    <Td align="right" className={papelPrincipal === "gestao" ? "text-gold" : "text-stone-500"}>
+                      {t.pct_gestao}%
+                    </Td>
+                  </Tr>
+                );
+              })}
+            </tbody>
+          </Table>
+          <p className="mt-2 text-[11px] text-stone-600">
+            Coluna destacada em dourado = papel principal do seu cargo (define o tier). As outras duas
+            rendem comissão à parte sempre que você atua nesse papel numa venda, sem mudar seu tier.
           </p>
-        )}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {marcos.map((m) => (
-            <div
-              key={m.id}
-              className={`overflow-hidden rounded-lg border ${
-                m.alcancado ? "border-gold" : m.elegivel ? "border-gold/50 border-dashed" : "border-imperium-line-strong"
-              }`}
-            >
-              <div className={`relative aspect-video ${m.alcancado || m.elegivel ? "" : "grayscale"}`}>
-                {m.imagemUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.imagemUrl} alt={m.nome} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-imperium-bg/60 text-3xl">
-                    {m.icone}
-                  </div>
-                )}
-                {!m.alcancado && !m.elegivel && (
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-2xl">
-                    🔒
-                  </span>
-                )}
-                <span
-                  className={`absolute right-2 top-2 rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide ${
-                    m.alcancado
-                      ? "border-success/50 bg-imperium-bg/80 text-success-bright"
-                      : m.elegivel
-                        ? "border-gold/50 bg-imperium-bg/80 text-gold"
-                        : "border-imperium-line-strong bg-imperium-bg/80 text-stone-400"
-                  }`}
-                >
-                  {m.alcancado ? "Desbloqueado" : m.elegivel ? "Disponível este mês" : "Bloqueado"}
-                </span>
-              </div>
-              <div className="p-3">
-                <p className="text-sm text-stone-100">{m.nome}</p>
-                <p className="text-xs text-stone-500">
-                  Marco de {moeda(m.threshold)}
-                  {!m.alcancado && !m.elegivel && ` · faltam ${moeda(m.falta)}`}
-                  {m.elegivel && " · fale com o Diretor pra confirmar o resgate"}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
 
-      {papelPrincipal !== "gestao" && <SimuladorComissao tiers={tiers} papel={papelPrincipal} />}
+          {papelPrincipal !== "gestao" && (
+            <>
+              <div className="mt-4">
+                <SimuladorVendaRapida tiers={tiers} producaoAtual={producaoPrincipal} papel={papelPrincipal} />
+              </div>
+              <div className="mt-4">
+                <SimuladorComissao tiers={tiers} papel={papelPrincipal} />
+              </div>
+            </>
+          )}
+        </div>
+      </details>
+
+      <details className="card-imp group">
+        <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
+          <span>Sistema de Marcos</span>
+          <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
+        </summary>
+        <div className="mt-4">
+          {marcos.length === 0 && (
+            <p className="text-sm text-stone-500">
+              Nenhum marco cadastrado ainda — peça ao Diretor pra rodar a migração de Sistema de
+              Marcos.
+            </p>
+          )}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {marcos.map((m) => (
+              <div
+                key={m.id}
+                className={`overflow-hidden rounded-lg border ${
+                  m.alcancado ? "border-gold" : m.elegivel ? "border-gold/50 border-dashed" : "border-imperium-line-strong"
+                }`}
+              >
+                <div className={`relative aspect-video ${m.alcancado || m.elegivel ? "" : "grayscale"}`}>
+                  {m.imagemUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={m.imagemUrl} alt={m.nome} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-imperium-bg/60 text-3xl">
+                      {m.icone}
+                    </div>
+                  )}
+                  {!m.alcancado && !m.elegivel && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-2xl">
+                      🔒
+                    </span>
+                  )}
+                  <span
+                    className={`absolute right-2 top-2 rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide ${
+                      m.alcancado
+                        ? "border-success/50 bg-imperium-bg/80 text-success-bright"
+                        : m.elegivel
+                          ? "border-gold/50 bg-imperium-bg/80 text-gold"
+                          : "border-imperium-line-strong bg-imperium-bg/80 text-stone-400"
+                    }`}
+                  >
+                    {m.alcancado ? "Desbloqueado" : m.elegivel ? "Disponível este mês" : "Bloqueado"}
+                  </span>
+                </div>
+                <div className="p-3">
+                  <p className="text-sm text-stone-100">{m.nome}</p>
+                  <p className="text-xs text-stone-500">
+                    Marco de {moeda(m.threshold)}
+                    {!m.alcancado && !m.elegivel && ` · faltam ${moeda(m.falta)}`}
+                    {m.elegivel && " · fale com o Diretor pra confirmar o resgate"}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </details>
 
       <section className="card-imp">
         <h2 className="kicker mb-4">
@@ -362,10 +377,13 @@ export default async function ComissaoPage() {
         )}
       </section>
 
-      <section id="contestar" className="card-imp scroll-mt-20">
-        <h2 className="kicker mb-4">Contestação</h2>
+      <details id="contestar" className="card-imp scroll-mt-20 group">
+        <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
+          <span>Contestação{contestacoes && contestacoes.length > 0 ? ` (${contestacoes.length})` : ""}</span>
+          <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
+        </summary>
 
-        <form action={abrirContestacao} className="mb-6 space-y-3">
+        <form action={abrirContestacao} className="mb-6 mt-4 space-y-3">
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="mb-1 block text-xs text-stone-400">Referência (opcional)</label>
@@ -405,7 +423,7 @@ export default async function ComissaoPage() {
             ))}
           </ul>
         )}
-      </section>
+      </details>
     </main>
   );
 }

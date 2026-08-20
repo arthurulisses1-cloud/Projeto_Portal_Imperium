@@ -8,8 +8,8 @@ export default function SimuladorComissao({ tiers, papel }: { tiers: Tier[]; pap
   const resultado = lookupComissao(tiers, producao, papel);
 
   return (
-    <div className="card-imp">
-      <h2 className="kicker mb-4">Simulador por faixa de produção</h2>
+    <div className="border-t border-imperium-line pt-4">
+      <p className="kicker mb-3">Simulador por faixa de produção</p>
       <label className="mb-1 block text-xs text-stone-400">
         Produção hipotética do mês (R$)
       </label>

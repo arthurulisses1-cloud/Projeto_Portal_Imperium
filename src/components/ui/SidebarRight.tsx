@@ -270,254 +270,249 @@ export default async function SidebarRight({ userId }: { userId: string }) {
         </div>
       )}
 
-      <div className="border-t border-imperium-line pt-4">
-        <p className="kicker mb-3">Sistema de Marcos</p>
-        {marcos.length > 0 ? (
-          <div className="grid grid-cols-3 gap-2">
-            {marcos.map((m) =>
-              m.imagemUrl ? (
-                <div
-                  key={m.id}
-                  className={`relative aspect-square overflow-hidden rounded-lg border ${
-                    m.alcancado
-                      ? "border-gold"
-                      : m.elegivel
-                        ? "border-gold/50 border-dashed"
-                        : "border-imperium-line-strong opacity-50 grayscale"
-                  }`}
-                  title={m.elegivel ? `${m.nome} — disponível este mês, fale com o Diretor` : m.nome}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={m.imagemUrl} alt={m.nome} className="h-full w-full object-cover" />
-                  {!m.alcancado && !m.elegivel && (
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-base">
-                      🔒
-                    </span>
-                  )}
-                  {m.elegivel && (
-                    <span className="absolute -bottom-1 -right-1 text-xs">🎁</span>
-                  )}
-                </div>
-              ) : (
-                <div
-                  key={m.id}
-                  className={`relative flex aspect-square items-center justify-center rounded-full border text-lg ${
-                    m.alcancado
-                      ? "border-gold bg-gold/10"
-                      : m.elegivel
-                        ? "border-gold/50 border-dashed bg-gold/5"
-                        : "border-imperium-line-strong bg-imperium-bg/40 opacity-50"
-                  }`}
-                  title={m.elegivel ? `${m.nome} — disponível este mês, fale com o Diretor` : m.nome}
-                >
-                  {m.icone}
-                  {!m.alcancado && !m.elegivel && <span className="absolute -bottom-1 -right-1 text-xs">🔒</span>}
-                  {m.elegivel && <span className="absolute -bottom-1 -right-1 text-xs">🎁</span>}
-                </div>
-              )
-            )}
-          </div>
-        ) : (
-          <p className="text-xs text-stone-600">Nenhum marco cadastrado ainda.</p>
-        )}
-      </div>
-
       {tierAtual && (
-        <div className="border-t border-imperium-line pt-4">
-          <p className="kicker mb-3">Tabela de Remuneração</p>
-          <div className="mb-2 flex items-end justify-center gap-1.5">
-            {tiersOrdenados.map((t, i) => {
-              const ativo = i === tierAtual.tierIdx;
-              return (
-                <div key={t.producao_min} className="flex flex-col items-center gap-1" title={moeda(t.producao_min)}>
-                  <span
-                    className={`flex h-6 w-6 items-center justify-center rounded-full border font-display text-[10px] ${
-                      ativo ? "border-gold bg-gold text-imperium-bg" : "border-imperium-line text-stone-500"
-                    }`}
-                  >
-                    {paraRomano(i + 1)}
-                  </span>
-                  <div
-                    className={`w-6 rounded-t ${ativo ? "bg-gold" : "bg-imperium-line"}`}
-                    style={{ height: `${14 + i * 9}px` }}
+        <a
+          href="/comissao"
+          className="block border-t border-imperium-line pt-4 transition hover:opacity-80"
+        >
+          <div className="flex items-center justify-between">
+            <p className="kicker">Comissão do mês</p>
+            <span className="text-[10px] text-gold">ver tudo →</span>
+          </div>
+          <p className="mt-1.5 text-xs text-stone-300">
+            Tier <span className="text-gold-bright">{paraRomano(tierAtual.tierIdx + 1)}</span> de{" "}
+            {paraRomano(tiersOrdenados.length)}
+            {proximo ? (
+              <>
+                {" "}
+                — faltam <span className="text-gold">{moeda(proximo.faltaProducao)}</span> pro próximo
+              </>
+            ) : (
+              <span className="text-success-bright"> — tier máximo</span>
+            )}
+          </p>
+        </a>
+      )}
+
+      {/* Marcos e Tribo/Exército: bloco secundário, colapsado por padrão — a
+          lateral aparece em TODA página, então empilhar tudo sempre aberto
+          soma densidade em cada uma delas. Só identidade/estrelas/carreira/
+          comissão (o que dá pra bater o olho rápido) fica sempre visível. */}
+      {(marcos.length > 0 || nomeTribo || exercito || exercitoLiderado) && (
+        <details className="border-t border-imperium-line pt-4 group">
+          <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
+            <span>Time e Marcos</span>
+            <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
+          </summary>
+
+          {marcos.length > 0 && (
+            <div className="mt-3">
+              <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Sistema de Marcos</p>
+              <div className="grid grid-cols-3 gap-2">
+                {marcos.map((m) =>
+                  m.imagemUrl ? (
+                    <div
+                      key={m.id}
+                      className={`relative aspect-square overflow-hidden rounded-lg border ${
+                        m.alcancado
+                          ? "border-gold"
+                          : m.elegivel
+                            ? "border-gold/50 border-dashed"
+                            : "border-imperium-line-strong opacity-50 grayscale"
+                      }`}
+                      title={m.elegivel ? `${m.nome} — disponível este mês, fale com o Diretor` : m.nome}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={m.imagemUrl} alt={m.nome} className="h-full w-full object-cover" />
+                      {!m.alcancado && !m.elegivel && (
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-base">
+                          🔒
+                        </span>
+                      )}
+                      {m.elegivel && (
+                        <span className="absolute -bottom-1 -right-1 text-xs">🎁</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      key={m.id}
+                      className={`relative flex aspect-square items-center justify-center rounded-full border text-lg ${
+                        m.alcancado
+                          ? "border-gold bg-gold/10"
+                          : m.elegivel
+                            ? "border-gold/50 border-dashed bg-gold/5"
+                            : "border-imperium-line-strong bg-imperium-bg/40 opacity-50"
+                      }`}
+                      title={m.elegivel ? `${m.nome} — disponível este mês, fale com o Diretor` : m.nome}
+                    >
+                      {m.icone}
+                      {!m.alcancado && !m.elegivel && <span className="absolute -bottom-1 -right-1 text-xs">🔒</span>}
+                      {m.elegivel && <span className="absolute -bottom-1 -right-1 text-xs">🎁</span>}
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          )}
+
+          {nomeTribo && (
+            <div className="mt-4">
+              <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Minha Tribo · {nomeTribo}</p>
+
+              <div className="mb-3 flex items-center gap-3 rounded border border-gold/30 bg-gold/5 p-2.5">
+                {logoTribo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={logoTribo}
+                    alt={nomeTribo}
+                    className="h-11 w-11 shrink-0 rounded-full border border-gold/50 object-cover"
                   />
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-dashed border-gold/40 text-[9px] text-stone-600">
+                    Bandeira
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  {closer ? (
+                    <>
+                      <p className="truncate text-sm text-gold-bright">{closer.nome}</p>
+                      <p className="text-[10px] uppercase tracking-wide text-stone-500">
+                        {RANK_LABELS[closer.rank] ?? closer.rank} · líder da Tribo
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-stone-600">Tribo sem Closer definido</p>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-          <p className="text-center text-xs text-stone-400">
-            Tier {paraRomano(tierAtual.tierIdx + 1)} de {paraRomano(tiersOrdenados.length)}
-          </p>
-          {proximo ? (
-            <p className="mt-1 text-center text-xs text-stone-500">
-              Faltam <span className="text-gold">{moeda(proximo.faltaProducao)}</span> pro próximo
-              tier.
-              <br />
-              Se alcançar, <span className="text-success-bright">+{moeda(proximo.ganhoTotal)}</span> na
-              comissão.
-            </p>
-          ) : (
-            <p className="mt-1 text-center text-xs text-success-bright">Tier máximo atingido.</p>
-          )}
-        </div>
-      )}
-
-      {nomeTribo && (
-        <div className="border-t border-imperium-line pt-4">
-          <p className="kicker mb-3">Minha Tribo · {nomeTribo}</p>
-
-          <div className="mb-3 flex items-center gap-3 rounded border border-gold/30 bg-gold/5 p-2.5">
-            {logoTribo ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={logoTribo}
-                alt={nomeTribo}
-                className="h-11 w-11 shrink-0 rounded-full border border-gold/50 object-cover"
-              />
-            ) : (
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-dashed border-gold/40 text-[9px] text-stone-600">
-                Bandeira
               </div>
-            )}
-            <div className="min-w-0 flex-1">
-              {closer ? (
-                <>
-                  <p className="truncate text-sm text-gold-bright">{closer.nome}</p>
-                  <p className="text-[10px] uppercase tracking-wide text-stone-500">
-                    {RANK_LABELS[closer.rank] ?? closer.rank} · líder da Tribo
-                  </p>
-                </>
+
+              {sdrsDaTribo.length > 0 ? (
+                <ul className="space-y-2">
+                  {sdrsDaTribo.map((m) => (
+                    <li key={m.id} className="flex items-center gap-2.5">
+                      {m.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={m.avatarUrl}
+                          alt={m.nome}
+                          className="h-7 w-7 shrink-0 rounded-full border border-imperium-line-strong object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-[9px] text-stone-500">
+                          {iniciais(m.nome)}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs text-stone-200">{m.nome}</p>
+                      </div>
+                      <span className="shrink-0 text-[10px] text-gold">{moeda(m.producao)}</span>
+                    </li>
+                  ))}
+                </ul>
               ) : (
-                <p className="text-xs text-stone-600">Tribo sem Closer definido</p>
+                <p className="text-xs text-stone-600">Nenhum SDR na Tribo ainda.</p>
               )}
             </div>
-          </div>
-
-          {sdrsDaTribo.length > 0 ? (
-            <ul className="space-y-2">
-              {sdrsDaTribo.map((m) => (
-                <li key={m.id} className="flex items-center gap-2.5">
-                  {m.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={m.avatarUrl}
-                      alt={m.nome}
-                      className="h-7 w-7 shrink-0 rounded-full border border-imperium-line-strong object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-[9px] text-stone-500">
-                      {iniciais(m.nome)}
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs text-stone-200">{m.nome}</p>
-                  </div>
-                  <span className="shrink-0 text-[10px] text-gold">{moeda(m.producao)}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-stone-600">Nenhum SDR na Tribo ainda.</p>
           )}
-        </div>
-      )}
 
-      {exercito && (
-        <div className="border-t border-imperium-line pt-4">
-          <p className="kicker mb-3">Meu Exército · {exercito.nome}</p>
+          {exercito && (
+            <div className="mt-4">
+              <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Meu Exército · {exercito.nome}</p>
 
-          <div className="flex items-center gap-3 rounded border border-wine/30 bg-wine/5 p-2.5">
-            {EXERCITO_CREST[exercito.nome] ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={EXERCITO_CREST[exercito.nome]}
-                alt={exercito.nome}
-                className="h-11 w-11 shrink-0 rounded-full border border-wine/50 object-cover"
-              />
-            ) : (
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-dashed border-wine/40 text-[9px] text-stone-600">
-                Bandeira
+              <div className="flex items-center gap-3 rounded border border-wine/30 bg-wine/5 p-2.5">
+                {EXERCITO_CREST[exercito.nome] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={EXERCITO_CREST[exercito.nome]}
+                    alt={exercito.nome}
+                    className="h-11 w-11 shrink-0 rounded-full border border-wine/50 object-cover"
+                  />
+                ) : (
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-dashed border-wine/40 text-[9px] text-stone-600">
+                    Bandeira
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  {exercito.legado ? (
+                    <>
+                      <p className="truncate text-sm text-gold-bright">{exercito.legado.nome}</p>
+                      <p className="text-[10px] uppercase tracking-wide text-stone-500">Legado do Exército</p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-stone-600">Exército sem Legado definido</p>
+                  )}
+                </div>
               </div>
-            )}
-            <div className="min-w-0 flex-1">
-              {exercito.legado ? (
-                <>
-                  <p className="truncate text-sm text-gold-bright">{exercito.legado.nome}</p>
-                  <p className="text-[10px] uppercase tracking-wide text-stone-500">Legado do Exército</p>
-                </>
+            </div>
+          )}
+
+          {exercitoLiderado && (
+            <div className="mt-4">
+              <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Meu Exército · {exercitoLiderado.nome}</p>
+
+              <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Minhas Tribos</p>
+              {exercitoLiderado.tribos.length > 0 ? (
+                <ul className="space-y-3">
+                  {exercitoLiderado.tribos.map((t) => (
+                    <li key={t.id} className="flex items-center gap-2.5">
+                      {t.logoUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={t.logoUrl}
+                          alt={t.nome}
+                          className="h-9 w-9 shrink-0 rounded-full border border-gold/40 object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-dashed border-gold/40 text-[8px] text-stone-600">
+                          Bandeira
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs text-gold-bright">{t.nome}</p>
+                        <p className="truncate text-[10px] text-stone-500">
+                          {t.closer ? t.closer.nome : "sem Closer definido"}
+                        </p>
+                      </div>
+                      {t.closer && <span className="shrink-0 text-[10px] text-gold">{moeda(t.producao)}</span>}
+                    </li>
+                  ))}
+                </ul>
               ) : (
-                <p className="text-xs text-stone-600">Exército sem Legado definido</p>
+                <p className="text-xs text-stone-600">Nenhuma Tribo neste Exército ainda.</p>
+              )}
+
+              <p className="mb-2 mt-4 text-[10px] uppercase tracking-wide text-stone-500">
+                Meu Time ({exercitoLiderado.membros.length})
+              </p>
+              {exercitoLiderado.membros.length > 0 ? (
+                <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">
+                  {exercitoLiderado.membros.map((m) => (
+                    <li key={m.id} className="flex items-center gap-2.5">
+                      {m.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={m.avatarUrl}
+                          alt={m.nome}
+                          className="h-7 w-7 shrink-0 rounded-full border border-imperium-line-strong object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-[9px] text-stone-500">
+                          {iniciais(m.nome)}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs text-stone-200">{m.nome}</p>
+                        <p className="truncate text-[10px] text-stone-500">{m.triboNome}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-stone-600">Nenhum membro nas Tribos ainda.</p>
               )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {exercitoLiderado && (
-        <div className="border-t border-imperium-line pt-4">
-          <p className="kicker mb-3">Meu Exército · {exercitoLiderado.nome}</p>
-
-          <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Minhas Tribos</p>
-          {exercitoLiderado.tribos.length > 0 ? (
-            <ul className="space-y-3">
-              {exercitoLiderado.tribos.map((t) => (
-                <li key={t.id} className="flex items-center gap-2.5">
-                  {t.logoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={t.logoUrl}
-                      alt={t.nome}
-                      className="h-9 w-9 shrink-0 rounded-full border border-gold/40 object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-dashed border-gold/40 text-[8px] text-stone-600">
-                      Bandeira
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs text-gold-bright">{t.nome}</p>
-                    <p className="truncate text-[10px] text-stone-500">
-                      {t.closer ? t.closer.nome : "sem Closer definido"}
-                    </p>
-                  </div>
-                  {t.closer && <span className="shrink-0 text-[10px] text-gold">{moeda(t.producao)}</span>}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-stone-600">Nenhuma Tribo neste Exército ainda.</p>
           )}
-
-          <p className="mb-2 mt-4 text-[10px] uppercase tracking-wide text-stone-500">
-            Meu Time ({exercitoLiderado.membros.length})
-          </p>
-          {exercitoLiderado.membros.length > 0 ? (
-            <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">
-              {exercitoLiderado.membros.map((m) => (
-                <li key={m.id} className="flex items-center gap-2.5">
-                  {m.avatarUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={m.avatarUrl}
-                      alt={m.nome}
-                      className="h-7 w-7 shrink-0 rounded-full border border-imperium-line-strong object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-[9px] text-stone-500">
-                      {iniciais(m.nome)}
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs text-stone-200">{m.nome}</p>
-                    <p className="truncate text-[10px] text-stone-500">{m.triboNome}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-stone-600">Nenhum membro nas Tribos ainda.</p>
-          )}
-        </div>
+        </details>
       )}
     </aside>
   );
