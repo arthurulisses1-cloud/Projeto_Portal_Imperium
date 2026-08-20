@@ -5,6 +5,7 @@ import Card from "@/components/ui/Card";
 import { buscarMetaIndividual, calcularFunilMeta } from "@/lib/metas";
 import { calcularStreak, cumpriuCompromisso, type StreakRow } from "@/lib/streak";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
+import { getViewerContext } from "@/lib/preview";
 
 type CompromissoRow = StreakRow;
 
@@ -35,24 +36,23 @@ function diasUteisRestantes(hoje: Date): number {
 
 export default async function CompromissoPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const viewer = await getViewerContext(supabase);
+  if (!viewer) return null;
+  const meId = viewer.effectiveId;
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role, tribo_id")
-    .eq("id", user.id)
+    .eq("id", meId)
     .single();
-  logErroSupabase(`CompromissoPage: profiles (id=${user.id})`, profileError);
+  logErroSupabase(`CompromissoPage: profiles (id=${meId})`, profileError);
 
   const hoje = new Date().toISOString().slice(0, 10);
 
   const { data: hojeRow } = await supabase
     .from("compromissos")
     .select("*")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .eq("data", hoje)
     .maybeSingle();
 
@@ -60,7 +60,7 @@ export default async function CompromissoPage() {
   const { data: historico } = await supabase
     .from("compromissos")
     .select("*")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .gte("data", primeiroDiaMes)
     .lt("data", hoje)
     .order("data", { ascending: false })
@@ -72,7 +72,7 @@ export default async function CompromissoPage() {
   const { data: historicoStreak } = await supabase
     .from("compromissos")
     .select("data, entrevistas_comp, entrevistas_real, assinaturas_comp, assinaturas_real, pagos_comp, pagos_real, falta, lancado")
-    .eq("profile_id", user.id)
+    .eq("profile_id", meId)
     .gte("data", seiscentaDiasAtras.toISOString().slice(0, 10))
     .lt("data", hoje)
     .order("data", { ascending: false });
@@ -88,14 +88,14 @@ export default async function CompromissoPage() {
   // Meta diária sugerida: (meta do mês inteiro - já realizado) / dias úteis restantes.
   let sugestao: { entrevistas: number; assinaturas: number; pagos: number } | null = null;
   if (!hojeRow) {
-    const { metaCreditoIndividual, metaTicketMedio, taxas } = await buscarMetaIndividual(supabase, user.id);
+    const { metaCreditoIndividual, metaTicketMedio, taxas } = await buscarMetaIndividual(supabase, meId);
     const metaFunil = calcularFunilMeta(metaCreditoIndividual, metaTicketMedio, taxas);
 
     const inicioMes = hoje.slice(0, 7) + "-01";
     const { data: realizadoMes } = await supabase
       .from("producao_funil")
       .select("etapa, realizado")
-      .eq("profile_id", user.id)
+      .eq("profile_id", meId)
       .in("etapa", ["entrevistas", "assinaturas", "pagos"])
       .gte("data", inicioMes);
     const jaFeito = { entrevistas: 0, assinaturas: 0, pagos: 0 };
@@ -138,7 +138,7 @@ export default async function CompromissoPage() {
       .eq("role", "sdr");
     logErroSupabase(`CompromissoPage: profiles sdrs da tribo (tribo_id=${profile.tribo_id})`, sdrsError);
 
-    const idsTribo = [user.id, ...(sdrs ?? []).map((s) => s.id)];
+    const idsTribo = [meId, ...(sdrs ?? []).map((s) => s.id)];
     const { data: comprosHoje } = await supabase
       .from("compromissos")
       .select("*")
@@ -146,10 +146,10 @@ export default async function CompromissoPage() {
       .eq("data", hoje);
     const comproPorId = new Map((comprosHoje ?? []).map((r) => [r.profile_id, r as CompromissoRow]));
 
-    const { data: euProfile } = await supabase.from("profiles").select("full_name, avatar_url").eq("id", user.id).single();
+    const { data: euProfile } = await supabase.from("profiles").select("full_name, avatar_url").eq("id", meId).single();
 
     membrosTribo = [
-      { id: user.id, nome: `${euProfile?.full_name ?? "Você"} (você)`, avatarUrl: euProfile?.avatar_url ?? null, row: comproPorId.get(user.id) ?? null },
+      { id: meId, nome: `${euProfile?.full_name ?? "Você"} (você)`, avatarUrl: euProfile?.avatar_url ?? null, row: comproPorId.get(meId) ?? null },
       ...(sdrs ?? []).map((s) => ({ id: s.id, nome: s.full_name, avatarUrl: s.avatar_url, row: comproPorId.get(s.id) ?? null })),
     ];
     // Quem ainda não lançou hoje sobe pro topo — é o que precisa de atenção
@@ -174,7 +174,7 @@ export default async function CompromissoPage() {
     const { data } = await supabase
       .from("feedbacks_sdr")
       .select("id, texto, created_at")
-      .eq("sdr_id", user.id)
+      .eq("sdr_id", meId)
       .order("created_at", { ascending: false })
       .limit(3);
     feedbacks = data ?? [];
@@ -185,7 +185,10 @@ export default async function CompromissoPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl text-gold-bright">Compromisso</h1>
-          <p className="kicker mt-1">Meta e acompanhamento do dia</p>
+          <p className="kicker mt-1">
+            Meta e acompanhamento do dia
+            {viewer.isPreview && ` · pré-visualizando como ${viewer.effectiveNome}`}
+          </p>
         </div>
         {streak > 0 && (
           <span className="flex items-center gap-1 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs text-gold-bright">
