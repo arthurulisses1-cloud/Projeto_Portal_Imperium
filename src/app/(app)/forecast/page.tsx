@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import ForecastView from "@/components/forecast/ForecastView";
 import { podeEditarOperacao, type ForecastOp } from "@/lib/forecast";
 import { getViewerContext } from "@/lib/preview";
+import { logErroSupabase } from "@/lib/log-erro-supabase";
 
 export default async function ForecastPage() {
   const supabase = await createClient();
@@ -58,12 +59,14 @@ export default async function ForecastPage() {
   ]);
   let opRows = opsRes.data;
   if (opsRes.error) {
+    logErroSupabase("ForecastPage: weekly_operacoes com motivo_queda (caindo pro fallback sem essas colunas)", opsRes.error);
     const fallback = await supabase
       .from("weekly_operacoes")
       .select("id, data, cliente, sdr_profile_id, closer_profile_id, valor, status, status_manual, observacao")
       .gte("data", inicioMes)
       .lte("data", fimMes)
       .order("data", { ascending: false });
+    logErroSupabase("ForecastPage: weekly_operacoes fallback", fallback.error);
     opRows = (fallback.data ?? []).map((o) => ({ ...o, motivo_queda: null, motivo_queda_obs: null }));
   }
 

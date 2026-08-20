@@ -8,6 +8,7 @@ import { buscarProgressoMarcos } from "@/lib/marcos";
 import { getViewerContext } from "@/lib/preview";
 import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
 import { RANK_LABELS } from "@/lib/labels";
+import { logErroSupabase } from "@/lib/log-erro-supabase";
 import Card from "@/components/ui/Card";
 
 const MESES = [
@@ -34,11 +35,12 @@ export default async function ComissaoPage() {
   if (!viewer) return null;
   const meId = viewer.effectiveId;
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("rank, role")
     .eq("id", meId)
     .single();
+  logErroSupabase(`ComissaoPage: profiles (id=${meId})`, profileError);
 
   const rank = (profile?.rank ?? "legionario") as Rank | "diretor";
   const role = profile?.role ?? "sdr";

@@ -4,6 +4,7 @@ import { marcarFaltaTime } from "@/app/(app)/exercito/actions";
 import Card from "@/components/ui/Card";
 import { buscarMetaIndividual, calcularFunilMeta } from "@/lib/metas";
 import { calcularStreak, cumpriuCompromisso, type StreakRow } from "@/lib/streak";
+import { logErroSupabase } from "@/lib/log-erro-supabase";
 
 type CompromissoRow = StreakRow;
 
@@ -39,11 +40,12 @@ export default async function CompromissoPage() {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role, tribo_id")
     .eq("id", user.id)
     .single();
+  logErroSupabase(`CompromissoPage: profiles (id=${user.id})`, profileError);
 
   const hoje = new Date().toISOString().slice(0, 10);
 
@@ -129,11 +131,12 @@ export default async function CompromissoPage() {
   } | null = null;
 
   if (profile?.role === "closer" && profile.tribo_id) {
-    const { data: sdrs } = await supabase
+    const { data: sdrs, error: sdrsError } = await supabase
       .from("profiles")
       .select("id, full_name, avatar_url")
       .eq("tribo_id", profile.tribo_id)
       .eq("role", "sdr");
+    logErroSupabase(`CompromissoPage: profiles sdrs da tribo (tribo_id=${profile.tribo_id})`, sdrsError);
 
     const idsTribo = [user.id, ...(sdrs ?? []).map((s) => s.id)];
     const { data: comprosHoje } = await supabase

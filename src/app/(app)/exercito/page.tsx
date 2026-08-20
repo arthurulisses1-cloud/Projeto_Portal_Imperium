@@ -11,6 +11,7 @@ import MembroCard from "@/components/MembroCard";
 import Card from "@/components/ui/Card";
 import { getViewerContext } from "@/lib/preview";
 import { calcularFunilMeta, mapaMetaCreditoPorTribo } from "@/lib/metas";
+import { logErroSupabase } from "@/lib/log-erro-supabase";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -50,13 +51,14 @@ export default async function ExercitoPage() {
   // mesma (é membro dela, além de líder), então sem esse filtro ele aparecia
   // duplicado: uma vez como Closer (via tribos.closer_id) e outra como "SDR"
   // (via tribo_id), com o mesmo valor de Pagos nos dois cards.
-  const { data: sdrs } = triboIds.length
+  const { data: sdrs, error: sdrsError } = triboIds.length
     ? await supabase
         .from("profiles")
         .select("id, full_name, tribo_id")
         .in("tribo_id", triboIds)
         .eq("role", "sdr")
-    : { data: [] };
+    : { data: [], error: null };
+  logErroSupabase(`ExercitoPage: profiles sdrs (exercito=${exercito.id})`, sdrsError);
 
   const todosIds = [
     ...(tribos ?? [])
