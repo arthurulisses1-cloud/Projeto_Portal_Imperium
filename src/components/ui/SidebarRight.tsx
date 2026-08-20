@@ -7,7 +7,8 @@ import {
   resultadoSemanaEstrela,
   type Rank,
 } from "@/lib/carreira";
-import { lookupComissao, proximoTier } from "@/lib/comissao";
+import { proximoTier } from "@/lib/comissao";
+import { buscarRemuneracaoMes } from "@/lib/remuneracao";
 import { buscarProgressoMarcos } from "@/lib/marcos";
 import { paraRomano } from "@/lib/numerals";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
@@ -62,21 +63,16 @@ export default async function SidebarRight({ userId }: { userId: string }) {
 
   const { marcos } = await buscarProgressoMarcos(supabase, userId);
 
-  const { data: tiers } = await supabase
-    .from("commission_tiers")
-    .select("producao_min, fixo, pct_variavel")
-    .eq("rank", rank)
-    .order("ordem");
   const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
-  const { data: vendasMes } = await supabase
-    .from("vendas")
-    .select("valor")
-    .eq("profile_id", userId)
-    .gte("data", inicioMes);
-  const producaoMes = (vendasMes ?? []).reduce((s, v) => s + Number(v.valor), 0);
-  const tiersOrdenados = [...(tiers ?? [])].sort((a, b) => a.producao_min - b.producao_min);
-  const tierAtual = lookupComissao(tiersOrdenados, producaoMes);
-  const proximo = proximoTier(tiersOrdenados, producaoMes);
+  const { tiers: tiersOrdenados, remuneracao, producaoPrincipal, papelPrincipal } = await buscarRemuneracaoMes(
+    supabase,
+    userId,
+    profile.role,
+    rank,
+    inicioMes
+  );
+  const tierAtual = remuneracao;
+  const proximo = remuneracao ? proximoTier(tiersOrdenados, producaoPrincipal, papelPrincipal) : null;
 
   // ---------- Minha Tribo (com o Tribuno/Pretor em destaque) + Meu Exército ----------
   type Pessoa = { id: string; nome: string; rank: Rank; avatarUrl: string | null };

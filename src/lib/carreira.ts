@@ -40,13 +40,16 @@ export const STAR_PACE: Record<Rank, { estrelas: number; cheia: number; meia: nu
   legado: { estrelas: 12, cheia: 10, meia: 6 },
 };
 
-// Um Closer às vezes fecha venda no papel de SDR (fez a prospecção sozinho).
-// Essa produção NÃO conta pro tier de Closer (que só sobe com produção COMO
-// closer), mas gera uma comissão à parte, calculada pela tabela do cargo de
-// SDR equivalente — "Jr" com "Jr", "Sr" com "Sr" (ver RANK_SUBTITLE).
-export const RANK_SDR_EQUIVALENTE: Partial<Record<Rank, Rank>> = {
-  tribuno: "legionario",
-  pretor: "centuriao",
+// Papel que define qual tier da tabela de comissão do cargo vale no mês —
+// os outros papéis (ex: Tribuno fazendo prospecção como SDR) são remunerados
+// pela % correspondente do MESMO tier, não por uma tabela de outro cargo.
+export const PAPEL_PRINCIPAL: Record<Rank | "diretor", "sdr" | "closer" | "gestao"> = {
+  legionario: "sdr",
+  centuriao: "sdr",
+  tribuno: "closer",
+  pretor: "closer",
+  legado: "gestao",
+  diretor: "gestao",
 };
 
 export type CriterioPromocao = {

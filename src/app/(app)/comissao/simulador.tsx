@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { lookupComissao, type Tier } from "@/lib/comissao";
+import { lookupComissao, type Tier, type Papel } from "@/lib/comissao";
 
-export default function SimuladorComissao({ tiers }: { tiers: Tier[] }) {
+export default function SimuladorComissao({ tiers, papel }: { tiers: Tier[]; papel: Papel }) {
   const [producao, setProducao] = useState(0);
-  const resultado = lookupComissao(tiers, producao);
+  const resultado = lookupComissao(tiers, producao, papel);
 
   return (
     <div className="card-imp">

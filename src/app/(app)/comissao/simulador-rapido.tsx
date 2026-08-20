@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { lookupComissao, type Tier } from "@/lib/comissao";
+import { lookupComissao, type Tier, type Papel } from "@/lib/comissao";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -10,14 +10,16 @@ function moeda(v: number) {
 export default function SimuladorVendaRapida({
   tiers,
   producaoAtual,
+  papel,
 }: {
   tiers: Tier[];
   producaoAtual: number;
+  papel: Papel;
 }) {
   const [valor, setValor] = useState(0);
 
-  const atual = lookupComissao(tiers, producaoAtual);
-  const comValor = lookupComissao(tiers, producaoAtual + valor);
+  const atual = lookupComissao(tiers, producaoAtual, papel);
+  const comValor = lookupComissao(tiers, producaoAtual + valor, papel);
   if (!atual || !comValor) return null;
 
   const mudaTier = comValor.tierIdx !== atual.tierIdx;
