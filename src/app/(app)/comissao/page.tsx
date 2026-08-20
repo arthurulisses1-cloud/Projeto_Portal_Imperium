@@ -81,7 +81,7 @@ export default async function ComissaoPage() {
   ];
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6 px-6 py-8">
+    <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
       <div>
         <h1 className="font-display text-2xl text-gold-bright">Comissão do Mês</h1>
         <p className="text-xs text-stone-400">Visão privada — só você e o Diretor veem isso</p>
@@ -297,61 +297,68 @@ export default async function ComissaoPage() {
           Extrato do mês {role === "lider" || role === "diretor" ? "(operações do time)" : ""}
         </h2>
         {extrato.length > 0 ? (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-stone-500">
-                <th className="pb-1">Data</th>
-                <th className="pb-1">Cliente</th>
-                <th className="pb-1">SDR</th>
-                <th className="pb-1">Closer</th>
-                <th className="pb-1">Origem</th>
-                <th className="pb-1">Papel</th>
-                <th className="pb-1 text-right">% aplicado</th>
-                <th className="pb-1 text-right">Valor</th>
-                <th className="pb-1"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {extrato.map((v) => {
-                const tierAtivo = remuneracao ? tiers[remuneracao.tierIdx] : null;
-                const pctAplicado =
-                  v.papel === "sdr"
-                    ? tierAtivo?.pct_sdr
-                    : v.papel === "closer"
-                      ? tierAtivo?.pct_closer
-                      : v.papel === "time"
-                        ? tierAtivo?.pct_gestao
-                        : v.papel === "ambos"
-                          ? (tierAtivo?.pct_sdr ?? 0) + (tierAtivo?.pct_closer ?? 0)
-                          : undefined;
-                return (
-                  <tr key={v.id} className="border-t border-imperium-line">
-                    <td className="py-1 text-stone-300">
-                      {new Date(v.data + "T00:00:00").toLocaleDateString("pt-BR")}
-                    </td>
-                    <td className="py-1 text-stone-300">{v.cliente ?? "—"}</td>
-                    <td className="py-1 text-stone-400">{v.sdrNome ?? "—"}</td>
-                    <td className="py-1 text-stone-400">{v.closerNome ?? "—"}</td>
-                    <td className="py-1 text-stone-400">{v.origem ?? "—"}</td>
-                    <td className="py-1 text-stone-400">{PAPEL_LABEL[v.papel] ?? v.papel}</td>
-                    <td className="py-1 text-right text-stone-500">
-                      {pctAplicado !== undefined ? `${pctAplicado}%` : "—"}
-                    </td>
-                    <td className="py-1 text-right text-stone-100">{moeda(v.valor)}</td>
-                    <td className="py-1 text-right">
-                      <a
-                        href={`#contestar`}
-                        className="text-[11px] text-stone-600 hover:text-gold hover:underline"
-                        title="Contestar essa venda"
-                      >
-                        Contestar
-                      </a>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead>
+                <tr className="text-left text-xs text-stone-500">
+                  <th className="px-2 pb-2">Data</th>
+                  <th className="px-2 pb-2">Cliente</th>
+                  <th className="px-2 pb-2">SDR</th>
+                  <th className="px-2 pb-2">Closer</th>
+                  <th className="px-2 pb-2">Origem</th>
+                  <th className="px-2 pb-2">Papel</th>
+                  <th className="px-2 pb-2 text-right">Crédito</th>
+                  <th className="px-2 pb-2 text-right">%</th>
+                  <th className="px-2 pb-2 text-right">Comissão</th>
+                  <th className="px-2 pb-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {extrato.map((v) => {
+                  const tierAtivo = remuneracao ? tiers[remuneracao.tierIdx] : null;
+                  const pctAplicado =
+                    v.papel === "sdr"
+                      ? tierAtivo?.pct_sdr
+                      : v.papel === "closer"
+                        ? tierAtivo?.pct_closer
+                        : v.papel === "time"
+                          ? tierAtivo?.pct_gestao
+                          : v.papel === "ambos"
+                            ? Math.max(tierAtivo?.pct_sdr ?? 0, tierAtivo?.pct_closer ?? 0)
+                            : undefined;
+                  const comissaoVenda = pctAplicado !== undefined ? Math.round((pctAplicado / 100) * v.valor) : null;
+                  return (
+                    <tr key={v.id} className="border-t border-imperium-line align-top">
+                      <td className="px-2 py-2.5 whitespace-nowrap text-stone-300">
+                        {new Date(v.data + "T00:00:00").toLocaleDateString("pt-BR")}
+                      </td>
+                      <td className="px-2 py-2.5 text-stone-300">{v.cliente ?? "—"}</td>
+                      <td className="px-2 py-2.5 text-stone-400">{v.sdrNome ?? "—"}</td>
+                      <td className="px-2 py-2.5 text-stone-400">{v.closerNome ?? "—"}</td>
+                      <td className="px-2 py-2.5 text-stone-400">{v.origem ?? "—"}</td>
+                      <td className="px-2 py-2.5 whitespace-nowrap text-stone-400">{PAPEL_LABEL[v.papel] ?? v.papel}</td>
+                      <td className="px-2 py-2.5 whitespace-nowrap text-right text-stone-100">{moeda(v.valor)}</td>
+                      <td className="px-2 py-2.5 whitespace-nowrap text-right text-stone-500">
+                        {pctAplicado !== undefined ? `${pctAplicado}%` : "—"}
+                      </td>
+                      <td className="px-2 py-2.5 whitespace-nowrap text-right text-gold-bright">
+                        {comissaoVenda !== null ? moeda(comissaoVenda) : "—"}
+                      </td>
+                      <td className="px-2 py-2.5 whitespace-nowrap text-right">
+                        <a
+                          href={`#contestar`}
+                          className="text-[11px] text-stone-600 hover:text-gold hover:underline"
+                          title="Contestar essa venda"
+                        >
+                          Contestar
+                        </a>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         ) : (
           <p className="text-sm text-stone-500">Nenhuma venda registrada neste mês ainda.</p>
         )}

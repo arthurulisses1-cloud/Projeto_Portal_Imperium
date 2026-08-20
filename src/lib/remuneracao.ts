@@ -112,11 +112,17 @@ export async function buscarRemuneracaoMes(
       });
     }
 
+    // Operação solo (mesma pessoa como SDR e Closer) não pode entrar nas duas
+    // somas ao mesmo tempo — vira uma categoria "ambos" à parte, resolvida
+    // pela % maior dentro de calcularRemuneracao.
     const producaoPessoalSdr = opsDoEscopo
-      .filter((o) => o.sdr_profile_id === profileId)
+      .filter((o) => o.sdr_profile_id === profileId && o.closer_profile_id !== profileId)
       .reduce((s, o) => s + Number(o.valor), 0);
     const producaoPessoalCloser = opsDoEscopo
-      .filter((o) => o.closer_profile_id === profileId)
+      .filter((o) => o.closer_profile_id === profileId && o.sdr_profile_id !== profileId)
+      .reduce((s, o) => s + Number(o.valor), 0);
+    const producaoPessoalAmbos = opsDoEscopo
+      .filter((o) => o.sdr_profile_id === profileId && o.closer_profile_id === profileId)
       .reduce((s, o) => s + Number(o.valor), 0);
     const producaoGestao = opsDoEscopo
       .filter((o) => o.sdr_profile_id !== profileId && o.closer_profile_id !== profileId)
@@ -125,6 +131,7 @@ export async function buscarRemuneracaoMes(
     const remuneracao = calcularRemuneracao(tiers, producaoGestao, {
       sdr: producaoPessoalSdr,
       closer: producaoPessoalCloser,
+      ambos: producaoPessoalAmbos,
       gestao: producaoGestao,
     });
 
@@ -191,17 +198,22 @@ export async function buscarRemuneracaoMes(
       : { data: [] };
   const nomePorIdContraparte = new Map((pessoasContraparte ?? []).map((p) => [p.id, p.full_name as string]));
 
-  const producaoSdr = vendasMes
-    .filter((v) => v.papel === "sdr" || v.papel === "ambos")
+  const producaoSdrPura = vendasMes
+    .filter((v) => v.papel === "sdr")
     .reduce((s, v) => s + Number(v.valor), 0);
-  const producaoCloser = vendasMes
-    .filter((v) => v.papel === "closer" || v.papel === "ambos")
+  const producaoCloserPura = vendasMes
+    .filter((v) => v.papel === "closer")
     .reduce((s, v) => s + Number(v.valor), 0);
-  const producaoPrincipal = papelPrincipal === "sdr" ? producaoSdr : producaoCloser;
+  const producaoAmbos = vendasMes
+    .filter((v) => v.papel === "ambos")
+    .reduce((s, v) => s + Number(v.valor), 0);
+  const producaoPrincipal =
+    papelPrincipal === "sdr" ? producaoSdrPura + producaoAmbos : producaoCloserPura + producaoAmbos;
 
   const remuneracao = calcularRemuneracao(tiers, producaoPrincipal, {
-    sdr: producaoSdr,
-    closer: producaoCloser,
+    sdr: producaoSdrPura,
+    closer: producaoCloserPura,
+    ambos: producaoAmbos,
     gestao: 0,
   });
 

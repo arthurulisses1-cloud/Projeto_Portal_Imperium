@@ -73,10 +73,15 @@ export type Remuneracao = {
 // cada rank já tem as 3 colunas certas, então não tem mais tabela emprestada
 // nem tier "fantasma" pro papel cruzado — só um Fixo por mês (do tier
 // principal), e cada variável nasce da produção real daquele papel.
+//
+// Venda "ambos" (fechou sozinho, sem SDR nem Closer separado): NÃO soma as
+// duas %, aplica só a MAIOR entre pct_sdr e pct_closer (decisão do Diretor,
+// 2026-08-21) — o executivo exerceu os dois papéis na mesma venda, mas
+// recebe uma comissão só, pela % mais vantajosa daquele tier.
 export function calcularRemuneracao(
   tiers: Tier[],
   producaoPrincipal: number,
-  producoes: { sdr: number; closer: number; gestao: number }
+  producoes: { sdr: number; closer: number; ambos: number; gestao: number }
 ): Remuneracao | null {
   if (!tiers || tiers.length === 0) return null;
   const ordenados = [...tiers].sort((a, b) => a.producao_min - b.producao_min);
@@ -90,8 +95,9 @@ export function calcularRemuneracao(
     pct,
     variavel: Math.round((pct / 100) * producao),
   });
-  const sdr = parcela(chosen.pct_sdr, producoes.sdr);
-  const closer = parcela(chosen.pct_closer, producoes.closer);
+  const ambosVaiPraSdr = chosen.pct_sdr >= chosen.pct_closer;
+  const sdr = parcela(chosen.pct_sdr, producoes.sdr + (ambosVaiPraSdr ? producoes.ambos : 0));
+  const closer = parcela(chosen.pct_closer, producoes.closer + (ambosVaiPraSdr ? 0 : producoes.ambos));
   const gestao = parcela(chosen.pct_gestao, producoes.gestao);
   return {
     tierIdx: chosenIdx,
