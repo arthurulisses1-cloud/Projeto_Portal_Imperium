@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcularRemuneracao, type Tier, type Remuneracao, type Papel } from "@/lib/comissao";
 import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
+import { logErroSupabase } from "@/lib/log-erro-supabase";
 
 export type LinhaExtrato = {
   id: string;
@@ -62,20 +63,22 @@ export async function buscarRemuneracaoMes(
 ): Promise<RemuneracaoMes> {
   const papelPrincipal = PAPEL_PRINCIPAL[rank] ?? "sdr";
 
-  const { data: tiersRaw } = await supabase
+  const { data: tiersRaw, error: tiersError } = await supabase
     .from("commission_tiers")
     .select("producao_min, fixo, pct_sdr, pct_closer, pct_gestao")
     .eq("rank", rank)
     .order("ordem");
+  logErroSupabase(`buscarRemuneracaoMes: commission_tiers (rank=${rank})`, tiersError);
   const tiers = [...(tiersRaw ?? [])].sort((a, b) => a.producao_min - b.producao_min);
   if (tiers.length === 0) return VAZIO(tiers, papelPrincipal);
 
   if (role === "lider" || role === "diretor") {
-    const { data: opsPagas } = await supabase
+    const { data: opsPagas, error: opsError } = await supabase
       .from("weekly_operacoes")
       .select("id, data, valor, origem, cliente, sdr_profile_id, closer_profile_id")
       .eq("status", "PAGO")
       .gte("data", inicioMes);
+    logErroSupabase(`buscarRemuneracaoMes: weekly_operacoes PAGO (profileId=${profileId})`, opsError);
 
     let opsDoEscopo = opsPagas ?? [];
 
@@ -168,26 +171,45 @@ export async function buscarRemuneracaoMes(
     return { tiers, remuneracao, extrato, papelPrincipal, producaoPrincipal: producaoGestao, producaoTotal };
   }
 
-  const { data: vendasRaw } = await supabase
+  const { data: vendasRaw, error: vendasError } = await supabase
     .from("vendas")
-    .select("id, data, valor, origem, multiplicador, cliente, papel")
+    .select("id, data, valor, origem, multiplicador, cliente, papel, weekly_operacao_id")
     .eq("profile_id", profileId)
     .gte("data", inicioMes)
     .order("data", { ascending: false });
+  logErroSupabase(`buscarRemuneracaoMes: vendas (profileId=${profileId})`, vendasError);
   const vendasMes = vendasRaw ?? [];
 
-  const { data: opsParaCasar } = await supabase
-    .from("weekly_operacoes")
-    .select("data, valor, cliente, sdr_profile_id, closer_profile_id")
-    .eq("status", "PAGO")
-    .gte("data", inicioMes);
+  // Vínculo direto por weekly_operacao_id (gravado pelo sync desde
+  // 2026-08-21, backfillado pra vendas mais antigas na migration 0032) —
+  // só cai no casamento por data+valor+cliente pra alguma linha rara que
+  // escapou do backfill (chave colidiu, cliente sem nome, etc).
+  const idsDireto = vendasMes.map((v) => v.weekly_operacao_id).filter((x): x is string => !!x);
+  const chavesParaCasar = vendasMes
+    .filter((v) => !v.weekly_operacao_id)
+    .map((v) => chaveOperacao(v.data, Number(v.valor), v.cliente));
+
+  const [{ data: opsDireto }, { data: opsParaCasar }] = await Promise.all([
+    idsDireto.length > 0
+      ? supabase.from("weekly_operacoes").select("id, data, valor, cliente, sdr_profile_id, closer_profile_id").in("id", idsDireto)
+      : Promise.resolve({ data: [] }),
+    chavesParaCasar.length > 0
+      ? supabase.from("weekly_operacoes").select("id, data, valor, cliente, sdr_profile_id, closer_profile_id").eq("status", "PAGO").gte("data", inicioMes)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const opPorId = new Map((opsDireto ?? []).map((o) => [o.id, o]));
   const opPorChave = new Map(
     (opsParaCasar ?? []).map((o) => [chaveOperacao(o.data, Number(o.valor), o.cliente), o])
   );
+  const opDaVenda = (v: (typeof vendasMes)[number]) =>
+    v.weekly_operacao_id
+      ? opPorId.get(v.weekly_operacao_id)
+      : opPorChave.get(chaveOperacao(v.data, Number(v.valor), v.cliente));
+
   const idsContraparte = Array.from(
     new Set(
       vendasMes
-        .map((v) => opPorChave.get(chaveOperacao(v.data, Number(v.valor), v.cliente)))
+        .map(opDaVenda)
         .flatMap((o) => (o ? [o.sdr_profile_id, o.closer_profile_id] : []))
         .filter((x): x is string => !!x)
     )
@@ -218,7 +240,7 @@ export async function buscarRemuneracaoMes(
   });
 
   const extrato: LinhaExtrato[] = vendasMes.map((v) => {
-    const op = opPorChave.get(chaveOperacao(v.data, Number(v.valor), v.cliente));
+    const op = opDaVenda(v);
     const papel = (v.papel as "sdr" | "closer" | "ambos" | null) ?? "closer";
     // Sem match em weekly_operacoes (venda antiga, ou fora do que o sync
     // dessa tabela cobre): pelo menos a própria pessoa aparece no seu papel.

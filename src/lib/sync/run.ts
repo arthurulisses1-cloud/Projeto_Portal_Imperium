@@ -172,6 +172,46 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     funilLinhasGravadas += batch.length;
   }
 
+  // ---------- Aba Assinado (de novo, sem filtro): espelho pra Weekly/Forecast ----------
+  // Roda ANTES de gravar vendas de propósito: vendaRows usa a mesma
+  // chaveNatural (ver assinado.ts) pra achar o id da operação equivalente
+  // aqui e gravar o vínculo direto (vendas.weekly_operacao_id), em vez de
+  // ficar casando por data+valor+cliente na hora de exibir (frágil — nome de
+  // cliente com acentuação/espaço diferente já quebrava esse match).
+  // Upsert por chave_natural (não apaga+recria) pra preservar status_manual/
+  // observacao que o closer/líder preenche no Forecast — ver migration 0024.
+  const operacoes = await buscarOperacoes();
+  const weeklyRows = operacoes.linhas.map((l) => ({
+    chave_natural: l.chaveNatural,
+    data: l.data,
+    sdr_profile_id: l.sdrNormalizado ? nomeParaId.get(l.sdrNormalizado) ?? null : null,
+    closer_profile_id: l.closerNormalizado ? nomeParaId.get(l.closerNormalizado) ?? null : null,
+    cliente: l.cliente,
+    valor: l.valor,
+    faturamento: l.faturamento,
+    produto: l.produto,
+    origem: l.origem,
+    status: l.status,
+    synced_at: new Date().toISOString(),
+  }));
+  for (const batch of chunk(weeklyRows, 1000)) {
+    const { error } = await supabase
+      .from("weekly_operacoes")
+      .upsert(batch, { onConflict: "chave_natural" });
+    if (error) throw new Error("Erro gravando weekly_operacoes: " + error.message);
+  }
+
+  const chavesVendas = Array.from(new Set(assinado.vendas.map((v) => v.chaveNatural)));
+  const weeklyIdPorChave = new Map<string, string>();
+  for (const chavesBatch of chunk(chavesVendas, 500)) {
+    const { data: idsRows, error } = await supabase
+      .from("weekly_operacoes")
+      .select("id, chave_natural")
+      .in("chave_natural", chavesBatch);
+    if (error) throw new Error("Erro buscando ids de weekly_operacoes pra vincular vendas: " + error.message);
+    for (const row of idsRows ?? []) weeklyIdPorChave.set(row.chave_natural, row.id);
+  }
+
   const vendaRows = assinado.vendas
     .map((v) => {
       const profileId = nomeParaId.get(v.nomeNormalizado);
@@ -188,6 +228,7 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
         multiplicador: v.multiplicador,
         cliente: v.cliente,
         papel: v.papel,
+        weekly_operacao_id: weeklyIdPorChave.get(v.chaveNatural) ?? null,
         synced_at: new Date().toISOString(),
       };
     })
@@ -211,30 +252,6 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     const { error } = await supabase.from("vendas").insert(batch);
     if (error) throw new Error("Erro gravando vendas: " + error.message);
     vendasInseridas += batch.length;
-  }
-
-  // ---------- Aba Assinado (de novo, sem filtro): espelho pra Weekly/Forecast ----------
-  // Upsert por chave_natural (não apaga+recria) pra preservar status_manual/
-  // observacao que o closer/líder preenche no Forecast — ver migration 0024.
-  const operacoes = await buscarOperacoes();
-  const weeklyRows = operacoes.linhas.map((l) => ({
-    chave_natural: l.chaveNatural,
-    data: l.data,
-    sdr_profile_id: l.sdrNormalizado ? nomeParaId.get(l.sdrNormalizado) ?? null : null,
-    closer_profile_id: l.closerNormalizado ? nomeParaId.get(l.closerNormalizado) ?? null : null,
-    cliente: l.cliente,
-    valor: l.valor,
-    faturamento: l.faturamento,
-    produto: l.produto,
-    origem: l.origem,
-    status: l.status,
-    synced_at: new Date().toISOString(),
-  }));
-  for (const batch of chunk(weeklyRows, 1000)) {
-    const { error } = await supabase
-      .from("weekly_operacoes")
-      .upsert(batch, { onConflict: "chave_natural" });
-    if (error) throw new Error("Erro gravando weekly_operacoes: " + error.message);
   }
 
   const detalhe = JSON.stringify({
