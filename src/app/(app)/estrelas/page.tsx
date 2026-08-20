@@ -3,6 +3,7 @@ import { STAR_PACE, inicioSemanaISO, resultadoSemanaEstrela, type Rank } from "@
 import { RANK_LABELS } from "@/lib/labels";
 import Card from "@/components/ui/Card";
 import { getViewerContext } from "@/lib/preview";
+import { Table, Th, Td, Tr } from "@/components/ui/Table";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -138,13 +139,13 @@ export default async function EstrelasPage() {
       </div>
 
       <Card title="Semana a semana">
-        <table className="w-full text-sm">
+        <Table>
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="pb-2">Semana</th>
-              <th className="pb-2 text-right">Pagos</th>
-              <th className="pb-2 text-right">Valor</th>
-              <th className="pb-2 text-right">Resultado</th>
+            <tr>
+              <Th>Semana</Th>
+              <Th align="right">Pagos</Th>
+              <Th align="right">Valor</Th>
+              <Th align="right">Resultado</Th>
             </tr>
           </thead>
           <tbody>
@@ -153,22 +154,22 @@ export default async function EstrelasPage() {
               const fim = new Date(s.inicio + "T12:00:00");
               fim.setDate(fim.getDate() + 6);
               return (
-                <tr key={s.inicio} className={`border-t border-imperium-line ${i === 0 ? "bg-gold/5" : ""}`}>
-                  <td className="py-2 text-stone-300">
+                <Tr key={s.inicio} className={i === 0 ? "bg-gold/5" : ""}>
+                  <Td className="text-stone-300">
                     {new Date(s.inicio + "T12:00:00").toLocaleDateString("pt-BR")} –{" "}
                     {fim.toLocaleDateString("pt-BR")}
                     {i === 0 && <span className="ml-2 text-[10px] uppercase text-gold">essa semana</span>}
-                  </td>
-                  <td className="py-2 text-right text-stone-100">{s.qtd}</td>
-                  <td className="py-2 text-right text-stone-400">{s.qtd > 0 ? moeda(s.valor) : "—"}</td>
-                  <td className={`py-2 text-right font-medium ${r.cor}`}>
+                  </Td>
+                  <Td align="right" className="text-stone-100">{s.qtd}</Td>
+                  <Td align="right" className="text-stone-400">{s.qtd > 0 ? moeda(s.valor) : "—"}</Td>
+                  <Td align="right" className={`font-medium ${r.cor}`}>
                     {r.icone} {r.label}
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               );
             })}
           </tbody>
-        </table>
+        </Table>
       </Card>
     </main>
   );

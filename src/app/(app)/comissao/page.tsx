@@ -10,6 +10,7 @@ import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
 import { RANK_LABELS } from "@/lib/labels";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import Card from "@/components/ui/Card";
+import { Table, Th, Td, Tr } from "@/components/ui/Table";
 
 const MESES = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez",
@@ -160,69 +161,66 @@ export default async function ComissaoPage() {
             <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">
               Comparativo com meses anteriores
             </p>
-            <table className="w-full text-sm">
+            <Table>
               <thead>
-                <tr className="text-left text-xs text-stone-500">
-                  <th className="pb-1">Mês</th>
-                  <th className="pb-1 text-right">Produção</th>
-                  <th className="pb-1 text-right">Total</th>
+                <tr>
+                  <Th>Mês</Th>
+                  <Th align="right">Produção</Th>
+                  <Th align="right">Total</Th>
                 </tr>
               </thead>
               <tbody>
                 {historico.map((h) => (
-                  <tr key={`${h.ano}-${h.mes}`} className="border-t border-imperium-line">
-                    <td className="py-1 text-stone-300">
+                  <Tr key={`${h.ano}-${h.mes}`}>
+                    <Td className="text-stone-300">
                       {MESES[h.mes - 1]}/{h.ano}
-                    </td>
-                    <td className="py-1 text-right text-stone-400">
+                    </Td>
+                    <Td align="right" className="text-stone-400">
                       {moeda(h.producao_realizada)}
-                    </td>
-                    <td className="py-1 text-right text-stone-100">{moeda(h.total)}</td>
-                  </tr>
+                    </Td>
+                    <Td align="right" className="text-stone-100">{moeda(h.total)}</Td>
+                  </Tr>
                 ))}
               </tbody>
-            </table>
+            </Table>
           </div>
         )}
       </section>
 
       <Card title={`Tabela de comissão · ${rankLabel}`}>
-        <table className="w-full text-sm">
+        <Table>
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="pb-2">Produção mín.</th>
-              <th className="pb-2 text-right">Fixo</th>
-              <th className="pb-2 text-right">% SDR</th>
-              <th className="pb-2 text-right">% Closer</th>
-              <th className="pb-2 text-right">% Gestão</th>
+            <tr>
+              <Th>Produção mín.</Th>
+              <Th align="right">Fixo</Th>
+              <Th align="right">% SDR</Th>
+              <Th align="right">% Closer</Th>
+              <Th align="right">% Gestão</Th>
             </tr>
           </thead>
           <tbody>
             {tiers.map((t, i) => {
               const ativo = remuneracao?.tierIdx === i;
               return (
-                <tr
-                  key={t.producao_min}
-                  className={`border-t border-imperium-line ${ativo ? "bg-gold/10" : ""}`}
-                >
-                  <td className={`py-2 ${ativo ? "text-gold-bright" : "text-stone-300"}`}>
+                <Tr key={t.producao_min} active={ativo}>
+                  <Td className={ativo ? "text-gold-bright" : "text-stone-300"}>
                     {moeda(t.producao_min)} {ativo && "← você está aqui"}
-                  </td>
-                  <td className="py-2 text-right text-stone-100">{moeda(t.fixo)}</td>
-                  <td className={`py-2 text-right ${papelPrincipal === "sdr" ? "text-gold" : "text-stone-500"}`}>
+                  </Td>
+                  <Td align="right" className="text-stone-100">{moeda(t.fixo)}</Td>
+                  <Td align="right" className={papelPrincipal === "sdr" ? "text-gold" : "text-stone-500"}>
                     {t.pct_sdr}%
-                  </td>
-                  <td className={`py-2 text-right ${papelPrincipal === "closer" ? "text-gold" : "text-stone-500"}`}>
+                  </Td>
+                  <Td align="right" className={papelPrincipal === "closer" ? "text-gold" : "text-stone-500"}>
                     {t.pct_closer}%
-                  </td>
-                  <td className={`py-2 text-right ${papelPrincipal === "gestao" ? "text-gold" : "text-stone-500"}`}>
+                  </Td>
+                  <Td align="right" className={papelPrincipal === "gestao" ? "text-gold" : "text-stone-500"}>
                     {t.pct_gestao}%
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               );
             })}
           </tbody>
-        </table>
+        </Table>
         <p className="mt-2 text-[11px] text-stone-600">
           Coluna destacada em dourado = papel principal do seu cargo (define o tier). As outras duas
           rendem comissão à parte sempre que você atua nesse papel numa venda, sem mudar seu tier.
@@ -299,68 +297,66 @@ export default async function ComissaoPage() {
           Extrato do mês {role === "lider" || role === "diretor" ? "(operações do time)" : ""}
         </h2>
         {extrato.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
-              <thead>
-                <tr className="text-left text-xs text-stone-500">
-                  <th className="px-2 pb-2">Data</th>
-                  <th className="px-2 pb-2">Cliente</th>
-                  <th className="px-2 pb-2">SDR</th>
-                  <th className="px-2 pb-2">Closer</th>
-                  <th className="px-2 pb-2">Origem</th>
-                  <th className="px-2 pb-2">Papel</th>
-                  <th className="px-2 pb-2 text-right">Crédito</th>
-                  <th className="px-2 pb-2 text-right">%</th>
-                  <th className="px-2 pb-2 text-right">Comissão</th>
-                  <th className="px-2 pb-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {extrato.map((v) => {
-                  const tierAtivo = remuneracao ? tiers[remuneracao.tierIdx] : null;
-                  const pctAplicado =
-                    v.papel === "sdr"
-                      ? tierAtivo?.pct_sdr
-                      : v.papel === "closer"
-                        ? tierAtivo?.pct_closer
-                        : v.papel === "time"
-                          ? tierAtivo?.pct_gestao
-                          : v.papel === "ambos"
-                            ? Math.max(tierAtivo?.pct_sdr ?? 0, tierAtivo?.pct_closer ?? 0)
-                            : undefined;
-                  const comissaoVenda = pctAplicado !== undefined ? Math.round((pctAplicado / 100) * v.valor) : null;
-                  return (
-                    <tr key={v.id} className="border-t border-imperium-line align-top">
-                      <td className="px-2 py-2.5 whitespace-nowrap text-stone-300">
-                        {new Date(v.data + "T00:00:00").toLocaleDateString("pt-BR")}
-                      </td>
-                      <td className="px-2 py-2.5 text-stone-300">{v.cliente ?? "—"}</td>
-                      <td className="px-2 py-2.5 text-stone-400">{v.sdrNome ?? "—"}</td>
-                      <td className="px-2 py-2.5 text-stone-400">{v.closerNome ?? "—"}</td>
-                      <td className="px-2 py-2.5 text-stone-400">{v.origem ?? "—"}</td>
-                      <td className="px-2 py-2.5 whitespace-nowrap text-stone-400">{PAPEL_LABEL[v.papel] ?? v.papel}</td>
-                      <td className="px-2 py-2.5 whitespace-nowrap text-right text-stone-100">{moeda(v.valor)}</td>
-                      <td className="px-2 py-2.5 whitespace-nowrap text-right text-stone-500">
-                        {pctAplicado !== undefined ? `${pctAplicado}%` : "—"}
-                      </td>
-                      <td className="px-2 py-2.5 whitespace-nowrap text-right text-gold-bright">
-                        {comissaoVenda !== null ? moeda(comissaoVenda) : "—"}
-                      </td>
-                      <td className="px-2 py-2.5 whitespace-nowrap text-right">
-                        <a
-                          href={`#contestar`}
-                          className="text-[11px] text-stone-600 hover:text-gold hover:underline"
-                          title="Contestar essa venda"
-                        >
-                          Contestar
-                        </a>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <Table minWidth="min-w-[820px]">
+            <thead>
+              <tr>
+                <Th className="px-2">Data</Th>
+                <Th className="px-2">Cliente</Th>
+                <Th className="px-2">SDR</Th>
+                <Th className="px-2">Closer</Th>
+                <Th className="px-2">Origem</Th>
+                <Th className="px-2">Papel</Th>
+                <Th align="right" className="px-2">Crédito</Th>
+                <Th align="right" className="px-2">%</Th>
+                <Th align="right" className="px-2">Comissão</Th>
+                <Th className="px-2"></Th>
+              </tr>
+            </thead>
+            <tbody>
+              {extrato.map((v) => {
+                const tierAtivo = remuneracao ? tiers[remuneracao.tierIdx] : null;
+                const pctAplicado =
+                  v.papel === "sdr"
+                    ? tierAtivo?.pct_sdr
+                    : v.papel === "closer"
+                      ? tierAtivo?.pct_closer
+                      : v.papel === "time"
+                        ? tierAtivo?.pct_gestao
+                        : v.papel === "ambos"
+                          ? Math.max(tierAtivo?.pct_sdr ?? 0, tierAtivo?.pct_closer ?? 0)
+                          : undefined;
+                const comissaoVenda = pctAplicado !== undefined ? Math.round((pctAplicado / 100) * v.valor) : null;
+                return (
+                  <Tr key={v.id} className="align-top">
+                    <Td className="px-2 whitespace-nowrap text-stone-300">
+                      {new Date(v.data + "T00:00:00").toLocaleDateString("pt-BR")}
+                    </Td>
+                    <Td className="px-2 text-stone-300">{v.cliente ?? "—"}</Td>
+                    <Td className="px-2 text-stone-400">{v.sdrNome ?? "—"}</Td>
+                    <Td className="px-2 text-stone-400">{v.closerNome ?? "—"}</Td>
+                    <Td className="px-2 text-stone-400">{v.origem ?? "—"}</Td>
+                    <Td className="px-2 whitespace-nowrap text-stone-400">{PAPEL_LABEL[v.papel] ?? v.papel}</Td>
+                    <Td align="right" className="px-2 whitespace-nowrap text-stone-100">{moeda(v.valor)}</Td>
+                    <Td align="right" className="px-2 whitespace-nowrap text-stone-500">
+                      {pctAplicado !== undefined ? `${pctAplicado}%` : "—"}
+                    </Td>
+                    <Td align="right" className="px-2 whitespace-nowrap text-gold-bright">
+                      {comissaoVenda !== null ? moeda(comissaoVenda) : "—"}
+                    </Td>
+                    <Td align="right" className="px-2 whitespace-nowrap">
+                      <a
+                        href={`#contestar`}
+                        className="text-[11px] text-stone-600 hover:text-gold hover:underline"
+                        title="Contestar essa venda"
+                      >
+                        Contestar
+                      </a>
+                    </Td>
+                  </Tr>
+                );
+              })}
+            </tbody>
+          </Table>
         ) : (
           <p className="text-sm text-stone-500">Nenhuma venda registrada neste mês ainda.</p>
         )}

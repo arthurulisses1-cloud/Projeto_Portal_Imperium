@@ -12,6 +12,7 @@ import Card from "@/components/ui/Card";
 import { getViewerContext } from "@/lib/preview";
 import { calcularFunilMeta, mapaMetaCreditoPorTribo } from "@/lib/metas";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
+import { Table, Th, Td, Tr } from "@/components/ui/Table";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -215,28 +216,28 @@ export default async function ExercitoPage() {
       )}
 
       <Card title="Produção coletiva do mês">
-        <table className="w-full text-sm">
+        <Table>
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="pb-2">Etapa</th>
-              <th className="pb-2 text-right">Realizado</th>
-              <th className="pb-2 text-right">Meta</th>
+            <tr>
+              <Th>Etapa</Th>
+              <Th align="right">Realizado</Th>
+              <Th align="right">Meta</Th>
             </tr>
           </thead>
           <tbody>
             {FUNNEL_STAGES.map((etapa) => (
-              <tr key={etapa} className="border-t border-imperium-line">
-                <td className="py-2 text-stone-300">{FUNNEL_LABELS[etapa]}</td>
-                <td className="py-2 text-right text-stone-100">
+              <Tr key={etapa}>
+                <Td className="text-stone-300">{FUNNEL_LABELS[etapa]}</Td>
+                <Td align="right" className="text-stone-100">
                   {funilColetivo[etapa].realizado}
-                </td>
-                <td className="py-2 text-right text-stone-500">
+                </Td>
+                <Td align="right" className="text-stone-500">
                   {metaFunilExercito[etapa] !== null ? Math.round(metaFunilExercito[etapa]!) : "—"}
-                </td>
-              </tr>
+                </Td>
+              </Tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       </Card>
 
       {(tribos ?? []).map((tribo) => {

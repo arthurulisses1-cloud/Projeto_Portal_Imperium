@@ -5,6 +5,7 @@ import Card from "@/components/ui/Card";
 import ForecastRow from "./ForecastRow";
 import ForecastRowQueda from "./ForecastRowQueda";
 import { STATUS_SHEET_LABELS, STATUS_SHEET_COR, type ForecastOp } from "@/lib/forecast";
+import { Table, Th, Td } from "@/components/ui/Table";
 
 type Aba = "assinaturas" | "pagos" | "quedas";
 
@@ -177,43 +178,41 @@ export default function ForecastView({
           </div>
         }
       >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs text-stone-500">
-                <th className="pb-2 pr-3">Data</th>
-                <th className="pb-2 pr-3">Cliente</th>
-                <th className="pb-2 pr-3">SDR</th>
-                <th className="pb-2 pr-3">Closer</th>
-                <th className="pb-2 pr-3 text-right">Valor</th>
-                <th className="pb-2 pr-3">Status planilha</th>
-                {aba === "quedas" ? (
-                  <>
-                    <th className="pb-2 pr-3">Motivo</th>
-                    <th className="pb-2">Observação</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="pb-2 pr-3">Status manual</th>
-                    <th className="pb-2">Observação</th>
-                  </>
-                )}
+        <Table>
+          <thead>
+            <tr>
+              <Th className="pr-3">Data</Th>
+              <Th className="pr-3">Cliente</Th>
+              <Th className="pr-3">SDR</Th>
+              <Th className="pr-3">Closer</Th>
+              <Th align="right" className="pr-3">Valor</Th>
+              <Th className="pr-3">Status planilha</Th>
+              {aba === "quedas" ? (
+                <>
+                  <Th className="pr-3">Motivo</Th>
+                  <Th>Observação</Th>
+                </>
+              ) : (
+                <>
+                  <Th className="pr-3">Status manual</Th>
+                  <Th>Observação</Th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {opsDaAba.length === 0 && (
+              <tr>
+                <Td colSpan={8} className="text-center text-stone-600">
+                  Nada neste recorte.
+                </Td>
               </tr>
-            </thead>
-            <tbody>
-              {opsDaAba.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="py-4 text-center text-stone-600">
-                    Nada neste recorte.
-                  </td>
-                </tr>
-              )}
-              {opsDaAba.map((op) =>
-                aba === "quedas" ? <ForecastRowQueda key={op.id} op={op} /> : <ForecastRow key={op.id} op={op} />
-              )}
-            </tbody>
-          </table>
-        </div>
+            )}
+            {opsDaAba.map((op) =>
+              aba === "quedas" ? <ForecastRowQueda key={op.id} op={op} /> : <ForecastRow key={op.id} op={op} />
+            )}
+          </tbody>
+        </Table>
       </Card>
     </main>
   );

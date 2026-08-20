@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
+import { Table, Th, Td, Tr } from "@/components/ui/Table";
 
 type Totais = Record<FunilEtapa, { realizado: number; meta: number }>;
 
@@ -48,24 +49,24 @@ export default function SimuladorMeta({ totais }: { totais: Totais }) {
         <span className="text-gold">{pagosPorDia.toFixed(1)}</span> Pagos/dia necessários.
       </p>
 
-      <table className="w-full text-sm">
+      <Table>
         <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-            <th className="pb-2">Etapa</th>
-            <th className="pb-2 text-right">Necessário/dia</th>
+          <tr>
+            <Th>Etapa</Th>
+            <Th align="right">Necessário/dia</Th>
           </tr>
         </thead>
         <tbody>
           {FUNNEL_STAGES.map((stage, i) => (
-            <tr key={stage} className="border-t border-imperium-line">
-              <td className="py-2 text-stone-300">{FUNNEL_LABELS[stage]}</td>
-              <td className="py-2 text-right text-stone-100">
+            <Tr key={stage}>
+              <Td className="text-stone-300">{FUNNEL_LABELS[stage]}</Td>
+              <Td align="right" className="text-stone-100">
                 {necessarioPorDia[i] !== null ? necessarioPorDia[i]!.toFixed(1) : "—"}
-              </td>
-            </tr>
+              </Td>
+            </Tr>
           ))}
         </tbody>
-      </table>
+      </Table>
 
       <p className="mt-3 text-xs text-stone-600">
         Cálculo usa a taxa de conversão real do mês entre etapas; sem dado realizado ainda, o

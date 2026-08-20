@@ -13,6 +13,7 @@ import ConvidarForm from "./convidar-form";
 import { criarTribo, renomearTribo, atualizarLogoTribo, deixarFeedback, registrarPerda } from "./actions";
 import Card from "@/components/ui/Card";
 import { getViewerContext } from "@/lib/preview";
+import { Table, Th, Td, Tr } from "@/components/ui/Table";
 
 const MOTIVOS_PERDA = ["Preço", "Timing", "Perfil fora do ICP", "Concorrência", "Sumiu/não respondeu", "Outro"];
 
@@ -215,28 +216,28 @@ export default async function TriboPage({
           </div>
         }
       >
-        <table className="w-full text-sm">
+        <Table>
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-              <th className="pb-2">Etapa</th>
-              <th className="pb-2 text-right">Realizado</th>
-              <th className="pb-2 text-right">Meta</th>
+            <tr>
+              <Th>Etapa</Th>
+              <Th align="right">Realizado</Th>
+              <Th align="right">Meta</Th>
             </tr>
           </thead>
           <tbody>
             {FUNNEL_STAGES.map((etapa) => (
-              <tr key={etapa} className="border-t border-imperium-line">
-                <td className="py-2 text-stone-300">{FUNNEL_LABELS[etapa]}</td>
-                <td className="py-2 text-right text-stone-100">
+              <Tr key={etapa}>
+                <Td className="text-stone-300">{FUNNEL_LABELS[etapa]}</Td>
+                <Td align="right" className="text-stone-100">
                   {funilExibido[etapa].realizado}
-                </td>
-                <td className="py-2 text-right text-stone-500">
+                </Td>
+                <Td align="right" className="text-stone-500">
                   {metaFunilExibido[etapa] !== null ? Math.round(metaFunilExibido[etapa]!) : "—"}
-                </td>
-              </tr>
+                </Td>
+              </Tr>
             ))}
           </tbody>
-        </table>
+        </Table>
       </Card>
 
       <Card title="Liderados">

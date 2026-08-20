@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { salvarStatusForecast } from "@/app/(app)/forecast/actions";
 import { STATUS_SHEET_LABELS, STATUS_MANUAL_LABELS, type ForecastOp, type StatusManual } from "@/lib/forecast";
+import { Tr, Td } from "@/components/ui/Table";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -32,14 +33,14 @@ export default function ForecastRow({ op }: { op: ForecastOp }) {
   const statusTerminal = op.status === "PAGO" || op.status === "CAIU" || op.status === "DESISTIU";
 
   return (
-    <tr className="border-t border-imperium-line">
-      <td className="py-2 pr-3 text-stone-300">{dbr(op.data)}</td>
-      <td className="py-2 pr-3 text-stone-300">{op.cliente ?? "—"}</td>
-      <td className="py-2 pr-3 text-stone-400">{op.sdrNome ?? "—"}</td>
-      <td className="py-2 pr-3 text-stone-400">{op.closerNome ?? "—"}</td>
-      <td className="py-2 pr-3 text-right text-stone-100">{moeda(op.valor)}</td>
-      <td className="py-2 pr-3 text-xs uppercase text-stone-400">{STATUS_SHEET_LABELS[op.status] ?? op.status}</td>
-      <td className="py-2 pr-3">
+    <Tr>
+      <Td className="pr-3 text-stone-300">{dbr(op.data)}</Td>
+      <Td className="pr-3 text-stone-300">{op.cliente ?? "—"}</Td>
+      <Td className="pr-3 text-stone-400">{op.sdrNome ?? "—"}</Td>
+      <Td className="pr-3 text-stone-400">{op.closerNome ?? "—"}</Td>
+      <Td align="right" className="pr-3 text-stone-100">{moeda(op.valor)}</Td>
+      <Td className="pr-3 text-xs uppercase text-stone-400">{STATUS_SHEET_LABELS[op.status] ?? op.status}</Td>
+      <Td className="pr-3">
         {op.podeEditar ? (
           <select
             value={statusManual}
@@ -58,8 +59,8 @@ export default function ForecastRow({ op }: { op: ForecastOp }) {
             {op.statusManual ? STATUS_MANUAL_LABELS[op.statusManual] : "—"}
           </span>
         )}
-      </td>
-      <td className="py-2">
+      </Td>
+      <Td>
         {op.podeEditar ? (
           <div className="flex items-center gap-1.5">
             <input
@@ -80,7 +81,7 @@ export default function ForecastRow({ op }: { op: ForecastOp }) {
         ) : (
           <span className="text-xs text-stone-500">{op.observacao ?? "—"}</span>
         )}
-      </td>
-    </tr>
+      </Td>
+    </Tr>
   );
 }

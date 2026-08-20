@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { TRANSICOES, MESES_LABEL } from "@/lib/metas";
 import { salvarMeta } from "./actions";
+import { Table, Th, Td, Tr } from "@/components/ui/Table";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -204,32 +205,31 @@ export default async function MetasPage({
       {evolucao.length > 0 && (
         <section className="card-imp">
           <h2 className="kicker mb-4">Evolução mês a mês</h2>
-          <table className="w-full text-sm">
+          <Table>
             <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-stone-500">
-                <th className="pb-2">Mês</th>
-                <th className="pb-2 text-right">Meta</th>
-                <th className="pb-2 text-right">Realizado</th>
-                <th className="pb-2 text-right">%</th>
+              <tr>
+                <Th>Mês</Th>
+                <Th align="right">Meta</Th>
+                <Th align="right">Realizado</Th>
+                <Th align="right">%</Th>
               </tr>
             </thead>
             <tbody>
               {evolucao.map((e) => (
-                <tr key={e.label} className="border-t border-imperium-line">
-                  <td className="py-2 text-stone-300">{e.label}</td>
-                  <td className="py-2 text-right text-stone-500">{moeda(e.meta)}</td>
-                  <td className="py-2 text-right text-stone-100">{moeda(e.realizado)}</td>
-                  <td
-                    className={`py-2 text-right ${
-                      e.pct !== null && e.pct >= 100 ? "text-success-bright" : "text-gold-dim"
-                    }`}
+                <Tr key={e.label}>
+                  <Td className="text-stone-300">{e.label}</Td>
+                  <Td align="right" className="text-stone-500">{moeda(e.meta)}</Td>
+                  <Td align="right" className="text-stone-100">{moeda(e.realizado)}</Td>
+                  <Td
+                    align="right"
+                    className={e.pct !== null && e.pct >= 100 ? "text-success-bright" : "text-gold-dim"}
                   >
                     {e.pct !== null ? `${e.pct.toFixed(0)}%` : "—"}
-                  </td>
-                </tr>
+                  </Td>
+                </Tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         </section>
       )}
     </main>

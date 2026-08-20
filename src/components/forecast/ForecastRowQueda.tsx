@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { salvarMotivoQueda } from "@/app/(app)/forecast/actions";
 import { MOTIVO_QUEDA_LABELS, MOTIVO_QUEDA_PEDE_OBS, STATUS_SHEET_LABELS, type ForecastOp, type MotivoQueda } from "@/lib/forecast";
+import { Tr, Td } from "@/components/ui/Table";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -38,16 +39,16 @@ export default function ForecastRowQueda({ op }: { op: ForecastOp }) {
   }
 
   return (
-    <tr className="border-t border-imperium-line">
-      <td className="py-2 pr-3 text-stone-300">{dbr(op.data)}</td>
-      <td className="py-2 pr-3 text-stone-300">{op.cliente ?? "—"}</td>
-      <td className="py-2 pr-3 text-stone-400">{op.sdrNome ?? "—"}</td>
-      <td className="py-2 pr-3 text-stone-400">{op.closerNome ?? "—"}</td>
-      <td className="py-2 pr-3 text-right text-stone-100">{moeda(op.valor)}</td>
-      <td className="py-2 pr-3 text-xs uppercase text-wine-bright">{STATUS_SHEET_LABELS[op.status] ?? op.status}</td>
+    <Tr>
+      <Td className="pr-3 text-stone-300">{dbr(op.data)}</Td>
+      <Td className="pr-3 text-stone-300">{op.cliente ?? "—"}</Td>
+      <Td className="pr-3 text-stone-400">{op.sdrNome ?? "—"}</Td>
+      <Td className="pr-3 text-stone-400">{op.closerNome ?? "—"}</Td>
+      <Td align="right" className="pr-3 text-stone-100">{moeda(op.valor)}</Td>
+      <Td className="pr-3 text-xs uppercase text-wine-bright">{STATUS_SHEET_LABELS[op.status] ?? op.status}</Td>
       {op.podeEditar ? (
         <>
-          <td className="py-2 pr-3">
+          <Td className="pr-3">
             <select
               value={motivo}
               onChange={(e) => setMotivo(e.target.value as MotivoQueda | "")}
@@ -60,8 +61,8 @@ export default function ForecastRowQueda({ op }: { op: ForecastOp }) {
                 </option>
               ))}
             </select>
-          </td>
-          <td className="py-2">
+          </Td>
+          <Td>
             <div className="flex items-center gap-1.5">
               <input
                 value={obs}
@@ -78,10 +79,10 @@ export default function ForecastRowQueda({ op }: { op: ForecastOp }) {
               </button>
             </div>
             {erro && <p className="mt-1 text-[10px] text-wine-bright">{erro}</p>}
-          </td>
+          </Td>
         </>
       ) : (
-        <td className="py-2 text-xs text-stone-500" colSpan={2}>
+        <Td className="text-xs text-stone-500" colSpan={2}>
           {op.motivoQueda ? (
             <>
               {MOTIVO_QUEDA_LABELS[op.motivoQueda]}
@@ -90,8 +91,8 @@ export default function ForecastRowQueda({ op }: { op: ForecastOp }) {
           ) : (
             "—"
           )}
-        </td>
+        </Td>
       )}
-    </tr>
+    </Tr>
   );
 }
