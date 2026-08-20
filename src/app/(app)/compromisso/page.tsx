@@ -14,6 +14,11 @@ function statusLabel(row: CompromissoRow, isHoje: boolean) {
   return { texto: "Não cumprido", cor: "text-wine-bright" };
 }
 
+// Pendente é um estado mais grave que "em andamento": a pessoa nem lançou a
+// meta do dia ainda (não dá nem pra saber se vai cumprir) — precisa saltar
+// aos olhos do Closer, não ficar discreto igual aos outros status.
+const PENDENTE_BADGE = "border-wine/50 bg-wine/10 text-wine-bright";
+
 // Conta dias úteis (seg-sex) entre hoje (inclusive) e o fim do mês.
 function diasUteisRestantes(hoje: Date): number {
   const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
@@ -144,6 +149,9 @@ export default async function CompromissoPage() {
       { id: user.id, nome: `${euProfile?.full_name ?? "Você"} (você)`, avatarUrl: euProfile?.avatar_url ?? null, row: comproPorId.get(user.id) ?? null },
       ...(sdrs ?? []).map((s) => ({ id: s.id, nome: s.full_name, avatarUrl: s.avatar_url, row: comproPorId.get(s.id) ?? null })),
     ];
+    // Quem ainda não lançou hoje sobe pro topo — é o que precisa de atenção
+    // do Closer primeiro, não devia se perder no meio da lista.
+    membrosTribo.sort((a, b) => Number(!!a.row) - Number(!!b.row));
 
     agregadoTribo = { entrevistas_comp: 0, entrevistas_real: 0, assinaturas_comp: 0, assinaturas_real: 0, pagos_comp: 0, pagos_real: 0 };
     for (const m of membrosTribo) {
@@ -186,7 +194,18 @@ export default async function CompromissoPage() {
       {agregadoTribo && (
         <Card
           title="Compromisso da Tribo (hoje)"
-          right={<span className="text-xs text-stone-500">soma de todos os membros</span>}
+          right={
+            (() => {
+              const pendentes = membrosTribo.filter((m) => !m.row).length;
+              return pendentes > 0 ? (
+                <span className="rounded-full border border-wine/50 bg-wine/10 px-2 py-0.5 text-xs text-wine-bright">
+                  {pendentes} {pendentes === 1 ? "ainda não lançou" : "ainda não lançaram"}
+                </span>
+              ) : (
+                <span className="text-xs text-emerald-400">Todo mundo já lançou hoje ✓</span>
+              );
+            })()
+          }
         >
           <div className="mb-4 grid grid-cols-3 gap-4 text-sm">
             <div>
@@ -211,14 +230,15 @@ export default async function CompromissoPage() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             {membrosTribo.map((m) => {
-              const status = m.row
-                ? statusLabel(m.row, true)
-                : { texto: "Pendente", cor: "text-stone-500" };
+              const pendente = !m.row;
+              const status = m.row ? statusLabel(m.row, true) : null;
               const jaAusente = m.row?.falta;
               return (
                 <div
                   key={m.id}
-                  className="flex items-center gap-3 rounded border border-imperium-line bg-imperium-bg/40 p-3"
+                  className={`flex items-center gap-3 rounded border p-3 ${
+                    pendente ? "border-wine/40 bg-wine/5" : "border-imperium-line bg-imperium-bg/40"
+                  }`}
                 >
                   {m.avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -234,7 +254,13 @@ export default async function CompromissoPage() {
                   )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-stone-200">{m.nome}</p>
-                    <p className={`text-xs ${status.cor}`}>{status.texto}</p>
+                    {pendente ? (
+                      <span className={`mt-0.5 inline-block rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${PENDENTE_BADGE}`}>
+                        ⚠ Não lançou hoje
+                      </span>
+                    ) : (
+                      <p className={`text-xs ${status!.cor}`}>{status!.texto}</p>
+                    )}
                   </div>
                   {!jaAusente && (
                     <form action={marcarFaltaTime}>
@@ -252,6 +278,12 @@ export default async function CompromissoPage() {
       )}
 
       <Card title={profile?.role === "closer" ? "Meu compromisso individual (opcional)" : "Hoje"}>
+        {profile?.role === "closer" && (
+          <p className="mb-3 text-xs text-stone-500">
+            O que conta pro seu acompanhamento principal é o card da Tribo acima (soma do time). Só
+            preencha isso aqui se você também quiser bater uma meta pessoal no dia.
+          </p>
+        )}
         {!hojeRow ? (
           <form action={registrarCompromisso} className="space-y-4">
             <p className="text-sm text-stone-400">
