@@ -8,7 +8,7 @@ import EnquetePoll, { type EnqueteData } from "@/components/ui/EnquetePoll";
 import CentralNotificacoes from "@/components/CentralNotificacoes";
 import { IconSwords, IconShield, IconCoin } from "@/components/ui/icons";
 import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
-import { buscarMetaIndividual, buscarMetaExercito, buscarProducaoPagaExercito, buscarMetaTribo, buscarProducaoPagaTribo } from "@/lib/metas";
+import { buscarMetaIndividual, buscarMetaExercito, buscarProducaoPagaExercito, buscarMetaTribo, buscarProducaoPagaTribo, buscarMetaFirma, buscarProducaoPagaFirma } from "@/lib/metas";
 import { buscarCampanhasAtivas, type CampanhaComProgresso } from "@/lib/campanhas";
 import { FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 import { getViewerContext } from "@/lib/preview";
@@ -113,6 +113,17 @@ export default async function MuralPage() {
     ]);
   }
 
+  // Diretor ganha a mesma barra "quanto fez × quanto devia × quanto falta"
+  // que SDR/Closer/Líder já tinham no Mural, só que no nível da firma inteira.
+  let metaFirma = 0;
+  let pagoFirmaMes = 0;
+  if (meRole === "diretor") {
+    [metaFirma, pagoFirmaMes] = await Promise.all([
+      buscarMetaFirma(supabase),
+      buscarProducaoPagaFirma(supabase, inicioMes),
+    ]);
+  }
+
   // Enquetes: pré-computa opções + votos dos posts do tipo 'enquete' já carregados
   const enquetePostIds = (muralPosts ?? []).filter((p) => p.tipo === "enquete").map((p) => p.id);
   const enquetesPorPost = new Map<string, EnqueteData>();
@@ -189,6 +200,12 @@ export default async function MuralPage() {
       {meRole === "lider" && metaExercito > 0 && (
         <Card title={`Meta do mês · ${escopoCentral?.tipo === "exercito" ? "Exército" : "time"}`}>
           <BarraMeta realizado={pagoExercitoMes} meta={metaExercito} />
+        </Card>
+      )}
+
+      {meRole === "diretor" && metaFirma > 0 && (
+        <Card title="Meta do mês · Firma">
+          <BarraMeta realizado={pagoFirmaMes} meta={metaFirma} />
         </Card>
       )}
 

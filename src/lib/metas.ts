@@ -215,6 +215,31 @@ export async function buscarProducaoPagaExercito(
     .reduce((s, o) => s + Number(o.valor), 0);
 }
 
+// Meta de crédito da FIRMA inteira do mês — é só o valor bruto cadastrado
+// pelo Diretor em metas_mensais, sem nenhuma divisão (a mesma base que as
+// funções de Exército/Tribo dividem entre si).
+export async function buscarMetaFirma(supabase: SupabaseClient): Promise<number> {
+  const agora = new Date();
+  const { data: metaMes } = await supabase
+    .from("metas_mensais")
+    .select("meta_credito_total")
+    .eq("ano", agora.getFullYear())
+    .eq("mes", agora.getMonth() + 1)
+    .maybeSingle();
+  return metaMes?.meta_credito_total ?? 0;
+}
+
+// Produção PAGA do mês da FIRMA inteira — soma direta, sem filtrar por
+// Exército/Tribo (é o "Meta do mês" que o Diretor vê no Mural).
+export async function buscarProducaoPagaFirma(supabase: SupabaseClient, inicioMes: string): Promise<number> {
+  const { data: opsPagas } = await supabase
+    .from("weekly_operacoes")
+    .select("valor")
+    .eq("status", "PAGO")
+    .gte("data", inicioMes);
+  return (opsPagas ?? []).reduce((s, o) => s + Number(o.valor), 0);
+}
+
 // Mesma regra que buscarProducaoPagaExercito, mas no nível da Tribo: time
 // dono da operação = Tribo do Closer, fallback pra Tribo do SDR. Líder não
 // tem tribo_id — uma operação fechada por ele (sem Closer de Tribo nenhuma
