@@ -4,7 +4,7 @@ const TONE: Record<NonNullable<Item["tone"]>, string> = {
   gold: "text-gold-bright",
   muted: "text-stone-300",
   warn: "text-wine-bright",
-  good: "text-emerald-400",
+  good: "text-success-bright",
 };
 
 // As 3 perguntas que o executivo deveria responder num olhar: onde estou,

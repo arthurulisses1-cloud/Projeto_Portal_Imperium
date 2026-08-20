@@ -221,7 +221,7 @@ export default async function MetasPage({
                   <td className="py-2 text-right text-stone-100">{moeda(e.realizado)}</td>
                   <td
                     className={`py-2 text-right ${
-                      e.pct !== null && e.pct >= 100 ? "text-emerald-400" : "text-gold-dim"
+                      e.pct !== null && e.pct >= 100 ? "text-success-bright" : "text-gold-dim"
                     }`}
                   >
                     {e.pct !== null ? `${e.pct.toFixed(0)}%` : "—"}

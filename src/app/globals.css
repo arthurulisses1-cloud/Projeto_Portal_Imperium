@@ -17,6 +17,13 @@
   --c-wine: 143 40 52;
   --c-wine-bright: 176 58 72;
 
+  /* sucesso (bateu meta/cumpriu) e atenção (ainda não aconteceu, não é
+     falha ainda — diferente de wine, que é "já falhou/ausente") */
+  --c-success: 16 185 129;
+  --c-success-bright: 52 211 153;
+  --c-warning: 245 158 11;
+  --c-warning-bright: 251 191 36;
+
   --c-templar: 163 39 47;
   --c-maximus: 176 141 79;
 
@@ -50,6 +57,11 @@
 
   --c-wine: 122 36 49;
   --c-wine-bright: 156 48 64;
+
+  --c-success: 5 150 105;
+  --c-success-bright: 16 185 129;
+  --c-warning: 180 95 6;
+  --c-warning-bright: 217 119 6;
 
   --c-templar: 163 39 47;
   --c-maximus: 140 109 59;

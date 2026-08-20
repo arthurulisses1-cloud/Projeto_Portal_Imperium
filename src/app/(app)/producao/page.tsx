@@ -242,7 +242,7 @@ export default async function ProducaoPage({
           <p className="kicker mb-2">Valor pago no período</p>
           <p className="font-display text-2xl text-gold-bright">{moeda(valorPago)}</p>
           {pctMeta !== null && (
-            <p className="mt-1 text-xs text-emerald-400">
+            <p className="mt-1 text-xs text-success-bright">
               {pctMeta.toFixed(0)}% da meta ({moeda(metaCreditoPeriodo)})
             </p>
           )}
@@ -341,7 +341,7 @@ export default async function ProducaoPage({
                   item.tom === "alerta"
                     ? "text-wine-bright"
                     : item.tom === "elogio"
-                      ? "text-emerald-400"
+                      ? "text-success-bright"
                       : "text-stone-300"
                 }`}
               >

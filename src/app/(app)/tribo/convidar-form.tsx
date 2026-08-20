@@ -59,8 +59,8 @@ export default function ConvidarForm() {
       {erro && <p className="mt-2 text-sm text-wine-bright">{erro}</p>}
 
       {resultado && (
-        <div className="mt-4 rounded border border-emerald-500/40 bg-emerald-500/5 p-4 text-sm">
-          <p className="mb-1 text-emerald-400">Conta criada! Compartilha isso com a pessoa:</p>
+        <div className="mt-4 rounded border border-success/40 bg-success/5 p-4 text-sm">
+          <p className="mb-1 text-success-bright">Conta criada! Compartilha isso com a pessoa:</p>
           <p className="text-stone-200">
             Email: <span className="text-gold">{resultado.email}</span>
           </p>

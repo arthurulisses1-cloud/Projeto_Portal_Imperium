@@ -10,7 +10,7 @@ type CompromissoRow = StreakRow;
 
 function statusLabel(row: CompromissoRow, isHoje: boolean) {
   if (row.falta) return { texto: "Ausente", cor: "text-stone-500" };
-  if (cumpriuCompromisso(row)) return { texto: "Cumprido", cor: "text-emerald-400" };
+  if (cumpriuCompromisso(row)) return { texto: "Cumprido", cor: "text-success-bright" };
   if (isHoje) return { texto: "Em andamento", cor: "text-gold" };
   return { texto: "Não cumprido", cor: "text-wine-bright" };
 }
@@ -18,7 +18,7 @@ function statusLabel(row: CompromissoRow, isHoje: boolean) {
 // Pendente é um estado mais grave que "em andamento": a pessoa nem lançou a
 // meta do dia ainda (não dá nem pra saber se vai cumprir) — precisa saltar
 // aos olhos do Closer, não ficar discreto igual aos outros status.
-const PENDENTE_BADGE = "border-wine/50 bg-wine/10 text-wine-bright";
+const PENDENTE_BADGE = "border-warning/50 bg-warning/10 text-warning-bright";
 
 // Conta dias úteis (seg-sex) entre hoje (inclusive) e o fim do mês.
 function diasUteisRestantes(hoje: Date): number {
@@ -201,11 +201,11 @@ export default async function CompromissoPage() {
             (() => {
               const pendentes = membrosTribo.filter((m) => !m.row).length;
               return pendentes > 0 ? (
-                <span className="rounded-full border border-wine/50 bg-wine/10 px-2 py-0.5 text-xs text-wine-bright">
+                <span className="rounded-full border border-warning/50 bg-warning/10 px-2 py-0.5 text-xs text-warning-bright">
                   {pendentes} {pendentes === 1 ? "ainda não lançou" : "ainda não lançaram"}
                 </span>
               ) : (
-                <span className="text-xs text-emerald-400">Todo mundo já lançou hoje ✓</span>
+                <span className="text-xs text-success-bright">Todo mundo já lançou hoje ✓</span>
               );
             })()
           }
@@ -240,7 +240,7 @@ export default async function CompromissoPage() {
                 <div
                   key={m.id}
                   className={`flex items-center gap-3 rounded border p-3 ${
-                    pendente ? "border-wine/40 bg-wine/5" : "border-imperium-line bg-imperium-bg/40"
+                    pendente ? "border-warning/40 bg-warning/5" : "border-imperium-line bg-imperium-bg/40"
                   }`}
                 >
                   {m.avatarUrl ? (
@@ -412,19 +412,19 @@ export default async function CompromissoPage() {
                     <div className="mt-1.5 flex gap-4 text-xs text-stone-500">
                       <span>
                         Entrevistas{" "}
-                        <span className={row.entrevistas_real >= row.entrevistas_comp ? "text-emerald-400" : "text-stone-400"}>
+                        <span className={row.entrevistas_real >= row.entrevistas_comp ? "text-success-bright" : "text-stone-400"}>
                           {row.entrevistas_real}/{row.entrevistas_comp}
                         </span>
                       </span>
                       <span>
                         Assinaturas{" "}
-                        <span className={row.assinaturas_real >= row.assinaturas_comp ? "text-emerald-400" : "text-stone-400"}>
+                        <span className={row.assinaturas_real >= row.assinaturas_comp ? "text-success-bright" : "text-stone-400"}>
                           {row.assinaturas_real}/{row.assinaturas_comp}
                         </span>
                       </span>
                       <span>
                         Pagos{" "}
-                        <span className={row.pagos_real >= row.pagos_comp ? "text-emerald-400" : "text-stone-400"}>
+                        <span className={row.pagos_real >= row.pagos_comp ? "text-success-bright" : "text-stone-400"}>
                           {row.pagos_real}/{row.pagos_comp}
                         </span>
                       </span>

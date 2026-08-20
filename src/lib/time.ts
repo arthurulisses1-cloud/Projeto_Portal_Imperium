@@ -67,7 +67,7 @@ export async function buscarFunilColetivo(supabase: SupabaseClient, profileIds: 
 }
 
 export const STATUS_COR: Record<string, string> = {
-  cumprido: "text-emerald-400",
+  cumprido: "text-success-bright",
   andamento: "text-amber-400",
   nao_cumprido: "text-red-400",
   ausente: "text-stone-500",

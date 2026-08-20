@@ -38,6 +38,14 @@ const config = {
           DEFAULT: withOpacity("--c-wine"),
           bright: withOpacity("--c-wine-bright"),
         },
+        success: {
+          DEFAULT: withOpacity("--c-success"),
+          bright: withOpacity("--c-success-bright"),
+        },
+        warning: {
+          DEFAULT: withOpacity("--c-warning"),
+          bright: withOpacity("--c-warning-bright"),
+        },
         templar: withOpacity("--c-templar"),
         maximus: withOpacity("--c-maximus"),
         stone: {

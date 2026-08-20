@@ -64,7 +64,7 @@ export default async function TarefasPage() {
                   <div className="flex shrink-0 gap-2">
                     <form action={concluirFollowup}>
                       <input type="hidden" name="id" value={t.id} />
-                      <button type="submit" className="text-xs text-emerald-400 hover:underline">
+                      <button type="submit" className="text-xs text-success-bright hover:underline">
                         Concluir
                       </button>
                     </form>

@@ -146,7 +146,7 @@ export default async function ComissaoPage() {
                   próximo tier (+{moeda(proximo.ganhoTotal)} na comissão total).
                 </>
               )}
-              {!proximo && <span className="ml-1 text-emerald-400">Você já está no tier máximo.</span>}
+              {!proximo && <span className="ml-1 text-success-bright">Você já está no tier máximo.</span>}
             </p>
           </>
         ) : (
@@ -270,7 +270,7 @@ export default async function ComissaoPage() {
                 <span
                   className={`absolute right-2 top-2 rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide ${
                     m.alcancado
-                      ? "border-emerald-500/50 bg-imperium-bg/80 text-emerald-400"
+                      ? "border-success/50 bg-imperium-bg/80 text-success-bright"
                       : m.elegivel
                         ? "border-gold/50 bg-imperium-bg/80 text-gold"
                         : "border-imperium-line-strong bg-imperium-bg/80 text-stone-400"
@@ -397,7 +397,7 @@ export default async function ComissaoPage() {
               <li key={c.id} className="border-t border-imperium-line pt-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-stone-300">{c.referencia ?? "Sem referência"}</span>
-                  <span className={c.status === "aberto" ? "text-gold" : "text-emerald-400"}>
+                  <span className={c.status === "aberto" ? "text-gold" : "text-success-bright"}>
                     {STATUS_LABELS[c.status]}
                   </span>
                 </div>

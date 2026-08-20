@@ -46,7 +46,7 @@ export default async function ValidacaoPage() {
                       type="submit"
                       name="status"
                       value="aprovado"
-                      className="rounded border border-emerald-500/50 px-3 py-1 text-xs text-emerald-400 hover:bg-emerald-500/10"
+                      className="rounded border border-success/50 px-3 py-1 text-xs text-success-bright hover:bg-success/10"
                     >
                       Aprovar e promover
                     </button>
@@ -96,7 +96,7 @@ export default async function ValidacaoPage() {
                       type="submit"
                       name="status"
                       value="aprovado"
-                      className="rounded border border-emerald-500/50 px-3 py-1 text-xs text-emerald-400 hover:bg-emerald-500/10"
+                      className="rounded border border-success/50 px-3 py-1 text-xs text-success-bright hover:bg-success/10"
                     >
                       Aprovar
                     </button>

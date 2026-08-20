@@ -33,7 +33,7 @@ export default function SincronizarPlanilha({ compact = false }: { compact?: boo
         </button>
         {erro && <p className="mt-1.5 text-[11px] text-wine-bright">{erro}</p>}
         {resultado && (
-          <p className="mt-1.5 text-[11px] text-emerald-400">
+          <p className="mt-1.5 text-[11px] text-success-bright">
             {resultado.funilLinhasGravadas} linhas de funil, {resultado.vendasInseridas} vendas
             {resultado.naoEncontrados.length > 0 && (
               <span className="text-gold-dim"> · {resultado.naoEncontrados.length} nome(s) não bateram</span>
@@ -60,7 +60,7 @@ export default function SincronizarPlanilha({ compact = false }: { compact?: boo
 
       {resultado && (
         <div className="mt-3 space-y-1 text-sm">
-          <p className="text-emerald-400">
+          <p className="text-success-bright">
             Sincronizado: {resultado.funilLinhasGravadas} linhas de funil, {resultado.vendasInseridas}{" "}
             vendas.
           </p>

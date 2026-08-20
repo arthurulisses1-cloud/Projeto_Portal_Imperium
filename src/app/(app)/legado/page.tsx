@@ -311,7 +311,7 @@ export default async function LegadoPage({
                     <li
                       key={i}
                       className={`text-xs ${
-                        item.tom === "alerta" ? "text-wine-bright" : item.tom === "elogio" ? "text-emerald-400" : "text-stone-300"
+                        item.tom === "alerta" ? "text-wine-bright" : item.tom === "elogio" ? "text-success-bright" : "text-stone-300"
                       }`}
                     >
                       {item.texto}
@@ -361,7 +361,7 @@ export default async function LegadoPage({
                   type="submit"
                   className={`w-full rounded border px-3 py-1.5 text-xs ${
                     inativo
-                      ? "border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10"
+                      ? "border-success/50 text-success-bright hover:bg-success/10"
                       : "border-wine/50 text-wine-bright hover:bg-wine/10"
                   }`}
                 >

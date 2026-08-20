@@ -64,7 +64,7 @@ export default async function TrilhaPage() {
                 {travado ? (
                   <span className="text-xs text-stone-600">Bloqueado</span>
                 ) : feito ? (
-                  <span className="text-xs text-emerald-400">Concluído</span>
+                  <span className="text-xs text-success-bright">Concluído</span>
                 ) : (
                   <form action={marcarModuloConcluido}>
                     <input type="hidden" name="modulo_id" value={m.id} />

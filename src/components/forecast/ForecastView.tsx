@@ -104,7 +104,7 @@ export default function ForecastView({
       <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
         <Card>
           <p className="kicker mb-2">Já pago</p>
-          <p className="font-display text-xl text-emerald-400">{moeda(resumo.pago)}</p>
+          <p className="font-display text-xl text-success-bright">{moeda(resumo.pago)}</p>
         </Card>
         <Card>
           <p className="kicker mb-2">Certo pra pagar</p>

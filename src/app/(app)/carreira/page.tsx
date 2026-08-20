@@ -227,7 +227,7 @@ export default async function CarreiraPage() {
                 <span
                   className={`rounded-full border px-3 py-1.5 text-xs uppercase ${
                     promoRequestAtual.status === "aprovado"
-                      ? "border-emerald-500/50 text-emerald-400"
+                      ? "border-success/50 text-success-bright"
                       : "border-gold/50 text-gold"
                   }`}
                 >
@@ -290,20 +290,20 @@ export default async function CarreiraPage() {
                   <div
                     key={item.id}
                     className={`rounded border p-3 ${
-                      cumprido ? "border-emerald-500/30 bg-emerald-500/5" : "border-imperium-line bg-imperium-bg/40"
+                      cumprido ? "border-success/30 bg-success/5" : "border-imperium-line bg-imperium-bg/40"
                     }`}
                   >
                     <div className="mb-1.5 flex items-start justify-between gap-2">
                       <p className="text-sm text-stone-300">{item.texto}</p>
                       <span
                         className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${
-                          cumprido ? "bg-emerald-400" : evidencia?.status === "pendente" ? "bg-gold" : "bg-stone-600"
+                          cumprido ? "bg-success-bright" : evidencia?.status === "pendente" ? "bg-gold" : "bg-stone-600"
                         }`}
                       />
                     </div>
 
                     {item.tipo === "strikes" && (
-                      <p className={`text-xs ${semStrikes ? "text-emerald-400" : "text-wine-bright"}`}>
+                      <p className={`text-xs ${semStrikes ? "text-success-bright" : "text-wine-bright"}`}>
                         {strikesRecentesTotal ?? 0} strike(s) nos últimos {item.dias_strikes} dias
                       </p>
                     )}
@@ -313,12 +313,12 @@ export default async function CarreiraPage() {
                         {auto.meta !== null && auto.atual !== null && (
                           <div className="mb-1 h-1 overflow-hidden rounded-full bg-imperium-line">
                             <div
-                              className={`h-full rounded-full ${auto.cumprido ? "bg-emerald-400" : "bg-gold"}`}
+                              className={`h-full rounded-full ${auto.cumprido ? "bg-success-bright" : "bg-gold"}`}
                               style={{ width: `${Math.min(100, (auto.atual / auto.meta) * 100)}%` }}
                             />
                           </div>
                         )}
-                        <p className={`text-[11px] ${auto.cumprido ? "text-emerald-400" : "text-stone-500"}`}>
+                        <p className={`text-[11px] ${auto.cumprido ? "text-success-bright" : "text-stone-500"}`}>
                           {auto.detalhe}
                         </p>
                       </div>
@@ -331,7 +331,7 @@ export default async function CarreiraPage() {
                             <span
                               className={`text-[11px] uppercase ${
                                 evidencia.status === "aprovado"
-                                  ? "text-emerald-400"
+                                  ? "text-success-bright"
                                   : evidencia.status === "rejeitado"
                                     ? "text-wine-bright"
                                     : "text-gold"
@@ -454,7 +454,7 @@ export default async function CarreiraPage() {
                 {livroEscolhido.titulo} — <span className="text-stone-400">{livroEscolhido.autor}</span>
               </p>
               {escolha?.apresentado ? (
-                <p className="mt-2 text-emerald-400">Apresentação pública concluída</p>
+                <p className="mt-2 text-success-bright">Apresentação pública concluída</p>
               ) : (
                 <form action={marcarApresentado} className="mt-2">
                   <input type="hidden" name="escolha_id" value={escolha!.id} />

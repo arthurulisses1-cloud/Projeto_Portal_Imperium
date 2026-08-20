@@ -53,7 +53,7 @@ export default async function CampanhasPage() {
               <li key={c.id} className="flex items-center justify-between border-t border-imperium-line pt-2 text-sm first:border-0 first:pt-0">
                 <span className="text-stone-200">
                   {c.titulo}{" "}
-                  {idsAtivas.has(c.id) && <span className="ml-1 text-[10px] uppercase text-emerald-400">ativa</span>}
+                  {idsAtivas.has(c.id) && <span className="ml-1 text-[10px] uppercase text-success-bright">ativa</span>}
                 </span>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-stone-500">

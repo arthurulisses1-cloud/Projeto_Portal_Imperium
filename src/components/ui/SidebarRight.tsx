@@ -353,11 +353,11 @@ export default async function SidebarRight({ userId }: { userId: string }) {
               Faltam <span className="text-gold">{moeda(proximo.faltaProducao)}</span> pro próximo
               tier.
               <br />
-              Se alcançar, <span className="text-emerald-400">+{moeda(proximo.ganhoTotal)}</span> na
+              Se alcançar, <span className="text-success-bright">+{moeda(proximo.ganhoTotal)}</span> na
               comissão.
             </p>
           ) : (
-            <p className="mt-1 text-center text-xs text-emerald-400">Tier máximo atingido.</p>
+            <p className="mt-1 text-center text-xs text-success-bright">Tier máximo atingido.</p>
           )}
         </div>
       )}

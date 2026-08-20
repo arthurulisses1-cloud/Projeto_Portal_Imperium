@@ -49,7 +49,7 @@ export default function BarraMeta({ realizado, meta }: { realizado: number; meta
           title="Onde você deveria estar hoje"
         />
       </div>
-      <p className={`mt-3 text-sm ${adiantado ? "text-emerald-400" : "text-wine-bright"}`}>{analise}</p>
+      <p className={`mt-3 text-sm ${adiantado ? "text-success-bright" : "text-warning-bright"}`}>{analise}</p>
     </div>
   );
 }

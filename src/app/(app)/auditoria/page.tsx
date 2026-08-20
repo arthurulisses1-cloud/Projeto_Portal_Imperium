@@ -10,10 +10,10 @@ const TRANSICAO_LABEL: Record<string, string> = {
 
 const STATUS_COR: Record<string, string> = {
   pendente: "text-gold",
-  aprovado: "text-emerald-400",
+  aprovado: "text-success-bright",
   rejeitado: "text-wine-bright",
   aberto: "text-gold",
-  resolvido: "text-emerald-400",
+  resolvido: "text-success-bright",
 };
 
 type EventoAuditoria = {

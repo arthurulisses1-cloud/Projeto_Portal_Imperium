@@ -48,8 +48,8 @@ export default function SimuladorVendaRapida({
             {mudaTier ? (
               <>
                 {" "}
-                — você <span className="text-emerald-400">sobe de tier</span>, ganhando{" "}
-                <span className="text-emerald-400">+{moeda(ganho)}</span> na comissão total do mês.
+                — você <span className="text-success-bright">sobe de tier</span>, ganhando{" "}
+                <span className="text-success-bright">+{moeda(ganho)}</span> na comissão total do mês.
               </>
             ) : (
               <> — ainda no mesmo tier, comissão total sobe pra {moeda(comValor.total)}.</>
