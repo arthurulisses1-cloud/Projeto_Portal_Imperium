@@ -1,6 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
-import { STAR_PACE, type Rank } from "@/lib/carreira";
+import {
+  STAR_PACE,
+  NEXT_RANK,
+  NEXT_TRANSICAO,
+  avaliarCriterioAutomatico,
+  buscarContextoAvaliacaoCriterios,
+  type Rank,
+} from "@/lib/carreira";
 import { lookupComissao, proximoTier } from "@/lib/comissao";
 import { buscarProgressoMarcos } from "@/lib/marcos";
 import { paraRomano } from "@/lib/numerals";
@@ -28,6 +35,48 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   const rank = profile.rank as Rank;
   const pace = STAR_PACE[rank] ?? STAR_PACE.legionario;
   const totalEstrelas = pace.estrelas || 6;
+
+  // Resumo do Plano de Carreira (SDR/Closer só — líder não tem "próximo
+  // rank" no mesmo sentido) — mesma avaliação de /carreira, pra nunca dar
+  // número diferente entre a lateral e a tela cheia.
+  let carreiraResumo: { proximoRank: Rank; ok: number; total: number } | null = null;
+  if (profile.role === "sdr" || profile.role === "closer") {
+    const proximoRank = NEXT_RANK[rank];
+    const transicao = NEXT_TRANSICAO[rank];
+    if (proximoRank && transicao) {
+      const [{ data: criterios }, { count: strikesTotal }, { data: escolhaLivro }] = await Promise.all([
+        supabase.from("promotion_criteria").select("id, bloco, texto, tipo, target_value, dias_strikes, ordem").eq("transicao", transicao),
+        supabase.from("strikes").select("id", { count: "exact", head: true }).eq("profile_id", userId),
+        supabase.from("biblioteca_escolhas").select("apresentado").eq("profile_id", userId).limit(1).maybeSingle(),
+      ]);
+      if (criterios && criterios.length > 0) {
+        const ctx = await buscarContextoAvaliacaoCriterios(
+          supabase,
+          userId,
+          profile.stars_total,
+          escolhaLivro ? !!escolhaLivro.apresentado : null
+        );
+        const { data: evidenciasAprovadas } = await supabase
+          .from("promotion_evidence")
+          .select("criterio_id")
+          .eq("profile_id", userId)
+          .eq("status", "aprovado")
+          .in("criterio_id", criterios.map((c) => c.id));
+        const aprovadosSet = new Set((evidenciasAprovadas ?? []).map((e) => e.criterio_id));
+
+        let ok = 0;
+        for (const c of criterios) {
+          if (c.tipo === "strikes") {
+            if ((strikesTotal ?? 0) === 0) ok++;
+            continue;
+          }
+          const auto = avaliarCriterioAutomatico(c, ctx);
+          if (auto ? auto.cumprido : aprovadosSet.has(c.id)) ok++;
+        }
+        carreiraResumo = { proximoRank, ok, total: criterios.length };
+      }
+    }
+  }
 
   const { data: quotes } = await supabase.from("sage_quotes").select("texto, fonte").eq("ativo", true);
   const dayOfYear = Math.floor(
@@ -201,6 +250,28 @@ export default async function SidebarRight({ userId }: { userId: string }) {
           ))}
         </p>
       </div>
+
+      {carreiraResumo && (
+        <a
+          href="/carreira"
+          className="block rounded border border-imperium-line p-3 transition hover:border-gold/50 hover:bg-gold/5"
+        >
+          <div className="flex items-center justify-between">
+            <p className="kicker">Plano de Carreira</p>
+            <span className="text-[10px] text-gold">ver tudo →</span>
+          </div>
+          <p className="mt-1.5 text-xs text-stone-300">
+            Rumo a <span className="text-gold-bright">{RANK_LABELS[carreiraResumo.proximoRank]}</span>:{" "}
+            <span className="text-gold-bright">{carreiraResumo.ok}</span>/{carreiraResumo.total} critérios
+          </p>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-imperium-line">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-gold to-gold-bright"
+              style={{ width: `${(carreiraResumo.ok / carreiraResumo.total) * 100}%` }}
+            />
+          </div>
+        </a>
+      )}
 
       {quote && (
         <div className="border-t border-imperium-line pt-4 text-center">

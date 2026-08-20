@@ -48,3 +48,162 @@ export const RANK_SDR_EQUIVALENTE: Partial<Record<Rank, Rank>> = {
   tribuno: "legionario",
   pretor: "centuriao",
 };
+
+export type CriterioPromocao = {
+  id: string;
+  bloco: number;
+  texto: string;
+  tipo: string;
+  target_value: number | null;
+  dias_strikes: number | null;
+  ordem: number;
+};
+
+export type AvaliacaoCriterio = {
+  automatico: boolean;
+  cumprido: boolean;
+  atual: number | null;
+  meta: number | null;
+  detalhe: string;
+};
+
+export type ContextoAvaliacaoCriterios = {
+  starsTotal: number;
+  entrevistasPorDia: number;
+  mesesFechados: { mes: string; valor: number }[];
+  vendaSozinho: boolean;
+  livroApresentado: boolean | null; // null = nem escolheu livro ainda
+};
+
+function moedaSimples(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+}
+
+// O que o sistema JÁ CONSEGUE verificar sozinho, sem precisar de input da
+// gestão — casado com texto EXATO dos critérios cadastrados (ver
+// supabase/migrations, promotion_criteria). Qualquer coisa fora desse
+// reconhecimento (aulas da trilha — ainda sem dado —, Top 1 do banco, lives,
+// avaliação do líder, match sales) cai no fluxo de solicitação de evidência
+// (ver /carreira e promotion_evidence). Compartilhado entre /carreira (visão
+// completa) e SidebarRight (resumo), pra nunca dar números diferentes.
+export function avaliarCriterioAutomatico(
+  criterio: CriterioPromocao,
+  ctx: ContextoAvaliacaoCriterios
+): AvaliacaoCriterio | null {
+  const { texto, target_value } = criterio;
+
+  if (/estrelas acumuladas/i.test(texto) && target_value) {
+    return {
+      automatico: true,
+      cumprido: ctx.starsTotal >= target_value,
+      atual: ctx.starsTotal,
+      meta: target_value,
+      detalhe: `${ctx.starsTotal}/${target_value} estrelas`,
+    };
+  }
+
+  const matchEntrevistas = texto.match(/média de ([\d,.]+) entrevistas\/dia/i);
+  if (matchEntrevistas) {
+    const alvo = Number(matchEntrevistas[1].replace(",", "."));
+    const atualArred = Math.round(ctx.entrevistasPorDia * 10) / 10;
+    return {
+      automatico: true,
+      cumprido: ctx.entrevistasPorDia >= alvo,
+      atual: atualArred,
+      meta: alvo,
+      detalhe: `${atualArred.toString().replace(".", ",")}/${alvo.toString().replace(".", ",")} entrevistas por dia, últimos 30 dias`,
+    };
+  }
+
+  if (/sem mês zerado/i.test(texto)) {
+    const zerados = ctx.mesesFechados.filter((m) => m.valor <= 0).length;
+    return {
+      automatico: true,
+      cumprido: ctx.mesesFechados.length > 0 && zerados === 0,
+      atual: ctx.mesesFechados.length - zerados,
+      meta: ctx.mesesFechados.length,
+      detalhe: `${ctx.mesesFechados.length - zerados}/${ctx.mesesFechados.length} últimos meses fechados com produção`,
+    };
+  }
+
+  const matchPiso = texto.match(/sem mês abaixo de r\$?\s?([\d.,]+)k/i);
+  if (matchPiso) {
+    const piso = Number(matchPiso[1].replace(".", "").replace(",", ".")) * 1000;
+    const abaixo = ctx.mesesFechados.filter((m) => m.valor < piso).length;
+    return {
+      automatico: true,
+      cumprido: ctx.mesesFechados.length > 0 && abaixo === 0,
+      atual: ctx.mesesFechados.length - abaixo,
+      meta: ctx.mesesFechados.length,
+      detalhe: `${ctx.mesesFechados.length - abaixo}/${ctx.mesesFechados.length} últimos meses acima de ${moedaSimples(piso)}`,
+    };
+  }
+
+  if (/venda sozinho/i.test(texto)) {
+    return {
+      automatico: true,
+      cumprido: ctx.vendaSozinho,
+      atual: ctx.vendaSozinho ? 1 : 0,
+      meta: 1,
+      detalhe: ctx.vendaSozinho
+        ? "Já fechou pelo menos 1 venda sozinho(a)"
+        : "Ainda não fechou nenhuma venda sozinho(a) (SDR + Closer na mesma operação)",
+    };
+  }
+
+  if (/livro.*apresenta/i.test(texto)) {
+    if (ctx.livroApresentado === null) return null; // ainda não escolheu livro — deixa cair no card de Biblioteca
+    return {
+      automatico: true,
+      cumprido: ctx.livroApresentado,
+      atual: ctx.livroApresentado ? 1 : 0,
+      meta: 1,
+      detalhe: ctx.livroApresentado ? "Apresentação pública concluída" : "Livro escolhido, apresentação pendente (ver card Biblioteca)",
+    };
+  }
+
+  return null;
+}
+
+// Busca tudo que avaliarCriterioAutomatico precisa pra UMA pessoa — usado
+// tanto em /carreira quanto no resumo da SidebarRight.
+export async function buscarContextoAvaliacaoCriterios(
+  supabase: import("@supabase/supabase-js").SupabaseClient,
+  profileId: string,
+  starsTotal: number,
+  livroApresentado: boolean | null
+): Promise<ContextoAvaliacaoCriterios> {
+  const hoje = new Date();
+  const trintaDiasAtras = new Date();
+  trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
+  const inicioJanela = new Date(hoje.getFullYear(), hoje.getMonth() - 4, 1);
+
+  const [{ data: entrevistasRows }, { data: vendasHistorico }] = await Promise.all([
+    supabase
+      .from("producao_funil")
+      .select("realizado")
+      .eq("profile_id", profileId)
+      .eq("etapa", "entrevistas")
+      .gte("data", trintaDiasAtras.toISOString().slice(0, 10)),
+    supabase.from("vendas").select("data, valor, papel").eq("profile_id", profileId).gte("data", inicioJanela.toISOString().slice(0, 10)),
+  ]);
+
+  const totalEntrevistas30d = (entrevistasRows ?? []).reduce((s: number, r: { realizado: number }) => s + r.realizado, 0);
+  const entrevistasPorDia = totalEntrevistas30d / 30;
+
+  const producaoPorMes = new Map<string, number>();
+  let vendaSozinho = false;
+  for (const v of vendasHistorico ?? []) {
+    const mes = (v.data as string).slice(0, 7);
+    producaoPorMes.set(mes, (producaoPorMes.get(mes) ?? 0) + Number(v.valor));
+    if (v.papel === "ambos") vendaSozinho = true;
+  }
+  const mesAtualStr = hoje.toISOString().slice(0, 7);
+  const mesesFechados = Array.from(producaoPorMes.entries())
+    .filter(([mes]) => mes !== mesAtualStr)
+    .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+    .slice(-3)
+    .map(([mes, valor]) => ({ mes, valor }));
+
+  return { starsTotal, entrevistasPorDia, mesesFechados, vendaSozinho, livroApresentado };
+}
