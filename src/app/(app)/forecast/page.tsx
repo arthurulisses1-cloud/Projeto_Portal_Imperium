@@ -134,8 +134,11 @@ export default async function ForecastPage() {
     };
   });
 
-  // Escopo por papel: closer só vê os próprios (como closer); líder só vê o
-  // que é DO PRÓPRIO EXÉRCITO; Diretor vê tudo.
+  // Escopo por papel: closer vê onde ele é Closer OU SDR da operação (o SDR
+  // também é comissionado pela venda, então precisa acompanhar o status
+  // dela mesmo sem ter fechado — só não pode EDITAR, isso continua exclusivo
+  // de quem é o Closer, ver podeEditarOperacao); líder só vê o que é DO
+  // PRÓPRIO EXÉRCITO; Diretor vê tudo.
   //
   // "Do próprio Exército" segue a mesma regra de atribuição de time do resto
   // do sistema (Weekly, Guerra Civil): o time DONO da operação é o do
@@ -146,7 +149,10 @@ export default async function ForecastPage() {
   // com um SDR seu envolvido, porque o crédito não é do time dele.
   let ops: ForecastOp[];
   if (meRole === "closer") {
-    ops = todasOps.filter((o) => o.closerId === meId);
+    ops = (opRows ?? [])
+      .map((o, i) => ({ raw: o, computed: todasOps[i] }))
+      .filter(({ raw }) => raw.closer_profile_id === meId || raw.sdr_profile_id === meId)
+      .map(({ computed }) => computed);
   } else if (meRole === "lider" && exercitoLideradoId) {
     ops = (opRows ?? [])
       .map((o, i) => ({ raw: o, computed: todasOps[i] }))
