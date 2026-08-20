@@ -46,11 +46,16 @@ export default async function ExercitoPage() {
     .eq("exercito_id", exercito.id);
 
   const triboIds = (tribos ?? []).map((t) => t.id);
+  // Só role="sdr" — o Closer da Tribo também tem tribo_id apontando pra ela
+  // mesma (é membro dela, além de líder), então sem esse filtro ele aparecia
+  // duplicado: uma vez como Closer (via tribos.closer_id) e outra como "SDR"
+  // (via tribo_id), com o mesmo valor de Pagos nos dois cards.
   const { data: sdrs } = triboIds.length
     ? await supabase
         .from("profiles")
         .select("id, full_name, tribo_id")
         .in("tribo_id", triboIds)
+        .eq("role", "sdr")
     : { data: [] };
 
   const todosIds = [
@@ -234,7 +239,7 @@ export default async function ExercitoPage() {
 
       {(tribos ?? []).map((tribo) => {
         const closer = tribo.closer as unknown as { id: string; full_name: string } | null;
-        const sdrsDaTribo = (sdrs ?? []).filter((s) => s.tribo_id === tribo.id);
+        const sdrsDaTribo = (sdrs ?? []).filter((s) => s.tribo_id === tribo.id && s.id !== closer?.id);
         return (
           <Card key={tribo.id} title={tribo.nome}>
             <div className="grid gap-3 sm:grid-cols-2">
