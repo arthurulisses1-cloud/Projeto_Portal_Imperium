@@ -219,19 +219,7 @@ export default async function MuralPage() {
         </Card>
       </div>
 
-      {campanhasAtivas.length > 0 && (
-        <div className="space-y-2">
-          <CampanhasCard campanhas={campanhasAtivas} />
-          {(meRole === "lider" || meRole === "diretor") && (
-            <a
-              href="/campanhas"
-              className="block rounded border border-imperium-line px-3 py-2 text-center text-xs text-gold transition hover:border-gold hover:bg-gold/10"
-            >
-              + Gerenciar campanhas
-            </a>
-          )}
-        </div>
-      )}
+      {campanhasAtivas.length > 0 && <CampanhasCard campanhas={campanhasAtivas} />}
 
       {ehExecutivo && (
         <Card title="Compromisso de hoje">
@@ -278,9 +266,23 @@ export default async function MuralPage() {
       )}
 
       {meRole !== "sdr" && (
-        <Card title="Publicar no Mural">
-          <MuralForm podeAviso={meRole === "lider" || meRole === "diretor"} podeEnquete={meRole === "diretor"} />
-        </Card>
+        <details className="card-imp group">
+          <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
+            <span>🛠 Publicar no Mural</span>
+            <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
+          </summary>
+          <div className="mt-4">
+            <MuralForm podeAviso={meRole === "lider" || meRole === "diretor"} podeEnquete={meRole === "diretor"} />
+            {(meRole === "lider" || meRole === "diretor") && (
+              <a
+                href="/campanhas"
+                className="mt-3 block rounded border border-imperium-line px-3 py-2 text-center text-xs text-gold transition hover:border-gold hover:bg-gold/10"
+              >
+                + Gerenciar campanhas
+              </a>
+            )}
+          </div>
+        </details>
       )}
 
       <Card title="Avisos e Reconhecimentos">

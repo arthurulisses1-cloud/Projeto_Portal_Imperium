@@ -79,6 +79,25 @@ function moedaSimples(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
+// Segunda-feira da semana de uma data, em yyyy-mm-dd — compartilhado entre
+// /estrelas (extrato completo) e o mini-indicador da SidebarRight, pra nunca
+// divergir em qual semana um pago cai.
+export function inicioSemanaISO(dataISO: string): string {
+  const d = new Date(dataISO + "T12:00:00");
+  const diaSemana = (d.getDay() + 6) % 7; // 0 = segunda
+  d.setDate(d.getDate() - diaSemana);
+  return d.toISOString().slice(0, 10);
+}
+
+export function resultadoSemanaEstrela(
+  qtd: number,
+  pace: { cheia: number; meia: number }
+): { label: string; cor: string; icone: string } {
+  if (pace.cheia > 0 && qtd >= pace.cheia) return { label: "Estrela cheia", cor: "text-gold-bright", icone: "★" };
+  if (pace.meia > 0 && qtd >= pace.meia) return { label: "Meia estrela", cor: "text-gold-dim", icone: "☆" };
+  return { label: "Sem estrela", cor: "text-stone-600", icone: "—" };
+}
+
 // O que o sistema JÁ CONSEGUE verificar sozinho, sem precisar de input da
 // gestão — casado com texto EXATO dos critérios cadastrados (ver
 // supabase/migrations, promotion_criteria). Qualquer coisa fora desse
@@ -206,4 +225,47 @@ export async function buscarContextoAvaliacaoCriterios(
     .map(([mes, valor]) => ({ mes, valor }));
 
   return { starsTotal, entrevistasPorDia, mesesFechados, vendaSozinho, livroApresentado };
+}
+
+// Quantos critérios do próximo rank já batem (auto + evidência aprovada) —
+// usado tanto no resumo da SidebarRight quanto no badge de pendência do menu,
+// pra nunca dar número diferente entre os dois.
+export async function avaliarProntidaoPromocao(
+  supabase: import("@supabase/supabase-js").SupabaseClient,
+  userId: string,
+  role: string,
+  rank: Rank,
+  starsTotal: number
+): Promise<{ proximoRank: Rank; ok: number; total: number } | null> {
+  if (role !== "sdr" && role !== "closer") return null;
+  const proximoRank = NEXT_RANK[rank];
+  const transicao = NEXT_TRANSICAO[rank];
+  if (!proximoRank || !transicao) return null;
+
+  const [{ data: criterios }, { count: strikesTotal }, { data: escolhaLivro }] = await Promise.all([
+    supabase.from("promotion_criteria").select("id, bloco, texto, tipo, target_value, dias_strikes, ordem").eq("transicao", transicao),
+    supabase.from("strikes").select("id", { count: "exact", head: true }).eq("profile_id", userId),
+    supabase.from("biblioteca_escolhas").select("apresentado").eq("profile_id", userId).limit(1).maybeSingle(),
+  ]);
+  if (!criterios || criterios.length === 0) return null;
+
+  const ctx = await buscarContextoAvaliacaoCriterios(supabase, userId, starsTotal, escolhaLivro ? !!escolhaLivro.apresentado : null);
+  const { data: evidenciasAprovadas } = await supabase
+    .from("promotion_evidence")
+    .select("criterio_id")
+    .eq("profile_id", userId)
+    .eq("status", "aprovado")
+    .in("criterio_id", criterios.map((c) => c.id));
+  const aprovadosSet = new Set((evidenciasAprovadas ?? []).map((e) => e.criterio_id));
+
+  let ok = 0;
+  for (const c of criterios) {
+    if (c.tipo === "strikes") {
+      if ((strikesTotal ?? 0) === 0) ok++;
+      continue;
+    }
+    const auto = avaliarCriterioAutomatico(c, ctx);
+    if (auto ? auto.cumprido : aprovadosSet.has(c.id)) ok++;
+  }
+  return { proximoRank, ok, total: criterios.length };
 }

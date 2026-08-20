@@ -1,19 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
-import { STAR_PACE, type Rank } from "@/lib/carreira";
+import { STAR_PACE, inicioSemanaISO, resultadoSemanaEstrela, type Rank } from "@/lib/carreira";
 import { RANK_LABELS } from "@/lib/labels";
 import Card from "@/components/ui/Card";
 import { getViewerContext } from "@/lib/preview";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
-}
-
-// Segunda-feira da semana de uma data, em yyyy-mm-dd.
-function inicioSemana(dataISO: string): string {
-  const d = new Date(dataISO + "T12:00:00");
-  const diaSemana = (d.getDay() + 6) % 7; // 0 = segunda
-  d.setDate(d.getDate() - diaSemana);
-  return d.toISOString().slice(0, 10);
 }
 
 export default async function EstrelasPage() {
@@ -52,14 +44,14 @@ export default async function EstrelasPage() {
 
   const porSemana = new Map<string, { qtd: number; valor: number }>();
   for (const v of vendas ?? []) {
-    const semana = inicioSemana(v.data);
+    const semana = inicioSemanaISO(v.data);
     const bucket = porSemana.get(semana) ?? { qtd: 0, valor: 0 };
     bucket.qtd += 1;
     bucket.valor += Number(v.valor);
     porSemana.set(semana, bucket);
   }
 
-  const semanaAtualInicio = inicioSemana(new Date().toISOString().slice(0, 10));
+  const semanaAtualInicio = inicioSemanaISO(new Date().toISOString().slice(0, 10));
 
   // Sempre lista as últimas 12 semanas, mesmo as sem nenhum pago (pra ficar
   // óbvio quando alguém ficou 2-3 semanas sem gerar nada).
@@ -72,11 +64,7 @@ export default async function EstrelasPage() {
     semanas.push({ inicio, ...bucket });
   }
 
-  function resultadoSemana(qtd: number): { label: string; cor: string; icone: string } {
-    if (pace.cheia > 0 && qtd >= pace.cheia) return { label: "Estrela cheia", cor: "text-gold-bright", icone: "★" };
-    if (pace.meia > 0 && qtd >= pace.meia) return { label: "Meia estrela", cor: "text-gold-dim", icone: "☆" };
-    return { label: "Sem estrela", cor: "text-stone-600", icone: "—" };
-  }
+  const resultadoSemana = (qtd: number) => resultadoSemanaEstrela(qtd, pace);
 
   const semanaAtual = semanas[0];
   const resultadoAtual = resultadoSemana(semanaAtual.qtd);

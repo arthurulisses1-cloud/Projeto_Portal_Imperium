@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { avaliarProntidaoPromocao, type Rank } from "./carreira";
 
 // Contagem de pendências por aba, pra sinalizar no menu lateral que tem
 // algo a fazer (ex: compromisso do dia ainda não lançado). Sempre baseado
@@ -47,6 +48,22 @@ export async function buscarPendencias(
     }
 
     if (countCompromisso > 0) pend["/compromisso"] = countCompromisso;
+
+    // Sinaliza "Plano de Carreira" quando todos os critérios do próximo rank já
+    // batem e ainda não existe um pedido de promoção em aberto — evita que a
+    // pessoa fique pronta pra subir sem perceber que precisa apertar o botão.
+    const { data: perfilRank } = await supabase.from("profiles").select("rank, stars_total").eq("id", userId).single();
+    if (perfilRank) {
+      const resumo = await avaliarProntidaoPromocao(supabase, userId, role, perfilRank.rank as Rank, perfilRank.stars_total);
+      if (resumo && resumo.ok === resumo.total) {
+        const { count: pedidoPendente } = await supabase
+          .from("promotion_requests")
+          .select("id", { count: "exact", head: true })
+          .eq("profile_id", userId)
+          .eq("status", "pendente");
+        if (!pedidoPendente) pend["/carreira"] = 1;
+      }
+    }
   }
 
   if (role === "lider") {

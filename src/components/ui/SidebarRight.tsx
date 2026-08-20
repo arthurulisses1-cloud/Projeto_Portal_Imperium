@@ -2,10 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
 import {
   STAR_PACE,
-  NEXT_RANK,
-  NEXT_TRANSICAO,
-  avaliarCriterioAutomatico,
-  buscarContextoAvaliacaoCriterios,
+  avaliarProntidaoPromocao,
+  inicioSemanaISO,
+  resultadoSemanaEstrela,
   type Rank,
 } from "@/lib/carreira";
 import { lookupComissao, proximoTier } from "@/lib/comissao";
@@ -36,47 +35,24 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   const pace = STAR_PACE[rank] ?? STAR_PACE.legionario;
   const totalEstrelas = pace.estrelas || 6;
 
+  // Mini-indicador da semana atual de Estrelas (SDR/Closer só) — mesmo
+  // cálculo de /estrelas, pra dar o "check rápido" sem precisar entrar na aba.
+  let semanaEstrelas: { qtd: number } | null = null;
+  if ((profile.role === "sdr" || profile.role === "closer") && pace.cheia > 0) {
+    const inicioSemanaAtual = inicioSemanaISO(new Date().toISOString().slice(0, 10));
+    const { data: vendasSemana } = await supabase
+      .from("vendas")
+      .select("id")
+      .eq("profile_id", userId)
+      .in("papel", profile.role === "sdr" ? ["sdr", "ambos"] : ["closer", "ambos"])
+      .gte("data", inicioSemanaAtual);
+    semanaEstrelas = { qtd: (vendasSemana ?? []).length };
+  }
+
   // Resumo do Plano de Carreira (SDR/Closer só — líder não tem "próximo
   // rank" no mesmo sentido) — mesma avaliação de /carreira, pra nunca dar
   // número diferente entre a lateral e a tela cheia.
-  let carreiraResumo: { proximoRank: Rank; ok: number; total: number } | null = null;
-  if (profile.role === "sdr" || profile.role === "closer") {
-    const proximoRank = NEXT_RANK[rank];
-    const transicao = NEXT_TRANSICAO[rank];
-    if (proximoRank && transicao) {
-      const [{ data: criterios }, { count: strikesTotal }, { data: escolhaLivro }] = await Promise.all([
-        supabase.from("promotion_criteria").select("id, bloco, texto, tipo, target_value, dias_strikes, ordem").eq("transicao", transicao),
-        supabase.from("strikes").select("id", { count: "exact", head: true }).eq("profile_id", userId),
-        supabase.from("biblioteca_escolhas").select("apresentado").eq("profile_id", userId).limit(1).maybeSingle(),
-      ]);
-      if (criterios && criterios.length > 0) {
-        const ctx = await buscarContextoAvaliacaoCriterios(
-          supabase,
-          userId,
-          profile.stars_total,
-          escolhaLivro ? !!escolhaLivro.apresentado : null
-        );
-        const { data: evidenciasAprovadas } = await supabase
-          .from("promotion_evidence")
-          .select("criterio_id")
-          .eq("profile_id", userId)
-          .eq("status", "aprovado")
-          .in("criterio_id", criterios.map((c) => c.id));
-        const aprovadosSet = new Set((evidenciasAprovadas ?? []).map((e) => e.criterio_id));
-
-        let ok = 0;
-        for (const c of criterios) {
-          if (c.tipo === "strikes") {
-            if ((strikesTotal ?? 0) === 0) ok++;
-            continue;
-          }
-          const auto = avaliarCriterioAutomatico(c, ctx);
-          if (auto ? auto.cumprido : aprovadosSet.has(c.id)) ok++;
-        }
-        carreiraResumo = { proximoRank, ok, total: criterios.length };
-      }
-    }
-  }
+  const carreiraResumo = await avaliarProntidaoPromocao(supabase, userId, profile.role, rank, profile.stars_total);
 
   const { data: quotes } = await supabase.from("sage_quotes").select("texto, fonte").eq("ativo", true);
   const dayOfYear = Math.floor(
@@ -250,6 +226,23 @@ export default async function SidebarRight({ userId }: { userId: string }) {
           ))}
         </p>
       </div>
+
+      {semanaEstrelas &&
+        (() => {
+          const r = resultadoSemanaEstrela(semanaEstrelas.qtd, pace);
+          return (
+            <a
+              href="/estrelas"
+              className="block rounded border border-imperium-line px-3 py-2 text-center text-xs transition hover:border-gold/50 hover:bg-gold/5"
+            >
+              <span className="text-stone-500">Essa semana: </span>
+              <span className={r.cor}>
+                {r.icone} {r.label}
+              </span>
+              <span className="text-stone-600"> · {semanaEstrelas.qtd}/{pace.cheia} pagos</span>
+            </a>
+          );
+        })()}
 
       {carreiraResumo && (
         <a
