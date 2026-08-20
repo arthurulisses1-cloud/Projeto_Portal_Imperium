@@ -27,7 +27,7 @@ export default function EnquetePoll({ dados }: { dados: EnqueteData }) {
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-imperium-line">
                 <div
-                  className={`h-full rounded-full ${minhaEscolha ? "bg-gradient-to-r from-gold to-gold-bright" : "bg-imperium-line-strong"}`}
+                  className={`h-full rounded-full ${minhaEscolha ? "bg-gold" : "bg-imperium-line-strong"}`}
                   style={{ width: `${pct}%` }}
                 />
               </div>

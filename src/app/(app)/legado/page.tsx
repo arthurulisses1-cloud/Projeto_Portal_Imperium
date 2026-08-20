@@ -7,6 +7,7 @@ import { EXERCITO_CREST } from "@/lib/exercito-crests";
 import { salvarAdmissao, salvarNascimento, alternarAtivo, confirmarResgateMarco } from "./actions";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 import { IconAlert, IconGift } from "@/components/ui/icons";
+import { Badge } from "@/components/ui/Badge";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -253,12 +254,15 @@ export default async function LegadoPage({
                   )}
                 </div>
                 {emQueda && (
-                  <span
-                    title="Ritmo do mês projeta bem abaixo da média dos últimos 2 meses"
-                    className="flex shrink-0 items-center gap-1 rounded-full border border-wine/50 bg-wine/10 px-2 py-1 text-[10px] uppercase text-wine-bright"
+                  <Badge
+                    tone="wine"
+                    variant="tag"
+                    className="shrink-0"
                   >
-                    <IconAlert className="h-3 w-3" /> Queda
-                  </span>
+                    <span title="Ritmo do mês projeta bem abaixo da média dos últimos 2 meses" className="flex items-center gap-1">
+                      <IconAlert className="h-3 w-3" /> Queda
+                    </span>
+                  </Badge>
                 )}
               </div>
 

@@ -14,6 +14,7 @@ import { calcularFunilMeta, mapaMetaCreditoPorTribo } from "@/lib/metas";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
 import { IconAlert } from "@/components/ui/icons";
+import { Badge } from "@/components/ui/Badge";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -170,9 +171,9 @@ export default async function ExercitoPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-stone-100">{t.nome}</p>
                     {emRisco && (
-                      <span className="flex items-center gap-1 text-[10px] uppercase text-wine-bright">
+                      <Badge tone="wine" variant="tag">
                         <IconAlert className="h-3 w-3" /> Em risco
-                      </span>
+                      </Badge>
                     )}
                   </div>
                   <p className="mt-1 text-gold">{moeda(pago)}</p>

@@ -256,7 +256,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
           </p>
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-imperium-line">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-gold to-gold-bright"
+              className="h-full rounded-full bg-gold"
               style={{ width: `${(carreiraResumo.ok / carreiraResumo.total) * 100}%` }}
             />
           </div>

@@ -11,6 +11,7 @@ import { RANK_LABELS } from "@/lib/labels";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
 import { IconLock } from "@/components/ui/icons";
+import { Badge } from "@/components/ui/Badge";
 
 const MESES = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez",
@@ -94,9 +95,9 @@ export default async function ComissaoPage() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <h2 className="kicker">Mês atual</h2>
           {remuneracao && (
-            <span className="rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs text-gold-bright">
+            <Badge tone="gold">
               {rankLabel} · Tier {remuneracao.tierIdx + 1} de {tiers.length}
-            </span>
+            </Badge>
           )}
         </div>
 
@@ -282,17 +283,13 @@ export default async function ComissaoPage() {
                       <IconLock className="h-6 w-6 text-stone-300" />
                     </span>
                   )}
-                  <span
-                    className={`absolute right-2 top-2 rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide ${
-                      m.alcancado
-                        ? "border-success/50 bg-imperium-bg/80 text-success-bright"
-                        : m.elegivel
-                          ? "border-gold/50 bg-imperium-bg/80 text-gold"
-                          : "border-imperium-line-strong bg-imperium-bg/80 text-stone-400"
-                    }`}
+                  <Badge
+                    tone={m.alcancado ? "success" : m.elegivel ? "gold" : "neutral"}
+                    variant={m.alcancado ? "solid" : "pill"}
+                    className="absolute right-2 top-2 !text-[9px]"
                   >
                     {m.alcancado ? "Desbloqueado" : m.elegivel ? "Disponível este mês" : "Bloqueado"}
-                  </span>
+                  </Badge>
                 </div>
                 <div className="p-3">
                   <p className="text-sm text-stone-100">{m.nome}</p>

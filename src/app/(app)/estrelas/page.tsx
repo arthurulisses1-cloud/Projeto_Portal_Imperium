@@ -108,7 +108,7 @@ export default async function EstrelasPage() {
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-imperium-line">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-gold to-gold-bright"
+                className="h-full rounded-full bg-gold"
                 style={{ width: `${Math.min(100, (semanaAtual.qtd / pace.cheia) * 100)}%` }}
               />
             </div>

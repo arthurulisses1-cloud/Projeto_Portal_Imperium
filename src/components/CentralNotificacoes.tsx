@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import Card from "@/components/ui/Card";
 import { IconLaurel } from "@/components/ui/icons";
+import { Badge } from "@/components/ui/Badge";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -95,8 +96,10 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
             </p>
             <ul className="flex flex-wrap gap-2">
               {naoLancaram.map((p) => (
-                <li key={p.id} className="rounded-full border border-wine/40 bg-wine/10 px-3 py-1 text-xs text-wine-bright">
-                  {p.full_name}
+                <li key={p.id}>
+                  <Badge tone="warning" variant="tag">
+                    {p.full_name}
+                  </Badge>
                 </li>
               ))}
             </ul>

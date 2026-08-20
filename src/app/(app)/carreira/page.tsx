@@ -18,6 +18,7 @@ import RankBadge from "@/components/ui/RankBadge";
 import Laurel from "@/components/ui/Laurel";
 import { getViewerContext } from "@/lib/preview";
 import { IconLaurel, IconBell } from "@/components/ui/icons";
+import { Badge } from "@/components/ui/Badge";
 
 export default async function CarreiraPage() {
   const supabase = await createClient();
@@ -225,13 +226,7 @@ export default async function CarreiraPage() {
             </div>
             {prontoPraPromocao &&
               (promoRequestAtual && promoRequestAtual.status !== "rejeitado" ? (
-                <span
-                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs uppercase ${
-                    promoRequestAtual.status === "aprovado"
-                      ? "border-success/50 text-success-bright"
-                      : "border-gold/50 text-gold"
-                  }`}
-                >
+                <Badge tone={promoRequestAtual.status === "aprovado" ? "success" : "gold"} variant={promoRequestAtual.status === "aprovado" ? "solid" : "pill"}>
                   {promoRequestAtual.status === "aprovado" ? (
                     <>
                       <IconLaurel className="h-3.5 w-3.5" /> Promoção aprovada
@@ -239,7 +234,7 @@ export default async function CarreiraPage() {
                   ) : (
                     "Solicitação enviada, aguardando o Diretor"
                   )}
-                </span>
+                </Badge>
               ) : (
                 <form action={solicitarPromocao}>
                   <input type="hidden" name="transicao" value={transicao ?? ""} />
@@ -251,7 +246,7 @@ export default async function CarreiraPage() {
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-imperium-line">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-gold to-gold-bright"
+              className="h-full rounded-full bg-gold"
               style={{ width: `${pctGeral}%` }}
             />
           </div>
@@ -275,7 +270,7 @@ export default async function CarreiraPage() {
           </div>
           <div className="h-1.5 overflow-hidden rounded-full bg-imperium-line">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-gold to-gold-bright"
+              className="h-full rounded-full bg-gold"
               style={{ width: `${progressoEstrelas}%` }}
             />
           </div>

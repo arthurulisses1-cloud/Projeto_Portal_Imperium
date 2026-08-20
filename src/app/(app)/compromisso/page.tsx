@@ -7,6 +7,7 @@ import { calcularStreak, cumpriuCompromisso, type StreakRow } from "@/lib/streak
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { getViewerContext } from "@/lib/preview";
 import { IconFlame, IconCheck, IconAlert } from "@/components/ui/icons";
+import { Badge } from "@/components/ui/Badge";
 
 type CompromissoRow = StreakRow;
 
@@ -16,11 +17,6 @@ function statusLabel(row: CompromissoRow, isHoje: boolean) {
   if (isHoje) return { texto: "Em andamento", cor: "text-gold" };
   return { texto: "Não cumprido", cor: "text-wine-bright" };
 }
-
-// Pendente é um estado mais grave que "em andamento": a pessoa nem lançou a
-// meta do dia ainda (não dá nem pra saber se vai cumprir) — precisa saltar
-// aos olhos do Closer, não ficar discreto igual aos outros status.
-const PENDENTE_BADGE = "border-warning/50 bg-warning/10 text-warning-bright";
 
 // Conta dias úteis (seg-sex) entre hoje (inclusive) e o fim do mês.
 function diasUteisRestantes(hoje: Date): number {
@@ -192,10 +188,10 @@ export default async function CompromissoPage() {
           </p>
         </div>
         {streak > 0 && (
-          <span className="flex items-center gap-1.5 rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-xs text-gold-bright">
+          <Badge tone="gold">
             <IconFlame className="h-3.5 w-3.5" />
             {streak} {streak === 1 ? "dia seguido" : "dias seguidos"}
-          </span>
+          </Badge>
         )}
       </div>
 
@@ -206,9 +202,9 @@ export default async function CompromissoPage() {
             (() => {
               const pendentes = membrosTribo.filter((m) => !m.row).length;
               return pendentes > 0 ? (
-                <span className="rounded-full border border-warning/50 bg-warning/10 px-2 py-0.5 text-xs text-warning-bright">
+                <Badge tone="warning" variant="solid">
                   {pendentes} {pendentes === 1 ? "ainda não lançou" : "ainda não lançaram"}
-                </span>
+                </Badge>
               ) : (
                 <span className="flex items-center gap-1 text-xs text-success-bright">
                   <IconCheck className="h-3.5 w-3.5" /> Todo mundo já lançou hoje
@@ -265,9 +261,9 @@ export default async function CompromissoPage() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-stone-200">{m.nome}</p>
                     {pendente ? (
-                      <span className={`mt-0.5 inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${PENDENTE_BADGE}`}>
+                      <Badge tone="warning" variant="tag" className="mt-0.5">
                         <IconAlert className="h-3 w-3" /> Não lançou hoje
-                      </span>
+                      </Badge>
                     ) : (
                       <p className={`text-xs ${status!.cor}`}>{status!.texto}</p>
                     )}

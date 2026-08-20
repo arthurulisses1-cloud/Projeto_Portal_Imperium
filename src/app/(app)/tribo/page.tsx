@@ -13,6 +13,7 @@ import ConvidarForm from "./convidar-form";
 import { criarTribo, renomearTribo, atualizarLogoTribo, deixarFeedback, registrarPerda } from "./actions";
 import Card from "@/components/ui/Card";
 import { getViewerContext } from "@/lib/preview";
+import { Badge } from "@/components/ui/Badge";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
 
 const MOTIVOS_PERDA = ["Preço", "Timing", "Perfil fora do ICP", "Concorrência", "Sumiu/não respondeu", "Outro"];
@@ -307,12 +308,9 @@ export default async function TriboPage({
             {Array.from(contagemMotivos.entries())
               .sort((a, b) => b[1] - a[1])
               .map(([motivo, qtd]) => (
-                <span
-                  key={motivo}
-                  className="rounded-full border border-wine/40 bg-wine/10 px-3 py-1 text-xs text-wine-bright"
-                >
+                <Badge key={motivo} tone="wine">
                   {motivo} · {qtd}
-                </span>
+                </Badge>
               ))}
           </div>
         )}
