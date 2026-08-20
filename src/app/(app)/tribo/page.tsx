@@ -7,6 +7,7 @@ import {
   STATUS_COR,
   STATUS_LABEL,
 } from "@/lib/time";
+import { buscarMetaTribo, buscarMetaIndividual, calcularFunilMeta } from "@/lib/metas";
 import MembroCard from "@/components/MembroCard";
 import ConvidarForm from "./convidar-form";
 import { criarTribo, renomearTribo, atualizarLogoTribo, deixarFeedback, registrarPerda } from "./actions";
@@ -89,6 +90,19 @@ export default async function TriboPage({
   const funilExibido = membroSelecionado
     ? await buscarFunilColetivo(supabase, [membroSelecionado])
     : funilColetivo;
+
+  // producao_funil.meta vem sempre 0 do sync — a meta de verdade é derivada
+  // da meta de crédito (da Tribo inteira, ou só do membro selecionado) via
+  // ticket médio + taxas de conversão esperadas.
+  const metaFunilExibido = membroSelecionado
+    ? await (async () => {
+        const { metaCreditoIndividual, metaTicketMedio, taxas } = await buscarMetaIndividual(supabase, membroSelecionado);
+        return calcularFunilMeta(metaCreditoIndividual, metaTicketMedio, taxas);
+      })()
+    : await (async () => {
+        const { metaCreditoTribo, metaTicketMedio, taxas } = await buscarMetaTribo(supabase, tribo.id);
+        return calcularFunilMeta(metaCreditoTribo, metaTicketMedio, taxas);
+      })();
 
   const rankingTribo = (sdrs ?? [])
     .map((s) => ({ id: s.id, nome: s.full_name, valor: pagosMap.get(s.id) ?? 0 }))
@@ -216,7 +230,9 @@ export default async function TriboPage({
                 <td className="py-2 text-right text-stone-100">
                   {funilExibido[etapa].realizado}
                 </td>
-                <td className="py-2 text-right text-stone-500">{funilExibido[etapa].meta}</td>
+                <td className="py-2 text-right text-stone-500">
+                  {metaFunilExibido[etapa] !== null ? Math.round(metaFunilExibido[etapa]!) : "—"}
+                </td>
               </tr>
             ))}
           </tbody>

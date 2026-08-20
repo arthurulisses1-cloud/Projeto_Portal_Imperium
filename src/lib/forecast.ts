@@ -73,7 +73,11 @@ export function podeEditarOperacao(
   if (viewer.role === "diretor") return true;
   if (viewer.role === "closer") return op.closerProfileId === viewer.id;
   if (viewer.role === "lider" && viewer.exercitoLideradoId) {
-    return op.sdrExercitoId === viewer.exercitoLideradoId || op.closerExercitoId === viewer.exercitoLideradoId;
+    // Time DONO da operação = time do Closer, com o SDR como fallback só
+    // quando o Closer não resolve — mesma regra de atribuição usada pra
+    // decidir o que aparece no Forecast do líder (ver forecast/page.tsx).
+    const timeDaOperacao = op.closerExercitoId ?? op.sdrExercitoId;
+    return timeDaOperacao === viewer.exercitoLideradoId;
   }
   return false;
 }

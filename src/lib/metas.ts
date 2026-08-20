@@ -96,3 +96,46 @@ export async function buscarMetaIndividual(supabase: SupabaseClient, userId: str
     taxas,
   };
 }
+
+// Meta de crédito da TRIBO inteira (soma dos membros) = meta da firma
+// dividida só até o nível de Tribo, sem descer pra "por pessoa" — mesma
+// conta de buscarMetaIndividual, um nível acima. Usada pra "Produção
+// coletiva do mês" em /tribo e /exercito, cujo funil coletivo soma todo
+// mundo — comparar contra a meta de UMA pessoa deixaria a barra sempre
+// parecendo "muito acima da meta".
+export async function buscarMetaTribo(supabase: SupabaseClient, triboId: string) {
+  const { data: triboRow } = await supabase.from("tribos").select("id, exercito_id").eq("id", triboId).single();
+
+  const agora = new Date();
+  const { data: metaMes } = await supabase
+    .from("metas_mensais")
+    .select("id, meta_credito_total, meta_ticket_medio")
+    .eq("ano", agora.getFullYear())
+    .eq("mes", agora.getMonth() + 1)
+    .maybeSingle();
+
+  const { data: conversoes } = metaMes
+    ? await supabase
+        .from("metas_conversao")
+        .select("etapa_de, etapa_para, taxa_esperada")
+        .eq("meta_mensal_id", metaMes.id)
+    : { data: [] };
+  const taxas = new Map((conversoes ?? []).map((c) => [`${c.etapa_de}_${c.etapa_para}`, c.taxa_esperada]));
+
+  let metaCreditoTribo = 0;
+  if (triboRow && metaMes?.meta_credito_total) {
+    const [{ count: numExercitos }, { count: numTribos }] = await Promise.all([
+      supabase.from("exercitos").select("id", { count: "exact", head: true }),
+      supabase.from("tribos").select("id", { count: "exact", head: true }).eq("exercito_id", triboRow.exercito_id),
+    ]);
+    if (numExercitos && numTribos) {
+      metaCreditoTribo = metaMes.meta_credito_total / numExercitos / numTribos;
+    }
+  }
+
+  return {
+    metaCreditoTribo,
+    metaTicketMedio: metaMes?.meta_ticket_medio ?? 0,
+    taxas,
+  };
+}

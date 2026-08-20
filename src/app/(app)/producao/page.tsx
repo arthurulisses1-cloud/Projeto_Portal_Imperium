@@ -267,15 +267,23 @@ export default async function ProducaoPage({
       <div className="grid gap-6 sm:grid-cols-2">
         <Card title="Volume">
           <div className="space-y-3">
-            {etapasVisiveis.map((etapa) => (
-              <div key={etapa} className="flex items-center gap-3 text-sm">
-                <span className="w-24 shrink-0 text-stone-400">{FUNNEL_LABELS[etapa]}</span>
-                <BarraProgresso realizado={totais[etapa].realizado} meta={totais[etapa].meta} />
-                <span className="w-16 shrink-0 text-right text-stone-100">
-                  {totais[etapa].realizado}/{totais[etapa].meta}
-                </span>
-              </div>
-            ))}
+            {etapasVisiveis.map((etapa) => {
+              // producao_funil.meta vem sempre 0 do sync (nunca foi
+              // populado) — a meta de verdade é a derivada de
+              // metaFunilIndividual (crédito ÷ ticket médio ÷ taxas
+              // esperadas), prorateada pro período selecionado.
+              const metaBruta = metaFunilIndividual[etapa];
+              const meta = metaBruta !== null ? Math.round(metaBruta * fatorPeriodo) : null;
+              return (
+                <div key={etapa} className="flex items-center gap-3 text-sm">
+                  <span className="w-24 shrink-0 text-stone-400">{FUNNEL_LABELS[etapa]}</span>
+                  <BarraProgresso realizado={totais[etapa].realizado} meta={meta ?? 0} />
+                  <span className="w-20 shrink-0 text-right text-stone-100">
+                    {totais[etapa].realizado}/{meta ?? "—"}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </Card>
 
@@ -284,12 +292,16 @@ export default async function ProducaoPage({
             {etapasVisiveis.map((etapa, i) => {
               const anterior = i > 0 ? totais[etapasVisiveis[i - 1]].realizado : null;
               const pct = anterior && anterior > 0 ? (totais[etapa].realizado / anterior) * 100 : null;
+              const taxaEsperada = i > 0 ? taxas.get(`${etapasVisiveis[i - 1]}_${etapa}`) : null;
               return (
                 <div key={etapa} className="flex items-center gap-3 text-sm">
                   <span className="w-24 shrink-0 text-stone-400">{FUNNEL_LABELS[etapa]}</span>
-                  <BarraProgresso realizado={pct ?? 0} meta={100} />
-                  <span className="w-16 shrink-0 text-right text-stone-100">
+                  <BarraProgresso realizado={pct ?? 0} meta={taxaEsperada ? taxaEsperada * 100 : 100} />
+                  <span className="w-24 shrink-0 text-right text-stone-100">
                     {pct !== null ? `${pct.toFixed(0)}%` : "—"}
+                    {taxaEsperada != null && (
+                      <span className="ml-1 text-[10px] text-stone-500">/ {(taxaEsperada * 100).toFixed(0)}%</span>
+                    )}
                   </span>
                 </div>
               );

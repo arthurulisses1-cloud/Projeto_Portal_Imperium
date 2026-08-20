@@ -25,19 +25,22 @@ export async function buscarComprometimentoHoje(
   return map;
 }
 
+// Valor PAGO (R$) no mês por pessoa — não confundir com a contagem de
+// operações "pagos" do funil (producao_funil.etapa='pagos', que é uma
+// QUANTIDADE, não dinheiro; usar aquilo aqui formatado como moeda mostrava
+// "R$ 3" quando eram 3 vendas, não R$ 3 de fato).
 export async function buscarPagosMes(supabase: SupabaseClient, profileIds: string[]) {
   if (profileIds.length === 0) return new Map<string, number>();
   const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
   const { data } = await supabase
-    .from("producao_funil")
-    .select("profile_id, realizado")
-    .eq("etapa", "pagos")
+    .from("vendas")
+    .select("profile_id, valor")
     .in("profile_id", profileIds)
     .gte("data", inicioMes);
 
   const map = new Map<string, number>();
   for (const row of data ?? []) {
-    map.set(row.profile_id, (map.get(row.profile_id) ?? 0) + row.realizado);
+    map.set(row.profile_id, (map.get(row.profile_id) ?? 0) + Number(row.valor));
   }
   return map;
 }

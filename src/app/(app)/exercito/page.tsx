@@ -10,6 +10,7 @@ import {
 import MembroCard from "@/components/MembroCard";
 import Card from "@/components/ui/Card";
 import { getViewerContext } from "@/lib/preview";
+import { calcularFunilMeta } from "@/lib/metas";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -69,7 +70,7 @@ export default async function ExercitoPage() {
   const agora = new Date();
   const { data: metaMes } = await supabase
     .from("metas_mensais")
-    .select("id, meta_credito_total")
+    .select("id, meta_credito_total, meta_ticket_medio")
     .eq("ano", agora.getFullYear())
     .eq("mes", agora.getMonth() + 1)
     .maybeSingle();
@@ -77,6 +78,14 @@ export default async function ExercitoPage() {
   const metaCreditoExercito = numExercitos ? (metaMes?.meta_credito_total ?? 0) / numExercitos : 0;
   const numTribos = tribos?.length ?? 0;
   const metaCreditoPorTribo = numTribos > 0 ? metaCreditoExercito / numTribos : 0;
+
+  // producao_funil.meta vem sempre 0 do sync — a meta de verdade é derivada
+  // da meta de crédito do Exército via ticket médio + taxas de conversão.
+  const { data: conversoes } = metaMes
+    ? await supabase.from("metas_conversao").select("etapa_de, etapa_para, taxa_esperada").eq("meta_mensal_id", metaMes.id)
+    : { data: [] };
+  const taxasExercito = new Map((conversoes ?? []).map((c) => [`${c.etapa_de}_${c.etapa_para}`, c.taxa_esperada]));
+  const metaFunilExercito = calcularFunilMeta(metaCreditoExercito, metaMes?.meta_ticket_medio ?? 0, taxasExercito);
 
   const diaDoMes = agora.getDate();
   const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
@@ -212,7 +221,9 @@ export default async function ExercitoPage() {
                 <td className="py-2 text-right text-stone-100">
                   {funilColetivo[etapa].realizado}
                 </td>
-                <td className="py-2 text-right text-stone-500">{funilColetivo[etapa].meta}</td>
+                <td className="py-2 text-right text-stone-500">
+                  {metaFunilExercito[etapa] !== null ? Math.round(metaFunilExercito[etapa]!) : "—"}
+                </td>
               </tr>
             ))}
           </tbody>

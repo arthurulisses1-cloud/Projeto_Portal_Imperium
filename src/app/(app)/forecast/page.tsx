@@ -54,7 +54,7 @@ export default async function ForecastPage() {
       .gte("data", inicioMes)
       .lte("data", fimMes)
       .order("data", { ascending: false }),
-    supabase.from("exercitos").select("id, nome"),
+    supabase.from("exercitos").select("id, nome, legado_id"),
   ]);
   let opRows = opsRes.data;
   if (opsRes.error) {
@@ -68,6 +68,11 @@ export default async function ForecastPage() {
   }
 
   const nomeExercitoPorId = new Map((exercitos ?? []).map((e) => [e.id, e.nome]));
+  // Legado do Exército não tem tribo_id (lidera o Exército inteiro, não uma
+  // Tribo específica) — sem esse fallback, uma operação fechada por ele
+  // "perde" o time no cálculo de atribuição (closerEx vira null e a regra
+  // cai pro SDR, que pode ser de outro Exército inteiramente).
+  const exercitoIdPorLegadoId = new Map((exercitos ?? []).map((e) => [e.legado_id, e.id]));
 
   const idsEnvolvidos = Array.from(
     new Set((opRows ?? []).flatMap((o) => [o.sdr_profile_id, o.closer_profile_id]).filter((x): x is string => !!x))
@@ -84,13 +89,14 @@ export default async function ForecastPage() {
   const pessoaPorId = new Map(
     (pessoas ?? []).map((p) => {
       const tribo = p.tribo as unknown as { nome: string; exercito_id: string } | null;
-      const exercitoNome = tribo?.exercito_id ? nomeExercitoPorId.get(tribo.exercito_id) ?? null : null;
+      const exercitoId = tribo?.exercito_id ?? exercitoIdPorLegadoId.get(p.id) ?? null;
+      const exercitoNome = exercitoId ? nomeExercitoPorId.get(exercitoId) ?? null : null;
       return [
         p.id,
         {
           nome: p.full_name,
           triboNome: tribo?.nome ?? null,
-          exercitoId: tribo?.exercito_id ?? null,
+          exercitoId,
           // "chave" namespada por Exército — evita colidir tribos com o mesmo
           // nome em Exércitos diferentes (ex.: "Inbound" existe nos dois).
           triboChave: tribo?.nome ? `${exercitoNome ?? "?"}|${tribo.nome}` : null,
@@ -129,7 +135,15 @@ export default async function ForecastPage() {
   });
 
   // Escopo por papel: closer só vê os próprios (como closer); líder só vê o
-  // próprio Exército (como SDR ou Closer); Diretor vê tudo.
+  // que é DO PRÓPRIO EXÉRCITO; Diretor vê tudo.
+  //
+  // "Do próprio Exército" segue a mesma regra de atribuição de time do resto
+  // do sistema (Weekly, Guerra Civil): o time DONO da operação é o do
+  // Closer, com o SDR como fallback só quando o Closer não resolve pra
+  // nenhum time — NÃO "SDR ou Closer, o que bater". Ex.: SDR do Templários +
+  // Closer do Maximus (e o Closer é o Legado do Maximus) → a operação é do
+  // Maximus; o líder dos Templários não deve vê-la no Forecast dele, mesmo
+  // com um SDR seu envolvido, porque o crédito não é do time dele.
   let ops: ForecastOp[];
   if (meRole === "closer") {
     ops = todasOps.filter((o) => o.closerId === meId);
@@ -139,7 +153,8 @@ export default async function ForecastPage() {
       .filter(({ raw }) => {
         const sdrEx = raw.sdr_profile_id ? pessoaPorId.get(raw.sdr_profile_id)?.exercitoId : null;
         const closerEx = raw.closer_profile_id ? pessoaPorId.get(raw.closer_profile_id)?.exercitoId : null;
-        return sdrEx === exercitoLideradoId || closerEx === exercitoLideradoId;
+        const timeDaOperacao = closerEx ?? sdrEx;
+        return timeDaOperacao === exercitoLideradoId;
       })
       .map(({ computed }) => computed);
   } else {

@@ -24,7 +24,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer"] },
   { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
   { type: "link", href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
-  { type: "link", href: "/tarefas", label: "Follow-ups", roles: ["closer"] },
   { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
   { type: "link", href: "/minha-producao", label: "Minha Produção", roles: ["lider"] },
   { type: "link", href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
@@ -108,12 +107,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   });
 
   const ehExecutivo = papelVisualizado === "sdr" || papelVisualizado === "closer" || papelVisualizado === "lider";
-  // O Mural já tem a própria lateral (Publicar no Mural + Campanhas, pra
-  // líder/diretor) e é a tela mais carregada do site — empilhar a SidebarRight
-  // global em cima disso vira 3-4 colunas espremidas. Some só nessa rota;
-  // nas outras páginas ela continua normalmente.
+  // O Mural é a tela mais carregada do site — pra SDR/Closer, empilhar a
+  // SidebarRight em cima do feed vira 3 colunas espremidas, então ela some
+  // nessa rota pra esses dois papéis. Líder é o oposto: o Mural é onde ele
+  // pede pra ver "Meu Exército" (Cargo, Tribos, Time), e como o Mural não
+  // tem mais uma lateral própria (Publicar/Campanhas viraram parte do feed
+  // principal), a SidebarRight aparece normalmente ali também.
   const pathname = (await headers()).get("x-pathname") ?? "";
   const naMural = pathname === "/";
+  const mostraSidebarRight = !naMural || papelVisualizado === "lider";
 
   const pendencias =
     user && profile
@@ -186,7 +188,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         <div className="flex flex-1">
           <div className="min-w-0 flex-1">{children}</div>
-          {user && ehExecutivo && !naMural && <SidebarRight userId={previewPessoa?.id ?? user.id} />}
+          {user && ehExecutivo && mostraSidebarRight && <SidebarRight userId={previewPessoa?.id ?? user.id} />}
         </div>
 
         <footer className="flex items-center justify-center gap-3 py-6">

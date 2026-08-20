@@ -122,18 +122,22 @@ export default async function SidebarRight({ userId }: { userId: string }) {
 
   // ---------- Líder de Exército: não tem tribo_id (lidera o Exército inteiro,
   // não uma Tribo específica) — em vez de "Minha Tribo", mostra o Exército
-  // como um todo: cada Tribo do Exército com seu Closer e produção do mês.
-  type TriboDoExercito = { id: string; nome: string; closer: Pessoa | null; producao: number };
-  let exercitoLiderado: { nome: string; tribos: TriboDoExercito[] } | null = null;
+  // como um todo: "Minhas Tribos" (logo + Closer de cada Tribo) e "Meu Time"
+  // (todo mundo — SDR e Closer — de todas as Tribos, com foto e Tribo).
+  type TriboDoExercito = { id: string; nome: string; logoUrl: string | null; closer: Pessoa | null; producao: number };
+  type MembroDoExercito = Pessoa & { role: string; triboNome: string };
+  let exercitoLiderado: { nome: string; tribos: TriboDoExercito[]; membros: MembroDoExercito[] } | null = null;
 
   if (profile.role === "lider" && !profile.tribo_id) {
     const { data: ex } = await supabase.from("exercitos").select("id, nome").eq("legado_id", userId).maybeSingle();
     if (ex) {
       const { data: tribosDoExercito } = await supabase
         .from("tribos")
-        .select("id, nome, closer:profiles!tribos_closer_id_fkey(id, full_name, rank, avatar_url)")
+        .select("id, nome, logo_url, closer:profiles!tribos_closer_id_fkey(id, full_name, rank, avatar_url)")
         .eq("exercito_id", ex.id)
         .order("nome");
+      const triboIds = (tribosDoExercito ?? []).map((t) => t.id);
+      const nomeTriboPorId = new Map((tribosDoExercito ?? []).map((t) => [t.id, t.nome]));
 
       const closerIds = (tribosDoExercito ?? [])
         .map((t) => (t.closer as unknown as { id: string } | null)?.id)
@@ -147,6 +151,16 @@ export default async function SidebarRight({ userId }: { userId: string }) {
         producaoPorCloser.set(v.profile_id, (producaoPorCloser.get(v.profile_id) ?? 0) + Number(v.valor));
       }
 
+      const { data: membrosDoExercito } =
+        triboIds.length > 0
+          ? await supabase
+              .from("profiles")
+              .select("id, full_name, rank, avatar_url, role, tribo_id")
+              .in("tribo_id", triboIds)
+              .in("role", ["sdr", "closer"])
+              .order("full_name")
+          : { data: [] };
+
       exercitoLiderado = {
         nome: ex.nome,
         tribos: (tribosDoExercito ?? []).map((t) => {
@@ -154,12 +168,21 @@ export default async function SidebarRight({ userId }: { userId: string }) {
           return {
             id: t.id,
             nome: t.nome,
+            logoUrl: t.logo_url,
             closer: closerRow
               ? { id: closerRow.id, nome: closerRow.full_name, rank: closerRow.rank, avatarUrl: closerRow.avatar_url }
               : null,
             producao: closerRow ? producaoPorCloser.get(closerRow.id) ?? 0 : 0,
           };
         }),
+        membros: (membrosDoExercito ?? []).map((m) => ({
+          id: m.id,
+          nome: m.full_name,
+          rank: m.rank as Rank,
+          avatarUrl: m.avatar_url,
+          role: m.role,
+          triboNome: (m.tribo_id && nomeTriboPorId.get(m.tribo_id)) || "—",
+        })),
       };
     }
   }
@@ -373,24 +396,26 @@ export default async function SidebarRight({ userId }: { userId: string }) {
       {exercitoLiderado && (
         <div className="border-t border-imperium-line pt-4">
           <p className="kicker mb-3">Meu Exército · {exercitoLiderado.nome}</p>
+
+          <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Minhas Tribos</p>
           {exercitoLiderado.tribos.length > 0 ? (
             <ul className="space-y-3">
               {exercitoLiderado.tribos.map((t) => (
                 <li key={t.id} className="flex items-center gap-2.5">
-                  {t.closer?.avatarUrl ? (
+                  {t.logoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={t.closer.avatarUrl}
-                      alt={t.closer.nome}
-                      className="h-8 w-8 shrink-0 rounded-full border border-imperium-line-strong object-cover"
+                      src={t.logoUrl}
+                      alt={t.nome}
+                      className="h-9 w-9 shrink-0 rounded-full border border-gold/40 object-cover"
                     />
                   ) : (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-[9px] text-stone-500">
-                      {t.closer ? iniciais(t.closer.nome) : "—"}
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-dashed border-gold/40 text-[8px] text-stone-600">
+                      Bandeira
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs text-stone-200">{t.nome}</p>
+                    <p className="truncate text-xs text-gold-bright">{t.nome}</p>
                     <p className="truncate text-[10px] text-stone-500">
                       {t.closer ? t.closer.nome : "sem Closer definido"}
                     </p>
@@ -401,6 +426,36 @@ export default async function SidebarRight({ userId }: { userId: string }) {
             </ul>
           ) : (
             <p className="text-xs text-stone-600">Nenhuma Tribo neste Exército ainda.</p>
+          )}
+
+          <p className="mb-2 mt-4 text-[10px] uppercase tracking-wide text-stone-500">
+            Meu Time ({exercitoLiderado.membros.length})
+          </p>
+          {exercitoLiderado.membros.length > 0 ? (
+            <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">
+              {exercitoLiderado.membros.map((m) => (
+                <li key={m.id} className="flex items-center gap-2.5">
+                  {m.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={m.avatarUrl}
+                      alt={m.nome}
+                      className="h-7 w-7 shrink-0 rounded-full border border-imperium-line-strong object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-[9px] text-stone-500">
+                      {iniciais(m.nome)}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs text-stone-200">{m.nome}</p>
+                    <p className="truncate text-[10px] text-stone-500">{m.triboNome}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-stone-600">Nenhum membro nas Tribos ainda.</p>
           )}
         </div>
       )}

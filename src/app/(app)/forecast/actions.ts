@@ -27,12 +27,20 @@ async function exigirPermissaoOperacao(admin: SupabaseClient, userId: string, op
   }
 
   const idsEnvolvidos = [op.sdr_profile_id, op.closer_profile_id].filter((x): x is string => !!x);
-  const { data: envolvidos } =
+  const [{ data: envolvidos }, { data: exercitosPorLegado }] = await Promise.all([
     idsEnvolvidos.length > 0
-      ? await admin.from("profiles").select("id, tribo:tribos!profiles_tribo_id_fkey(exercito_id)").in("id", idsEnvolvidos)
-      : { data: [] };
+      ? admin.from("profiles").select("id, tribo:tribos!profiles_tribo_id_fkey(exercito_id)").in("id", idsEnvolvidos)
+      : Promise.resolve({ data: [] }),
+    // Legado do Exército não tem tribo_id — sem esse fallback, uma operação
+    // fechada por ele "perde" o time (mesma regra de forecast/page.tsx).
+    admin.from("exercitos").select("id, legado_id").in("legado_id", idsEnvolvidos),
+  ]);
+  const exercitoIdPorLegadoId = new Map((exercitosPorLegado ?? []).map((e) => [e.legado_id, e.id]));
   const exercitoPorProfileId = new Map(
-    (envolvidos ?? []).map((p) => [p.id, (p.tribo as unknown as { exercito_id: string } | null)?.exercito_id ?? null])
+    (envolvidos ?? []).map((p) => [
+      p.id,
+      (p.tribo as unknown as { exercito_id: string } | null)?.exercito_id ?? exercitoIdPorLegadoId.get(p.id) ?? null,
+    ])
   );
 
   const permitido = podeEditarOperacao(
