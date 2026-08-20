@@ -8,7 +8,7 @@ import EnquetePoll, { type EnqueteData } from "@/components/ui/EnquetePoll";
 import CentralNotificacoes from "@/components/CentralNotificacoes";
 import { IconSwords, IconShield, IconCoin } from "@/components/ui/icons";
 import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
-import { buscarMetaIndividual } from "@/lib/metas";
+import { buscarMetaIndividual, buscarMetaExercito, buscarProducaoPagaExercito, buscarMetaTribo, buscarProducaoPagaTribo } from "@/lib/metas";
 import { buscarCampanhasAtivas, type CampanhaComProgresso } from "@/lib/campanhas";
 import { FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 import { getViewerContext } from "@/lib/preview";
@@ -90,6 +90,29 @@ export default async function MuralPage() {
     escopoCentral = { tipo: "tribo", triboId: triboAtual.id };
   }
 
+  // Líder ganha a mesma barra "quanto fez × quanto devia × quanto falta" que
+  // SDR/Closer já tinham no Mural, só que no nível do Exército inteiro.
+  let metaExercito = 0;
+  let pagoExercitoMes = 0;
+  if (meRole === "lider" && escopoCentral?.tipo === "exercito") {
+    [metaExercito, pagoExercitoMes] = await Promise.all([
+      buscarMetaExercito(supabase, escopoCentral.exercitoId),
+      buscarProducaoPagaExercito(supabase, escopoCentral.exercitoId, inicioMes),
+    ]);
+  }
+
+  // Closer também vê a meta do TIME (Tribo), não só a fatia pessoal — a meta
+  // da Tribo é a soma da meta dos SDRs + a meta de produção individual do
+  // Closer; bater a produção pessoal não quer dizer que a Tribo bateu.
+  let metaTribo = 0;
+  let pagoTriboMes = 0;
+  if (meRole === "closer" && escopoCentral?.tipo === "tribo") {
+    [metaTribo, pagoTriboMes] = await Promise.all([
+      buscarMetaTribo(supabase, escopoCentral.triboId).then((r) => r.metaCreditoTribo),
+      buscarProducaoPagaTribo(supabase, escopoCentral.triboId, inicioMes),
+    ]);
+  }
+
   // Enquetes: pré-computa opções + votos dos posts do tipo 'enquete' já carregados
   const enquetePostIds = (muralPosts ?? []).filter((p) => p.tipo === "enquete").map((p) => p.id);
   const enquetesPorPost = new Map<string, EnqueteData>();
@@ -148,28 +171,35 @@ export default async function MuralPage() {
         <CentralNotificacoes escopo={escopoCentral} />
       )}
 
-      {ehExecutivo && !compromissoHoje && new Date().getHours() >= 14 && (
-        <div className="rounded border border-wine/50 bg-wine/10 px-4 py-3 text-sm text-wine-bright">
-          ⚠ Você ainda não lançou o compromisso de hoje.{" "}
-          <a href="/compromisso" className="underline hover:text-gold-bright">
-            Lançar agora
-          </a>
-        </div>
-      )}
-
-      {ehExecutivo && metaIndividual > 0 && (
+      {meRole === "sdr" && metaIndividual > 0 && (
         <Card title="Meta do mês">
           <BarraMeta realizado={pagosMes} meta={metaIndividual} />
         </Card>
       )}
 
-      {quote && (
-        <Card className="watermark-spqr text-center">
-          <p className="kicker mb-3">Oráculo</p>
-          <p className="font-serif text-xl italic text-stone-100">&quot;{quote.texto}&quot;</p>
-          <Laurel className="mx-auto my-3 h-3 w-24 text-gold/40" />
-          <p className="text-xs text-stone-500">{quote.fonte}</p>
+      {meRole === "closer" && metaTribo > 0 && (
+        <Card title={`Meta do mês · Tribo ${triboAtual?.nome ?? ""}`}>
+          <BarraMeta realizado={pagoTriboMes} meta={metaTribo} />
+          <p className="mt-2 text-[11px] text-stone-600">
+            Meta do time inteiro (você + seus SDRs) — sua produção pessoal fica em Minha Produção.
+          </p>
         </Card>
+      )}
+
+      {meRole === "lider" && metaExercito > 0 && (
+        <Card title={`Meta do mês · ${escopoCentral?.tipo === "exercito" ? "Exército" : "time"}`}>
+          <BarraMeta realizado={pagoExercitoMes} meta={metaExercito} />
+        </Card>
+      )}
+
+      {quote && (
+        <div className="flex items-center gap-3 border-y border-imperium-line py-2.5 text-center">
+          <Laurel className="hidden h-3 w-8 shrink-0 -scale-x-100 text-gold/30 sm:block" />
+          <p className="min-w-0 flex-1 font-serif text-sm italic text-stone-300">
+            &quot;{quote.texto}&quot; <span className="not-italic text-stone-600">— {quote.fonte}</span>
+          </p>
+          <Laurel className="hidden h-3 w-8 shrink-0 text-gold/30 sm:block" />
+        </div>
       )}
 
       <div className="grid gap-6 sm:grid-cols-3">

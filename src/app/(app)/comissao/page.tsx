@@ -5,6 +5,8 @@ import { abrirContestacao } from "./actions";
 import { lookupComissao, proximoTier } from "@/lib/comissao";
 import { buscarProgressoMarcos } from "@/lib/marcos";
 import { getViewerContext } from "@/lib/preview";
+import { RANK_SDR_EQUIVALENTE, type Rank } from "@/lib/carreira";
+import { RANK_LABELS } from "@/lib/labels";
 import Card from "@/components/ui/Card";
 
 const MESES = [
@@ -52,39 +54,51 @@ export default async function ComissaoPage() {
   // DO EXÉRCITO INTEIRO no mês, não a produção pessoal. Usando só `vendas`
   // dele (quase sempre zero), a Comissão do Mês aparecia zerada mesmo com o
   // Exército inteiro produzindo.
-  let vendasMes: { id: string; data: string; valor: number; origem: string | null; multiplicador: number | null; cliente: string | null }[] = [];
+  let vendasMes: { id: string; data: string; valor: number; origem: string | null; multiplicador: number | null; cliente: string | null; papel: string | null }[] = [];
   if (profile?.role === "lider") {
     const { data: exercitoLiderado } = await supabase.from("exercitos").select("id").eq("legado_id", meId).maybeSingle();
     if (exercitoLiderado) {
-      const { data: tribosDoExercito } = await supabase.from("tribos").select("id").eq("exercito_id", exercitoLiderado.id);
-      const triboIds = (tribosDoExercito ?? []).map((t) => t.id);
-      const { data: membros } =
-        triboIds.length > 0
-          ? await supabase.from("profiles").select("id, tribo_id").in("tribo_id", triboIds)
-          : { data: [] };
-      const exercitoPorProfileId = new Map((membros ?? []).map((m) => [m.id, exercitoLiderado.id]));
-
       const { data: opsPagas } = await supabase
         .from("weekly_operacoes")
         .select("id, data, valor, origem, cliente, sdr_profile_id, closer_profile_id")
         .eq("status", "PAGO")
         .gte("data", inicioMes);
 
+      // Time DONO da operação = time do Closer, fallback pro SDR só quando o
+      // Closer não resolve time nenhum — precisa resolver TODO MUNDO
+      // envolvido (não só quem já é dessa Tribo), senão uma operação cujo
+      // Closer é de outro Exército "vaza" pra cá pelo lado do SDR. Inclui o
+      // fallback de Legado-sem-tribo_id (mesma regra de forecast/page.tsx).
+      const idsEnvolvidos = Array.from(
+        new Set((opsPagas ?? []).flatMap((o) => [o.sdr_profile_id, o.closer_profile_id]).filter((x): x is string => !!x))
+      );
+      const [{ data: pessoas }, { data: exercitos }] = await Promise.all([
+        idsEnvolvidos.length > 0
+          ? supabase.from("profiles").select("id, tribo:tribos!profiles_tribo_id_fkey(exercito_id)").in("id", idsEnvolvidos)
+          : Promise.resolve({ data: [] }),
+        supabase.from("exercitos").select("id, legado_id"),
+      ]);
+      const exercitoIdPorLegadoId = new Map((exercitos ?? []).map((e) => [e.legado_id, e.id]));
+      const exercitoPorProfileId = new Map(
+        (pessoas ?? []).map((p) => [
+          p.id,
+          (p.tribo as unknown as { exercito_id: string } | null)?.exercito_id ?? exercitoIdPorLegadoId.get(p.id) ?? null,
+        ])
+      );
+
       vendasMes = (opsPagas ?? [])
         .filter((o) => {
-          // Time da operação = time do Closer, com fallback pro SDR (mesma
-          // regra do resto do sistema — ver [[weekly-forecast-arquitetura]]).
-          const time =
+          const timeDaOperacao =
             (o.closer_profile_id && exercitoPorProfileId.get(o.closer_profile_id)) ||
             (o.sdr_profile_id && exercitoPorProfileId.get(o.sdr_profile_id));
-          return time === exercitoLiderado.id;
+          return timeDaOperacao === exercitoLiderado.id;
         })
-        .map((o) => ({ id: o.id, data: o.data, valor: Number(o.valor), origem: o.origem, multiplicador: null, cliente: o.cliente }));
+        .map((o) => ({ id: o.id, data: o.data, valor: Number(o.valor), origem: o.origem, multiplicador: null, cliente: o.cliente, papel: null }));
     }
   } else {
     const { data } = await supabase
       .from("vendas")
-      .select("id, data, valor, origem, multiplicador, cliente")
+      .select("id, data, valor, origem, multiplicador, cliente, papel")
       .eq("profile_id", meId)
       .gte("data", inicioMes)
       .order("data", { ascending: false });
@@ -93,8 +107,31 @@ export default async function ComissaoPage() {
 
   const producaoRealMes = vendasMes.reduce((s, v) => s + Number(v.valor), 0);
   const tiersOrdenados = [...(tiers ?? [])].sort((a, b) => a.producao_min - b.producao_min);
-  const tierAtual = lookupComissao(tiersOrdenados, producaoRealMes);
-  const proximo = proximoTier(tiersOrdenados, producaoRealMes);
+
+  // Closer que também vende como SDR: essa produção NÃO conta pro tier de
+  // Closer (que só sobe com produção COMO closer) — é uma comissão à parte,
+  // pela tabela do cargo de SDR equivalente ("Jr" com "Jr", "Sr" com "Sr").
+  // "ambos" (fechou sozinho, sem SDR envolvido) conta nos dois lados: fez o
+  // trabalho dos dois papéis nessa venda.
+  const rankAtual = profile?.rank as Rank | undefined;
+  const rankSdrEquivalente = rankAtual ? RANK_SDR_EQUIVALENTE[rankAtual] : undefined;
+
+  const producaoComoCloser = rankSdrEquivalente
+    ? vendasMes.filter((v) => v.papel === "closer" || v.papel === "ambos").reduce((s, v) => s + Number(v.valor), 0)
+    : producaoRealMes;
+  const producaoComoSdr = rankSdrEquivalente
+    ? vendasMes.filter((v) => v.papel === "sdr" || v.papel === "ambos").reduce((s, v) => s + Number(v.valor), 0)
+    : 0;
+
+  const { data: tiersSdrEquivalente } = rankSdrEquivalente
+    ? await supabase.from("commission_tiers").select("producao_min, fixo, pct_variavel").eq("rank", rankSdrEquivalente).order("ordem")
+    : { data: null };
+  const tiersSdrOrdenados = [...(tiersSdrEquivalente ?? [])].sort((a, b) => a.producao_min - b.producao_min);
+
+  const tierAtual = lookupComissao(tiersOrdenados, producaoComoCloser);
+  const proximo = proximoTier(tiersOrdenados, producaoComoCloser);
+  const comissaoSdr = rankSdrEquivalente && producaoComoSdr > 0 ? lookupComissao(tiersSdrOrdenados, producaoComoSdr) : null;
+  const comissaoTotalMes = (tierAtual?.total ?? 0) + (comissaoSdr?.total ?? 0);
 
   const { marcos } = await buscarProgressoMarcos(supabase, meId);
 
@@ -114,24 +151,61 @@ export default async function ComissaoPage() {
       <section className="card-imp">
         <h2 className="kicker mb-4">Mês atual</h2>
         {tierAtual ? (
-          <div className="grid grid-cols-4 gap-4 text-sm">
-            <div>
-              <p className="text-stone-500">Produção</p>
-              <p className="text-stone-100">{moeda(producaoRealMes)}</p>
+          <>
+            {comissaoSdr && (
+              <p className="mb-3 text-xs uppercase tracking-wide text-stone-500">
+                Comissão como {RANK_LABELS[profile?.rank ?? ""] ?? "Closer"}
+              </p>
+            )}
+            <div className="grid grid-cols-4 gap-4 text-sm">
+              <div>
+                <p className="text-stone-500">Produção</p>
+                <p className="text-stone-100">{moeda(comissaoSdr ? producaoComoCloser : producaoRealMes)}</p>
+              </div>
+              <div>
+                <p className="text-stone-500">Fixo</p>
+                <p className="text-stone-100">{moeda(tierAtual.fixo)}</p>
+              </div>
+              <div>
+                <p className="text-stone-500">Variável</p>
+                <p className="text-stone-100">{moeda(tierAtual.variavel)}</p>
+              </div>
+              <div>
+                <p className="text-stone-500">Total</p>
+                <p className="text-gold-bright">{moeda(tierAtual.total)}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-stone-500">Fixo</p>
-              <p className="text-stone-100">{moeda(tierAtual.fixo)}</p>
-            </div>
-            <div>
-              <p className="text-stone-500">Variável</p>
-              <p className="text-stone-100">{moeda(tierAtual.variavel)}</p>
-            </div>
-            <div>
-              <p className="text-stone-500">Total</p>
-              <p className="text-gold-bright">{moeda(tierAtual.total)}</p>
-            </div>
-          </div>
+
+            {comissaoSdr && (
+              <>
+                <p className="mb-3 mt-5 text-xs uppercase tracking-wide text-stone-500">
+                  + Comissão como {RANK_LABELS[RANK_SDR_EQUIVALENTE[profile?.rank as Rank] ?? ""] ?? "SDR"}
+                  <span className="ml-1 normal-case text-stone-600">(vendas fechadas sozinho, no papel de SDR)</span>
+                </p>
+                <div className="grid grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-stone-500">Produção</p>
+                    <p className="text-stone-100">{moeda(producaoComoSdr)}</p>
+                  </div>
+                  <div>
+                    <p className="text-stone-500">Fixo</p>
+                    <p className="text-stone-100">{moeda(comissaoSdr.fixo)}</p>
+                  </div>
+                  <div>
+                    <p className="text-stone-500">Variável</p>
+                    <p className="text-stone-100">{moeda(comissaoSdr.variavel)}</p>
+                  </div>
+                  <div>
+                    <p className="text-stone-500">Total</p>
+                    <p className="text-gold-bright">{moeda(comissaoSdr.total)}</p>
+                  </div>
+                </div>
+                <p className="mt-4 border-t border-imperium-line pt-3 text-sm text-stone-300">
+                  Remuneração total do mês: <span className="text-lg text-gold-bright">{moeda(comissaoTotalMes)}</span>
+                </p>
+              </>
+            )}
+          </>
         ) : (
           <p className="text-sm text-stone-500">
             Nenhuma faixa de comissão cadastrada pro seu cargo ainda — fale com o Diretor.
@@ -171,8 +245,13 @@ export default async function ComissaoPage() {
 
       <Card title="Tabela de comissão do seu cargo">
         <p className="mb-4 text-sm text-stone-300">
-          Produção do mês (extrato):{" "}
-          <span className="text-gold">{moeda(producaoRealMes)}</span>
+          {comissaoSdr ? "Produção como Closer (o que conta pro seu tier)" : "Produção do mês (extrato)"}:{" "}
+          <span className="text-gold">{moeda(comissaoSdr ? producaoComoCloser : producaoRealMes)}</span>
+          {rankSdrEquivalente && producaoComoSdr > 0 && (
+            <span className="ml-1 text-stone-500">
+              (+ {moeda(producaoComoSdr)} como SDR, não conta aqui — só na comissão à parte acima)
+            </span>
+          )}
           {proximo && (
             <>
               {" "}
@@ -287,6 +366,7 @@ export default async function ComissaoPage() {
                 <th className="pb-1">Data</th>
                 <th className="pb-1">Cliente</th>
                 <th className="pb-1">Origem</th>
+                {rankSdrEquivalente && <th className="pb-1">Papel</th>}
                 <th className="pb-1 text-right">Valor</th>
                 <th className="pb-1 text-right">Multiplicador</th>
               </tr>
@@ -299,6 +379,11 @@ export default async function ComissaoPage() {
                   </td>
                   <td className="py-1 text-stone-300">{v.cliente ?? "—"}</td>
                   <td className="py-1 text-stone-400">{v.origem ?? "—"}</td>
+                  {rankSdrEquivalente && (
+                    <td className="py-1 text-stone-400">
+                      {v.papel === "sdr" ? "SDR" : v.papel === "ambos" ? "Ambos" : "Closer"}
+                    </td>
+                  )}
                   <td className="py-1 text-right text-stone-100">{moeda(Number(v.valor))}</td>
                   <td className="py-1 text-right text-stone-400">{v.multiplicador != null ? `×${v.multiplicador}` : "—"}</td>
                 </tr>

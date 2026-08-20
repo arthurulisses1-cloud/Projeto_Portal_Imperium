@@ -39,3 +39,12 @@ export const STAR_PACE: Record<Rank, { estrelas: number; cheia: number; meia: nu
   pretor: { estrelas: 10, cheia: 7, meia: 5 },
   legado: { estrelas: 12, cheia: 10, meia: 6 },
 };
+
+// Um Closer às vezes fecha venda no papel de SDR (fez a prospecção sozinho).
+// Essa produção NÃO conta pro tier de Closer (que só sobe com produção COMO
+// closer), mas gera uma comissão à parte, calculada pela tabela do cargo de
+// SDR equivalente — "Jr" com "Jr", "Sr" com "Sr" (ver RANK_SUBTITLE).
+export const RANK_SDR_EQUIVALENTE: Partial<Record<Rank, Rank>> = {
+  tribuno: "legionario",
+  pretor: "centuriao",
+};

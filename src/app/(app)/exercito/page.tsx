@@ -10,7 +10,7 @@ import {
 import MembroCard from "@/components/MembroCard";
 import Card from "@/components/ui/Card";
 import { getViewerContext } from "@/lib/preview";
-import { calcularFunilMeta } from "@/lib/metas";
+import { calcularFunilMeta, mapaMetaCreditoPorTribo } from "@/lib/metas";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -74,10 +74,11 @@ export default async function ExercitoPage() {
     .eq("ano", agora.getFullYear())
     .eq("mes", agora.getMonth() + 1)
     .maybeSingle();
-  const { count: numExercitos } = await supabase.from("exercitos").select("id", { count: "exact", head: true });
-  const metaCreditoExercito = numExercitos ? (metaMes?.meta_credito_total ?? 0) / numExercitos : 0;
-  const numTribos = tribos?.length ?? 0;
-  const metaCreditoPorTribo = numTribos > 0 ? metaCreditoExercito / numTribos : 0;
+  // Divisão igual por Tribo (Inbound conta como meio de uma Tribo lógica —
+  // ver mapaMetaCreditoPorTribo) — cada Tribo pode ter uma meta diferente
+  // agora, então "por Tribo" vira um mapa, não mais um número único.
+  const mapaMetaTribo = await mapaMetaCreditoPorTribo(supabase, metaMes?.meta_credito_total ?? 0);
+  const metaCreditoExercito = (tribos ?? []).reduce((s, t) => s + (mapaMetaTribo.get(t.id) ?? 0), 0);
 
   // producao_funil.meta vem sempre 0 do sync — a meta de verdade é derivada
   // da meta de crédito do Exército via ticket médio + taxas de conversão.
@@ -148,9 +149,10 @@ export default async function ExercitoPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             {tribos.map((t) => {
               const pago = pagoPorTribo.get(t.id) ?? 0;
-              const esperado = metaCreditoPorTribo * paceEsperado;
-              const emRisco = metaCreditoPorTribo > 0 && pago < esperado * 0.8;
-              const pct = metaCreditoPorTribo > 0 ? (pago / metaCreditoPorTribo) * 100 : null;
+              const metaTribo = mapaMetaTribo.get(t.id) ?? 0;
+              const esperado = metaTribo * paceEsperado;
+              const emRisco = metaTribo > 0 && pago < esperado * 0.8;
+              const pct = metaTribo > 0 ? (pago / metaTribo) * 100 : null;
               return (
                 <div
                   key={t.id}
