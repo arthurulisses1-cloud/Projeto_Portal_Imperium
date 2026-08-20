@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { salvarNomesPlanilha } from "@/app/(app)/gestao/actions";
+import { IconCheck } from "./icons";
 
 export default function SeletorNomesPlanilha({
   profileId,
@@ -76,9 +77,15 @@ export default function SeletorNomesPlanilha({
         type="button"
         onClick={salvar}
         disabled={isPending}
-        className="btn-outline mt-2 px-2 py-1 text-xs"
+        className="btn-outline mt-2 flex items-center gap-1 px-2 py-1 text-xs"
       >
-        {isPending ? "Salvando..." : salvo ? "Salvo ✓" : "Salvar vínculo"}
+        {isPending ? "Salvando..." : salvo ? (
+          <>
+            <IconCheck className="h-3 w-3" /> Salvo
+          </>
+        ) : (
+          "Salvar vínculo"
+        )}
       </button>
     </div>
   );

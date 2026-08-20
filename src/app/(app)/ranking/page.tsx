@@ -1,12 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
+import { IconMedal } from "@/components/ui/icons";
 
 type Linha = { nome: string; tribo: string; valor: number };
 
-const PODIO_ESTILO: Record<1 | 2 | 3, { alt: string; borda: string; texto: string; medalha: string; nomeCls: string; av: string }> = {
-  1: { alt: "h-16", borda: "border-gold", texto: "text-gold-bright", medalha: "🥇", nomeCls: "text-sm", av: "h-14 w-14 text-base" },
-  2: { alt: "h-11", borda: "border-stone-400", texto: "text-stone-200", medalha: "🥈", nomeCls: "text-xs", av: "h-11 w-11 text-sm" },
-  3: { alt: "h-7", borda: "border-amber-700", texto: "text-amber-500", medalha: "🥉", nomeCls: "text-xs", av: "h-11 w-11 text-sm" },
+const PODIO_ESTILO: Record<1 | 2 | 3, { alt: string; borda: string; texto: string; nomeCls: string; av: string }> = {
+  1: { alt: "h-16", borda: "border-gold", texto: "text-gold-bright", nomeCls: "text-sm", av: "h-14 w-14 text-base" },
+  2: { alt: "h-11", borda: "border-stone-400", texto: "text-stone-200", nomeCls: "text-xs", av: "h-11 w-11 text-sm" },
+  3: { alt: "h-7", borda: "border-amber-700", texto: "text-amber-500", nomeCls: "text-xs", av: "h-11 w-11 text-sm" },
 };
 
 function iniciais(nome: string) {
@@ -17,7 +18,7 @@ function PodioCard({ linha, posicao, fmt }: { linha: Linha; posicao: 1 | 2 | 3; 
   const e = PODIO_ESTILO[posicao];
   return (
     <div className="flex w-24 flex-col items-center gap-1">
-      <span className="text-base leading-none">{e.medalha}</span>
+      <IconMedal className={`h-5 w-5 ${e.texto}`} />
       <div
         className={`flex items-center justify-center rounded-full border-2 bg-imperium-bg font-display ${e.borda} ${e.texto} ${e.av}`}
       >

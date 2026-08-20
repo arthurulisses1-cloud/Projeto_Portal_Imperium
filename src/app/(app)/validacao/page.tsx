@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
 import { decidirEvidencia, decidirPromocao } from "./actions";
+import { IconBell } from "@/components/ui/icons";
 
 export default async function ValidacaoPage() {
   const supabase = await createClient();
@@ -28,7 +29,9 @@ export default async function ValidacaoPage() {
 
       {pedidosPromocao && pedidosPromocao.length > 0 && (
         <section className="card-imp border-gold/40">
-          <h2 className="kicker mb-4 text-gold">🔔 Pedidos de promoção</h2>
+          <h2 className="kicker mb-4 flex items-center gap-1.5 text-gold">
+            <IconBell className="h-3.5 w-3.5" /> Pedidos de promoção
+          </h2>
           <ul className="space-y-4">
             {pedidosPromocao.map((p) => {
               const autor = p.profile as unknown as { full_name: string } | null;

@@ -1,4 +1,5 @@
 import type { Confronto } from "@/lib/guerra";
+import { IconCrown } from "./icons";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -29,7 +30,7 @@ export default function ConfrontoWidget({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={crests[d.nome]} alt={d.nome} className="h-5 w-5 rounded-full object-cover" />
               )}
-              {i === 0 && "👑 "}
+              {i === 0 && <IconCrown className="h-3.5 w-3.5" />}
               {d.nome}
             </span>
             <span className={i === 0 ? "text-gold-bright" : "text-stone-400"}>{moeda(d.valor)}</span>

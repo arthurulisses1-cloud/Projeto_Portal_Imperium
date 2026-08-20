@@ -1,5 +1,7 @@
+import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
 import Card from "@/components/ui/Card";
+import { IconMedal, IconScales, IconAlert } from "@/components/ui/icons";
 
 const TRANSICAO_LABEL: Record<string, string> = {
   legionario_centuriao: "Legionário → Centurião",
@@ -84,10 +86,10 @@ export default async function AuditoriaPage() {
     }),
   ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
-  const TIPO_ICONE: Record<EventoAuditoria["tipo"], string> = {
-    Promoção: "🎖️",
-    Contestação: "⚖️",
-    Strike: "⚠️",
+  const TIPO_ICONE: Record<EventoAuditoria["tipo"], ReactNode> = {
+    Promoção: <IconMedal className="h-4 w-4" />,
+    Contestação: <IconScales className="h-4 w-4" />,
+    Strike: <IconAlert className="h-4 w-4" />,
   };
 
   return (
@@ -102,7 +104,7 @@ export default async function AuditoriaPage() {
           <ul className="space-y-3">
             {eventos.map((e) => (
               <li key={e.id} className="flex items-start gap-3 border-b border-imperium-line pb-3 text-sm last:border-0">
-                <span className="text-lg leading-none">{TIPO_ICONE[e.tipo]}</span>
+                <span className="text-stone-400">{TIPO_ICONE[e.tipo]}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-stone-100">

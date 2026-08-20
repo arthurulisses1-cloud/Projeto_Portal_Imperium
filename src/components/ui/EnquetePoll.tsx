@@ -1,4 +1,5 @@
 import { votarEnquete } from "@/app/(app)/mural-actions";
+import { IconCheck } from "./icons";
 
 export type EnqueteData = {
   enqueteId: string;
@@ -18,8 +19,8 @@ export default function EnquetePoll({ dados }: { dados: EnqueteData }) {
           return (
             <div key={o.id}>
               <div className="mb-1 flex items-center justify-between text-sm">
-                <span className={minhaEscolha ? "text-gold-bright" : "text-stone-300"}>
-                  {minhaEscolha && "✓ "}
+                <span className={`flex items-center gap-1 ${minhaEscolha ? "text-gold-bright" : "text-stone-300"}`}>
+                  {minhaEscolha && <IconCheck className="h-3.5 w-3.5" />}
                   {o.texto}
                 </span>
                 <span className="text-stone-400">{pct}%</span>

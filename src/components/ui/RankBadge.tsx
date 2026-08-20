@@ -1,5 +1,6 @@
 import { toRoman } from "@/lib/roman";
 import { RANK_ORDER, type Rank } from "@/lib/carreira";
+import { IconLock } from "./icons";
 
 const SIZES = {
   sm: "h-8 w-8 text-xs",
@@ -42,8 +43,8 @@ export default function RankBadge({
           }`}
         />
         {!active && (
-          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/30 text-xs">
-            🔒
+          <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/30">
+            <IconLock className="h-3.5 w-3.5 text-stone-300" />
           </span>
         )}
       </div>

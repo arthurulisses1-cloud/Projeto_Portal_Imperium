@@ -10,6 +10,7 @@ import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
 import { RANK_LABELS } from "@/lib/labels";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
+import { IconLock } from "@/components/ui/icons";
 
 const MESES = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez",
@@ -277,8 +278,8 @@ export default async function ComissaoPage() {
                     </div>
                   )}
                   {!m.alcancado && !m.elegivel && (
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-2xl">
-                      🔒
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/45">
+                      <IconLock className="h-6 w-6 text-stone-300" />
                     </span>
                   )}
                   <span

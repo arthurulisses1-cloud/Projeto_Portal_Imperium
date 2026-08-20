@@ -13,6 +13,7 @@ import { getViewerContext } from "@/lib/preview";
 import { calcularFunilMeta, mapaMetaCreditoPorTribo } from "@/lib/metas";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
+import { IconAlert } from "@/components/ui/icons";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -168,7 +169,11 @@ export default async function ExercitoPage() {
                 >
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-stone-100">{t.nome}</p>
-                    {emRisco && <span className="text-[10px] uppercase text-wine-bright">⚠ Em risco</span>}
+                    {emRisco && (
+                      <span className="flex items-center gap-1 text-[10px] uppercase text-wine-bright">
+                        <IconAlert className="h-3 w-3" /> Em risco
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1 text-gold">{moeda(pago)}</p>
                   {pct !== null && <p className="text-xs text-stone-500">{pct.toFixed(0)}% da meta do mês</p>}

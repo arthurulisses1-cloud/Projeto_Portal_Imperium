@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { salvarMotivoQueda } from "@/app/(app)/forecast/actions";
 import { MOTIVO_QUEDA_LABELS, MOTIVO_QUEDA_PEDE_OBS, STATUS_SHEET_LABELS, type ForecastOp, type MotivoQueda } from "@/lib/forecast";
 import { Tr, Td } from "@/components/ui/Table";
+import { IconCheck } from "@/components/ui/icons";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -75,7 +76,7 @@ export default function ForecastRowQueda({ op }: { op: ForecastOp }) {
                 disabled={isPending || !motivo}
                 className="btn-outline shrink-0 px-2 py-1 text-[10px]"
               >
-                {isPending ? "..." : salvo ? "✓" : "Salvar"}
+                {isPending ? "..." : salvo ? <IconCheck className="mx-auto h-3 w-3" /> : "Salvar"}
               </button>
             </div>
             {erro && <p className="mt-1 text-[10px] text-wine-bright">{erro}</p>}

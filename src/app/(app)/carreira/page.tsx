@@ -17,6 +17,7 @@ import Card from "@/components/ui/Card";
 import RankBadge from "@/components/ui/RankBadge";
 import Laurel from "@/components/ui/Laurel";
 import { getViewerContext } from "@/lib/preview";
+import { IconLaurel, IconBell } from "@/components/ui/icons";
 
 export default async function CarreiraPage() {
   const supabase = await createClient();
@@ -225,19 +226,25 @@ export default async function CarreiraPage() {
             {prontoPraPromocao &&
               (promoRequestAtual && promoRequestAtual.status !== "rejeitado" ? (
                 <span
-                  className={`rounded-full border px-3 py-1.5 text-xs uppercase ${
+                  className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs uppercase ${
                     promoRequestAtual.status === "aprovado"
                       ? "border-success/50 text-success-bright"
                       : "border-gold/50 text-gold"
                   }`}
                 >
-                  {promoRequestAtual.status === "aprovado" ? "Promoção aprovada 🎉" : "Solicitação enviada, aguardando o Diretor"}
+                  {promoRequestAtual.status === "aprovado" ? (
+                    <>
+                      <IconLaurel className="h-3.5 w-3.5" /> Promoção aprovada
+                    </>
+                  ) : (
+                    "Solicitação enviada, aguardando o Diretor"
+                  )}
                 </span>
               ) : (
                 <form action={solicitarPromocao}>
                   <input type="hidden" name="transicao" value={transicao ?? ""} />
-                  <button type="submit" className="btn-gold">
-                    🔔 Solicitar promoção
+                  <button type="submit" className="btn-gold flex items-center gap-1.5">
+                    <IconBell className="h-4 w-4" /> Solicitar promoção
                   </button>
                 </form>
               ))}

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import Card from "@/components/ui/Card";
+import { IconLaurel } from "@/components/ui/icons";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -124,7 +125,9 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
             <ul className="space-y-1.5">
               {aniversarios.map((a) => (
                 <li key={a.id} className="flex items-center justify-between text-sm">
-                  <span className="text-stone-200">🎉 {a.nome}</span>
+                  <span className="flex items-center gap-1.5 text-stone-200">
+                    <IconLaurel className="h-3.5 w-3.5 text-gold" /> {a.nome}
+                  </span>
                   <span className="text-gold">
                     {a.anos} {a.anos === 1 ? "ano" : "anos"} — {a.dias === 0 ? "hoje" : `em ${a.dias}d`}
                   </span>

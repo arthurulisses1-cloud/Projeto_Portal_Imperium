@@ -82,3 +82,65 @@ export const IconTablet = ({ className }: P) => (
     <path d="M8 8h8M8 12h8M8 16h5" />
   </svg>
 );
+export const IconFlame = ({ className }: P) => (
+  <svg {...props(className)}>
+    <path d="M12 3c1 3-3 4-3 7.5a3.5 3.5 0 0 0 7 0c0-1.2-.6-2-1.2-2.8.3 2-1.1 2.8-1.8 2 .8-2.3-1-4-1-6.7Z" />
+    <path d="M9 15a3.5 4 0 0 0 7 0" />
+  </svg>
+);
+export const IconGift = ({ className }: P) => (
+  <svg {...props(className)}>
+    <rect x="4" y="9" width="16" height="4" />
+    <rect x="5" y="13" width="14" height="8" />
+    <path d="M12 9v12M12 9c-1-3-3.5-4-4.5-2.5S9 9 12 9ZM12 9c1-3 3.5-4 4.5-2.5S15 9 12 9Z" />
+  </svg>
+);
+export const IconLock = ({ className }: P) => (
+  <svg {...props(className)}>
+    <rect x="5" y="11" width="14" height="10" rx="1.5" />
+    <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+  </svg>
+);
+export const IconBallot = ({ className }: P) => (
+  <svg {...props(className)}>
+    <rect x="4" y="4" width="16" height="16" rx="1.5" />
+    <path d="M8 12l2.5 2.5L16 9" />
+  </svg>
+);
+export const IconMedal = ({ className }: P) => (
+  <svg {...props(className)}>
+    <path d="M8 3h8l-3 8h-2L8 3Z" />
+    <circle cx="12" cy="15" r="6" />
+    <path d="M12 12v6M9.5 15h5" />
+  </svg>
+);
+export const IconCrown = ({ className }: P) => (
+  <svg {...props(className)}>
+    <path d="M4 9l3 3 5-6 5 6 3-3-2 10H6L4 9Z" />
+    <path d="M6 19h12" />
+  </svg>
+);
+export const IconCheck = ({ className }: P) => (
+  <svg {...props(className)}>
+    <path d="M4 12.5l5 5L20 6" />
+  </svg>
+);
+export const IconEye = ({ className }: P) => (
+  <svg {...props(className)}>
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+export const IconBell = ({ className }: P) => (
+  <svg {...props(className)}>
+    <path d="M6 16V11a6 6 0 0 1 12 0v5l2 3H4l2-3Z" />
+    <path d="M10 21a2 2 0 0 0 4 0" />
+  </svg>
+);
+export const IconAlert = ({ className }: P) => (
+  <svg {...props(className)}>
+    <path d="M12 3.5L21.5 20h-19L12 3.5Z" />
+    <path d="M12 10v4.5" />
+    <circle cx="12" cy="17.3" r="0.6" fill="currentColor" />
+  </svg>
+);

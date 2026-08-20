@@ -8,6 +8,7 @@ import SimuladorMeta from "./simulador";
 import Card from "@/components/ui/Card";
 import BarraProgresso from "@/components/ui/BarraProgresso";
 import { getViewerContext } from "@/lib/preview";
+import { IconAlert, IconCheck, IconBook } from "@/components/ui/icons";
 
 type Periodo = "hoje" | "semana" | "mes";
 type Visao = "total" | "individual" | "tribo";
@@ -231,9 +232,12 @@ export default async function ProducaoPage({
       </div>
 
       {fechosForaDaTribo && (
-        <div className="rounded border border-gold/40 bg-gold/10 px-4 py-2.5 text-xs text-gold-dim">
-          ⚠ Inclui {fechosForaDaTribo.qtd} fechamento(s) seu(s) fora da própria Tribo neste período (
-          {moeda(fechosForaDaTribo.valor)}) — já contado no total da Tribo, mas não é pipeline orgânico dela.
+        <div className="flex items-start gap-2 rounded border border-gold/40 bg-gold/10 px-4 py-2.5 text-xs text-gold-dim">
+          <IconAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Inclui {fechosForaDaTribo.qtd} fechamento(s) seu(s) fora da própria Tribo neste período (
+            {moeda(fechosForaDaTribo.valor)}) — já contado no total da Tribo, mas não é pipeline orgânico dela.
+          </span>
         </div>
       )}
 
@@ -346,7 +350,13 @@ export default async function ProducaoPage({
                 }`}
               >
                 <span className="mt-0.5 shrink-0">
-                  {item.tom === "alerta" ? "⚠" : item.tom === "elogio" ? "✓" : "📘"}
+                  {item.tom === "alerta" ? (
+                    <IconAlert className="h-4 w-4" />
+                  ) : item.tom === "elogio" ? (
+                    <IconCheck className="h-4 w-4" />
+                  ) : (
+                    <IconBook className="h-4 w-4" />
+                  )}
                 </span>
                 <span>
                   {item.texto}

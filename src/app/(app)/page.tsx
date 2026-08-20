@@ -6,7 +6,7 @@ import BarraMeta from "@/components/ui/BarraMeta";
 import ConfrontoWidget from "@/components/ui/Confronto";
 import EnquetePoll, { type EnqueteData } from "@/components/ui/EnquetePoll";
 import CentralNotificacoes from "@/components/CentralNotificacoes";
-import { IconSwords, IconShield, IconCoin } from "@/components/ui/icons";
+import { IconSwords, IconShield, IconCoin, IconHorn, IconBallot, IconMedal, IconScroll, IconCrown } from "@/components/ui/icons";
 import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
 import { buscarMetaIndividual, buscarMetaExercito, buscarProducaoPagaExercito, buscarMetaTribo, buscarProducaoPagaTribo, buscarMetaFirma, buscarProducaoPagaFirma } from "@/lib/metas";
 import { buscarCampanhasAtivas, type CampanhaComProgresso } from "@/lib/campanhas";
@@ -285,7 +285,9 @@ export default async function MuralPage() {
       {meRole !== "sdr" && (
         <details className="card-imp group">
           <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
-            <span>🛠 Publicar no Mural</span>
+            <span className="flex items-center gap-1.5">
+              <IconScroll className="h-4 w-4" /> Publicar no Mural
+            </span>
             <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
           </summary>
           <div className="mt-4">
@@ -313,8 +315,14 @@ export default async function MuralPage() {
                   id={`post-${post.id}`}
                   className="flex gap-4 rounded border border-imperium-line bg-imperium-bg/40 p-4 scroll-mt-20"
                 >
-                  <span className="text-2xl">
-                    {post.tipo === "aviso" ? "📯" : post.tipo === "enquete" ? "🗳️" : "🏅"}
+                  <span className="mt-0.5 shrink-0 text-gold">
+                    {post.tipo === "aviso" ? (
+                      <IconHorn className="h-6 w-6" />
+                    ) : post.tipo === "enquete" ? (
+                      <IconBallot className="h-6 w-6" />
+                    ) : (
+                      <IconMedal className="h-6 w-6" />
+                    )}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
@@ -388,8 +396,8 @@ function CampanhasCard({ campanhas }: { campanhas: CampanhaComProgresso[] }) {
                   {c.participantes.map((p, i) => (
                     <div key={p.refId}>
                       <div className="mb-1 flex items-center justify-between text-xs">
-                        <span className={i === 0 && c.alvo !== "geral" ? "text-gold-bright" : "text-stone-300"}>
-                          {i === 0 && c.alvo !== "geral" && "👑 "}
+                        <span className={`flex items-center gap-1 ${i === 0 && c.alvo !== "geral" ? "text-gold-bright" : "text-stone-300"}`}>
+                          {i === 0 && c.alvo !== "geral" && <IconCrown className="h-3.5 w-3.5" />}
                           {p.label}
                         </span>
                         <span className="text-stone-400">

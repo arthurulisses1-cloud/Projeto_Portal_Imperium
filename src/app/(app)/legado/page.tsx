@@ -6,6 +6,7 @@ import { gerarParecer } from "@/lib/oraculo";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
 import { salvarAdmissao, salvarNascimento, alternarAtivo, confirmarResgateMarco } from "./actions";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
+import { IconAlert, IconGift } from "@/components/ui/icons";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -254,9 +255,9 @@ export default async function LegadoPage({
                 {emQueda && (
                   <span
                     title="Ritmo do mês projeta bem abaixo da média dos últimos 2 meses"
-                    className="shrink-0 rounded-full border border-wine/50 bg-wine/10 px-2 py-1 text-[10px] uppercase text-wine-bright"
+                    className="flex shrink-0 items-center gap-1 rounded-full border border-wine/50 bg-wine/10 px-2 py-1 text-[10px] uppercase text-wine-bright"
                   >
-                    ⚠ Queda
+                    <IconAlert className="h-3 w-3" /> Queda
                   </span>
                 )}
               </div>
@@ -282,8 +283,8 @@ export default async function LegadoPage({
 
               {elegiveis.length > 0 && (
                 <div className="mt-4 rounded border border-gold/40 bg-gold/5 p-2.5">
-                  <p className="mb-1.5 text-[10px] uppercase tracking-wide text-gold">
-                    🎁 Marco batido este mês — confirmar resgate
+                  <p className="mb-1.5 flex items-center gap-1 text-[10px] uppercase tracking-wide text-gold">
+                    <IconGift className="h-3 w-3" /> Marco batido este mês — confirmar resgate
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {elegiveis.map((m) => (

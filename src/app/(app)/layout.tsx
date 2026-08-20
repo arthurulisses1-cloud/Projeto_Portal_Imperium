@@ -7,7 +7,7 @@ import UserMenu from "@/components/ui/UserMenu";
 import VisualizacaoSelector from "@/components/ui/VisualizacaoSelector";
 import PreviewPessoaSelector from "@/components/ui/PreviewPessoaSelector";
 import { limparPreview } from "./preview-actions";
-import { IconLaurel } from "@/components/ui/icons";
+import { IconLaurel, IconEye } from "@/components/ui/icons";
 import { buscarPendencias } from "@/lib/pendencias";
 
 export const dynamic = "force-dynamic";
@@ -167,8 +167,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex min-w-0 flex-1 flex-col">
         {previewPessoa && (
           <div className="flex items-center justify-between gap-3 border-b border-gold/40 bg-gold/10 px-6 py-2 text-xs text-gold-bright">
-            <span>
-              👁 Pré-visualizando como <b>{previewPessoa.nome}</b> — os dados nas telas pessoais são dela(e), não seus.
+            <span className="flex items-center gap-1.5">
+              <IconEye className="h-3.5 w-3.5 shrink-0" /> Pré-visualizando como <b>{previewPessoa.nome}</b> — os dados nas telas pessoais são dela(e), não seus.
             </span>
             <form action={limparPreview}>
               <button type="submit" className="rounded border border-gold/40 px-2 py-1 text-[10px] uppercase hover:bg-gold/20">

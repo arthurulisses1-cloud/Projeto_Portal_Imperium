@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { salvarStatusForecast } from "@/app/(app)/forecast/actions";
 import { STATUS_SHEET_LABELS, STATUS_MANUAL_LABELS, type ForecastOp, type StatusManual } from "@/lib/forecast";
 import { Tr, Td } from "@/components/ui/Table";
+import { IconCheck } from "@/components/ui/icons";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -75,7 +76,7 @@ export default function ForecastRow({ op }: { op: ForecastOp }) {
               disabled={isPending || statusTerminal}
               className="btn-outline shrink-0 px-2 py-1 text-[10px]"
             >
-              {isPending ? "..." : salvo ? "✓" : "Salvar"}
+              {isPending ? "..." : salvo ? <IconCheck className="mx-auto h-3 w-3" /> : "Salvar"}
             </button>
           </div>
         ) : (

@@ -12,6 +12,7 @@ import { buscarRemuneracaoMes } from "@/lib/remuneracao";
 import { buscarProgressoMarcos } from "@/lib/marcos";
 import { paraRomano } from "@/lib/numerals";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
+import { IconLock, IconGift } from "./icons";
 import RankBadge from "./RankBadge";
 
 function moeda(v: number) {
@@ -325,12 +326,14 @@ export default async function SidebarRight({ userId }: { userId: string }) {
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={m.imagemUrl} alt={m.nome} className="h-full w-full object-cover" />
                       {!m.alcancado && !m.elegivel && (
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-base">
-                          🔒
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/40">
+                          <IconLock className="h-4 w-4 text-stone-300" />
                         </span>
                       )}
                       {m.elegivel && (
-                        <span className="absolute -bottom-1 -right-1 text-xs">🎁</span>
+                        <span className="absolute -bottom-1 -right-1 rounded-full bg-imperium-surface p-0.5">
+                          <IconGift className="h-3 w-3 text-gold" />
+                        </span>
                       )}
                     </div>
                   ) : (
@@ -346,8 +349,16 @@ export default async function SidebarRight({ userId }: { userId: string }) {
                       title={m.elegivel ? `${m.nome} — disponível este mês, fale com o Diretor` : m.nome}
                     >
                       {m.icone}
-                      {!m.alcancado && !m.elegivel && <span className="absolute -bottom-1 -right-1 text-xs">🔒</span>}
-                      {m.elegivel && <span className="absolute -bottom-1 -right-1 text-xs">🎁</span>}
+                      {!m.alcancado && !m.elegivel && (
+                        <span className="absolute -bottom-1 -right-1 rounded-full bg-imperium-surface p-0.5">
+                          <IconLock className="h-3 w-3 text-stone-500" />
+                        </span>
+                      )}
+                      {m.elegivel && (
+                        <span className="absolute -bottom-1 -right-1 rounded-full bg-imperium-surface p-0.5">
+                          <IconGift className="h-3 w-3 text-gold" />
+                        </span>
+                      )}
                     </div>
                   )
                 )}
