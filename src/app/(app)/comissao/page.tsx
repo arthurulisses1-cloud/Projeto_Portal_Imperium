@@ -302,6 +302,8 @@ export default async function ComissaoPage() {
               <tr className="text-left text-xs text-stone-500">
                 <th className="pb-1">Data</th>
                 <th className="pb-1">Cliente</th>
+                <th className="pb-1">SDR</th>
+                <th className="pb-1">Closer</th>
                 <th className="pb-1">Origem</th>
                 <th className="pb-1">Papel</th>
                 <th className="pb-1 text-right">% aplicado</th>
@@ -328,6 +330,8 @@ export default async function ComissaoPage() {
                       {new Date(v.data + "T00:00:00").toLocaleDateString("pt-BR")}
                     </td>
                     <td className="py-1 text-stone-300">{v.cliente ?? "—"}</td>
+                    <td className="py-1 text-stone-400">{v.sdrNome ?? "—"}</td>
+                    <td className="py-1 text-stone-400">{v.closerNome ?? "—"}</td>
                     <td className="py-1 text-stone-400">{v.origem ?? "—"}</td>
                     <td className="py-1 text-stone-400">{PAPEL_LABEL[v.papel] ?? v.papel}</td>
                     <td className="py-1 text-right text-stone-500">

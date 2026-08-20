@@ -10,7 +10,18 @@ export type LinhaExtrato = {
   valor: number;
   papel: "sdr" | "closer" | "ambos" | "time";
   multiplicador: number | null;
+  sdrNome: string | null;
+  closerNome: string | null;
 };
+
+// vendas e weekly_operacoes nascem da MESMA linha da planilha "Assinado"
+// (ver src/lib/sync/assinado.ts) — vendas credita cada pessoa num registro
+// separado (sem guardar o par SDR+Closer), weekly_operacoes guarda os dois
+// profile_id juntos. Casando por data+valor+cliente (mesma origem, mesmos
+// valores) dá pra recuperar "quem fez o outro papel" pro extrato pessoal.
+function chaveOperacao(data: string, valor: number, cliente: string | null): string {
+  return `${data}|${valor.toFixed(2)}|${(cliente ?? "").trim().toLowerCase()}`;
+}
 
 export type RemuneracaoMes = {
   tiers: Tier[];
@@ -117,6 +128,15 @@ export async function buscarRemuneracaoMes(
       gestao: producaoGestao,
     });
 
+    const idsParaNome = Array.from(
+      new Set(opsDoEscopo.flatMap((o) => [o.sdr_profile_id, o.closer_profile_id]).filter((x): x is string => !!x))
+    );
+    const { data: pessoasNome } =
+      idsParaNome.length > 0
+        ? await supabase.from("profiles").select("id, full_name").in("id", idsParaNome)
+        : { data: [] };
+    const nomePorId = new Map((pessoasNome ?? []).map((p) => [p.id, p.full_name as string]));
+
     const extrato: LinhaExtrato[] = opsDoEscopo.map((o) => ({
       id: o.id,
       data: o.data,
@@ -132,6 +152,8 @@ export async function buscarRemuneracaoMes(
               ? "sdr"
               : "time",
       multiplicador: null,
+      sdrNome: o.sdr_profile_id ? (nomePorId.get(o.sdr_profile_id) ?? null) : null,
+      closerNome: o.closer_profile_id ? (nomePorId.get(o.closer_profile_id) ?? null) : null,
     }));
 
     const producaoTotal = opsDoEscopo.reduce((s, o) => s + Number(o.valor), 0);
@@ -147,6 +169,28 @@ export async function buscarRemuneracaoMes(
     .order("data", { ascending: false });
   const vendasMes = vendasRaw ?? [];
 
+  const { data: opsParaCasar } = await supabase
+    .from("weekly_operacoes")
+    .select("data, valor, cliente, sdr_profile_id, closer_profile_id")
+    .eq("status", "PAGO")
+    .gte("data", inicioMes);
+  const opPorChave = new Map(
+    (opsParaCasar ?? []).map((o) => [chaveOperacao(o.data, Number(o.valor), o.cliente), o])
+  );
+  const idsContraparte = Array.from(
+    new Set(
+      vendasMes
+        .map((v) => opPorChave.get(chaveOperacao(v.data, Number(v.valor), v.cliente)))
+        .flatMap((o) => (o ? [o.sdr_profile_id, o.closer_profile_id] : []))
+        .filter((x): x is string => !!x)
+    )
+  );
+  const { data: pessoasContraparte } =
+    idsContraparte.length > 0
+      ? await supabase.from("profiles").select("id, full_name").in("id", idsContraparte)
+      : { data: [] };
+  const nomePorIdContraparte = new Map((pessoasContraparte ?? []).map((p) => [p.id, p.full_name as string]));
+
   const producaoSdr = vendasMes
     .filter((v) => v.papel === "sdr" || v.papel === "ambos")
     .reduce((s, v) => s + Number(v.valor), 0);
@@ -161,15 +205,37 @@ export async function buscarRemuneracaoMes(
     gestao: 0,
   });
 
-  const extrato: LinhaExtrato[] = vendasMes.map((v) => ({
-    id: v.id,
-    data: v.data,
-    cliente: v.cliente,
-    origem: v.origem,
-    valor: Number(v.valor),
-    papel: (v.papel as "sdr" | "closer" | "ambos" | null) ?? "closer",
-    multiplicador: v.multiplicador,
-  }));
+  const extrato: LinhaExtrato[] = vendasMes.map((v) => {
+    const op = opPorChave.get(chaveOperacao(v.data, Number(v.valor), v.cliente));
+    const papel = (v.papel as "sdr" | "closer" | "ambos" | null) ?? "closer";
+    // Sem match em weekly_operacoes (venda antiga, ou fora do que o sync
+    // dessa tabela cobre): pelo menos a própria pessoa aparece no seu papel.
+    const sdrNome = op
+      ? op.sdr_profile_id
+        ? (nomePorIdContraparte.get(op.sdr_profile_id) ?? null)
+        : null
+      : papel === "sdr" || papel === "ambos"
+        ? "Você"
+        : null;
+    const closerNome = op
+      ? op.closer_profile_id
+        ? (nomePorIdContraparte.get(op.closer_profile_id) ?? null)
+        : null
+      : papel === "closer" || papel === "ambos"
+        ? "Você"
+        : null;
+    return {
+      id: v.id,
+      data: v.data,
+      cliente: v.cliente,
+      origem: v.origem,
+      valor: Number(v.valor),
+      papel,
+      multiplicador: v.multiplicador,
+      sdrNome,
+      closerNome,
+    };
+  });
 
   const producaoTotal = vendasMes.reduce((s, v) => s + Number(v.valor), 0);
 
