@@ -112,6 +112,27 @@ export async function enviarLinkAcesso(formData: FormData) {
   return { email: emailReal };
 }
 
+// Fallback pra quando email não é uma opção viável (sem SMTP configurado,
+// domínio da empresa fora do nosso controle) — gera uma senha nova
+// diretamente e devolve pra tela, igual o fluxo antigo de "Closer convida
+// SDR" já fazia, só que pra conta que já existe. O Diretor vê a senha UMA
+// vez e compartilha por fora (WhatsApp, pessoalmente) — não fica salva em
+// lugar nenhum depois disso, então se perder, só gerando outra.
+export async function gerarSenhaNova(formData: FormData) {
+  await exigirDiretor();
+  const profileId = String(formData.get("profile_id") ?? "");
+  if (!profileId) throw new Error("profile_id é obrigatório.");
+
+  const { randomInt } = await import("crypto");
+  const senha = "Imperium#" + randomInt(100000, 999999);
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(profileId, { password: senha });
+  if (error) throw new Error("Erro ao gerar senha: " + error.message);
+
+  return { senha };
+}
+
 export async function dispararSyncManual() {
   await exigirLiderOuDiretor();
   const resultado = await runSync();

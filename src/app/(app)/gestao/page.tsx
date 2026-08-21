@@ -8,6 +8,7 @@ import Card from "@/components/ui/Card";
 import SincronizarPlanilha from "@/components/ui/SincronizarPlanilha";
 import SeletorNomesPlanilha from "@/components/ui/SeletorNomesPlanilha";
 import EnviarAcessoForm from "@/components/ui/EnviarAcessoForm";
+import GerarSenhaButton from "@/components/ui/GerarSenhaButton";
 
 const ROLES = ["sdr", "closer", "lider", "diretor"] as const;
 const RANKS = [...RANK_ORDER, "diretor"] as const;
@@ -146,6 +147,13 @@ export default async function GestaoPage() {
                       Acesso (email real + link de redefinir senha)
                     </p>
                     <EnviarAcessoForm profileId={p.id} emailAtual={emailPorId.get(p.id) ?? null} />
+                  </div>
+
+                  <div className="mt-3">
+                    <p className="mb-1.5 text-[10px] uppercase tracking-wide text-stone-500">
+                      Sem email funcionando? Gere uma senha e mande direto
+                    </p>
+                    <GerarSenhaButton profileId={p.id} />
                   </div>
 
                   <details className="mt-3">
