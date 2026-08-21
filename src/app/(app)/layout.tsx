@@ -4,8 +4,6 @@ import AppNav, { type NavEntry } from "@/components/ui/AppNav";
 import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
 import SidebarRight from "@/components/ui/SidebarRight";
 import UserMenu from "@/components/ui/UserMenu";
-import VisualizacaoSelector from "@/components/ui/VisualizacaoSelector";
-import PreviewPessoaSelector from "@/components/ui/PreviewPessoaSelector";
 import { limparPreview } from "./preview-actions";
 import { IconLaurel, IconEye } from "@/components/ui/icons";
 import { buscarPendencias } from "@/lib/pendencias";
@@ -72,32 +70,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const cookieStore = await cookies();
 
-  // Diretor pode pré-visualizar como uma pessoa real específica — sem senha,
-  // sem logar em outra conta (ver src/lib/preview.ts). Isso tem prioridade
-  // sobre o "ver como <papel genérico>" de baixo, porque é mais específico:
-  // dirige a navegação inteira (abas) E os dados das telas pessoais.
+  // Pré-visualização (Diretor virar outra pessoa/papel pra revisar telas)
+  // foi desativada a pedido (2026-08-22) — "só quero usar minha conta como
+  // Diretor". Continua lendo preview_profile_id só de forma defensiva, pra
+  // não deixar ninguém preso numa pré-visualização antiga sem UI pra sair
+  // (o botão "Sair da pré-visualização" abaixo ainda cobre esse caso) — mas
+  // não existe mais nenhum jeito de ATIVAR isso pela UI, e o cookie
+  // "view_role" nem é mais lido, então "ver como <papel genérico>" some de
+  // vez, mesmo que um cookie antigo ainda exista no navegador.
   const previewProfileId = profile?.role === "diretor" ? cookieStore.get("preview_profile_id")?.value ?? null : null;
-  let pessoasPreview: { id: string; nome: string; role: string }[] = [];
   let previewPessoa: { id: string; nome: string; role: string; tribo_id: string | null } | null = null;
-  if (profile?.role === "diretor") {
-    const { data: pessoas } = await supabase
+  if (profile?.role === "diretor" && previewProfileId) {
+    const { data: encontrada } = await supabase
       .from("profiles")
       .select("id, full_name, role, tribo_id")
-      .in("role", ["sdr", "closer", "lider"])
-      .eq("ativo", true)
-      .order("full_name");
-    pessoasPreview = (pessoas ?? []).map((p) => ({ id: p.id, nome: p.full_name, role: p.role }));
-    if (previewProfileId) {
-      const encontrada = (pessoas ?? []).find((p) => p.id === previewProfileId);
-      if (encontrada) previewPessoa = { id: encontrada.id, nome: encontrada.full_name, role: encontrada.role, tribo_id: encontrada.tribo_id };
-    }
+      .eq("id", previewProfileId)
+      .maybeSingle();
+    if (encontrada) previewPessoa = { id: encontrada.id, nome: encontrada.full_name, role: encontrada.role, tribo_id: encontrada.tribo_id };
   }
 
-  // Diretor também pode escolher "ver como" um papel genérico (sem pessoa
-  // específica) — só troca a lista de abas, pra revisar rápido.
-  const papelVisualizado =
-    previewPessoa?.role ??
-    (profile?.role === "diretor" ? cookieStore.get("view_role")?.value || "diretor" : profile?.role);
+  const papelVisualizado = previewPessoa?.role ?? profile?.role;
 
   const itensVisiveis: NavEntry[] = NAV_ITEMS.filter(
     (item) => !profile || item.roles.includes(papelVisualizado ?? profile.role)
@@ -154,13 +146,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </p>
             </div>
           </div>
-
-          {profile?.role === "diretor" && (
-            <>
-              <VisualizacaoSelector atual={papelVisualizado ?? "diretor"} />
-              <PreviewPessoaSelector pessoas={pessoasPreview} atual={previewProfileId} />
-            </>
-          )}
 
           <div className="overflow-y-auto p-3">
             <AppNav items={itensVisiveis} pendencias={pendencias} />
