@@ -108,15 +108,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   });
 
   const ehExecutivo = papelVisualizado === "sdr" || papelVisualizado === "closer" || papelVisualizado === "lider";
+  // Diretor também ganha a lateral (2026-08-22, a pedido) — o conteúdo já
+  // degrada bem pro papel dele (Cargo/Comissão do mês reaproveitam o que
+  // já existia; Estrelas/Plano de Carreira/Minha Tribo simplesmente não
+  // renderizam, porque já checavam role sdr/closer/lider antes disso).
+  const mostraSidebarPapel = ehExecutivo || papelVisualizado === "diretor";
   // O Mural é a tela mais carregada do site — pra SDR/Closer, empilhar a
   // SidebarRight em cima do feed vira 3 colunas espremidas, então ela some
-  // nessa rota pra esses dois papéis. Líder é o oposto: o Mural é onde ele
-  // pede pra ver "Meu Exército" (Cargo, Tribos, Time), e como o Mural não
-  // tem mais uma lateral própria (Publicar/Campanhas viraram parte do feed
-  // principal), a SidebarRight aparece normalmente ali também.
+  // nessa rota pra esses dois papéis. Líder e Diretor são o oposto: o
+  // Mural é onde o líder pede pra ver "Meu Exército" (Cargo, Tribos,
+  // Time), e como o Mural não tem mais uma lateral própria (Publicar/
+  // Campanhas viraram parte do feed principal), a SidebarRight aparece
+  // normalmente ali também pros dois.
   const pathname = (await headers()).get("x-pathname") ?? "";
   const naMural = pathname === "/";
-  const mostraSidebarRight = !naMural || papelVisualizado === "lider";
+  const mostraSidebarRight = !naMural || papelVisualizado === "lider" || papelVisualizado === "diretor";
 
   const pendencias =
     user && profile
@@ -189,7 +195,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         <div className="flex flex-1">
           <div className="min-w-0 flex-1">{children}</div>
-          {user && ehExecutivo && mostraSidebarRight && <SidebarRight userId={previewPessoa?.id ?? user.id} />}
+          {user && mostraSidebarPapel && mostraSidebarRight && <SidebarRight userId={previewPessoa?.id ?? user.id} />}
         </div>
 
         <footer className="flex items-center justify-center gap-3 py-6">

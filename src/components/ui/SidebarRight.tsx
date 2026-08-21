@@ -215,13 +215,15 @@ export default async function SidebarRight({ userId }: { userId: string }) {
         <p className="kicker mb-3">Cargo Atual</p>
         <RankBadge rank={rank} size="lg" />
         <p className="mt-2 font-display text-base text-gold-bright">{RANK_LABELS[rank]}</p>
-        <p className="mt-1 text-lg tracking-widest">
-          {Array.from({ length: totalEstrelas }).map((_, i) => (
-            <span key={i} className={i < profile.stars_total ? "text-gold" : "text-imperium-line-strong"}>
-              ★
-            </span>
-          ))}
-        </p>
+        {profile.role !== "diretor" && (
+          <p className="mt-1 text-lg tracking-widest">
+            {Array.from({ length: totalEstrelas }).map((_, i) => (
+              <span key={i} className={i < profile.stars_total ? "text-gold" : "text-imperium-line-strong"}>
+                ★
+              </span>
+            ))}
+          </p>
+        )}
       </div>
 
       {semanaEstrelas &&
