@@ -46,6 +46,10 @@ const config = {
           DEFAULT: withOpacity("--c-warning"),
           bright: withOpacity("--c-warning-bright"),
         },
+        purpura: {
+          DEFAULT: withOpacity("--c-purpura"),
+          bright: withOpacity("--c-purpura-bright"),
+        },
         templar: withOpacity("--c-templar"),
         maximus: withOpacity("--c-maximus"),
         stone: {

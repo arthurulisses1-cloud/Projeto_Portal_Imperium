@@ -27,6 +27,11 @@
   --c-templar: 163 39 47;
   --c-maximus: 176 141 79;
 
+  /* púrpura imperial — só usado em detalhes ornamentais do tema Império,
+     mas definido em todo tema pra --c-purpura nunca ficar indefinida. */
+  --c-purpura: 108 66 148;
+  --c-purpura-bright: 142 96 186;
+
   /* escala "stone" — 100 = texto principal, 900 = quase invisível no fundo escuro */
   --stone-50: 250 250 249;
   --stone-100: 245 245 244;
@@ -66,6 +71,9 @@
   --c-templar: 163 39 47;
   --c-maximus: 140 109 59;
 
+  --c-purpura: 91 51 130;
+  --c-purpura-bright: 118 68 158;
+
   /* escala invertida: 100 = quase preto (texto principal no claro), 900 = quase branco */
   --stone-50: 250 250 249;
   --stone-100: 28 25 23;
@@ -82,9 +90,60 @@
   --foreground: rgb(var(--stone-100));
 }
 
+/* ============ Tema "Império" (vívido — púrpura e vermelho pompeiano, mais ornamento romano) ============ */
+:root[data-theme="imperio"] {
+  --c-bg: 21 9 10;
+  --c-surface: 40 15 17;
+  --c-raised: 52 19 22;
+  --c-line: 96 32 36;
+  --c-line-strong: 138 40 46;
+
+  --c-gold: 214 158 46;
+  --c-gold-bright: 255 197 84;
+  --c-gold-dim: 156 108 40;
+
+  --c-wine: 176 30 40;
+  --c-wine-bright: 219 46 58;
+
+  --c-success: 12 191 118;
+  --c-success-bright: 54 224 152;
+  --c-warning: 255 141 22;
+  --c-warning-bright: 255 176 56;
+
+  --c-templar: 178 34 44;
+  --c-maximus: 122 46 168;
+
+  --c-purpura: 122 46 168;
+  --c-purpura-bright: 158 84 214;
+
+  --stone-50: 250 248 246;
+  --stone-100: 245 240 235;
+  --stone-200: 226 214 205;
+  --stone-300: 202 184 172;
+  --stone-400: 166 143 133;
+  --stone-500: 128 104 98;
+  --stone-600: 94 72 68;
+  --stone-700: 70 50 48;
+  --stone-800: 46 28 27;
+  --stone-900: 30 17 17;
+
+  --background: rgb(var(--c-bg));
+  --foreground: rgb(var(--stone-100));
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
+}
+
+/* Fundo com veio sutil (evoca pórfiro/mármore vermelho) — só no Império,
+   os outros temas ficam com o fundo plano de sempre. */
+:root[data-theme="imperio"] body {
+  background-image:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgb(var(--c-purpura) / 0.10), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 10%, rgb(var(--c-wine) / 0.12), transparent 55%),
+    radial-gradient(ellipse 800px 600px at 50% 120%, rgb(var(--c-gold) / 0.05), transparent 60%);
+  background-attachment: fixed;
 }
 
 @layer components {
@@ -97,6 +156,27 @@ body {
     content: "";
     @apply absolute inset-x-0 top-0 h-px rounded-t bg-gradient-to-r from-transparent via-gold/50 to-transparent;
   }
+}
+
+/* Império: troca o traço simples por um friso grego (meandro) — o mesmo
+   ornamento usado em bordas de mosaicos e togas romanas — em vez de só
+   "mais uma linha com gradiente dourado". Fora do @layer de propósito:
+   o seletor com atributo já é mais específico que .card-imp::before
+   sozinho, então ganha sem precisar de !important nem depender de ordem. */
+:root[data-theme="imperio"] .card-imp::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 7px;
+  border-radius: 2px 2px 0 0;
+  background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='7' viewBox='0 0 16 7'%3E%3Cpath d='M0.5 6.5 L0.5 2.5 L4.5 2.5 L4.5 4.5 L8.5 4.5 L8.5 0.5 L12.5 0.5 L12.5 6.5 L16.5 6.5' fill='none' stroke='%23e0a840' stroke-width='1.1' stroke-linecap='square' opacity='0.55'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-position: top left;
+  background-size: 16px 7px;
+}
+
+@layer components {
 
   .kicker {
     @apply text-[11px] font-medium uppercase tracking-[0.14em] text-gold-dim;
@@ -142,4 +222,11 @@ body {
     pointer-events: none;
     user-select: none;
   }
+}
+
+/* Império: selo mais presente (o tema pede "mais detalhe romano", não só
+   mais cor) e com um leve traço de púrpura imperial junto do dourado. */
+:root[data-theme="imperio"] .watermark-spqr::after {
+  color: rgb(var(--c-gold) / 0.13);
+  text-shadow: 0 0 24px rgb(var(--c-purpura) / 0.25);
 }
