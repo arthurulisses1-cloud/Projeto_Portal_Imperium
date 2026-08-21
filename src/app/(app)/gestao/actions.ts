@@ -1,7 +1,9 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { runSync } from "@/lib/sync/run";
 
 async function exigirDiretor() {
@@ -76,6 +78,38 @@ export async function salvarNomesPlanilha(formData: FormData) {
     .eq("id", profileId);
   if (error) throw new Error(error.message);
   revalidatePath("/gestao");
+}
+
+// Troca o email de teste (falso, sem caixa de entrada de verdade) por um
+// email real e dispara o fluxo padrão de "esqueci minha senha" do Supabase
+// pra esse endereço — a pessoa recebe o link, define a própria senha, e a
+// gente nunca chega a ver/manusear a senha dela. Substitui o antigo modelo
+// de gerar uma senha temporária e mostrar em tela (que só funcionava uma
+// vez e não dava pra recuperar depois).
+export async function enviarLinkAcesso(formData: FormData) {
+  await exigirDiretor();
+  const profileId = String(formData.get("profile_id") ?? "");
+  const emailReal = String(formData.get("email_real") ?? "").trim().toLowerCase();
+  if (!profileId || !emailReal) throw new Error("Email é obrigatório.");
+
+  const admin = createAdminClient();
+
+  const { error: updateError } = await admin.auth.admin.updateUserById(profileId, {
+    email: emailReal,
+    email_confirm: true,
+  });
+  if (updateError) throw new Error("Erro ao atualizar email: " + updateError.message);
+
+  const h = await headers();
+  const host = h.get("host") ?? "localhost:3000";
+  const proto = host.startsWith("localhost") ? "http" : "https";
+  const redirectTo = `${proto}://${host}/auth/redefinir-senha`;
+
+  const { error: resetError } = await admin.auth.resetPasswordForEmail(emailReal, { redirectTo });
+  if (resetError) throw new Error("Email atualizado, mas falhou ao enviar o link: " + resetError.message);
+
+  revalidatePath("/gestao");
+  return { email: emailReal };
 }
 
 export async function dispararSyncManual() {

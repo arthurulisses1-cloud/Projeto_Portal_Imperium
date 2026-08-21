@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { RANK_LABELS, ROLE_LABELS } from "@/lib/labels";
 import { RANK_ORDER } from "@/lib/carreira";
 import { listarNomesPlanilha } from "@/lib/sync/nomes";
@@ -6,6 +7,7 @@ import { atualizarCargo, atualizarTribo, atualizarLegado } from "./actions";
 import Card from "@/components/ui/Card";
 import SincronizarPlanilha from "@/components/ui/SincronizarPlanilha";
 import SeletorNomesPlanilha from "@/components/ui/SeletorNomesPlanilha";
+import EnviarAcessoForm from "@/components/ui/EnviarAcessoForm";
 
 const ROLES = ["sdr", "closer", "lider", "diretor"] as const;
 const RANKS = [...RANK_ORDER, "diretor"] as const;
@@ -30,6 +32,13 @@ export default async function GestaoPage() {
 
   const lideres = (pessoas ?? []).filter((p) => p.role === "lider");
   const nomesPlanilha = await listarNomesPlanilha();
+
+  // Email mora só em auth.users (profiles não tem essa coluna) — só o
+  // service role enxerga essa tabela, daí o client admin. listUsers pagina
+  // de 50 em 50; a equipe toda cabe numa página só (revisar se crescer).
+  const admin = createAdminClient();
+  const { data: usersData } = await admin.auth.admin.listUsers({ perPage: 200 });
+  const emailPorId = new Map((usersData?.users ?? []).map((u) => [u.id, u.email ?? null]));
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
@@ -130,6 +139,13 @@ export default async function GestaoPage() {
                         atual: {(tribo.exercito as unknown as { nome: string } | null)?.nome} · {tribo.nome}
                       </span>
                     )}
+                  </div>
+
+                  <div className="mt-3">
+                    <p className="mb-1.5 text-[10px] uppercase tracking-wide text-stone-500">
+                      Acesso (email real + link de redefinir senha)
+                    </p>
+                    <EnviarAcessoForm profileId={p.id} emailAtual={emailPorId.get(p.id) ?? null} />
                   </div>
 
                   <details className="mt-3">
