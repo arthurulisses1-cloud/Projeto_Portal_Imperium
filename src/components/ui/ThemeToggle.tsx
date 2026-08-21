@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from "react";
 
-type Tema = "roma" | "claro" | "imperio";
+type Tema = "roma" | "claro" | "imperio" | "imperio-claro";
+
+const TEMAS_VALIDOS: Tema[] = ["roma", "claro", "imperio", "imperio-claro"];
 
 const OPCOES: { valor: Tema; label: string; ativo: string }[] = [
   { valor: "roma", label: "Roma", ativo: "bg-wine text-stone-100" },
   { valor: "claro", label: "Claro", ativo: "bg-gold text-imperium-bg" },
   { valor: "imperio", label: "Império", ativo: "bg-purpura text-stone-100" },
+  { valor: "imperio-claro", label: "Império Claro", ativo: "bg-purpura text-stone-100" },
 ];
 
 export default function ThemeToggle() {
@@ -15,7 +18,7 @@ export default function ThemeToggle() {
 
   useEffect(() => {
     const atual = document.documentElement.getAttribute("data-theme");
-    setTema(atual === "claro" ? "claro" : atual === "imperio" ? "imperio" : "roma");
+    setTema(TEMAS_VALIDOS.includes(atual as Tema) ? (atual as Tema) : "roma");
   }, []);
 
   function trocar(novo: Tema) {
@@ -25,7 +28,7 @@ export default function ThemeToggle() {
   }
 
   return (
-    <div className="flex items-center rounded-full border border-imperium-line text-[10px] uppercase tracking-wide">
+    <div className="flex flex-wrap items-center gap-0.5 rounded-full border border-imperium-line text-[10px] uppercase tracking-wide">
       {OPCOES.map((o) => (
         <button
           key={o.valor}

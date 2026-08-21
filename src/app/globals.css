@@ -131,19 +131,70 @@
   --foreground: rgb(var(--stone-100));
 }
 
+/* ============ Tema "Império Claro" (mesmo espírito vívido do Império — pompeiano/púrpura/dourado — em fundo claro tipo travertino) ============ */
+:root[data-theme="imperio-claro"] {
+  --c-bg: 250 240 223;
+  --c-surface: 255 253 248;
+  --c-raised: 242 224 197;
+  --c-line: 218 178 148;
+  --c-line-strong: 190 124 100;
+
+  --c-gold: 178 118 16;
+  --c-gold-bright: 214 146 22;
+  --c-gold-dim: 130 88 14;
+
+  --c-wine: 168 26 34;
+  --c-wine-bright: 200 36 46;
+
+  --c-success: 4 138 94;
+  --c-success-bright: 8 160 110;
+  --c-warning: 196 96 6;
+  --c-warning-bright: 224 116 16;
+
+  --c-templar: 168 26 34;
+  --c-maximus: 100 40 148;
+
+  --c-purpura: 100 40 148;
+  --c-purpura-bright: 128 62 178;
+
+  /* mesma família "quente" do Império escuro, só invertida (100 = texto
+     escuro no claro, 900 = quase branco) — não é a escala neutra de
+     "Claro" comum, por isso os dois temas claros têm sensações diferentes. */
+  --stone-50: 250 248 246;
+  --stone-100: 30 17 17;
+  --stone-200: 46 28 27;
+  --stone-300: 70 50 48;
+  --stone-400: 94 72 68;
+  --stone-500: 128 104 98;
+  --stone-600: 166 143 133;
+  --stone-700: 202 184 172;
+  --stone-800: 226 214 205;
+  --stone-900: 245 240 235;
+
+  --background: rgb(var(--c-bg));
+  --foreground: rgb(var(--stone-100));
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
 }
 
-/* Fundo com veio sutil (evoca pórfiro/mármore vermelho) — só no Império,
-   os outros temas ficam com o fundo plano de sempre. */
-:root[data-theme="imperio"] body {
+/* Fundo com veio sutil (evoca pórfiro/mármore) — Império e Império Claro,
+   os outros dois temas ficam com o fundo plano de sempre. */
+:root[data-theme="imperio"] body,
+:root[data-theme="imperio-claro"] body {
   background-image:
     radial-gradient(ellipse 900px 500px at 15% -10%, rgb(var(--c-purpura) / 0.10), transparent 60%),
     radial-gradient(ellipse 700px 500px at 100% 10%, rgb(var(--c-wine) / 0.12), transparent 55%),
     radial-gradient(ellipse 800px 600px at 50% 120%, rgb(var(--c-gold) / 0.05), transparent 60%);
   background-attachment: fixed;
+}
+:root[data-theme="imperio-claro"] body {
+  background-image:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgb(var(--c-purpura) / 0.05), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 100% 10%, rgb(var(--c-wine) / 0.06), transparent 55%),
+    radial-gradient(ellipse 800px 600px at 50% 120%, rgb(var(--c-gold) / 0.05), transparent 60%);
 }
 
 @layer components {
@@ -163,7 +214,8 @@ body {
    "mais uma linha com gradiente dourado". Fora do @layer de propósito:
    o seletor com atributo já é mais específico que .card-imp::before
    sozinho, então ganha sem precisar de !important nem depender de ordem. */
-:root[data-theme="imperio"] .card-imp::before {
+:root[data-theme="imperio"] .card-imp::before,
+:root[data-theme="imperio-claro"] .card-imp::before {
   content: "";
   position: absolute;
   inset-inline: 0;
@@ -229,4 +281,8 @@ body {
 :root[data-theme="imperio"] .watermark-spqr::after {
   color: rgb(var(--c-gold) / 0.13);
   text-shadow: 0 0 24px rgb(var(--c-purpura) / 0.25);
+}
+:root[data-theme="imperio-claro"] .watermark-spqr::after {
+  color: rgb(var(--c-line-strong) / 0.30);
+  text-shadow: 0 0 24px rgb(var(--c-purpura) / 0.12);
 }
