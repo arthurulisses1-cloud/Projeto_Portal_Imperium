@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Cinzel, Cormorant_Garamond } from "next/font/google";
+import ColosseumWatermark from "@/components/ui/ColosseumWatermark";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -47,6 +48,7 @@ export default function RootLayout({
               "try{var t=localStorage.getItem('imperium-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}",
           }}
         />
+        <ColosseumWatermark className="pointer-events-none fixed inset-x-0 bottom-0 -z-10 h-[42vh] w-full text-gold/[0.07]" />
         {children}
       </body>
     </html>
