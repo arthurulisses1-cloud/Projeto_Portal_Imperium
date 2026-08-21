@@ -28,7 +28,7 @@ export default async function CarreiraPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, rank, stars_total")
+    .select("full_name, rank, stars_total, tribo_id")
     .eq("id", meId)
     .single();
 
@@ -93,7 +93,9 @@ export default async function CarreiraPage() {
     supabase,
     meId,
     profile.stars_total,
-    escolha ? !!escolha.apresentado : null
+    escolha ? !!escolha.apresentado : null,
+    profile.tribo_id,
+    criterios ?? []
   );
 
   // ---------- Solicitações de evidência (critérios sem dado automático) ----------

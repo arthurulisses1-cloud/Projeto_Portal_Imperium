@@ -1,4 +1,4 @@
-import { cookies, headers } from "next/headers";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import AppNav, { type NavEntry } from "@/components/ui/AppNav";
 import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
@@ -107,16 +107,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // já existia; Estrelas/Plano de Carreira/Minha Tribo simplesmente não
   // renderizam, porque já checavam role sdr/closer/lider antes disso).
   const mostraSidebarPapel = ehExecutivo || papelVisualizado === "diretor";
-  // O Mural é a tela mais carregada do site — pra SDR/Closer, empilhar a
-  // SidebarRight em cima do feed vira 3 colunas espremidas, então ela some
-  // nessa rota pra esses dois papéis. Líder e Diretor são o oposto: o
-  // Mural é onde o líder pede pra ver "Meu Exército" (Cargo, Tribos,
-  // Time), e como o Mural não tem mais uma lateral própria (Publicar/
-  // Campanhas viraram parte do feed principal), a SidebarRight aparece
-  // normalmente ali também pros dois.
-  const pathname = (await headers()).get("x-pathname") ?? "";
-  const naMural = pathname === "/";
-  const mostraSidebarRight = !naMural || papelVisualizado === "lider" || papelVisualizado === "diretor";
+  // Antes a SidebarRight sumia no Mural pra SDR/Closer (reduzir densidade),
+  // mas na prática isso lia como bug — quem loga pela primeira vez cai no
+  // Mural e via a lateral "sumida", só aparecendo ao navegar pra outra
+  // aba (2026-08-22, a pedido, depois de confirmado como confuso). Agora
+  // aparece sempre, em toda rota, pra todo mundo.
+  const mostraSidebarRight = true;
 
   const pendencias =
     user && profile

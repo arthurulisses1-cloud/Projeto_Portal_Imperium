@@ -52,9 +52,9 @@ export async function buscarPendencias(
     // Sinaliza "Plano de Carreira" quando todos os critérios do próximo rank já
     // batem e ainda não existe um pedido de promoção em aberto — evita que a
     // pessoa fique pronta pra subir sem perceber que precisa apertar o botão.
-    const { data: perfilRank } = await supabase.from("profiles").select("rank, stars_total").eq("id", userId).single();
+    const { data: perfilRank } = await supabase.from("profiles").select("rank, stars_total, tribo_id").eq("id", userId).single();
     if (perfilRank) {
-      const resumo = await avaliarProntidaoPromocao(supabase, userId, role, perfilRank.rank as Rank, perfilRank.stars_total);
+      const resumo = await avaliarProntidaoPromocao(supabase, userId, role, perfilRank.rank as Rank, perfilRank.stars_total, perfilRank.tribo_id);
       if (resumo && resumo.ok === resumo.total) {
         const { count: pedidoPendente } = await supabase
           .from("promotion_requests")

@@ -10,13 +10,10 @@ import {
 import { buscarMetaTribo, buscarMetaIndividual, calcularFunilMeta } from "@/lib/metas";
 import MembroCard from "@/components/MembroCard";
 import ConvidarForm from "./convidar-form";
-import { criarTribo, renomearTribo, atualizarLogoTribo, deixarFeedback, registrarPerda } from "./actions";
+import { criarTribo, renomearTribo, atualizarLogoTribo, deixarFeedback } from "./actions";
 import Card from "@/components/ui/Card";
 import { getViewerContext } from "@/lib/preview";
-import { Badge } from "@/components/ui/Badge";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
-
-const MOTIVOS_PERDA = ["Preço", "Timing", "Perfil fora do ICP", "Concorrência", "Sumiu/não respondeu", "Outro"];
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -109,18 +106,6 @@ export default async function TriboPage({
   const rankingTribo = (sdrs ?? [])
     .map((s) => ({ id: s.id, nome: s.full_name, valor: pagosMap.get(s.id) ?? 0 }))
     .sort((a, b) => b.valor - a.valor);
-
-  const { data: perdas } = await supabase
-    .from("perdas")
-    .select("id, motivo, observacao, data")
-    .eq("profile_id", meId)
-    .order("data", { ascending: false })
-    .limit(10);
-
-  const contagemMotivos = new Map<string, number>();
-  for (const p of perdas ?? []) {
-    contagemMotivos.set(p.motivo, (contagemMotivos.get(p.motivo) ?? 0) + 1);
-  }
 
   const exercitoNome = (tribo.exercito as unknown as { nome: string } | null)?.nome;
 
@@ -276,60 +261,6 @@ export default async function TriboPage({
             </div>
           ))}
         </div>
-      </Card>
-
-      <Card title="Motivos de Perda" right={<span className="text-xs text-stone-500">Diagnóstico qualitativo</span>}>
-        <form action={registrarPerda} className="mb-4 flex flex-wrap items-end gap-3">
-          <div>
-            <label className="mb-1 block text-xs text-stone-400">Motivo</label>
-            <select name="motivo" required className="input-imp text-sm">
-              {MOTIVOS_PERDA.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-stone-400">Data</label>
-            <input type="date" name="data" defaultValue={new Date().toISOString().slice(0, 10)} className="input-imp text-sm" />
-          </div>
-          <div className="min-w-[180px] flex-1">
-            <label className="mb-1 block text-xs text-stone-400">Observação (opcional)</label>
-            <input name="observacao" className="input-imp text-sm" />
-          </div>
-          <button type="submit" className="btn-outline">
-            Registrar
-          </button>
-        </form>
-
-        {contagemMotivos.size > 0 && (
-          <div className="mb-4 flex flex-wrap gap-2">
-            {Array.from(contagemMotivos.entries())
-              .sort((a, b) => b[1] - a[1])
-              .map(([motivo, qtd]) => (
-                <Badge key={motivo} tone="wine">
-                  {motivo} · {qtd}
-                </Badge>
-              ))}
-          </div>
-        )}
-
-        {perdas && perdas.length > 0 ? (
-          <ul className="space-y-1.5">
-            {perdas.map((p) => (
-              <li key={p.id} className="flex justify-between border-t border-imperium-line pt-1.5 text-xs">
-                <span className="text-stone-300">
-                  {p.motivo}
-                  {p.observacao ? ` — ${p.observacao}` : ""}
-                </span>
-                <span className="text-stone-600">{new Date(p.data + "T00:00:00").toLocaleDateString("pt-BR")}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-xs text-stone-600">Nenhuma perda registrada ainda.</p>
-        )}
       </Card>
     </main>
   );

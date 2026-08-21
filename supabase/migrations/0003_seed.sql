@@ -38,7 +38,7 @@ insert into promotion_criteria (transicao, bloco, texto, tipo, target_value, dia
 ('legionario_centuriao',1,'Sem mês zerado nos últimos 30 dias','auto',1,null,2),
 ('legionario_centuriao',2,'Match Sales médio > 60','manual',60,null,1),
 ('legionario_centuriao',2,'Média de 1,5 entrevistas/dia por 30 dias','auto',1.5,null,2),
-('legionario_centuriao',3,'Top 1 da Tribo por 1 mês (válido 60 dias)','manual',null,null,1),
+('legionario_centuriao',3,'Top 1 da Tribo por 1 mês (válido 60 dias)','auto',null,null,1),
 ('legionario_centuriao',3,'Top 1 SDR do banco 1x','auto',1,null,2),
 ('legionario_centuriao',4,'8 aulas presenciais + trilha completa','auto',8,null,1),
 ('legionario_centuriao',4,'1 livro da Biblioteca + apresentação pública','manual',null,null,2),
@@ -58,7 +58,7 @@ insert into promotion_criteria (transicao, bloco, texto, tipo, target_value, dia
 -- Tribuno → Pretor
 ('tribuno_pretor',1,'10 estrelas acumuladas','auto',10,null,1),
 ('tribuno_pretor',1,'Sem mês abaixo de R$200K','auto',1,null,2),
-('tribuno_pretor',2,'Top 1 da Tribo do mês (válido 60 dias)','manual',null,null,1),
+('tribuno_pretor',2,'Top 1 da Tribo do mês (válido 60 dias)','auto',null,null,1),
 ('tribuno_pretor',2,'Média de 4 entrevistas/dia por 30 dias','auto',4,null,2),
 ('tribuno_pretor',3,'1 Legionário da Tribo promovido a Centurião','manual',null,null,1),
 ('tribuno_pretor',3,'Top 1 Closer do banco 2x (ou Top do mês)','auto',2,null,2),
@@ -68,7 +68,7 @@ insert into promotion_criteria (transicao, bloco, texto, tipo, target_value, dia
 ('tribuno_pretor',5,'Avaliação do líder direto + Diretoria','manual',null,null,2),
 -- Pretor → Legado (transição mais exigente do Cursus Honorum)
 ('pretor_legado',1,'12 estrelas acumuladas','auto',12,null,1),
-('pretor_legado',2,'Top 1 da Tribo do mês (válido 30 dias)','manual',null,null,1),
+('pretor_legado',2,'Top 1 da Tribo do mês (válido 30 dias)','auto',null,null,1),
 ('pretor_legado',2,'Média de 6 entrevistas/dia por 30 dias','auto',6,null,2),
 ('pretor_legado',3,'1 Legionário promovido a Centurião + 1 Centurião promovido a Tribuno','manual',null,null,1),
 ('pretor_legado',3,'2 aparições em lives em 30 dias','auto',2,null,2),

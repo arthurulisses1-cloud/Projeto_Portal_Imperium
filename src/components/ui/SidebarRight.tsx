@@ -56,7 +56,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   // Resumo do Plano de Carreira (SDR/Closer só — líder não tem "próximo
   // rank" no mesmo sentido) — mesma avaliação de /carreira, pra nunca dar
   // número diferente entre a lateral e a tela cheia.
-  const carreiraResumo = await avaliarProntidaoPromocao(supabase, userId, profile.role, rank, profile.stars_total);
+  const carreiraResumo = await avaliarProntidaoPromocao(supabase, userId, profile.role, rank, profile.stars_total, profile.tribo_id);
 
   const { data: quotes } = await supabase.from("sage_quotes").select("texto, fonte").eq("ativo", true);
   const dayOfYear = Math.floor(
@@ -299,12 +299,8 @@ export default async function SidebarRight({ userId }: { userId: string }) {
         </a>
       )}
 
-      {/* Marcos e Tribo/Exército: bloco secundário, colapsado por padrão — a
-          lateral aparece em TODA página, então empilhar tudo sempre aberto
-          soma densidade em cada uma delas. Só identidade/estrelas/carreira/
-          comissão (o que dá pra bater o olho rápido) fica sempre visível. */}
       {(marcos.length > 0 || nomeTribo || exercito || exercitoLiderado) && (
-        <details className="border-t border-imperium-line pt-4 group">
+        <details open className="border-t border-imperium-line pt-4 group">
           <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
             <span>Time e Marcos</span>
             <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
