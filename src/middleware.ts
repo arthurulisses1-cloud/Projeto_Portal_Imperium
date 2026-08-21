@@ -31,7 +31,14 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isAuthRoute = request.nextUrl.pathname.startsWith("/login");
+  // /auth/redefinir-senha precisa ficar acessível SEM sessão — é a página
+  // que o link de "esqueci minha senha" abre; quem clica nele ainda não
+  // está logado, então sem essa exceção o middleware redirecionava pro
+  // /login antes da página processar o ?code= do link (bug real, achado
+  // testando o fluxo de acesso por email real em 2026-08-22).
+  const isAuthRoute =
+    request.nextUrl.pathname.startsWith("/login") ||
+    request.nextUrl.pathname.startsWith("/auth/redefinir-senha");
   const isApiRoute = request.nextUrl.pathname.startsWith("/api/");
 
   // rotas de API (ex: /api/sync) cuidam da própria autenticação (chave secreta),
