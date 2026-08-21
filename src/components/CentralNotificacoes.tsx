@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import Card from "@/components/ui/Card";
 import { IconLaurel } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
+import { MARCO_MULTIPLICADOR_POR_ROLE } from "@/lib/marcos";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -57,7 +58,9 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   const pertoDeMarco = (pessoas ?? [])
     .map((p) => {
       const producao = producaoMesPorPessoa.get(p.id) ?? 0;
+      const multiplicador = MARCO_MULTIPLICADOR_POR_ROLE[p.role] ?? 1;
       const proximo = (marcos ?? [])
+        .map((m) => ({ ...m, threshold: m.threshold * multiplicador }))
         .filter((m) => producao < m.threshold)
         .sort((a, b) => a.threshold - b.threshold)[0];
       if (!proximo) return null;

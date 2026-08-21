@@ -64,7 +64,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   );
   const quote = quotes && quotes.length > 0 ? quotes[(dayOfYear + 1) % quotes.length] : null;
 
-  const { marcos } = await buscarProgressoMarcos(supabase, userId);
+  const { marcos } = await buscarProgressoMarcos(supabase, userId, profile.role);
 
   const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
   const { tiers: tiersOrdenados, remuneracao, producaoPrincipal, papelPrincipal } = await buscarRemuneracaoMes(

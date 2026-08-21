@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { uploadAvatarAction, atualizarNome } from "@/app/(app)/avatar-actions";
 import ThemeToggle from "./ThemeToggle";
 import SincronizarPlanilha from "./SincronizarPlanilha";
@@ -18,17 +19,27 @@ export default function UserMenu({
   nome: string;
   role?: string;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState(false);
   const [novoNome, setNovoNome] = useState(nome);
   const [isPending, startTransition] = useTransition();
+  const [erroAvatar, setErroAvatar] = useState<string | null>(null);
 
   function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    setErroAvatar(null);
     const fd = new FormData();
     fd.set("avatar", file);
-    startTransition(() => uploadAvatarAction(fd));
+    startTransition(async () => {
+      try {
+        await uploadAvatarAction(fd);
+        router.refresh();
+      } catch (err) {
+        setErroAvatar(err instanceof Error ? err.message : "Erro ao enviar foto.");
+      }
+    });
   }
 
   function handleSalvarNome() {
@@ -103,6 +114,7 @@ export default function UserMenu({
                     onChange={handleAvatarChange}
                     className="w-full text-xs text-stone-400"
                   />
+                  {erroAvatar && <p className="text-[11px] text-wine-bright">{erroAvatar}</p>}
                   <button
                     onClick={handleSalvarNome}
                     disabled={isPending}

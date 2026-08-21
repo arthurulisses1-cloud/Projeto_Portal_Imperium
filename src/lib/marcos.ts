@@ -1,5 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+// Marcos são cadastrados com 1 threshold só, pensado pra produção de SDR —
+// Closer e Líder naturalmente produzem/lideram produção muito maior, então
+// multiplicamos a meta pelo papel em vez de manter tabelas de marco
+// duplicadas (2026-08-21, a pedido do Diretor).
+export const MARCO_MULTIPLICADOR_POR_ROLE: Record<string, number> = {
+  sdr: 1,
+  closer: 3,
+  lider: 6,
+};
+
 export type MarcoProgresso = {
   id: string;
   nome: string;
@@ -23,8 +33,10 @@ export type MarcoProgresso = {
 // marcos_resgates, migration 0026) — quem confirma o resgate é o Diretor.
 export async function buscarProgressoMarcos(
   supabase: SupabaseClient,
-  profileId: string
+  profileId: string,
+  role: string = "sdr"
 ): Promise<{ marcos: MarcoProgresso[]; producaoMes: number }> {
+  const multiplicador = MARCO_MULTIPLICADOR_POR_ROLE[role] ?? 1;
   const hoje = new Date().toISOString().slice(0, 10);
   const inicioMes = hoje.slice(0, 7) + "-01";
   const competenciaAtual = inicioMes;
@@ -42,19 +54,20 @@ export async function buscarProgressoMarcos(
   const jaResgatouEsteMes = (resgates ?? []).some((r) => r.competencia === competenciaAtual);
 
   const marcos = (marcosRows ?? []).map((m) => {
+    const threshold = m.threshold * multiplicador;
     const resgate = resgatePorMarco.get(m.id);
     const alcancado = !!resgate;
-    const elegivel = !alcancado && !jaResgatouEsteMes && producaoMes >= m.threshold;
+    const elegivel = !alcancado && !jaResgatouEsteMes && producaoMes >= threshold;
     return {
       id: m.id,
       nome: m.nome,
-      threshold: m.threshold,
+      threshold,
       icone: m.icone,
       imagemUrl: m.imagem_url,
       alcancado,
       resgatadoEm: resgate?.criado_em ?? null,
       elegivel,
-      falta: Math.max(0, m.threshold - producaoMes),
+      falta: Math.max(0, threshold - producaoMes),
     };
   });
 

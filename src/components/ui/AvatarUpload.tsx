@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { uploadAvatarAction } from "@/app/(app)/avatar-actions";
 
 export default function AvatarUpload({ avatarUrl, nome }: { avatarUrl: string | null; nome: string }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
   const iniciais = nome
@@ -23,6 +25,7 @@ export default function AvatarUpload({ avatarUrl, nome }: { avatarUrl: string | 
     startTransition(async () => {
       try {
         await uploadAvatarAction(fd);
+        router.refresh();
       } catch (err) {
         setErro(err instanceof Error ? err.message : "Erro ao enviar foto.");
       }

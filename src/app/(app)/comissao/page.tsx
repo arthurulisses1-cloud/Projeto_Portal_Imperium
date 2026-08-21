@@ -70,7 +70,7 @@ export default async function ComissaoPage() {
     .order("mes", { ascending: false })
     .limit(6);
 
-  const { marcos } = await buscarProgressoMarcos(supabase, meId);
+  const { marcos } = await buscarProgressoMarcos(supabase, meId, role);
 
   const { data: contestacoes } = await supabase
     .from("contestacoes")
