@@ -7,6 +7,7 @@ import UserMenu from "@/components/ui/UserMenu";
 import { limparPreview } from "./preview-actions";
 import { IconLaurel, IconEye } from "@/components/ui/icons";
 import { buscarPendencias } from "@/lib/pendencias";
+import { logErroSupabase } from "@/lib/log-erro-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -60,13 +61,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: profile } = user
+  const { data: profile, error: profileError } = user
     ? await supabase
         .from("profiles")
         .select("full_name, role, rank, avatar_url, tribo_id")
         .eq("id", user.id)
         .single()
-    : { data: null };
+    : { data: null, error: null };
+  logErroSupabase(`AppLayout: profiles (id=${user?.id})`, profileError);
 
   const cookieStore = await cookies();
 

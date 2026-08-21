@@ -14,6 +14,7 @@ import { paraRomano } from "@/lib/numerals";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
 import { IconLock, IconGift } from "./icons";
 import RankBadge from "./RankBadge";
+import { logErroSupabase } from "@/lib/log-erro-supabase";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -26,11 +27,12 @@ function iniciais(nome: string) {
 export default async function SidebarRight({ userId }: { userId: string }) {
   const supabase = await createClient();
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("rank, stars_total, tribo_id, role")
     .eq("id", userId)
     .single();
+  logErroSupabase(`SidebarRight: profiles (userId=${userId})`, profileError);
 
   if (!profile) return null;
   const rank = profile.rank as Rank;
