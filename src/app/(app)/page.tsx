@@ -138,7 +138,12 @@ export default async function MuralPage() {
   // Resolvendo Pendência. Previsão de crédito soma os 3 baldes com alguma
   // certeza de virar crédito (exclui Análise Jurídico/Esfriou, que ainda
   // não têm destino definido).
-  let painelFinanceiroFirma: { paraPagar: number; pendencia: number; previsaoCredito: number } | null = null;
+  let painelFinanceiroFirma: {
+    paraPagar: number;
+    pendencia: number;
+    previsaoCredito: number;
+    pagoMaisParaPagar: number;
+  } | null = null;
   if (meRole === "diretor") {
     const agora = new Date();
     const fimMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
@@ -156,7 +161,12 @@ export default async function MuralPage() {
       else if (o.status_manual === "aguardando_pagamento") paraPagar += valor;
       else if (o.status_manual === "resolvendo_pendencia") pendencia += valor;
     }
-    painelFinanceiroFirma = { paraPagar, pendencia, previsaoCredito: pago + paraPagar + pendencia };
+    painelFinanceiroFirma = {
+      paraPagar,
+      pendencia,
+      previsaoCredito: pago + paraPagar + pendencia,
+      pagoMaisParaPagar: pago + paraPagar,
+    };
   }
 
   // Enquetes: pré-computa opções + votos dos posts do tipo 'enquete' já carregados
@@ -260,7 +270,7 @@ export default async function MuralPage() {
       )}
 
       {meRole === "diretor" && painelFinanceiroFirma && (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           <Card title="Pra pagar × Em pendência">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -276,6 +286,13 @@ export default async function MuralPage() {
                 </p>
               </div>
             </div>
+          </Card>
+
+          <Card title="Pago + Aguardando pagamento">
+            <p className="font-display text-xl text-gold-bright">
+              {moeda(painelFinanceiroFirma.pagoMaisParaPagar)}
+            </p>
+            <p className="mt-1 text-[11px] text-stone-600">Pago + Em pagamento (sem contar pendência)</p>
           </Card>
 
           <Card title="Previsão de crédito">
