@@ -64,7 +64,9 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   );
   const quote = quotes && quotes.length > 0 ? quotes[(dayOfYear + 1) % quotes.length] : null;
 
-  const { marcos } = await buscarProgressoMarcos(supabase, userId, profile.role);
+  // Marcos não fazem sentido pro Diretor (sem meta de crédito pessoal como
+  // executivo) — a pedido, sai da visão dele (2026-08-22).
+  const { marcos } = profile.role !== "diretor" ? await buscarProgressoMarcos(supabase, userId, profile.role) : { marcos: [] };
 
   const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
   const { tiers: tiersOrdenados, remuneracao, producaoPrincipal, papelPrincipal } = await buscarRemuneracaoMes(
