@@ -81,3 +81,28 @@ export async function excluirDespesaExtra(formData: FormData) {
 
   revalidatePath("/dre");
 }
+
+export async function adicionarReceitaExtra(formData: FormData) {
+  const supabase = await exigirDiretor();
+
+  const ano = Number(formData.get("ano"));
+  const mes = Number(formData.get("mes"));
+  const descricao = String(formData.get("descricao") ?? "").trim();
+  const valor = Number(formData.get("valor"));
+  if (!descricao || !valor) throw new Error("Descrição e valor são obrigatórios.");
+
+  const { error } = await supabase.from("dre_receitas_extras").insert({ ano, mes, descricao, valor });
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/dre");
+}
+
+export async function excluirReceitaExtra(formData: FormData) {
+  const supabase = await exigirDiretor();
+  const id = String(formData.get("id"));
+
+  const { error } = await supabase.from("dre_receitas_extras").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/dre");
+}

@@ -57,6 +57,18 @@ export async function buscarProducaoParceiro(supabase: SupabaseClient, ano: numb
   return Number(data?.valor ?? 0);
 }
 
+export type ReceitaExtra = { id: string; descricao: string; valor: number };
+
+export async function buscarReceitasExtras(supabase: SupabaseClient, ano: number, mes: number): Promise<ReceitaExtra[]> {
+  const { data } = await supabase
+    .from("dre_receitas_extras")
+    .select("id, descricao, valor")
+    .eq("ano", ano)
+    .eq("mes", mes)
+    .order("created_at", { ascending: false });
+  return (data ?? []).map((r) => ({ id: r.id, descricao: r.descricao, valor: Number(r.valor) }));
+}
+
 export type LinhaFolha = {
   profileId: string;
   nome: string;
@@ -182,47 +194,58 @@ export type ResumoDre = {
   producaoParceiro: number;
   receitaPropria: number;
   receitaParceiro: number;
-  receitaTotal: number;
-  folhaTotal: number;
+  outrasReceitas: number;
+  receitaBruta: number;
   imposto: number;
+  receitaLiquida: number;
+  folhaTotal: number;
   custoAluguel: number;
   custoTrafego: number;
   despesasExtrasGerais: number;
-  despesasTotal: number;
+  despesasOperacionais: number;
   lucro: number;
 };
 
+// Estrutura de DRE de verdade: Receita Bruta (crédito + parceiro + outras)
+// → (-) Impostos → Receita Líquida → (-) Despesas Operacionais (Folha +
+// fixos + extras) → Lucro. Cada peça também some pro simulador client-side
+// recalcular sem round-trip (ver SimuladorDre.tsx).
 export async function buscarResumoDre(supabase: SupabaseClient, ano: number, mes: number): Promise<ResumoDre> {
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const config = await buscarConfigDre(supabase);
 
-  const [creditoTotalMes, producaoParceiro, folha, despesas] = await Promise.all([
+  const [creditoTotalMes, producaoParceiro, folha, despesas, receitasExtras] = await Promise.all([
     buscarProducaoPagaFirma(supabase, inicioMes),
     buscarProducaoParceiro(supabase, ano, mes),
     buscarFolha(supabase, ano, mes),
     buscarDespesasExtras(supabase, ano, mes),
+    buscarReceitasExtras(supabase, ano, mes),
   ]);
 
   const despesasExtrasGerais = despesas.filter((d) => !d.profileId).reduce((s, d) => s + d.valor, 0);
+  const outrasReceitas = receitasExtras.reduce((s, r) => s + r.valor, 0);
 
   const receitaPropria = creditoTotalMes * config.pctReceitaCredito;
   const receitaParceiro = producaoParceiro * config.pctReceitaParceiro;
-  const receitaTotal = receitaPropria + receitaParceiro;
-  const imposto = receitaTotal * config.pctImposto;
-  const despesasTotal = folha.totais.folhaTotal + imposto + config.custoAluguel + config.custoTrafego + despesasExtrasGerais;
+  const receitaBruta = receitaPropria + receitaParceiro + outrasReceitas;
+  const imposto = receitaBruta * config.pctImposto;
+  const receitaLiquida = receitaBruta - imposto;
+  const despesasOperacionais = folha.totais.folhaTotal + config.custoAluguel + config.custoTrafego + despesasExtrasGerais;
 
   return {
     creditoTotalMes,
     producaoParceiro,
     receitaPropria,
     receitaParceiro,
-    receitaTotal,
-    folhaTotal: folha.totais.folhaTotal,
+    outrasReceitas,
+    receitaBruta,
     imposto,
+    receitaLiquida,
+    folhaTotal: folha.totais.folhaTotal,
     custoAluguel: config.custoAluguel,
     custoTrafego: config.custoTrafego,
     despesasExtrasGerais,
-    despesasTotal,
-    lucro: receitaTotal - despesasTotal,
+    despesasOperacionais,
+    lucro: receitaLiquida - despesasOperacionais,
   };
 }
