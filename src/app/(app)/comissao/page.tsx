@@ -236,16 +236,15 @@ export default async function ComissaoPage() {
             rendem comissão à parte sempre que você atua nesse papel numa venda, sem mudar seu tier.
           </p>
 
-          {papelPrincipal !== "gestao" && (
-            <>
-              <div className="mt-4">
-                <SimuladorVendaRapida tiers={tiers} producaoAtual={producaoPrincipal} papel={papelPrincipal} />
-              </div>
-              <div className="mt-4">
-                <SimuladorComissao tiers={tiers} papel={papelPrincipal} />
-              </div>
-            </>
-          )}
+          {/* "Gestão" (Líder/Diretor) também simula — lookupComissao já
+              suporta esse papel (usa pct_gestao da tabela), só a UI escondia
+              antes (liberado a pedido do Diretor, 2026-08-22). */}
+          <div className="mt-4">
+            <SimuladorVendaRapida tiers={tiers} producaoAtual={producaoPrincipal} papel={papelPrincipal} />
+          </div>
+          <div className="mt-4">
+            <SimuladorComissao tiers={tiers} papel={papelPrincipal} />
+          </div>
         </div>
       </details>
 
