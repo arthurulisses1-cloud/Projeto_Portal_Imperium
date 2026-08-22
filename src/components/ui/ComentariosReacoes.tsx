@@ -1,10 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { postarComentario, excluirComentario, reagir } from "@/app/(app)/social-actions";
 import { EMOJIS_REACAO, type AlvoTipo, type Comentario, type ReacaoResumo } from "@/lib/social";
 
 type Pessoa = { id: string; nome: string };
+
+function normalizar(s: string) {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+}
 
 export default function ComentariosReacoes({
   alvoTipo,
@@ -25,11 +32,65 @@ export default function ComentariosReacoes({
 }) {
   const [isPending, startTransition] = useTransition();
   const [texto, setTexto] = useState("");
-  const [mencionados, setMencionados] = useState<string[]>([]);
-  const [mostrarMarcar, setMostrarMarcar] = useState(false);
+  const [mencionados, setMencionados] = useState<{ id: string; nome: string }[]>([]);
+  const [buscaMencao, setBuscaMencao] = useState<string | null>(null); // null = dropdown fechado
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  function toggleMencionado(id: string) {
-    setMencionados((atual) => (atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id]));
+  const sugestoes = useMemo(() => {
+    if (buscaMencao === null) return [];
+    const q = normalizar(buscaMencao);
+    return pessoas.filter((p) => normalizar(p.nome).includes(q)).slice(0, 6);
+  }, [buscaMencao, pessoas]);
+
+  // Detecta se o cursor está logo depois de um "@" (sem espaço no meio) — é
+  // o gatilho pro dropdown, igual Instagram/Facebook/Slack. `@` sozinho no
+  // início do texto ou depois de espaço conta; "email@dominio" não conta,
+  // porque tem letra colada antes do @.
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const novoTexto = e.target.value;
+    setTexto(novoTexto);
+    // Solta menções cujo "@Nome" sumiu do texto (a pessoa apagou ou editou).
+    setMencionados((atual) => atual.filter((m) => novoTexto.includes(`@${m.nome}`)));
+
+    const cursor = e.target.selectionStart ?? novoTexto.length;
+    const antesDoCursor = novoTexto.slice(0, cursor);
+    const ultimoArroba = antesDoCursor.lastIndexOf("@");
+    if (ultimoArroba === -1) {
+      setBuscaMencao(null);
+      return;
+    }
+    const charAntes = ultimoArroba > 0 ? antesDoCursor[ultimoArroba - 1] : " ";
+    const trecho = antesDoCursor.slice(ultimoArroba + 1);
+    const temEspaco = /\s/.test(trecho);
+    const letraColada = /[a-zA-Z0-9À-ÿ]/.test(charAntes);
+    if (temEspaco || letraColada) {
+      setBuscaMencao(null);
+      return;
+    }
+    setBuscaMencao(trecho);
+  }
+
+  function escolherPessoa(p: Pessoa) {
+    const ta = textareaRef.current;
+    const cursor = ta?.selectionStart ?? texto.length;
+    const antesDoCursor = texto.slice(0, cursor);
+    const ultimoArroba = antesDoCursor.lastIndexOf("@");
+    if (ultimoArroba === -1) return;
+
+    const novoTexto = `${texto.slice(0, ultimoArroba)}@${p.nome} ${texto.slice(cursor)}`;
+    setTexto(novoTexto);
+    setMencionados((atual) => (atual.some((m) => m.id === p.id) ? atual : [...atual, { id: p.id, nome: p.nome }]));
+    setBuscaMencao(null);
+
+    const novaPosicao = ultimoArroba + p.nome.length + 2;
+    requestAnimationFrame(() => {
+      ta?.focus();
+      ta?.setSelectionRange(novaPosicao, novaPosicao);
+    });
+  }
+
+  function removerMencionado(id: string) {
+    setMencionados((atual) => atual.filter((m) => m.id !== id));
   }
 
   function enviar() {
@@ -38,12 +99,12 @@ export default function ComentariosReacoes({
     fd.set("alvo_tipo", alvoTipo);
     fd.set("alvo_id", alvoId);
     fd.set("texto", texto.trim());
-    for (const id of mencionados) fd.append("mencionado", id);
+    for (const m of mencionados) fd.append("mencionado", m.id);
     startTransition(async () => {
       await postarComentario(fd);
       setTexto("");
       setMencionados([]);
-      setMostrarMarcar(false);
+      setBuscaMencao(null);
     });
   }
 
@@ -93,9 +154,6 @@ export default function ComentariosReacoes({
                   <span className="text-stone-300">
                     <span className="text-gold-bright">{c.autorNome}</span>: {c.texto}
                   </span>
-                  {c.mencionados.length > 0 && (
-                    <p className="mt-0.5 text-[10px] text-gold">marcou {c.mencionados.map((n) => `@${n}`).join(" ")}</p>
-                  )}
                 </div>
                 {(c.autorId === meId || isDiretor) && (
                   <button
@@ -112,22 +170,51 @@ export default function ComentariosReacoes({
         </ul>
       )}
 
-      <div className="mt-2.5 space-y-1.5">
+      <div className="relative mt-2.5 space-y-1.5">
         <textarea
+          ref={textareaRef}
           value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          placeholder="Comentar..."
+          onChange={handleChange}
+          onBlur={() => setTimeout(() => setBuscaMencao(null), 150)}
+          placeholder="Comentar... use @ pra marcar alguém"
           rows={1}
           className="input-imp w-full px-2 py-1.5 text-xs"
         />
-        <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={() => setMostrarMarcar((v) => !v)}
-            className="text-[10px] text-stone-500 hover:text-gold"
-          >
-            {mencionados.length > 0 ? `${mencionados.length} marcado(s)` : "Marcar alguém"}
-          </button>
+
+        {buscaMencao !== null && sugestoes.length > 0 && (
+          <ul className="absolute bottom-full z-10 mb-1 w-56 overflow-hidden rounded border border-gold/40 bg-imperium-surface shadow-xl">
+            {sugestoes.map((p) => (
+              <li key={p.id}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => escolherPessoa(p)}
+                  className="block w-full px-2.5 py-1.5 text-left text-xs text-stone-300 hover:bg-gold/15 hover:text-gold-bright"
+                >
+                  {p.nome}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {mencionados.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {mencionados.map((m) => (
+              <span
+                key={m.id}
+                className="flex items-center gap-1 rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[10px] text-gold"
+              >
+                @{m.nome}
+                <button type="button" onClick={() => removerMencionado(m.id)} className="text-gold/70 hover:text-gold-bright">
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={enviar}
@@ -137,16 +224,6 @@ export default function ComentariosReacoes({
             {isPending ? "..." : "Enviar"}
           </button>
         </div>
-        {mostrarMarcar && (
-          <div className="grid max-h-28 grid-cols-2 gap-1 overflow-y-auto rounded border border-imperium-line p-1.5 sm:grid-cols-3">
-            {pessoas.map((p) => (
-              <label key={p.id} className="flex items-center gap-1 text-[10px] text-stone-400">
-                <input type="checkbox" checked={mencionados.includes(p.id)} onChange={() => toggleMencionado(p.id)} />
-                {p.nome}
-              </label>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
