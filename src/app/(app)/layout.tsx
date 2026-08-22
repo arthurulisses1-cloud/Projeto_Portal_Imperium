@@ -35,6 +35,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor"] },
   { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor"] },
   { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
+  { type: "link", href: "/minerva", label: "Minerva", roles: ["sdr", "closer", "lider", "diretor"] },
   { type: "link", href: "/auditoria", label: "Auditoria", roles: ["diretor"] },
   {
     type: "group",

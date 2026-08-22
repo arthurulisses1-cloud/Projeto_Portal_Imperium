@@ -31,6 +31,7 @@ const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> =
   "/forecast": IconTarget,
   "/weekly": IconEagle,
   "/trilha": IconBook,
+  "/minerva": IconEagle,
   "/metas": IconTarget,
   "/validacao": IconTablet,
   "/aprovacoes": IconScales,
