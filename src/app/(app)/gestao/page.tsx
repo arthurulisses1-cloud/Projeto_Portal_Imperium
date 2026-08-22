@@ -12,7 +12,7 @@ import GerarSenhaButton from "@/components/ui/GerarSenhaButton";
 import CriarUsuarioForm from "@/components/ui/CriarUsuarioForm";
 import ExcluirUsuarioButton from "@/components/ui/ExcluirUsuarioButton";
 
-const ROLES = ["sdr", "closer", "lider", "diretor"] as const;
+const ROLES = ["sdr", "closer", "lider", "diretor", "investidor"] as const;
 const RANKS = [...RANK_ORDER, "diretor"] as const;
 
 export default async function GestaoPage() {

@@ -88,7 +88,7 @@ export default async function RankingPage() {
   const { data: pessoas } = await supabase
     .from("profiles")
     .select("id, full_name, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome))")
-    .neq("role", "diretor");
+    .in("role", ["sdr", "closer", "lider"]);
 
   const todosIds = (pessoas ?? []).map((p) => p.id);
 
