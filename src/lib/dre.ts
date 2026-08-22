@@ -198,18 +198,40 @@ export type ResumoDre = {
   receitaBruta: number;
   imposto: number;
   receitaLiquida: number;
-  folhaTotal: number;
+  // Custos e Despesas Variáveis: tudo que só existe PORQUE alguém vendeu —
+  // comissão (SDR/Closer/Gestão), o bônus de tier (sobe com a produção que
+  // empurra o tier, mesmo sendo um degrau e não um % contínuo) e despesa
+  // extra amarrada a uma pessoa (campanha/marco pago por bater meta).
+  // Fonte: comissão de vendas é custo variável e entra na margem de
+  // contribuição (não em "despesa operacional fixa") — ver AccountingTools/
+  // Qobra/CubeSoftware nas fontes desta conversa.
+  comissaoSdr: number;
+  comissaoCloser: number;
+  comissaoGestao: number;
+  bonusTier: number;
+  extrasVariaveis: number;
+  custosVariaveisTotal: number;
+  margemContribuicao: number;
+  margemContribuicaoPct: number; // sobre a Receita Líquida
+  // Despesas Fixas: existem independente de quanto foi vendido.
+  folhaFixa: number; // soma só do salário-base (sem bônus/comissão)
   custoAluguel: number;
   custoTrafego: number;
-  despesasExtrasGerais: number;
-  despesasOperacionais: number;
+  despesasFixasExtras: number; // dre_despesas_extras sem pessoa vinculada
+  despesasFixasTotal: number;
   lucro: number;
+  lucroPct: number; // margem líquida, sobre a Receita Bruta
 };
 
-// Estrutura de DRE de verdade: Receita Bruta (crédito + parceiro + outras)
-// → (-) Impostos → Receita Líquida → (-) Despesas Operacionais (Folha +
-// fixos + extras) → Lucro. Cada peça também some pro simulador client-side
-// recalcular sem round-trip (ver SimuladorDre.tsx).
+// Estrutura de DRE gerencial (custeio variável), não a DRE fiscal
+// tradicional — pra um negócio de comissão de vendas isso é o que dá
+// visibilidade de verdade: Receita Bruta → (-) Impostos → Receita Líquida
+// → (-) Custos/Despesas VARIÁVEIS (comissão, bônus de tier, extras por
+// pessoa) → MARGEM DE CONTRIBUIÇÃO → (-) Despesas FIXAS (salário-base,
+// aluguel, tráfego, extras gerais) → Lucro. Pedido explícito do Diretor
+// (2026-08-22) depois de perceber que a versão anterior misturava fixo e
+// variável dentro de "Folha" numa despesa operacional só, escondendo a
+// margem de contribuição.
 export async function buscarResumoDre(supabase: SupabaseClient, ano: number, mes: number): Promise<ResumoDre> {
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const config = await buscarConfigDre(supabase);
@@ -222,7 +244,8 @@ export async function buscarResumoDre(supabase: SupabaseClient, ano: number, mes
     buscarReceitasExtras(supabase, ano, mes),
   ]);
 
-  const despesasExtrasGerais = despesas.filter((d) => !d.profileId).reduce((s, d) => s + d.valor, 0);
+  const despesasFixasExtras = despesas.filter((d) => !d.profileId).reduce((s, d) => s + d.valor, 0);
+  const extrasVariaveis = despesas.filter((d) => d.profileId).reduce((s, d) => s + d.valor, 0);
   const outrasReceitas = receitasExtras.reduce((s, r) => s + r.valor, 0);
 
   const receitaPropria = creditoTotalMes * config.pctReceitaCredito;
@@ -230,7 +253,14 @@ export async function buscarResumoDre(supabase: SupabaseClient, ano: number, mes
   const receitaBruta = receitaPropria + receitaParceiro + outrasReceitas;
   const imposto = receitaBruta * config.pctImposto;
   const receitaLiquida = receitaBruta - imposto;
-  const despesasOperacionais = folha.totais.folhaTotal + config.custoAluguel + config.custoTrafego + despesasExtrasGerais;
+
+  const { totais } = folha;
+  const custosVariaveisTotal =
+    totais.variavelSdr + totais.variavelCloser + totais.variavelGestao + totais.bonus + extrasVariaveis;
+  const margemContribuicao = receitaLiquida - custosVariaveisTotal;
+
+  const despesasFixasTotal = totais.fixo + config.custoAluguel + config.custoTrafego + despesasFixasExtras;
+  const lucro = margemContribuicao - despesasFixasTotal;
 
   return {
     creditoTotalMes,
@@ -241,11 +271,20 @@ export async function buscarResumoDre(supabase: SupabaseClient, ano: number, mes
     receitaBruta,
     imposto,
     receitaLiquida,
-    folhaTotal: folha.totais.folhaTotal,
+    comissaoSdr: totais.variavelSdr,
+    comissaoCloser: totais.variavelCloser,
+    comissaoGestao: totais.variavelGestao,
+    bonusTier: totais.bonus,
+    extrasVariaveis,
+    custosVariaveisTotal,
+    margemContribuicao,
+    margemContribuicaoPct: receitaLiquida > 0 ? (margemContribuicao / receitaLiquida) * 100 : 0,
+    folhaFixa: totais.fixo,
     custoAluguel: config.custoAluguel,
     custoTrafego: config.custoTrafego,
-    despesasExtrasGerais,
-    despesasOperacionais,
-    lucro: receitaLiquida - despesasOperacionais,
+    despesasFixasExtras,
+    despesasFixasTotal,
+    lucro,
+    lucroPct: receitaBruta > 0 ? (lucro / receitaBruta) * 100 : 0,
   };
 }

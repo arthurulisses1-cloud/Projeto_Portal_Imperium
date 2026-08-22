@@ -83,49 +83,33 @@ export default async function DrePage({ searchParams }: { searchParams: { ano?: 
             {resumo.outrasReceitas > 0 && <> + {moeda(resumo.outrasReceitas)} outras</>}
           </p>
         </Card>
-        <Card title="Despesas">
-          <p className="font-display text-2xl text-wine-bright">
-            {moeda(resumo.imposto + resumo.despesasOperacionais)}
-          </p>
+        <Card title="Margem de Contribuição">
+          <p className="font-display text-2xl text-gold-bright">{moeda(resumo.margemContribuicao)}</p>
           <p className="mt-1 text-[11px] text-stone-600">
-            Folha {moeda(resumo.folhaTotal)} · Imposto {moeda(resumo.imposto)} · Fixos{" "}
-            {moeda(resumo.custoAluguel + resumo.custoTrafego)}
-            {resumo.despesasExtrasGerais > 0 && <> · Extras {moeda(resumo.despesasExtrasGerais)}</>}
+            {resumo.margemContribuicaoPct.toFixed(0)}% da Receita Líquida, depois de tirar comissão e bônus
           </p>
         </Card>
         <Card title="Lucro">
           <p className={`font-display text-2xl ${resumo.lucro >= 0 ? "text-success-bright" : "text-wine-bright"}`}>
             {moeda(resumo.lucro)}
           </p>
-          <p className="mt-1 text-[11px] text-stone-600">
-            Margem: {resumo.receitaBruta > 0 ? ((resumo.lucro / resumo.receitaBruta) * 100).toFixed(0) : 0}%
-          </p>
+          <p className="mt-1 text-[11px] text-stone-600">Margem líquida: {resumo.lucroPct.toFixed(0)}%</p>
         </Card>
       </div>
 
+      {/* DRE gerencial de custeio variável — separa o que só existe PORQUE
+          alguém vendeu (comissão, bônus de tier) do que a firma paga
+          independente de vender ou não (salário-base, aluguel, tráfego).
+          Comissão de vendas é custo variável e entra na margem de
+          contribuição, não numa "despesa operacional" genérica misturada
+          com fixo — é assim que qualquer CFO estruturaria isso. */}
       <Card title="Estrutura da DRE">
         <div className="space-y-1 text-sm">
-          <p className="text-[10px] uppercase tracking-wide text-gold">Receita Bruta</p>
-          <div className="flex justify-between pl-3 text-stone-400">
-            <span>Crédito próprio ({(config.pctReceitaCredito * 100).toFixed(0)}% de {moeda(resumo.creditoTotalMes)})</span>
-            <span className="text-stone-200">{moeda(resumo.receitaPropria)}</span>
-          </div>
-          <div className="flex justify-between pl-3 text-stone-400">
-            <span>Produção parceiro ({(config.pctReceitaParceiro * 100).toFixed(0)}% de {moeda(resumo.producaoParceiro)})</span>
-            <span className="text-stone-200">{moeda(resumo.receitaParceiro)}</span>
-          </div>
-          {resumo.outrasReceitas > 0 && (
-            <div className="flex justify-between pl-3 text-stone-400">
-              <span>Outras receitas</span>
-              <span className="text-stone-200">{moeda(resumo.outrasReceitas)}</span>
-            </div>
-          )}
-          <div className="flex justify-between border-t border-imperium-line pt-1 font-medium">
-            <span className="text-stone-200">= Receita Bruta</span>
+          <div className="flex justify-between pt-1 font-medium">
+            <span className="text-stone-200">Receita Bruta</span>
             <span className="text-gold-bright">{moeda(resumo.receitaBruta)}</span>
           </div>
-
-          <div className="flex justify-between pt-2 text-stone-400">
+          <div className="flex justify-between text-stone-400">
             <span>(-) Impostos ({(config.pctImposto * 100).toFixed(0)}%)</span>
             <span className="text-wine-bright">{moeda(resumo.imposto)}</span>
           </div>
@@ -134,10 +118,45 @@ export default async function DrePage({ searchParams }: { searchParams: { ano?: 
             <span className="text-gold-bright">{moeda(resumo.receitaLiquida)}</span>
           </div>
 
-          <p className="pt-3 text-[10px] uppercase tracking-wide text-gold">Despesas Operacionais</p>
+          <p className="pt-3 text-[10px] uppercase tracking-wide text-gold">(-) Custos e Despesas Variáveis</p>
           <div className="flex justify-between pl-3 text-stone-400">
-            <span>Folha de Pagamento</span>
-            <span className="text-stone-200">{moeda(resumo.folhaTotal)}</span>
+            <span>Comissão SDR</span>
+            <span className="text-stone-200">{moeda(resumo.comissaoSdr)}</span>
+          </div>
+          <div className="flex justify-between pl-3 text-stone-400">
+            <span>Comissão Closer</span>
+            <span className="text-stone-200">{moeda(resumo.comissaoCloser)}</span>
+          </div>
+          <div className="flex justify-between pl-3 text-stone-400">
+            <span>Comissão Gestão</span>
+            <span className="text-stone-200">{moeda(resumo.comissaoGestao)}</span>
+          </div>
+          <div className="flex justify-between pl-3 text-stone-400">
+            <span>Bônus de tier</span>
+            <span className="text-stone-200">{moeda(resumo.bonusTier)}</span>
+          </div>
+          {resumo.extrasVariaveis > 0 && (
+            <div className="flex justify-between pl-3 text-stone-400">
+              <span>Campanhas/marcos (por pessoa)</span>
+              <span className="text-stone-200">{moeda(resumo.extrasVariaveis)}</span>
+            </div>
+          )}
+          <div className="flex justify-between border-t border-imperium-line pt-1 font-medium">
+            <span className="text-stone-200">= Total Custos Variáveis</span>
+            <span className="text-wine-bright">{moeda(resumo.custosVariaveisTotal)}</span>
+          </div>
+
+          <div className="flex justify-between border-t-2 border-imperium-line-strong pt-2 text-base font-medium">
+            <span className="text-gold">= MARGEM DE CONTRIBUIÇÃO</span>
+            <span className="text-gold-bright">
+              {moeda(resumo.margemContribuicao)} ({resumo.margemContribuicaoPct.toFixed(0)}%)
+            </span>
+          </div>
+
+          <p className="pt-3 text-[10px] uppercase tracking-wide text-gold">(-) Despesas Fixas</p>
+          <div className="flex justify-between pl-3 text-stone-400">
+            <span>Folha fixa (salário-base do time)</span>
+            <span className="text-stone-200">{moeda(resumo.folhaFixa)}</span>
           </div>
           <div className="flex justify-between pl-3 text-stone-400">
             <span>Vorp (aluguel)</span>
@@ -147,15 +166,15 @@ export default async function DrePage({ searchParams }: { searchParams: { ano?: 
             <span>Tráfego</span>
             <span className="text-stone-200">{moeda(resumo.custoTrafego)}</span>
           </div>
-          {resumo.despesasExtrasGerais > 0 && (
+          {resumo.despesasFixasExtras > 0 && (
             <div className="flex justify-between pl-3 text-stone-400">
-              <span>Despesas extras (gerais)</span>
-              <span className="text-stone-200">{moeda(resumo.despesasExtrasGerais)}</span>
+              <span>Despesas gerais (sem pessoa)</span>
+              <span className="text-stone-200">{moeda(resumo.despesasFixasExtras)}</span>
             </div>
           )}
           <div className="flex justify-between border-t border-imperium-line pt-1 font-medium">
-            <span className="text-stone-200">= Total Despesas Operacionais</span>
-            <span className="text-wine-bright">{moeda(resumo.despesasOperacionais)}</span>
+            <span className="text-stone-200">= Total Despesas Fixas</span>
+            <span className="text-wine-bright">{moeda(resumo.despesasFixasTotal)}</span>
           </div>
 
           <div className="flex justify-between border-t-2 border-imperium-line-strong pt-2 text-base font-medium">
@@ -170,51 +189,38 @@ export default async function DrePage({ searchParams }: { searchParams: { ano?: 
           pctReceitaCredito={config.pctReceitaCredito}
           pctReceitaParceiro={config.pctReceitaParceiro}
           pctImposto={config.pctImposto}
-          despesasOperacionaisAtuais={resumo.despesasOperacionais}
+          pctCustoVariavel={resumo.receitaLiquida > 0 ? resumo.custosVariaveisTotal / resumo.receitaLiquida : 0}
+          despesasFixasAtuais={resumo.despesasFixasTotal}
         />
       </Card>
 
-      <details className="card-imp group" open>
+      <details className="card-imp group">
         <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
-          <span>Folha de Pagamento ({linhas.length} pessoas)</span>
+          <span>Folha de Pagamento, por pessoa ({linhas.length})</span>
           <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
         </summary>
         <div className="mt-4">
-          <Table minWidth="min-w-[1100px]">
+          <Table>
             <thead>
               <tr>
                 <Th className="px-2">Equipe</Th>
-                <Th align="right" className="px-2">Vendido SDR</Th>
-                <Th align="right" className="px-2">Vendido Closer</Th>
                 <Th className="px-2">Cargo</Th>
                 <Th className="px-2">Time</Th>
-                <Th className="px-2">Tribo</Th>
                 <Th align="right" className="px-2">Fixo</Th>
-                <Th align="right" className="px-2">Bônus</Th>
-                <Th align="right" className="px-2">Fixo+Bônus</Th>
-                <Th align="right" className="px-2">Var. SDR</Th>
-                <Th align="right" className="px-2">Var. Closer</Th>
-                <Th align="right" className="px-2">Var. Gestão</Th>
-                <Th align="right" className="px-2">Campanhas</Th>
-                <Th align="right" className="px-2">Folha</Th>
+                <Th align="right" className="px-2">Variável</Th>
+                <Th align="right" className="px-2">Total</Th>
               </tr>
             </thead>
             <tbody>
               {linhas.map((l) => (
                 <Tr key={l.profileId}>
                   <Td className="px-2 whitespace-nowrap text-stone-200">{l.nome}</Td>
-                  <Td align="right" className="px-2 text-stone-400">{l.vendidoSdr > 0 ? moeda(l.vendidoSdr) : "—"}</Td>
-                  <Td align="right" className="px-2 text-stone-400">{l.vendidoCloser > 0 ? moeda(l.vendidoCloser) : "—"}</Td>
                   <Td className="px-2 whitespace-nowrap text-stone-400">{l.cargo}</Td>
-                  <Td className="px-2 whitespace-nowrap text-stone-500">{l.time ?? "—"}</Td>
-                  <Td className="px-2 whitespace-nowrap text-stone-500">{l.tribo ?? "—"}</Td>
+                  <Td className="px-2 whitespace-nowrap text-stone-500">{l.time ?? l.tribo ?? "—"}</Td>
                   <Td align="right" className="px-2 text-stone-300">{moeda(l.fixo)}</Td>
-                  <Td align="right" className="px-2 text-stone-300">{l.bonus > 0 ? moeda(l.bonus) : "—"}</Td>
-                  <Td align="right" className="px-2 text-stone-100">{moeda(l.fixoMaisBonus)}</Td>
-                  <Td align="right" className="px-2 text-stone-400">{l.variavelSdr > 0 ? moeda(l.variavelSdr) : "—"}</Td>
-                  <Td align="right" className="px-2 text-stone-400">{l.variavelCloser > 0 ? moeda(l.variavelCloser) : "—"}</Td>
-                  <Td align="right" className="px-2 text-stone-400">{l.variavelGestao > 0 ? moeda(l.variavelGestao) : "—"}</Td>
-                  <Td align="right" className="px-2 text-stone-400">{l.campanhas > 0 ? moeda(l.campanhas) : "—"}</Td>
+                  <Td align="right" className="px-2 text-stone-300">
+                    {moeda(l.bonus + l.variavelSdr + l.variavelCloser + l.variavelGestao + l.campanhas)}
+                  </Td>
                   <Td align="right" className="px-2 font-medium text-gold-bright">{moeda(l.folhaTotal)}</Td>
                 </Tr>
               ))}
@@ -224,16 +230,10 @@ export default async function DrePage({ searchParams }: { searchParams: { ano?: 
                 <Td className="px-2 text-gold-bright">TOTAL</Td>
                 <Td className="px-2" />
                 <Td className="px-2" />
-                <Td className="px-2" />
-                <Td className="px-2" />
-                <Td className="px-2" />
                 <Td align="right" className="px-2 text-stone-200">{moeda(totais.fixo)}</Td>
-                <Td align="right" className="px-2 text-stone-200">{moeda(totais.bonus)}</Td>
-                <Td align="right" className="px-2 text-stone-100">{moeda(totais.fixoMaisBonus)}</Td>
-                <Td align="right" className="px-2 text-stone-200">{moeda(totais.variavelSdr)}</Td>
-                <Td align="right" className="px-2 text-stone-200">{moeda(totais.variavelCloser)}</Td>
-                <Td align="right" className="px-2 text-stone-200">{moeda(totais.variavelGestao)}</Td>
-                <Td align="right" className="px-2 text-stone-200">{moeda(totais.campanhas)}</Td>
+                <Td align="right" className="px-2 text-stone-200">
+                  {moeda(totais.bonus + totais.variavelSdr + totais.variavelCloser + totais.variavelGestao + totais.campanhas)}
+                </Td>
                 <Td align="right" className="px-2 text-gold-bright">{moeda(totais.folhaTotal)}</Td>
               </Tr>
             </tfoot>
