@@ -3,12 +3,31 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // Marcos são cadastrados com 1 threshold só, pensado pra produção de SDR —
 // Closer e Líder naturalmente produzem/lideram produção muito maior, então
 // multiplicamos a meta pelo papel em vez de manter tabelas de marco
-// duplicadas (2026-08-21, a pedido do Diretor).
+// duplicadas (2026-08-21, a pedido do Diretor; multiplicador ajustado de
+// x3/x6 pra x2/x3 no mesmo dia, por esticar demais).
 export const MARCO_MULTIPLICADOR_POR_ROLE: Record<string, number> = {
   sdr: 1,
-  closer: 3,
-  lider: 6,
+  closer: 2,
+  lider: 3,
 };
+
+// Os 3 marcos mais caros (Notebook + as 2 viagens) ficaram altos demais só
+// com o multiplicador linear — valor fixo por papel pra esses, pedido
+// explicitamente pelo Diretor (2026-08-21). Os outros 3 marcos continuam
+// no multiplicador padrão acima.
+const MARCO_THRESHOLD_OVERRIDE: Record<string, Partial<Record<"closer" | "lider", number>>> = {
+  "Notebook": { closer: 2_000_000, lider: 3_000_000 },
+  "Viagem Ceará p/ 2": { closer: 2_500_000, lider: 4_000_000 },
+  "Viagem Brasil p/ 2": { closer: 3_000_000, lider: 5_000_000 },
+};
+
+// Exportado pra CentralNotificacoes.tsx (widget "perto de marco") calcular
+// a mesma meta por papel sem duplicar a regra do override.
+export function calcularThreshold(nome: string, thresholdBase: number, role: string): number {
+  const multiplicador = MARCO_MULTIPLICADOR_POR_ROLE[role] ?? 1;
+  const override = MARCO_THRESHOLD_OVERRIDE[nome]?.[role as "closer" | "lider"];
+  return override ?? thresholdBase * multiplicador;
+}
 
 export type MarcoProgresso = {
   id: string;
@@ -36,7 +55,6 @@ export async function buscarProgressoMarcos(
   profileId: string,
   role: string = "sdr"
 ): Promise<{ marcos: MarcoProgresso[]; producaoMes: number }> {
-  const multiplicador = MARCO_MULTIPLICADOR_POR_ROLE[role] ?? 1;
   const hoje = new Date().toISOString().slice(0, 10);
   const inicioMes = hoje.slice(0, 7) + "-01";
   const competenciaAtual = inicioMes;
@@ -54,7 +72,7 @@ export async function buscarProgressoMarcos(
   const jaResgatouEsteMes = (resgates ?? []).some((r) => r.competencia === competenciaAtual);
 
   const marcos = (marcosRows ?? []).map((m) => {
-    const threshold = m.threshold * multiplicador;
+    const threshold = calcularThreshold(m.nome, m.threshold, role);
     const resgate = resgatePorMarco.get(m.id);
     const alcancado = !!resgate;
     const elegivel = !alcancado && !jaResgatouEsteMes && producaoMes >= threshold;
