@@ -213,19 +213,47 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // Upsert por chave_natural (não apaga+recria) pra preservar status_manual/
   // observacao que o closer/líder preenche no Forecast — ver migration 0024.
   const operacoes = await buscarOperacoes();
-  const weeklyRows = operacoes.linhas.map((l) => ({
-    chave_natural: l.chaveNatural,
-    data: l.data,
-    sdr_profile_id: l.sdrNormalizado ? nomeParaId.get(l.sdrNormalizado) ?? null : null,
-    closer_profile_id: l.closerNormalizado ? nomeParaId.get(l.closerNormalizado) ?? null : null,
-    cliente: l.cliente,
-    valor: l.valor,
-    faturamento: l.faturamento,
-    produto: l.produto,
-    origem: l.origem,
-    status: l.status,
-    synced_at: new Date().toISOString(),
-  }));
+
+  // weekly_operacoes.data é a data de ASSINATURA, não de pagamento — sem
+  // isso, "pagos de ontem" (Central de Notificações) só pegaria operação
+  // assinada E paga no mesmo dia, quase nunca o caso real. pago_em grava a
+  // data em que a sync PRIMEIRO viu o status virar PAGO: busca o status
+  // atual de cada chave_natural já existente antes de upsertar, e só
+  // escreve pago_em = hoje pra quem tava diferente de PAGO e virou agora —
+  // quem já era PAGO mantém o pago_em antigo (nunca sobrescreve).
+  const chavesOperacoes = operacoes.linhas.map((l) => l.chaveNatural);
+  const statusAnteriorPorChave = new Map<string, { status: string; pago_em: string | null }>();
+  for (const chavesBatch of chunk(chavesOperacoes, 500)) {
+    const { data: existentes, error: existentesError } = await supabase
+      .from("weekly_operacoes")
+      .select("chave_natural, status, pago_em")
+      .in("chave_natural", chavesBatch);
+    if (existentesError) throw new Error("Erro lendo status anterior de weekly_operacoes: " + existentesError.message);
+    for (const e of existentes ?? []) statusAnteriorPorChave.set(e.chave_natural, { status: e.status, pago_em: e.pago_em });
+  }
+  const hojeStr = new Date().toISOString().slice(0, 10);
+
+  const weeklyRows = operacoes.linhas.map((l) => {
+    const anterior = statusAnteriorPorChave.get(l.chaveNatural);
+    let pagoEm: string | null = anterior?.pago_em ?? null;
+    if (l.status === "PAGO" && anterior?.status !== "PAGO") pagoEm = hojeStr;
+    else if (l.status !== "PAGO") pagoEm = null;
+
+    return {
+      chave_natural: l.chaveNatural,
+      data: l.data,
+      sdr_profile_id: l.sdrNormalizado ? nomeParaId.get(l.sdrNormalizado) ?? null : null,
+      closer_profile_id: l.closerNormalizado ? nomeParaId.get(l.closerNormalizado) ?? null : null,
+      cliente: l.cliente,
+      valor: l.valor,
+      faturamento: l.faturamento,
+      produto: l.produto,
+      origem: l.origem,
+      status: l.status,
+      pago_em: pagoEm,
+      synced_at: new Date().toISOString(),
+    };
+  });
   for (const batch of chunk(weeklyRows, 1000)) {
     const { error } = await supabase
       .from("weekly_operacoes")

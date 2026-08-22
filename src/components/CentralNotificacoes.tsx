@@ -89,30 +89,50 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
 
   // "Ontem seu time fez": funil realizado ONTEM (não hoje — hoje ainda tá
   // em andamento) contra a meta do MÊS pró-rateada por dia (mesmo padrão de
-  // /producao: meta_mensal ÷ dias do mês). R$ Assinado/Pago vêm direto de
-  // weekly_operacoes (não de `vendas`, que só existe pra linha já PAGA) —
-  // "assinado" conta qualquer status, "pago" só status='PAGO'.
+  // /producao: meta_mensal ÷ dias do mês).
+  //
+  // "Pagos" é especial: weekly_operacoes.data é a data de ASSINATURA, não
+  // de pagamento — status vira PAGO dias depois, então filtrar por
+  // status='PAGO' e data=ontem quase sempre dá zero (só pega quem assinou E
+  // pagou no mesmo dia). Usa pago_em (migration 0041 — a sync grava a data
+  // real em que cada operação virou PAGO) tanto pra R$ Pago quanto pra
+  // contagem de "pagos", em vez do producao_funil.etapa='pagos' (que tem a
+  // mesma limitação de ser keyed pela data de assinatura).
   const ontem = new Date(agora);
   ontem.setDate(ontem.getDate() - 1);
   const ontemStr = ontem.toISOString().slice(0, 10);
   const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
 
-  const [{ data: funilOntem }, { data: opsOntem }, { metaCredito, metaTicketMedio, taxas }] = await Promise.all([
-    ids.length
-      ? supabase.from("producao_funil").select("etapa, realizado").in("profile_id", ids).eq("data", ontemStr)
-      : Promise.resolve({ data: [] }),
-    ids.length
-      ? supabase
-          .from("weekly_operacoes")
-          .select("valor, status, sdr_profile_id, closer_profile_id")
-          .eq("data", ontemStr)
-          .or(`sdr_profile_id.in.(${ids.join(",")}),closer_profile_id.in.(${ids.join(",")})`)
-      : Promise.resolve({ data: [] }),
-    buscarMetaComTaxas(supabase, escopo),
-  ]);
+  const [{ data: funilOntem }, { data: opsAssinadoOntem }, { data: opsPagoOntem }, { metaCredito, metaTicketMedio, taxas }] =
+    await Promise.all([
+      ids.length
+        ? supabase
+            .from("producao_funil")
+            .select("etapa, realizado")
+            .in("profile_id", ids)
+            .neq("etapa", "pagos")
+            .eq("data", ontemStr)
+        : Promise.resolve({ data: [] }),
+      ids.length
+        ? supabase
+            .from("weekly_operacoes")
+            .select("valor, sdr_profile_id, closer_profile_id")
+            .eq("data", ontemStr)
+            .or(`sdr_profile_id.in.(${ids.join(",")}),closer_profile_id.in.(${ids.join(",")})`)
+        : Promise.resolve({ data: [] }),
+      ids.length
+        ? supabase
+            .from("weekly_operacoes")
+            .select("valor, sdr_profile_id, closer_profile_id")
+            .eq("pago_em", ontemStr)
+            .or(`sdr_profile_id.in.(${ids.join(",")}),closer_profile_id.in.(${ids.join(",")})`)
+        : Promise.resolve({ data: [] }),
+      buscarMetaComTaxas(supabase, escopo),
+    ]);
 
   const realizadoOntem = Object.fromEntries(FUNNEL_STAGES.map((e) => [e, 0])) as Record<FunilEtapa, number>;
   for (const r of funilOntem ?? []) realizadoOntem[r.etapa as FunilEtapa] += r.realizado;
+  realizadoOntem.pagos = (opsPagoOntem ?? []).length;
 
   const metaMensalPorEtapa = calcularFunilMeta(metaCredito, metaTicketMedio, taxas);
   const metaOntemPorEtapa = Object.fromEntries(
@@ -120,8 +140,8 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   ) as Record<FunilEtapa, number | null>;
   const metaPagosR$Ontem = metaCredito / diasNoMes;
 
-  const rAssinadoOntem = (opsOntem ?? []).reduce((s, o) => s + Number(o.valor), 0);
-  const rPagoOntem = (opsOntem ?? []).filter((o) => o.status === "PAGO").reduce((s, o) => s + Number(o.valor), 0);
+  const rAssinadoOntem = (opsAssinadoOntem ?? []).reduce((s, o) => s + Number(o.valor), 0);
+  const rPagoOntem = (opsPagoOntem ?? []).reduce((s, o) => s + Number(o.valor), 0);
 
   const temAlgumaMeta = Object.values(metaOntemPorEtapa).some((v) => v !== null);
 
