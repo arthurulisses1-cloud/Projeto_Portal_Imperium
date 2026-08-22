@@ -10,7 +10,7 @@ import EnquetePoll, { type EnqueteData } from "@/components/ui/EnquetePoll";
 import CentralNotificacoes from "@/components/CentralNotificacoes";
 import { IconSwords, IconShield, IconCoin, IconHorn, IconBallot, IconMedal, IconScroll, IconCrown } from "@/components/ui/icons";
 import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
-import { buscarMetaIndividual, buscarMetaExercito, buscarProducaoPagaExercito, buscarMetaTribo, buscarProducaoPagaTribo, buscarMetaFirma, buscarProducaoPagaFirma } from "@/lib/metas";
+import { buscarMetaIndividual, buscarMetaExercito, buscarProducaoPagaExercito, buscarMetaTribo, buscarProducaoPagaTribo, buscarMetaFirma, buscarProducaoPagaFirma, buscarPainelFinanceiroTribo, buscarPainelFinanceiroPessoa, type PainelFinanceiro } from "@/lib/metas";
 import { buscarCampanhasAtivas, type CampanhaComProgresso } from "@/lib/campanhas";
 import { FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 import { getViewerContext } from "@/lib/preview";
@@ -132,21 +132,17 @@ export default async function MuralPage() {
     ]);
   }
 
-  // Painel financeiro do mês (só Diretor) — mesma classificação que o
-  // Forecast já usa (status_manual, catálogo preenchido por closer/líder/
-  // diretor): "pra pagar" = Aguardando Pagamento, "em pendência" =
-  // Resolvendo Pendência. Previsão de crédito soma os 3 baldes com alguma
-  // certeza de virar crédito (exclui Análise Jurídico/Esfriou, que ainda
-  // não têm destino definido).
-  let painelFinanceiroFirma: {
-    paraPagar: number;
-    pendencia: number;
-    previsaoCredito: number;
-    pagoMaisParaPagar: number;
-  } | null = null;
+  // Painel financeiro do mês — mesma classificação que o Forecast já usa
+  // (status_manual, catálogo preenchido por closer/líder/diretor): "pra
+  // pagar" = Aguardando Pagamento, "em pendência" = Resolvendo Pendência.
+  // Previsão de crédito soma os 3 baldes com alguma certeza de virar
+  // crédito (exclui Análise Jurídico/Esfriou, que ainda não têm destino
+  // definido). Diretor vê a firma, Closer a própria Tribo, SDR a própria
+  // produção — Líder fica de fora por enquanto (não foi pedido).
+  const agora = new Date();
+  const fimMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
+  let painelFinanceiro: PainelFinanceiro | null = null;
   if (meRole === "diretor") {
-    const agora = new Date();
-    const fimMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
     const { data: opsMes } = await supabase
       .from("weekly_operacoes")
       .select("valor, status, status_manual")
@@ -161,12 +157,11 @@ export default async function MuralPage() {
       else if (o.status_manual === "aguardando_pagamento") paraPagar += valor;
       else if (o.status_manual === "resolvendo_pendencia") pendencia += valor;
     }
-    painelFinanceiroFirma = {
-      paraPagar,
-      pendencia,
-      previsaoCredito: pago + paraPagar + pendencia,
-      pagoMaisParaPagar: pago + paraPagar,
-    };
+    painelFinanceiro = { paraPagar, pendencia, previsaoCredito: pago + paraPagar + pendencia, pagoMaisParaPagar: pago + paraPagar };
+  } else if (meRole === "closer" && triboAtual?.id) {
+    painelFinanceiro = await buscarPainelFinanceiroTribo(supabase, triboAtual.id, inicioMes, fimMes);
+  } else if (meRole === "sdr") {
+    painelFinanceiro = await buscarPainelFinanceiroPessoa(supabase, meId, inicioMes, fimMes);
   }
 
   // Enquetes: pré-computa opções + votos dos posts do tipo 'enquete' já carregados
@@ -269,36 +264,28 @@ export default async function MuralPage() {
         </Card>
       )}
 
-      {meRole === "diretor" && painelFinanceiroFirma && (
+      {painelFinanceiro && (
         <div className="grid gap-4 sm:grid-cols-3">
           <Card title="Pra pagar × Em pendência">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="kicker">Pra pagar</p>
-                <p className="mt-1 font-display text-xl text-gold-bright">
-                  {moeda(painelFinanceiroFirma.paraPagar)}
-                </p>
+                <p className="mt-1 font-display text-xl text-gold-bright">{moeda(painelFinanceiro.paraPagar)}</p>
               </div>
               <div>
                 <p className="kicker">Em pendência</p>
-                <p className="mt-1 font-display text-xl text-wine-bright">
-                  {moeda(painelFinanceiroFirma.pendencia)}
-                </p>
+                <p className="mt-1 font-display text-xl text-wine-bright">{moeda(painelFinanceiro.pendencia)}</p>
               </div>
             </div>
           </Card>
 
           <Card title="Pago + Aguardando pagamento">
-            <p className="font-display text-xl text-gold-bright">
-              {moeda(painelFinanceiroFirma.pagoMaisParaPagar)}
-            </p>
+            <p className="font-display text-xl text-gold-bright">{moeda(painelFinanceiro.pagoMaisParaPagar)}</p>
             <p className="mt-1 text-[11px] text-stone-600">Pago + Em pagamento (sem contar pendência)</p>
           </Card>
 
           <Card title="Previsão de crédito">
-            <p className="font-display text-xl text-gold-bright">
-              {moeda(painelFinanceiroFirma.previsaoCredito)}
-            </p>
+            <p className="font-display text-xl text-gold-bright">{moeda(painelFinanceiro.previsaoCredito)}</p>
             <p className="mt-1 text-[11px] text-stone-600">Pago + Em pagamento + Resolvendo pendência</p>
           </Card>
         </div>

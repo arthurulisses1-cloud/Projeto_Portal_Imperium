@@ -240,6 +240,82 @@ export async function buscarProducaoPagaFirma(supabase: SupabaseClient, inicioMe
   return (opsPagas ?? []).reduce((s, o) => s + Number(o.valor), 0);
 }
 
+export type PainelFinanceiro = {
+  paraPagar: number;
+  pendencia: number;
+  previsaoCredito: number;
+  pagoMaisParaPagar: number;
+};
+
+// Mesma classificação que o Forecast usa (status_manual, catálogo
+// preenchido por closer/líder/diretor): "pra pagar" = Aguardando
+// Pagamento, "em pendência" = Resolvendo Pendência. Compartilhado entre o
+// painel do Diretor (firma inteira), do Closer (própria Tribo) e do SDR
+// (própria produção) — só muda o filtro de quais operações entram.
+function calcularPainelFinanceiro(
+  ops: { valor: number; status: string; status_manual: string | null }[]
+): PainelFinanceiro {
+  let pago = 0;
+  let paraPagar = 0;
+  let pendencia = 0;
+  for (const o of ops) {
+    const valor = Number(o.valor);
+    if (o.status === "PAGO") pago += valor;
+    else if (o.status_manual === "aguardando_pagamento") paraPagar += valor;
+    else if (o.status_manual === "resolvendo_pendencia") pendencia += valor;
+  }
+  return { paraPagar, pendencia, previsaoCredito: pago + paraPagar + pendencia, pagoMaisParaPagar: pago + paraPagar };
+}
+
+// SDR/Closer fechando sozinho ("ambos") aparece como sdr_profile_id E
+// closer_profile_id na mesma linha — o filtro OR já cobre isso sem duplicar
+// (é a MESMA linha, contada uma vez).
+export async function buscarPainelFinanceiroPessoa(
+  supabase: SupabaseClient,
+  profileId: string,
+  inicioMes: string,
+  fimMes: string
+): Promise<PainelFinanceiro> {
+  const { data: ops } = await supabase
+    .from("weekly_operacoes")
+    .select("valor, status, status_manual")
+    .gte("data", inicioMes)
+    .lte("data", fimMes)
+    .or(`sdr_profile_id.eq.${profileId},closer_profile_id.eq.${profileId}`);
+  return calcularPainelFinanceiro(ops ?? []);
+}
+
+// Mesma regra "time dono = Tribo do Closer, fallback Tribo do SDR" que
+// buscarProducaoPagaTribo usa pro crédito já pago.
+export async function buscarPainelFinanceiroTribo(
+  supabase: SupabaseClient,
+  triboId: string,
+  inicioMes: string,
+  fimMes: string
+): Promise<PainelFinanceiro> {
+  const { data: ops } = await supabase
+    .from("weekly_operacoes")
+    .select("valor, status, status_manual, sdr_profile_id, closer_profile_id")
+    .gte("data", inicioMes)
+    .lte("data", fimMes);
+
+  const idsEnvolvidos = Array.from(
+    new Set((ops ?? []).flatMap((o) => [o.sdr_profile_id, o.closer_profile_id]).filter((x): x is string => !!x))
+  );
+  if (idsEnvolvidos.length === 0) return calcularPainelFinanceiro([]);
+
+  const { data: pessoas } = await supabase.from("profiles").select("id, tribo_id").in("id", idsEnvolvidos);
+  const triboPorProfileId = new Map((pessoas ?? []).map((p) => [p.id, p.tribo_id]));
+
+  const opsDaTribo = (ops ?? []).filter((o) => {
+    const timeDaOperacao =
+      (o.closer_profile_id && triboPorProfileId.get(o.closer_profile_id)) ||
+      (o.sdr_profile_id && triboPorProfileId.get(o.sdr_profile_id));
+    return timeDaOperacao === triboId;
+  });
+  return calcularPainelFinanceiro(opsDaTribo);
+}
+
 // Mesma regra que buscarProducaoPagaExercito, mas no nível da Tribo: time
 // dono da operação = Tribo do Closer, fallback pra Tribo do SDR. Líder não
 // tem tribo_id — uma operação fechada por ele (sem Closer de Tribo nenhuma
