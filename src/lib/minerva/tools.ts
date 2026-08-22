@@ -6,6 +6,11 @@ import { calcularGargalo } from "@/lib/gargalo";
 import { RANK_LABELS, ROLE_LABELS } from "@/lib/labels";
 import type { Escopo } from "./scope";
 
+// REGRA DURA (pedido explícito do Diretor, 2026-08-22): NUNCA importe nada
+// de src/lib/dre.ts aqui, nem crie uma tool que leia dre_configuracoes /
+// dre_producao_parceiro / dre_despesas_extras / folha de pagamento — em
+// nenhuma hipótese, nem pro próprio Diretor. A DRE só existe em /dre.
+
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }

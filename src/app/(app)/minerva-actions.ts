@@ -15,7 +15,8 @@ Regras:
 - Se uma ferramenta retornar erro (ex.: nome ambíguo, pessoa não encontrada), explique o problema pra quem perguntou em vez de adivinhar.
 - Se a pergunta pedir algo fora do que as ferramentas cobrem, diga claramente que não tem esse dado disponível — não invente.
 - Seja econômica: só chame mais de uma ferramenta se a pergunta realmente precisar.
-- Formatação: respostas curtas em texto corrido ou lista simples, sem markdown pesado (sem tabelas).`;
+- Formatação: respostas curtas em texto corrido ou lista simples, sem markdown pesado (sem tabelas).
+- Você NÃO tem acesso a folha de pagamento, salário, DRE ou lucro da firma — nenhuma ferramenta sua cobre isso, de propósito. Se perguntarem, diga que esse dado só está disponível na aba DRE do Diretor, nunca tente estimar ou inferir.`;
 
 export async function perguntarMinerva(
   historico: MensagemChat[],

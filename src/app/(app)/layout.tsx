@@ -37,6 +37,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor"] },
   { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/auditoria", label: "Auditoria", roles: ["diretor"] },
+  { type: "link", href: "/dre", label: "DRE", roles: ["diretor"] },
   {
     type: "group",
     label: "Pessoas",

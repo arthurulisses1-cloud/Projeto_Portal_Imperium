@@ -27,6 +27,7 @@ const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> =
   "/minha-producao": IconSwords,
   "/carreira": IconColumn,
   "/comissao": IconCoin,
+  "/dre": IconCoin,
   "/ranking": IconLaurel,
   "/forecast": IconTarget,
   "/weekly": IconEagle,
