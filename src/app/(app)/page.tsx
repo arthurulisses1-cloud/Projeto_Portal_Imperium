@@ -125,7 +125,7 @@ export default async function MuralPage() {
   // que SDR/Closer/Líder já tinham no Mural, só que no nível da firma inteira.
   let metaFirma = 0;
   let pagoFirmaMes = 0;
-  if (meRole === "diretor") {
+  if (meRole === "diretor" || meRole === "investidor") {
     [metaFirma, pagoFirmaMes] = await Promise.all([
       buscarMetaFirma(supabase),
       buscarProducaoPagaFirma(supabase, inicioMes),
@@ -142,7 +142,7 @@ export default async function MuralPage() {
   const agora = new Date();
   const fimMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
   let painelFinanceiro: PainelFinanceiro | null = null;
-  if (meRole === "diretor") {
+  if (meRole === "diretor" || meRole === "investidor") {
     const { data: opsMes } = await supabase
       .from("weekly_operacoes")
       .select("valor, status, status_manual")
@@ -258,7 +258,7 @@ export default async function MuralPage() {
         </Card>
       )}
 
-      {meRole === "diretor" && metaFirma > 0 && (
+      {(meRole === "diretor" || meRole === "investidor") && metaFirma > 0 && (
         <Card title="Meta do mês · Firma">
           <BarraMeta realizado={pagoFirmaMes} meta={metaFirma} />
         </Card>
@@ -374,7 +374,7 @@ export default async function MuralPage() {
         />
       )}
 
-      {meRole !== "sdr" && (
+      {(meRole === "closer" || meRole === "lider" || meRole === "diretor") && (
         <details className="card-imp group">
           <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
             <span className="flex items-center gap-1.5">

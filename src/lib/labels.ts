@@ -12,6 +12,7 @@ export const ROLE_LABELS: Record<string, string> = {
   closer: "Closer",
   lider: "Líder",
   diretor: "Diretor",
+  investidor: "Investidor",
 };
 
 export const COMPROMISSO_STATUS_LABELS: Record<string, string> = {

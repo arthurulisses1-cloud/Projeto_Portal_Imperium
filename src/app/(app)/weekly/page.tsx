@@ -12,7 +12,7 @@ export default async function WeeklyPage() {
   if (!user) return null;
 
   const { data: meProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (!meProfile || (meProfile.role !== "lider" && meProfile.role !== "diretor")) {
+  if (!meProfile || !["lider", "diretor", "investidor"].includes(meProfile.role)) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>
@@ -29,7 +29,7 @@ export default async function WeeklyPage() {
     supabase
       .from("profiles")
       .select("id, full_name, role, rank, ativo, stars_total, tribo_id")
-      .neq("role", "diretor")
+      .in("role", ["sdr", "closer", "lider"])
       .order("full_name"),
   ]);
 

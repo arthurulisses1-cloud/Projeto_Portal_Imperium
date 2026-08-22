@@ -16,7 +16,11 @@ export type Escopo = {
 // autenticado), essa função é quem garante que a Minerva não vaza dado de
 // outro time pra quem não deveria ver.
 export async function resolverEscopo(supabase: SupabaseClient, viewerId: string, role: string): Promise<Escopo> {
-  if (role === "diretor") return { idsPermitidos: null, role, viewerId };
+  // Investidor é gestão pura (mesmo acesso de visão do Diretor na Minerva,
+  // liberado a pedido, 2026-08-22) — mas nunca aparece como "pessoa" nos
+  // agregados de ninguém, porque as tools já filtram por role sdr/closer/
+  // lider (ver pessoasNoEscopo em tools.ts), igual o Diretor já não aparecia.
+  if (role === "diretor" || role === "investidor") return { idsPermitidos: null, role, viewerId };
 
   if (role === "sdr") return { idsPermitidos: [viewerId], role, viewerId };
 

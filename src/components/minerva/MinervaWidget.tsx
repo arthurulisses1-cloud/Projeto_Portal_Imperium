@@ -8,6 +8,7 @@ import { perguntarMinerva, type MensagemChat } from "@/app/(app)/minerva-actions
 // SDR/Closer, que não têm "o time" pra olhar, só a própria Tribo/produção.
 const SUGESTOES_POR_ROLE: Record<string, string[]> = {
   diretor: ["Quem está zerado esse mês?", "Como está a produção da firma?", "Qual o ranking de crédito?"],
+  investidor: ["Como está a produção da firma?", "Qual o ranking de crédito?", "Quem está zerado esse mês?"],
   lider: ["Quem do meu Exército está zerado?", "Como está a produção do meu Exército?", "Qual o gap da operação?"],
   closer: ["Quem da minha Tribo está zerado?", "Como está a produção da minha Tribo?", "Qual o gap da minha operação?"],
   sdr: ["Como está minha produção esse mês?", "Qual o gap da minha operação?", "Estou zerado esse mês?"],

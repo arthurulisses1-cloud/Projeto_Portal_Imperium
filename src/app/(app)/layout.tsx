@@ -23,7 +23,7 @@ type NavConfigEntry = (NavEntry | { type: "group"; label: string; items: { href:
 // Visão Geral da Firma saiu (a Weekly de Receita cobre o mesmo terreno);
 // Campanhas virou um atalho na lateral do Mural em vez de aba fixa.
 const NAV_ITEMS: NavConfigEntry[] = [
-  { type: "link", href: "/", label: "Mural", roles: ["sdr", "closer", "lider", "diretor"] },
+  { type: "link", href: "/", label: "Mural", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
   { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer"] },
   { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
   { type: "link", href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
@@ -32,12 +32,12 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/estrelas", label: "Estrelas", roles: ["sdr", "closer"] },
   { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider", "diretor"] },
-  { type: "link", href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor"] },
-  { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor"] },
-  { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor"] },
+  { type: "link", href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
+  { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor", "investidor"] },
+  { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor", "investidor"] },
   { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/auditoria", label: "Auditoria", roles: ["diretor"] },
-  { type: "link", href: "/dre", label: "DRE", roles: ["diretor"] },
+  { type: "link", href: "/dre", label: "DRE", roles: ["diretor", "investidor"] },
   {
     type: "group",
     label: "Pessoas",

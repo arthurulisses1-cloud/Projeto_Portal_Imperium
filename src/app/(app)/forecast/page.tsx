@@ -11,7 +11,7 @@ export default async function ForecastPage() {
   const meId = viewer.effectiveId;
   const meRole = viewer.effectiveRole;
 
-  if (!["closer", "lider", "diretor"].includes(meRole)) {
+  if (!["closer", "lider", "diretor", "investidor"].includes(meRole)) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>
