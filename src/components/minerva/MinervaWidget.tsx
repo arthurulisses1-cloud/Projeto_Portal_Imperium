@@ -3,9 +3,19 @@
 import { useRef, useState, useTransition } from "react";
 import { perguntarMinerva, type MensagemChat } from "@/app/(app)/minerva-actions";
 
-const SUGESTOES = ["Quem está zerado esse mês?", "Qual o gap da minha operação?", "Como está a produção do time?"];
+// Cada papel enxerga um escopo diferente (ver resolverEscopo em
+// lib/minerva/scope.ts) — sugerir a mesma pergunta pra todo mundo confundia
+// SDR/Closer, que não têm "o time" pra olhar, só a própria Tribo/produção.
+const SUGESTOES_POR_ROLE: Record<string, string[]> = {
+  diretor: ["Quem está zerado esse mês?", "Como está a produção da firma?", "Qual o ranking de crédito?"],
+  lider: ["Quem do meu Exército está zerado?", "Como está a produção do meu Exército?", "Qual o gap da operação?"],
+  closer: ["Quem da minha Tribo está zerado?", "Como está a produção da minha Tribo?", "Qual o gap da minha operação?"],
+  sdr: ["Como está minha produção esse mês?", "Qual o gap da minha operação?", "Estou zerado esse mês?"],
+};
+const SUGESTOES_PADRAO = ["Qual o gap da minha operação?", "Como está minha produção esse mês?"];
 
-export default function MinervaWidget() {
+export default function MinervaWidget({ role }: { role?: string }) {
+  const sugestoes = (role && SUGESTOES_POR_ROLE[role]) || SUGESTOES_PADRAO;
   const [aberto, setAberto] = useState(false);
   const [mensagens, setMensagens] = useState<MensagemChat[]>([]);
   const [pergunta, setPergunta] = useState("");
@@ -56,7 +66,7 @@ export default function MinervaWidget() {
               <div className="flex flex-col items-center py-6 text-center">
                 <p className="text-xs text-stone-500">Pergunte qualquer coisa sobre os dados do seu escopo.</p>
                 <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-                  {SUGESTOES.map((s) => (
+                  {sugestoes.map((s) => (
                     <button
                       key={s}
                       type="button"

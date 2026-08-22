@@ -201,7 +201,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </footer>
       </div>
 
-      {user && <MinervaWidget />}
+      {user && <MinervaWidget role={papelVisualizado} />}
     </div>
   );
 }
