@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
-import Card from "@/components/ui/Card";
 import { IconLaurel } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
 import { calcularThreshold } from "@/lib/marcos";
+import { buscarMetaComTaxas, calcularFunilMeta, type EscopoTime } from "@/lib/metas";
+import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -11,7 +12,7 @@ function moeda(v: number) {
 // Antes era a aba "/central" — agora embutido direto no Mural, escopado por
 // quem tá vendo: Diretor vê a firma inteira, Líder só o próprio Exército,
 // Closer só a própria Tribo (via `escopo`; sem escopo = sem filtro extra).
-type Escopo = { tipo: "exercito"; exercitoId: string } | { tipo: "tribo"; triboId: string } | null;
+type Escopo = EscopoTime;
 
 export default async function CentralNotificacoes({ escopo = null }: { escopo?: Escopo }) {
   const supabase = await createClient();
@@ -86,11 +87,80 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
     .filter((a) => a.dias >= 0 && a.dias <= 7)
     .sort((a, b) => a.dias - b.dias);
 
-  if (naoLancaram.length === 0 && pertoDeMarco.length === 0 && aniversarios.length === 0) return null;
+  // "Ontem seu time fez": funil realizado ONTEM (não hoje — hoje ainda tá
+  // em andamento) contra a meta do MÊS pró-rateada por dia (mesmo padrão de
+  // /producao: meta_mensal ÷ dias do mês). R$ Assinado/Pago vêm direto de
+  // weekly_operacoes (não de `vendas`, que só existe pra linha já PAGA) —
+  // "assinado" conta qualquer status, "pago" só status='PAGO'.
+  const ontem = new Date(agora);
+  ontem.setDate(ontem.getDate() - 1);
+  const ontemStr = ontem.toISOString().slice(0, 10);
+  const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
+
+  const [{ data: funilOntem }, { data: opsOntem }, { metaCredito, metaTicketMedio, taxas }] = await Promise.all([
+    ids.length
+      ? supabase.from("producao_funil").select("etapa, realizado").in("profile_id", ids).eq("data", ontemStr)
+      : Promise.resolve({ data: [] }),
+    ids.length
+      ? supabase
+          .from("weekly_operacoes")
+          .select("valor, status, sdr_profile_id, closer_profile_id")
+          .eq("data", ontemStr)
+          .or(`sdr_profile_id.in.(${ids.join(",")}),closer_profile_id.in.(${ids.join(",")})`)
+      : Promise.resolve({ data: [] }),
+    buscarMetaComTaxas(supabase, escopo),
+  ]);
+
+  const realizadoOntem = Object.fromEntries(FUNNEL_STAGES.map((e) => [e, 0])) as Record<FunilEtapa, number>;
+  for (const r of funilOntem ?? []) realizadoOntem[r.etapa as FunilEtapa] += r.realizado;
+
+  const metaMensalPorEtapa = calcularFunilMeta(metaCredito, metaTicketMedio, taxas);
+  const metaOntemPorEtapa = Object.fromEntries(
+    FUNNEL_STAGES.map((e) => [e, metaMensalPorEtapa[e] !== null ? Math.round(metaMensalPorEtapa[e]! / diasNoMes) : null])
+  ) as Record<FunilEtapa, number | null>;
+  const metaPagosR$Ontem = metaCredito / diasNoMes;
+
+  const rAssinadoOntem = (opsOntem ?? []).reduce((s, o) => s + Number(o.valor), 0);
+  const rPagoOntem = (opsOntem ?? []).filter((o) => o.status === "PAGO").reduce((s, o) => s + Number(o.valor), 0);
+
+  const temAlgumaMeta = Object.values(metaOntemPorEtapa).some((v) => v !== null);
+
+  if (naoLancaram.length === 0 && pertoDeMarco.length === 0 && aniversarios.length === 0 && !temAlgumaMeta) return null;
 
   return (
-    <Card title="Central de Notificações" right={<span className="text-xs text-stone-500">o que precisa da sua atenção</span>}>
+    <details open className="card-imp group">
+      <summary className="mb-4 flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
+        <h2 className="kicker">Central de Notificações</h2>
+        <span className="flex items-center gap-2 text-xs text-stone-500">
+          o que precisa da sua atenção
+          <span className="text-[10px] transition group-open:rotate-180">▾</span>
+        </span>
+      </summary>
       <div className="space-y-5">
+        {temAlgumaMeta && (
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Ontem, seu time fez</p>
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-3">
+              {FUNNEL_STAGES.map((etapa) => (
+                <li key={etapa} className="flex items-center justify-between">
+                  <span className="text-stone-400">{FUNNEL_LABELS[etapa]}</span>
+                  <span className="text-stone-200">
+                    {realizadoOntem[etapa]}/{metaOntemPorEtapa[etapa] ?? "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-500">
+              <span>
+                R$ Assinado: <span className="text-gold">{moeda(rAssinadoOntem)}</span>
+              </span>
+              <span>
+                R$ Pago: <span className="text-gold">{moeda(rPagoOntem)}</span> / meta {moeda(metaPagosR$Ontem)}
+              </span>
+            </div>
+          </div>
+        )}
+
         {naoLancaram.length > 0 && (
           <div>
             <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">
@@ -142,6 +212,6 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
           </div>
         )}
       </div>
-    </Card>
+    </details>
   );
 }

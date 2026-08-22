@@ -152,6 +152,44 @@ export async function buscarMetaTribo(supabase: SupabaseClient, triboId: string)
   };
 }
 
+export type EscopoTime = { tipo: "exercito"; exercitoId: string } | { tipo: "tribo"; triboId: string } | null;
+
+// Meta de crédito do escopo (Tribo/Exército/firma inteira) + ticket médio e
+// taxas esperadas do mês — usado pra derivar a meta de CADA etapa do funil
+// via calcularFunilMeta, no mesmo escopo. Ticket médio e taxas vêm de
+// metas_mensais/metas_conversao, que não são por Tribo/Exército (só a meta
+// de crédito é dividida) — por isso busca ela uma vez só, direto, pros
+// casos que buscarMetaTribo não cobre (Exército/firma só devolvem o número).
+export async function buscarMetaComTaxas(
+  supabase: SupabaseClient,
+  escopo: EscopoTime
+): Promise<{ metaCredito: number; metaTicketMedio: number; taxas: Map<string, number> }> {
+  if (escopo?.tipo === "tribo") {
+    const r = await buscarMetaTribo(supabase, escopo.triboId);
+    return { metaCredito: r.metaCreditoTribo, metaTicketMedio: r.metaTicketMedio, taxas: r.taxas };
+  }
+
+  const agora = new Date();
+  const { data: metaMes } = await supabase
+    .from("metas_mensais")
+    .select("id, meta_credito_total, meta_ticket_medio")
+    .eq("ano", agora.getFullYear())
+    .eq("mes", agora.getMonth() + 1)
+    .maybeSingle();
+  const { data: conversoes } = metaMes
+    ? await supabase.from("metas_conversao").select("etapa_de, etapa_para, taxa_esperada").eq("meta_mensal_id", metaMes.id)
+    : { data: [] };
+  const taxas = new Map((conversoes ?? []).map((c) => [`${c.etapa_de}_${c.etapa_para}`, c.taxa_esperada]));
+
+  if (escopo?.tipo === "exercito") {
+    const metaCredito = await buscarMetaExercito(supabase, escopo.exercitoId);
+    return { metaCredito, metaTicketMedio: metaMes?.meta_ticket_medio ?? 0, taxas };
+  }
+
+  // null = firma inteira (Diretor)
+  return { metaCredito: metaMes?.meta_credito_total ?? 0, metaTicketMedio: metaMes?.meta_ticket_medio ?? 0, taxas };
+}
+
 // Meta de crédito do EXÉRCITO inteiro = soma da meta de cada Tribo dele
 // (mesma divisão igual-por-Tribo-lógica de buscarMetaTribo) — pro "Meta do
 // mês" do líder no Mural, mesmo card que SDR/Closer já tinham com a própria
