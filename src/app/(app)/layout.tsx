@@ -6,6 +6,7 @@ import CampanhasCompactas from "@/components/ui/CampanhasCompactas";
 import SidebarRight from "@/components/ui/SidebarRight";
 import UserMenu from "@/components/ui/UserMenu";
 import MencoesBell from "@/components/ui/MencoesBell";
+import MinervaWidget from "@/components/minerva/MinervaWidget";
 import { limparPreview } from "./preview-actions";
 import { IconLaurel, IconEye } from "@/components/ui/icons";
 import { buscarPendencias } from "@/lib/pendencias";
@@ -35,7 +36,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor"] },
   { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor"] },
   { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
-  { type: "link", href: "/minerva", label: "Minerva", roles: ["sdr", "closer", "lider", "diretor"] },
   { type: "link", href: "/auditoria", label: "Auditoria", roles: ["diretor"] },
   {
     type: "group",
@@ -200,6 +200,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <IconLaurel className="h-3 w-6 text-imperium-line-strong" />
         </footer>
       </div>
+
+      {user && <MinervaWidget />}
     </div>
   );
 }
