@@ -64,6 +64,22 @@ export async function publicarMural(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function excluirPostMural(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const id = String(formData.get("id"));
+  // RLS (mural_delete) já restringe pra autor do post ou Diretor — esse
+  // delete só afeta linha nenhuma (sem erro) se a pessoa não tiver direito.
+  const { error } = await supabase.from("mural_posts").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/");
+}
+
 export async function votarEnquete(formData: FormData) {
   const supabase = await createClient();
   const {

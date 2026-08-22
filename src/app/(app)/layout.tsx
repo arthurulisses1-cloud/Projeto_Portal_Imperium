@@ -2,11 +2,14 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import AppNav, { type NavEntry } from "@/components/ui/AppNav";
 import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
+import CampanhasCompactas from "@/components/ui/CampanhasCompactas";
 import SidebarRight from "@/components/ui/SidebarRight";
 import UserMenu from "@/components/ui/UserMenu";
+import MencoesBell from "@/components/ui/MencoesBell";
 import { limparPreview } from "./preview-actions";
 import { IconLaurel, IconEye } from "@/components/ui/icons";
 import { buscarPendencias } from "@/lib/pendencias";
+import { buscarMencoesPendentes } from "@/lib/social";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 
 export const dynamic = "force-dynamic";
@@ -124,6 +127,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         )
       : {};
 
+  // post_mencoes é da migration 0036 — se ainda não rodou nesse banco, o
+  // select simplesmente retorna erro (Supabase não lança), buscarMencoesPendentes
+  // já trata como lista vazia em vez de quebrar o layout inteiro.
+  const mencoesPendentes = user ? await buscarMencoesPendentes(supabase, previewPessoa?.id ?? user.id) : [];
+
   return (
     <div className="flex min-h-screen">
       {user && (
@@ -150,6 +158,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
 
           <NoticiasCompactas />
+          <CampanhasCompactas />
         </aside>
       )}
 
@@ -167,6 +176,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         )}
         <header className="flex items-center justify-end gap-3 border-b border-imperium-line bg-imperium-surface px-6 py-3">
+          {user && <MencoesBell mencoes={mencoesPendentes} />}
           {user && (
             <UserMenu
               avatarUrl={profile?.avatar_url ?? null}

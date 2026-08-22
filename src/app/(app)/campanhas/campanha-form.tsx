@@ -55,6 +55,19 @@ export default function CampanhaForm({
         <textarea name="descricao" rows={2} className="input-imp" />
       </div>
       <div>
+        <label className="mb-1 block text-xs text-stone-400">Requisitos mínimos (opcional)</label>
+        <textarea
+          name="requisitos_minimos"
+          rows={2}
+          placeholder="Ex: precisa ter pelo menos 3 vendas pagas no período pra concorrer"
+          className="input-imp"
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-stone-400">Recompensa da campanha (opcional)</label>
+        <input name="recompensa" placeholder="Ex: R$500 de bônus + jantar de equipe" className="input-imp" />
+      </div>
+      <div>
         <label className="mb-1 block text-xs text-stone-400">Imagem (opcional)</label>
         <input type="file" name="imagem" accept="image/*" className="text-sm text-stone-300" />
       </div>

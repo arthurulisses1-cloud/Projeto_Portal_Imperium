@@ -12,6 +12,8 @@ export type CampanhaComProgresso = {
   id: string;
   titulo: string;
   descricao: string | null;
+  requisitosMinimos: string | null;
+  recompensa: string | null;
   imagemUrl: string | null;
   alvo: CampanhaAlvo;
   metrica: string;
@@ -27,12 +29,40 @@ export type CampanhaComProgresso = {
 export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<CampanhaComProgresso[]> {
   const hoje = new Date().toISOString().slice(0, 10);
 
-  const { data: campanhas } = await supabase
+  // requisitos_minimos/recompensa vêm da migration 0034 — se ela ainda não
+  // rodou nesse banco, o select com essas colunas falha e cai no fallback
+  // sem elas, pra não quebrar o Mural inteiro enquanto a migration pendente
+  // não roda (mesmo padrão do Forecast com motivo_queda).
+  let campanhas: {
+    id: string;
+    titulo: string;
+    descricao: string | null;
+    requisitos_minimos: string | null;
+    recompensa: string | null;
+    imagem_url: string | null;
+    alvo: string;
+    metrica: string;
+    meta_valor: number | null;
+    data_inicio: string;
+    data_fim: string;
+  }[] | null;
+  const comColunasNovas = await supabase
     .from("campanhas")
-    .select("id, titulo, descricao, imagem_url, alvo, metrica, meta_valor, data_inicio, data_fim")
+    .select("id, titulo, descricao, requisitos_minimos, recompensa, imagem_url, alvo, metrica, meta_valor, data_inicio, data_fim")
     .lte("data_inicio", hoje)
     .gte("data_fim", hoje)
     .order("created_at", { ascending: false });
+  if (comColunasNovas.error) {
+    const fallback = await supabase
+      .from("campanhas")
+      .select("id, titulo, descricao, imagem_url, alvo, metrica, meta_valor, data_inicio, data_fim")
+      .lte("data_inicio", hoje)
+      .gte("data_fim", hoje)
+      .order("created_at", { ascending: false });
+    campanhas = (fallback.data ?? []).map((c) => ({ ...c, requisitos_minimos: null, recompensa: null }));
+  } else {
+    campanhas = comColunasNovas.data;
+  }
 
   if (!campanhas || campanhas.length === 0) return [];
 
@@ -106,6 +136,8 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
       id: c.id,
       titulo: c.titulo,
       descricao: c.descricao,
+      requisitosMinimos: c.requisitos_minimos,
+      recompensa: c.recompensa,
       imagemUrl: c.imagem_url,
       alvo: c.alvo as CampanhaAlvo,
       metrica: c.metrica,

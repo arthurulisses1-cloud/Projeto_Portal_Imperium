@@ -20,6 +20,8 @@ export async function criarCampanha(formData: FormData) {
 
   const titulo = String(formData.get("titulo") ?? "").trim();
   const descricao = String(formData.get("descricao") ?? "").trim();
+  const requisitosMinimos = String(formData.get("requisitos_minimos") ?? "").trim();
+  const recompensa = String(formData.get("recompensa") ?? "").trim();
   const alvo = String(formData.get("alvo") ?? "geral");
   const metrica = String(formData.get("metrica") ?? "credito");
   const metaValorRaw = String(formData.get("meta_valor") ?? "").trim();
@@ -42,6 +44,8 @@ export async function criarCampanha(formData: FormData) {
     .insert({
       titulo,
       descricao: descricao || null,
+      requisitos_minimos: requisitosMinimos || null,
+      recompensa: recompensa || null,
       imagem_url: imagemUrl,
       alvo,
       metrica,

@@ -9,6 +9,7 @@ import SincronizarPlanilha from "@/components/ui/SincronizarPlanilha";
 import SeletorNomesPlanilha from "@/components/ui/SeletorNomesPlanilha";
 import EnviarAcessoForm from "@/components/ui/EnviarAcessoForm";
 import GerarSenhaButton from "@/components/ui/GerarSenhaButton";
+import CriarUsuarioForm from "@/components/ui/CriarUsuarioForm";
 
 const ROLES = ["sdr", "closer", "lider", "diretor"] as const;
 const RANKS = [...RANK_ORDER, "diretor"] as const;
@@ -47,6 +48,16 @@ export default async function GestaoPage() {
         <h1 className="font-display text-2xl text-gold-bright">Gestão de Pessoas</h1>
         <p className="kicker mt-1">Cargo, Tribo e Exército de cada membro — acesso total do Diretor</p>
       </div>
+
+      <Card title="Cadastrar novo usuário">
+        <CriarUsuarioForm
+          tribos={(tribos ?? []).map((t) => ({
+            id: t.id,
+            nome: t.nome,
+            exercitoNome: (t.exercito as unknown as { nome: string } | null)?.nome ?? null,
+          }))}
+        />
+      </Card>
 
       <Card title="Sincronização com a Planilha">
         <SincronizarPlanilha />

@@ -133,10 +133,20 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     .filter((r): r is NonNullable<typeof r> => r !== null);
   const funilRowsEntrevistasMesclado = mesclarFunil(funilRowsEntrevistas);
 
+  // Apaga tudo de etapa='entrevistas' antes de regravar — a aba Entrevistas
+  // sempre vem com o histórico completo, então o snapshot de agora é a
+  // fonte da verdade inteira. Só upsert (sem delete) deixava lixo pra
+  // sempre quando a planilha corrigia um SDR/Closer trocado: a linha errada
+  // antiga (papel diferente da nova) nunca sumia, e cada entrevista
+  // corrigida ficava contando 2x pro resto da vida (achado numa auditoria
+  // 2026-08-21: total de papel='sdr' do mês tava quase o dobro do de
+  // papel='closer', que deveriam ser sempre iguais 1:1 — cada entrevista
+  // gera exatamente 1 crédito de SDR + 1 de Closer, ou 1 de "ambos").
+  const { error: limpezaError } = await supabase.from("producao_funil").delete().eq("etapa", "entrevistas");
+  if (limpezaError) throw new Error("Erro limpando funil antigo (Entrevistas): " + limpezaError.message);
+
   for (const batch of chunk(funilRowsEntrevistasMesclado, 1000)) {
-    const { error } = await supabase
-      .from("producao_funil")
-      .upsert(batch, { onConflict: "profile_id,data,etapa,papel" });
+    const { error } = await supabase.from("producao_funil").insert(batch);
     if (error) throw new Error("Erro gravando funil (Entrevistas): " + error.message);
     funilLinhasGravadas += batch.length;
   }

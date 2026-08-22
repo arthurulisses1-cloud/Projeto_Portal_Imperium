@@ -10,7 +10,7 @@ import BarraProgresso from "@/components/ui/BarraProgresso";
 import { getViewerContext } from "@/lib/preview";
 import { IconAlert, IconCheck, IconBook } from "@/components/ui/icons";
 
-type Periodo = "hoje" | "semana" | "mes";
+type Periodo = "hoje" | "semana" | "mes" | "personalizado";
 type Visao = "total" | "individual" | "tribo";
 
 function moeda(v: number) {
@@ -20,10 +20,15 @@ function moeda(v: number) {
 export default async function ProducaoPage({
   searchParams,
 }: {
-  searchParams: { periodo?: string; visao?: string };
+  searchParams: { periodo?: string; visao?: string; de?: string; ate?: string };
 }) {
-  const periodo: Periodo =
-    searchParams.periodo === "hoje" || searchParams.periodo === "semana"
+  // "Personalizado" só vale de verdade com as duas datas preenchidas —
+  // sem isso cai pro mês, igual ao default de sempre.
+  const personalizadoValido =
+    searchParams.periodo === "personalizado" && !!searchParams.de && !!searchParams.ate;
+  const periodo: Periodo = personalizadoValido
+    ? "personalizado"
+    : searchParams.periodo === "hoje" || searchParams.periodo === "semana"
       ? searchParams.periodo
       : "mes";
 
@@ -66,7 +71,8 @@ export default async function ProducaoPage({
     if (idsProducao.length === 0) idsProducao = [meId];
   }
 
-  const { inicio, fim } = periodoParaDatas(periodo);
+  const { inicio, fim } =
+    periodo === "personalizado" ? { inicio: searchParams.de!, fim: searchParams.ate! } : periodoParaDatas(periodo);
 
   let queryLinhas = supabase
     .from("producao_funil")
@@ -149,7 +155,18 @@ export default async function ProducaoPage({
   // meta de crédito prorateada pro período selecionado (mês inteiro = 100%)
   const hoje = new Date();
   const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
-  const fatorPeriodo = periodo === "hoje" ? 1 / diasNoMes : periodo === "semana" ? 7 / diasNoMes : 1;
+  const diasPersonalizado =
+    periodo === "personalizado"
+      ? Math.max(1, Math.round((new Date(fim + "T00:00:00").getTime() - new Date(inicio + "T00:00:00").getTime()) / 86400000) + 1)
+      : null;
+  const fatorPeriodo =
+    periodo === "hoje"
+      ? 1 / diasNoMes
+      : periodo === "semana"
+        ? 7 / diasNoMes
+        : periodo === "personalizado"
+          ? diasPersonalizado! / diasNoMes
+          : 1;
   const metaCreditoPeriodo = metaCreditoIndividual * fatorPeriodo;
   const pctMeta = metaCreditoPeriodo > 0 ? (valorPago / metaCreditoPeriodo) * 100 : null;
 
@@ -196,7 +213,7 @@ export default async function ProducaoPage({
           <h1 className="font-display text-2xl text-gold-bright">Minha Produção</h1>
           <p className="text-sm italic text-stone-500">O campo de batalha — realizado × meta</p>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {(["hoje", "semana", "mes"] as Periodo[]).map((p) => (
             <a
               key={p}
@@ -210,13 +227,44 @@ export default async function ProducaoPage({
               {p === "hoje" ? "Hoje" : p === "semana" ? "Semana" : "Mês"}
             </a>
           ))}
+          <form method="get" className="flex items-center gap-1.5">
+            <input type="hidden" name="periodo" value="personalizado" />
+            <input type="hidden" name="visao" value={visao} />
+            <input
+              type="date"
+              name="de"
+              required
+              defaultValue={periodo === "personalizado" ? inicio : undefined}
+              className="input-imp px-2 py-1 text-xs"
+            />
+            <span className="text-stone-600">–</span>
+            <input
+              type="date"
+              name="ate"
+              required
+              defaultValue={periodo === "personalizado" ? fim : undefined}
+              className="input-imp px-2 py-1 text-xs"
+            />
+            <button
+              type="submit"
+              className={`rounded px-3 py-1.5 text-xs uppercase transition ${
+                periodo === "personalizado"
+                  ? "bg-gold text-imperium-bg"
+                  : "border border-imperium-line text-stone-300 hover:border-gold"
+              }`}
+            >
+              Personalizado
+            </button>
+          </form>
           {ehCloser && (
             <>
               <span className="mx-1 self-center text-stone-700">·</span>
               {(["total", "individual", "tribo"] as Visao[]).map((v) => (
                 <a
                   key={v}
-                  href={`/producao?periodo=${periodo}&visao=${v}`}
+                  href={`/producao?periodo=${periodo}&visao=${v}${
+                    periodo === "personalizado" ? `&de=${inicio}&ate=${fim}` : ""
+                  }`}
                   className={`rounded px-3 py-1.5 text-xs uppercase transition ${
                     visao === v
                       ? "bg-gold text-imperium-bg"

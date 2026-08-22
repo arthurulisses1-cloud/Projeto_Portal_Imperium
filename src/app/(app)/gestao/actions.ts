@@ -133,6 +133,44 @@ export async function gerarSenhaNova(formData: FormData) {
   return { senha };
 }
 
+// Antes só existia um jeito de criar conta: o Closer convidando um SDR pra
+// própria Tribo (ver convidarMembro em tribo/actions.ts) — sem forma
+// nenhuma do Diretor cadastrar um Closer, Líder ou SDR direto. Mesma
+// mecânica (cria no Auth + a trigger handle_new_user já cria a linha
+// mínima em profiles, aqui só ajusta pro papel/cargo/tribo certos), mas
+// liberado pra qualquer papel.
+export async function criarUsuario(formData: FormData) {
+  await exigirDiretor();
+
+  const nome = String(formData.get("full_name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const role = String(formData.get("role") ?? "sdr");
+  const rank = String(formData.get("rank") ?? "legionario");
+  const triboId = String(formData.get("tribo_id") ?? "") || null;
+  if (!nome || !email) throw new Error("Nome e email são obrigatórios.");
+
+  const { randomInt } = await import("crypto");
+  const senha = "Imperium#" + randomInt(100000, 999999);
+
+  const admin = createAdminClient();
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
+    email,
+    password: senha,
+    email_confirm: true,
+    user_metadata: { full_name: nome },
+  });
+  if (createError) throw new Error("Erro ao criar conta: " + createError.message);
+
+  const { error: updateError } = await admin
+    .from("profiles")
+    .update({ full_name: nome, role, rank, tribo_id: triboId })
+    .eq("id", created.user.id);
+  if (updateError) throw new Error("Conta criada, mas falhou ao ajustar papel/tribo: " + updateError.message);
+
+  revalidatePath("/gestao");
+  return { email, senha };
+}
+
 export async function dispararSyncManual() {
   await exigirLiderOuDiretor();
   const resultado = await runSync();

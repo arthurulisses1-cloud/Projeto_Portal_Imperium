@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import MuralForm from "./mural-form";
+import { excluirPostMural } from "./mural-actions";
+import { excluirCampanha } from "./campanhas/actions";
 import Card from "@/components/ui/Card";
 import Laurel from "@/components/ui/Laurel";
 import BarraMeta from "@/components/ui/BarraMeta";
@@ -12,6 +14,12 @@ import { buscarMetaIndividual, buscarMetaExercito, buscarProducaoPagaExercito, b
 import { buscarCampanhasAtivas, type CampanhaComProgresso } from "@/lib/campanhas";
 import { FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 import { getViewerContext } from "@/lib/preview";
+import { buscarComentarios, buscarReacoes, type Comentario, type ReacaoResumo } from "@/lib/social";
+import ComentariosReacoes from "@/components/ui/ComentariosReacoes";
+
+function moeda(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+}
 
 export default async function MuralPage() {
   const supabase = await createClient();
@@ -34,7 +42,7 @@ export default async function MuralPage() {
 
   const { data: muralPosts } = await supabase
     .from("mural_posts")
-    .select("id, tipo, titulo, corpo, midia_url, created_at, autor:profiles!mural_posts_autor_id_fkey(full_name)")
+    .select("id, tipo, titulo, corpo, midia_url, created_at, autor_id, autor:profiles!mural_posts_autor_id_fkey(full_name)")
     .order("created_at", { ascending: false })
     .limit(8);
 
@@ -124,6 +132,33 @@ export default async function MuralPage() {
     ]);
   }
 
+  // Painel financeiro do mês (só Diretor) — mesma classificação que o
+  // Forecast já usa (status_manual, catálogo preenchido por closer/líder/
+  // diretor): "pra pagar" = Aguardando Pagamento, "em pendência" =
+  // Resolvendo Pendência. Previsão de crédito soma os 3 baldes com alguma
+  // certeza de virar crédito (exclui Análise Jurídico/Esfriou, que ainda
+  // não têm destino definido).
+  let painelFinanceiroFirma: { paraPagar: number; pendencia: number; previsaoCredito: number } | null = null;
+  if (meRole === "diretor") {
+    const agora = new Date();
+    const fimMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
+    const { data: opsMes } = await supabase
+      .from("weekly_operacoes")
+      .select("valor, status, status_manual")
+      .gte("data", inicioMes)
+      .lte("data", fimMes);
+    let pago = 0;
+    let paraPagar = 0;
+    let pendencia = 0;
+    for (const o of opsMes ?? []) {
+      const valor = Number(o.valor);
+      if (o.status === "PAGO") pago += valor;
+      else if (o.status_manual === "aguardando_pagamento") paraPagar += valor;
+      else if (o.status_manual === "resolvendo_pendencia") pendencia += valor;
+    }
+    painelFinanceiroFirma = { paraPagar, pendencia, previsaoCredito: pago + paraPagar + pendencia };
+  }
+
   // Enquetes: pré-computa opções + votos dos posts do tipo 'enquete' já carregados
   const enquetePostIds = (muralPosts ?? []).filter((p) => p.tipo === "enquete").map((p) => p.id);
   const enquetesPorPost = new Map<string, EnqueteData>();
@@ -151,6 +186,21 @@ export default async function MuralPage() {
       enquetesPorPost.set(e.mural_post_id, { enqueteId: e.id, opcoes, totalVotos, meuVoto });
     }
   }
+
+  // Comentários/reações — compartilhado entre posts do Mural e Campanhas
+  // (ver src/lib/social.ts). Lista de pessoas pra marcar @menção não
+  // inclui a própria pessoa (não faz sentido marcar a si mesmo).
+  const muralPostIds = (muralPosts ?? []).map((p) => p.id);
+  const campanhaIds = campanhasAtivas.map((c) => c.id);
+  const [comentariosPorMural, reacoesPorMural, comentariosPorCampanha, reacoesPorCampanha, { data: todasPessoas }] =
+    await Promise.all([
+      buscarComentarios(supabase, "mural_post", muralPostIds),
+      buscarReacoes(supabase, "mural_post", muralPostIds, meId),
+      buscarComentarios(supabase, "campanha", campanhaIds),
+      buscarReacoes(supabase, "campanha", campanhaIds, meId),
+      supabase.from("profiles").select("id, full_name").neq("id", meId).order("full_name"),
+    ]);
+  const pessoasParaMarcar = (todasPessoas ?? []).map((p) => ({ id: p.id, nome: p.full_name }));
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
@@ -209,34 +259,33 @@ export default async function MuralPage() {
         </Card>
       )}
 
-      {quote && (
-        <div className="flex items-center gap-3 border-y border-imperium-line py-2.5 text-center">
-          <Laurel className="hidden h-3 w-8 shrink-0 -scale-x-100 text-gold/30 sm:block" />
-          <p className="min-w-0 flex-1 font-serif text-sm italic text-stone-300">
-            &quot;{quote.texto}&quot; <span className="not-italic text-stone-600">— {quote.fonte}</span>
-          </p>
-          <Laurel className="hidden h-3 w-8 shrink-0 text-gold/30 sm:block" />
+      {meRole === "diretor" && painelFinanceiroFirma && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card title="Pra pagar × Em pendência">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="kicker">Pra pagar</p>
+                <p className="mt-1 font-display text-xl text-gold-bright">
+                  {moeda(painelFinanceiroFirma.paraPagar)}
+                </p>
+              </div>
+              <div>
+                <p className="kicker">Em pendência</p>
+                <p className="mt-1 font-display text-xl text-wine-bright">
+                  {moeda(painelFinanceiroFirma.pendencia)}
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Previsão de crédito">
+            <p className="font-display text-xl text-gold-bright">
+              {moeda(painelFinanceiroFirma.previsaoCredito)}
+            </p>
+            <p className="mt-1 text-[11px] text-stone-600">Pago + Em pagamento + Resolvendo pendência</p>
+          </Card>
         </div>
       )}
-
-      <div className="grid gap-6 sm:grid-cols-3">
-        <Card title="Guerra Civil" icon={<IconSwords className="h-4 w-4 text-wine-bright" />}>
-          <ConfrontoWidget
-            dados={confrontoExercitos}
-            crests={{ Templários: "/crests/templarios.jpg", Maximus: "/crests/maximus.jpg" }}
-          />
-        </Card>
-
-        <Card title="Guerra de Tribos" icon={<IconShield className="h-4 w-4 text-gold" />}>
-          <ConfrontoWidget dados={confrontoTribos} crests={crestsTribos} />
-        </Card>
-
-        <Card title="Ranking de Crédito" icon={<IconCoin className="h-4 w-4 text-gold" />}>
-          <ConfrontoWidget dados={topCredito} />
-        </Card>
-      </div>
-
-      {campanhasAtivas.length > 0 && <CampanhasCard campanhas={campanhasAtivas} />}
 
       {ehExecutivo && (
         <Card title="Compromisso de hoje">
@@ -280,6 +329,45 @@ export default async function MuralPage() {
             </p>
           )}
         </Card>
+      )}
+
+      {quote && (
+        <div className="flex items-center gap-3 border-y border-imperium-line py-2.5 text-center">
+          <Laurel className="hidden h-3 w-8 shrink-0 -scale-x-100 text-gold/30 sm:block" />
+          <p className="min-w-0 flex-1 font-serif text-sm italic text-stone-300">
+            &quot;{quote.texto}&quot; <span className="not-italic text-stone-600">— {quote.fonte}</span>
+          </p>
+          <Laurel className="hidden h-3 w-8 shrink-0 text-gold/30 sm:block" />
+        </div>
+      )}
+
+      <div className="grid gap-6 sm:grid-cols-3">
+        <Card title="Guerra Civil" icon={<IconSwords className="h-4 w-4 text-wine-bright" />}>
+          <ConfrontoWidget
+            dados={confrontoExercitos}
+            crests={{ Templários: "/crests/templarios.jpg", Maximus: "/crests/maximus.jpg" }}
+          />
+        </Card>
+
+        <Card title="Guerra de Tribos" icon={<IconShield className="h-4 w-4 text-gold" />}>
+          <ConfrontoWidget dados={confrontoTribos} crests={crestsTribos} />
+        </Card>
+
+        <Card title="Ranking de Crédito" icon={<IconCoin className="h-4 w-4 text-gold" />}>
+          <ConfrontoWidget dados={topCredito} />
+        </Card>
+      </div>
+
+      {campanhasAtivas.length > 0 && (
+        <CampanhasCard
+          campanhas={campanhasAtivas}
+          podeGerenciar={meRole === "lider" || meRole === "diretor"}
+          meId={meId}
+          isDiretor={meRole === "diretor"}
+          comentariosPorCampanha={comentariosPorCampanha}
+          reacoesPorCampanha={reacoesPorCampanha}
+          pessoas={pessoasParaMarcar}
+        />
       )}
 
       {meRole !== "sdr" && (
@@ -327,8 +415,18 @@ export default async function MuralPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
                       <p className="font-display text-base text-gold-bright">{post.titulo}</p>
-                      <span className="shrink-0 text-[10px] uppercase tracking-wide text-stone-600">
-                        {post.tipo === "aviso" ? "Aviso" : post.tipo === "enquete" ? "Enquete" : "Reconhecimento"}
+                      <span className="flex shrink-0 items-center gap-2">
+                        <span className="text-[10px] uppercase tracking-wide text-stone-600">
+                          {post.tipo === "aviso" ? "Aviso" : post.tipo === "enquete" ? "Enquete" : "Reconhecimento"}
+                        </span>
+                        {(post.autor_id === meId || meRole === "diretor") && (
+                          <form action={excluirPostMural}>
+                            <input type="hidden" name="id" value={post.id} />
+                            <button type="submit" className="text-[10px] text-stone-600 hover:text-wine-bright">
+                              Excluir
+                            </button>
+                          </form>
+                        )}
                       </span>
                     </div>
                     {post.corpo && <p className="mt-1 text-sm text-stone-300">{post.corpo}</p>}
@@ -354,6 +452,15 @@ export default async function MuralPage() {
                       {autor?.full_name ?? "Gestão"} ·{" "}
                       {new Date(post.created_at).toLocaleDateString("pt-BR")}
                     </p>
+                    <ComentariosReacoes
+                      alvoTipo="mural_post"
+                      alvoId={post.id}
+                      meId={meId}
+                      isDiretor={meRole === "diretor"}
+                      comentarios={comentariosPorMural.get(post.id) ?? []}
+                      reacoes={reacoesPorMural.get(post.id) ?? { porEmoji: [], minhaReacao: null }}
+                      pessoas={pessoasParaMarcar}
+                    />
                   </div>
                 </li>
               );
@@ -367,7 +474,23 @@ export default async function MuralPage() {
   );
 }
 
-function CampanhasCard({ campanhas }: { campanhas: CampanhaComProgresso[] }) {
+function CampanhasCard({
+  campanhas,
+  podeGerenciar,
+  meId,
+  isDiretor,
+  comentariosPorCampanha,
+  reacoesPorCampanha,
+  pessoas,
+}: {
+  campanhas: CampanhaComProgresso[];
+  podeGerenciar: boolean;
+  meId: string;
+  isDiretor: boolean;
+  comentariosPorCampanha: Map<string, Comentario[]>;
+  reacoesPorCampanha: Map<string, ReacaoResumo>;
+  pessoas: { id: string; nome: string }[];
+}) {
   return (
     <Card title="Campanhas do mês">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -380,14 +503,36 @@ function CampanhasCard({ campanhas }: { campanhas: CampanhaComProgresso[] }) {
           const max = Math.max(...c.participantes.map((p) => p.valor), c.metaValor ?? 0, 1);
 
           return (
-            <div key={c.id} className="overflow-hidden rounded-lg border border-gold/30">
+            <div key={c.id} id={`campanha-${c.id}`} className="scroll-mt-20 overflow-hidden rounded-lg border border-gold/30">
               {c.imagemUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={c.imagemUrl} alt={c.titulo} className="h-32 w-full object-cover" />
               )}
               <div className="p-3">
-                <p className="font-display text-base text-gold-bright">{c.titulo}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-display text-base text-gold-bright">{c.titulo}</p>
+                  {podeGerenciar && (
+                    <form action={excluirCampanha}>
+                      <input type="hidden" name="id" value={c.id} />
+                      <button type="submit" className="shrink-0 text-[10px] text-stone-600 hover:text-wine-bright">
+                        Excluir
+                      </button>
+                    </form>
+                  )}
+                </div>
                 {c.descricao && <p className="mt-1 text-xs text-stone-400">{c.descricao}</p>}
+                {c.requisitosMinimos && (
+                  <p className="mt-1.5 text-[11px] text-stone-500">
+                    <span className="text-stone-600">Requisitos mínimos: </span>
+                    {c.requisitosMinimos}
+                  </p>
+                )}
+                {c.recompensa && (
+                  <p className="mt-1 text-[11px] text-gold">
+                    <span className="text-stone-600">Recompensa: </span>
+                    {c.recompensa}
+                  </p>
+                )}
                 <p className="mt-1 text-[10px] uppercase tracking-wide text-stone-600">
                   até {new Date(c.dataFim + "T00:00:00").toLocaleDateString("pt-BR")}
                 </p>
@@ -416,6 +561,16 @@ function CampanhasCard({ campanhas }: { campanhas: CampanhaComProgresso[] }) {
                     </div>
                   ))}
                 </div>
+
+                <ComentariosReacoes
+                  alvoTipo="campanha"
+                  alvoId={c.id}
+                  meId={meId}
+                  isDiretor={isDiretor}
+                  comentarios={comentariosPorCampanha.get(c.id) ?? []}
+                  reacoes={reacoesPorCampanha.get(c.id) ?? { porEmoji: [], minhaReacao: null }}
+                  pessoas={pessoas}
+                />
               </div>
             </div>
           );
