@@ -10,6 +10,7 @@ import SeletorNomesPlanilha from "@/components/ui/SeletorNomesPlanilha";
 import EnviarAcessoForm from "@/components/ui/EnviarAcessoForm";
 import GerarSenhaButton from "@/components/ui/GerarSenhaButton";
 import CriarUsuarioForm from "@/components/ui/CriarUsuarioForm";
+import ExcluirUsuarioButton from "@/components/ui/ExcluirUsuarioButton";
 
 const ROLES = ["sdr", "closer", "lider", "diretor"] as const;
 const RANKS = [...RANK_ORDER, "diretor"] as const;
@@ -182,6 +183,10 @@ export default async function GestaoPage() {
                       selecionados={p.nomes_planilha ?? []}
                     />
                   </details>
+
+                  <div className="mt-3 border-t border-imperium-line pt-3">
+                    <ExcluirUsuarioButton profileId={p.id} nome={p.full_name} />
+                  </div>
                 </div>
               );
             })}

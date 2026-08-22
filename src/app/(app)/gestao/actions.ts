@@ -171,6 +171,25 @@ export async function criarUsuario(formData: FormData) {
   return { email, senha };
 }
 
+// Apaga o usuário inteiro (auth.users + todo dado dele — vendas,
+// producao_funil, compromissos, comentarios, etc. têm "on delete cascade"
+// até profiles, que por sua vez tem "on delete cascade" até auth.users, ver
+// migration 0001). Some pra sempre — sem lixeira. Se a pessoa for
+// closer_id de uma Tribo ou legado_id de um Exército, o Postgres recusa o
+// delete (FK sem cascade nesses dois casos, de propósito) até desvincular
+// primeiro em Gestão de Pessoas.
+export async function excluirUsuario(formData: FormData) {
+  await exigirDiretor();
+  const profileId = String(formData.get("profile_id") ?? "");
+  if (!profileId) throw new Error("profile_id é obrigatório.");
+
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(profileId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/gestao");
+}
+
 export async function dispararSyncManual() {
   await exigirLiderOuDiretor();
   const resultado = await runSync();
