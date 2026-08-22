@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { postarComentario, excluirComentario, reagir } from "@/app/(app)/social-actions";
-import { EMOJIS_REACAO, type AlvoTipo, type Comentario, type ReacaoResumo } from "@/lib/social";
+import { EMOJIS_REACAO, EMOJIS_EXTRA, type AlvoTipo, type Comentario, type ReacaoResumo } from "@/lib/social";
 
 type Pessoa = { id: string; nome: string };
 
@@ -31,6 +31,7 @@ export default function ComentariosReacoes({
   pessoas: Pessoa[];
 }) {
   const [isPending, startTransition] = useTransition();
+  const [maisEmojisAberto, setMaisEmojisAberto] = useState(false);
   const [texto, setTexto] = useState("");
   const [mencionados, setMencionados] = useState<{ id: string; nome: string }[]>([]);
   const [buscaMencao, setBuscaMencao] = useState<string | null>(null); // null = dropdown fechado
@@ -115,6 +116,7 @@ export default function ComentariosReacoes({
   }
 
   function clicarReacao(emoji: string) {
+    setMaisEmojisAberto(false);
     const fd = new FormData();
     fd.set("alvo_tipo", alvoTipo);
     fd.set("alvo_id", alvoId);
@@ -122,27 +124,72 @@ export default function ComentariosReacoes({
     startTransition(() => reagir(fd));
   }
 
+  // Emojis extras que a pessoa já usou aqui (fora dos padrão) também
+  // aparecem fixos na barra, não só no "+" — senão a reação de alguém
+  // some visualmente pra quem não abre o picker.
+  const emojisExtrasUsados = reacoes.porEmoji.map((r) => r.emoji).filter((e) => !EMOJIS_REACAO.includes(e));
+  const barraEmojis = [...EMOJIS_REACAO, ...emojisExtrasUsados];
+
   return (
     <div className="mt-3 border-t border-imperium-line pt-2.5">
-      <div className="flex flex-wrap items-center gap-1.5">
-        {EMOJIS_REACAO.map((emoji) => {
+      <div className="relative flex flex-wrap items-center gap-1.5">
+        {barraEmojis.map((emoji) => {
           const info = reacoes.porEmoji.find((r) => r.emoji === emoji);
           const ativo = reacoes.minhaReacao === emoji;
           return (
-            <button
-              key={emoji}
-              type="button"
-              onClick={() => clicarReacao(emoji)}
-              disabled={isPending}
-              className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition ${
-                ativo ? "border-gold bg-gold/15 text-gold-bright" : "border-imperium-line text-stone-400 hover:border-gold/50"
-              }`}
-            >
-              <span>{emoji}</span>
-              {info && info.qtd > 0 && <span>{info.qtd}</span>}
-            </button>
+            <div key={emoji} className="group/reacao relative">
+              <button
+                type="button"
+                onClick={() => clicarReacao(emoji)}
+                disabled={isPending}
+                className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition ${
+                  ativo ? "border-gold bg-gold/15 text-gold-bright" : "border-imperium-line text-stone-400 hover:border-gold/50"
+                }`}
+              >
+                <span>{emoji}</span>
+                {info && info.qtd > 0 && <span>{info.qtd}</span>}
+              </button>
+              {info && info.nomes.length > 0 && (
+                <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded border border-imperium-line bg-imperium-surface px-2 py-1 text-[10px] text-stone-300 shadow-lg group-hover/reacao:block">
+                  {info.nomes.join(", ")}
+                </div>
+              )}
+            </div>
           );
         })}
+
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setMaisEmojisAberto((v) => !v)}
+            disabled={isPending}
+            className="flex h-6 w-6 items-center justify-center rounded-full border border-imperium-line text-xs text-stone-500 transition hover:border-gold/50 hover:text-gold"
+            title="Mais reações"
+          >
+            +
+          </button>
+          {maisEmojisAberto && (
+            <>
+              <button
+                aria-label="Fechar"
+                onClick={() => setMaisEmojisAberto(false)}
+                className="fixed inset-0 z-10 cursor-default"
+              />
+              <div className="absolute left-0 top-full z-20 mt-1.5 grid w-48 grid-cols-6 gap-1 rounded border border-gold/40 bg-imperium-surface p-2 shadow-xl">
+                {EMOJIS_EXTRA.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => clicarReacao(emoji)}
+                    className="flex h-7 w-7 items-center justify-center rounded text-base hover:bg-gold/15"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {comentarios.length > 0 && (

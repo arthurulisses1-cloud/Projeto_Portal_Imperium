@@ -12,11 +12,20 @@ export type Comentario = {
 };
 
 export type ReacaoResumo = {
-  porEmoji: { emoji: string; qtd: number }[];
+  porEmoji: { emoji: string; qtd: number; nomes: string[] }[];
   minhaReacao: string | null;
 };
 
-export const EMOJIS_REACAO = ["👍", "❤️", "🔥", "👏"];
+// Sempre visíveis na barra. O botão "+" abre um grid maior com EMOJIS_EXTRA
+// pra quem quiser reagir com outra coisa.
+export const EMOJIS_REACAO = ["👍", "❤️", "🔥", "👏", "😂", "🎉"];
+
+export const EMOJIS_EXTRA = [
+  "😀", "😍", "🤩", "😎", "🥳", "🙌",
+  "💪", "✅", "🚀", "⭐️", "💯", "🏆",
+  "🎯", "👀", "🤝", "🙏", "😢", "😡",
+  "🤔", "👑", "🍾", "😮", "👌", "💰",
+];
 
 export async function buscarComentarios(
   supabase: SupabaseClient,
@@ -77,16 +86,21 @@ export async function buscarReacoes(
 
   const { data: rows } = await supabase
     .from("post_reacoes")
-    .select("alvo_id, profile_id, emoji")
+    .select("alvo_id, profile_id, emoji, profile:profiles!post_reacoes_profile_id_fkey(full_name)")
     .eq("alvo_tipo", alvoTipo)
     .in("alvo_id", alvoIds);
 
   const porAlvo = new Map<string, ReacaoResumo>();
   for (const r of rows ?? []) {
+    const nome = (r.profile as unknown as { full_name: string } | null)?.full_name ?? "—";
     const atual = porAlvo.get(r.alvo_id) ?? { porEmoji: [], minhaReacao: null };
     const existente = atual.porEmoji.find((e) => e.emoji === r.emoji);
-    if (existente) existente.qtd++;
-    else atual.porEmoji.push({ emoji: r.emoji, qtd: 1 });
+    if (existente) {
+      existente.qtd++;
+      existente.nomes.push(nome);
+    } else {
+      atual.porEmoji.push({ emoji: r.emoji, qtd: 1, nomes: [nome] });
+    }
     if (r.profile_id === meId) atual.minhaReacao = r.emoji;
     porAlvo.set(r.alvo_id, atual);
   }
