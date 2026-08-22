@@ -103,10 +103,18 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     .filter((r): r is NonNullable<typeof r> => r !== null);
   const funilRowsDadosMesclado = mesclarFunil(funilRowsDados);
 
+  // Mesmo raciocínio do bloco Entrevistas logo abaixo: a aba Dados sempre
+  // vem com o histórico completo (uma coluna por dia, sem paginação), então
+  // apaga tudo dessas 3 etapas antes de regravar — upsert sozinho deixava
+  // lixo quando uma célula da planilha era corrigida/zerada depois do sync.
+  const { error: limpezaDadosError } = await supabase
+    .from("producao_funil")
+    .delete()
+    .in("etapa", ["tentativas", "alos", "conexoes"]);
+  if (limpezaDadosError) throw new Error("Erro limpando funil antigo (Dados): " + limpezaDadosError.message);
+
   for (const batch of chunk(funilRowsDadosMesclado, 1000)) {
-    const { error } = await supabase
-      .from("producao_funil")
-      .upsert(batch, { onConflict: "profile_id,data,etapa,papel" });
+    const { error } = await supabase.from("producao_funil").insert(batch);
     if (error) throw new Error("Erro gravando funil (Dados): " + error.message);
     funilLinhasGravadas += batch.length;
   }
@@ -174,10 +182,24 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     .filter((r): r is NonNullable<typeof r> => r !== null);
   const funilRowsAssinadoMesclado = mesclarFunil(funilRowsAssinado);
 
-  for (const batch of chunk(funilRowsAssinadoMesclado, 1000)) {
-    const { error } = await supabase
+  // Mesmo bug do bloco Entrevistas (achado numa auditoria 2026-08-22 sobre
+  // assinaturas do Rafael Saboya: 19 "como SDR" no ranking, mas 17 dessas
+  // eram lixo de uma correção de SDR/Closer trocado na planilha que nunca
+  // foi apagado — só upsert nunca limpa a linha com o papel ANTIGO). Apaga
+  // o intervalo de datas coberto pela aba antes de regravar, mesmo padrão
+  // já usado abaixo pra `vendas`.
+  if (assinado.menorData && assinado.maiorData) {
+    const { error: limpezaAssinadoError } = await supabase
       .from("producao_funil")
-      .upsert(batch, { onConflict: "profile_id,data,etapa,papel" });
+      .delete()
+      .in("etapa", ["assinaturas", "pagos"])
+      .gte("data", assinado.menorData)
+      .lte("data", assinado.maiorData);
+    if (limpezaAssinadoError) throw new Error("Erro limpando funil antigo (Assinado): " + limpezaAssinadoError.message);
+  }
+
+  for (const batch of chunk(funilRowsAssinadoMesclado, 1000)) {
+    const { error } = await supabase.from("producao_funil").insert(batch);
     if (error) throw new Error("Erro gravando funil (Assinado): " + error.message);
     funilLinhasGravadas += batch.length;
   }
