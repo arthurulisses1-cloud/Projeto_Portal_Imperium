@@ -30,14 +30,17 @@ const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> =
   "/dre": IconCoin,
   "/ranking": IconLaurel,
   "/forecast": IconTarget,
+  "/parceiros": IconScales,
   "/weekly": IconEagle,
   "/trilha": IconBook,
   "/metas": IconTarget,
   "/validacao": IconTablet,
   "/aprovacoes": IconScales,
   "/contestacoes": IconScales,
+  "/fechamento": IconCoin,
   Pessoas: IconColumn,
   "Validações": IconScales,
+  Financeiro: IconCoin,
 };
 
 export type NavLink = { type: "link"; href: string; label: string };

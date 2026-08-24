@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import ForecastView from "@/components/forecast/ForecastView";
-import { podeEditarOperacao, type ForecastOp, type ComissaoParceiro } from "@/lib/forecast";
+import { podeEditarOperacao, type ForecastOp } from "@/lib/forecast";
 import { getViewerContext } from "@/lib/preview";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 
@@ -89,24 +89,6 @@ export default async function ForecastPage() {
           .in("id", idsEnvolvidos)
       : { data: [] };
 
-  // Consulta direta na tabela (não importa src/lib/dre.ts aqui — esse
-  // módulo é estritamente Diretor-only) só pelo % padrão de comissão de
-  // parceiro, que não é dado de folha/salário.
-  const [{ data: config }, { data: comissoesParceiro }] = await Promise.all([
-    supabase.from("dre_configuracoes").select("pct_receita_parceiro").eq("id", true).maybeSingle(),
-    (opRows ?? []).length > 0
-      ? supabase
-          .from("comissoes_parceiro")
-          .select("weekly_operacao_id, nome_parceiro, percentual, chave_pix, status")
-          .in(
-            "weekly_operacao_id",
-            (opRows ?? []).map((o) => o.id)
-          )
-      : Promise.resolve({ data: [] }),
-  ]);
-  const pctParceiroPadrao = Number(config?.pct_receita_parceiro ?? 0.01) * 100;
-  const comissaoParceiroPorOp = new Map((comissoesParceiro ?? []).map((c) => [c.weekly_operacao_id, c]));
-
   const pessoaPorId = new Map(
     (pessoas ?? []).map((p) => {
       const tribo = p.tribo as unknown as { nome: string; exercito_id: string } | null;
@@ -129,7 +111,6 @@ export default async function ForecastPage() {
   const todasOps: ForecastOp[] = (opRows ?? []).map((o) => {
     const sdr = o.sdr_profile_id ? pessoaPorId.get(o.sdr_profile_id) : undefined;
     const closer = o.closer_profile_id ? pessoaPorId.get(o.closer_profile_id) : undefined;
-    const comissaoParceiro = comissaoParceiroPorOp.get(o.id);
     return {
       id: o.id,
       data: o.data,
@@ -153,14 +134,6 @@ export default async function ForecastPage() {
           closerExercitoId: closer?.exercitoId ?? null,
         }
       ),
-      comissaoParceiro: comissaoParceiro
-        ? {
-            nomeParceiro: comissaoParceiro.nome_parceiro,
-            percentual: Number(comissaoParceiro.percentual),
-            chavePix: comissaoParceiro.chave_pix,
-            status: comissaoParceiro.status as ComissaoParceiro["status"],
-          }
-        : null,
     };
   });
 
@@ -223,7 +196,6 @@ export default async function ForecastPage() {
       ops={ops}
       escopoLabel={viewer.isPreview ? `${escopoBase} (pré-visualizando como ${viewer.effectiveNome})` : escopoBase}
       tribos={meRole === "closer" ? [] : tribosFiltro}
-      pctParceiroPadrao={pctParceiroPadrao}
     />
   );
 }

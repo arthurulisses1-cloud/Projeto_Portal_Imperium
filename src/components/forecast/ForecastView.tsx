@@ -17,12 +17,10 @@ export default function ForecastView({
   ops,
   escopoLabel,
   tribos,
-  pctParceiroPadrao,
 }: {
   ops: ForecastOp[];
   escopoLabel: string;
   tribos: { chave: string; label: string }[];
-  pctParceiroPadrao: number;
 }) {
   const [triboFiltro, setTriboFiltro] = useState<string | null>(null);
   const [aba, setAba] = useState<Aba>("assinaturas");
@@ -197,8 +195,7 @@ export default function ForecastView({
               ) : (
                 <>
                   <Th className="pr-3">Status manual</Th>
-                  <Th className="pr-3">Observação</Th>
-                  <Th>Parceiro</Th>
+                  <Th>Observação</Th>
                 </>
               )}
             </tr>
@@ -206,17 +203,13 @@ export default function ForecastView({
           <tbody>
             {opsDaAba.length === 0 && (
               <tr>
-                <Td colSpan={aba === "quedas" ? 8 : 9} className="text-center text-stone-600">
+                <Td colSpan={8} className="text-center text-stone-600">
                   Nada neste recorte.
                 </Td>
               </tr>
             )}
             {opsDaAba.map((op) =>
-              aba === "quedas" ? (
-                <ForecastRowQueda key={op.id} op={op} />
-              ) : (
-                <ForecastRow key={op.id} op={op} pctParceiroPadrao={pctParceiroPadrao} />
-              )
+              aba === "quedas" ? <ForecastRowQueda key={op.id} op={op} /> : <ForecastRow key={op.id} op={op} />
             )}
           </tbody>
         </Table>

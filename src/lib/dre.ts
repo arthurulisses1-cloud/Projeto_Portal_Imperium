@@ -7,7 +7,8 @@ import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
 
 // ATENÇÃO: este módulo é estritamente Diretor-only (RLS na migration 0037
 // já barra qualquer outro papel no banco, mas nunca importe isso fora de
-// /dre — e NUNCA registre nenhuma dessas funções como tool da Minerva em
+// /dre ou /fechamento (mesma área privada, só separada em duas abas) —
+// e NUNCA registre nenhuma dessas funções como tool da Minerva em
 // src/lib/minerva/tools.ts, por pedido explícito do Diretor).
 
 export type ConfigDre = {
@@ -468,7 +469,7 @@ export async function buscarResumoDre(supabase: SupabaseClient, ano: number, mes
 // mesma base (ver buscarFolhaForecast) — é uma projeção pra "se tudo que
 // tá pra pagar realmente pagar", não o número oficial do mês.
 // --- Fechamento Mensal + Comissão de Parceiro -------------------------
-// Mesma restrição estrita de "nunca fora de /dre" das funções acima —
+// Mesma restrição estrita de "nunca fora de /dre ou /fechamento" das funções acima —
 // fixo/bônus/variável por pessoa e Pix de parceiro são dado de folha.
 
 export type LinhaNota = {

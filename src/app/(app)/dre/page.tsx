@@ -9,9 +9,6 @@ import {
   buscarDespesasExtras,
   buscarProducaoParceiro,
   buscarReceitasExtras,
-  buscarNotaMes,
-  buscarPendenciasAprovacao,
-  buscarFechamento,
 } from "@/lib/dre";
 import {
   salvarConfigDre,
@@ -20,14 +17,10 @@ import {
   excluirDespesaExtra,
   adicionarReceitaExtra,
   excluirReceitaExtra,
-  aprovarComissaoParceiro,
-  fecharMes,
-  reabrirMes,
 } from "./actions";
 import Card from "@/components/ui/Card";
 import SimuladorDre from "@/components/dre/SimuladorDre";
 import EstruturaDreView from "@/components/dre/EstruturaDreView";
-import { Table, Th, Td, Tr } from "@/components/ui/Table";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -53,31 +46,17 @@ export default async function DrePage({ searchParams }: { searchParams: { ano?: 
   const ano = Number(searchParams.ano) || hoje.getFullYear();
   const mes = Number(searchParams.mes) || hoje.getMonth() + 1;
 
-  const [
-    folhaPago,
-    resumoPago,
-    folhaForecast,
-    resumoForecast,
-    config,
-    despesas,
-    receitasExtras,
-    producaoParceiroAtual,
-    nota,
-    pendencias,
-    fechamento,
-  ] = await Promise.all([
-    buscarFolha(supabase, ano, mes),
-    buscarResumoDre(supabase, ano, mes),
-    buscarFolhaForecast(supabase, ano, mes),
-    buscarResumoDreForecast(supabase, ano, mes),
-    buscarConfigDre(supabase),
-    buscarDespesasExtras(supabase, ano, mes),
-    buscarReceitasExtras(supabase, ano, mes),
-    buscarProducaoParceiro(supabase, ano, mes),
-    buscarNotaMes(supabase, ano, mes),
-    buscarPendenciasAprovacao(supabase, ano, mes),
-    buscarFechamento(supabase, ano, mes),
-  ]);
+  const [folhaPago, resumoPago, folhaForecast, resumoForecast, config, despesas, receitasExtras, producaoParceiroAtual] =
+    await Promise.all([
+      buscarFolha(supabase, ano, mes),
+      buscarResumoDre(supabase, ano, mes),
+      buscarFolhaForecast(supabase, ano, mes),
+      buscarResumoDreForecast(supabase, ano, mes),
+      buscarConfigDre(supabase),
+      buscarDespesasExtras(supabase, ano, mes),
+      buscarReceitasExtras(supabase, ano, mes),
+      buscarProducaoParceiro(supabase, ano, mes),
+    ]);
   const { linhas } = folhaPago;
   const resumo = resumoPago;
 
@@ -89,7 +68,12 @@ export default async function DrePage({ searchParams }: { searchParams: { ano?: 
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl text-gold-bright">DRE & Folha de Pagamento</h1>
-          <p className="text-xs text-stone-500">Visão privada — só o Diretor acessa. Nunca é lida pela Minerva.</p>
+          <p className="text-xs text-stone-500">
+            Visão privada — só o Diretor acessa. Nunca é lida pela Minerva. ·{" "}
+            <a href="/fechamento" className="text-gold hover:underline">
+              Ir pro Fechamento de Mês →
+            </a>
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <a href={`/dre?ano=${mesAnterior.ano}&mes=${mesAnterior.mes}`} className="btn-outline px-2.5 py-1.5 text-xs">
@@ -103,169 +87,6 @@ export default async function DrePage({ searchParams }: { searchParams: { ano?: 
           </a>
         </div>
       </div>
-
-      {/* Fechamento Mensal: trava (no dia 1) a Folha + Comissão de Parceiro
-          desse mês de produção — a partir daí /comissao e este painel
-          mostram o snapshot, não o número live (que pode mudar se o sync
-          corrigir algo depois). Reabrível pelo Diretor se achar erro. */}
-      <details open className="card-imp group">
-        <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
-          <span>Fechamento Mensal · Nota e Pagamentos</span>
-          <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
-        </summary>
-        <div className="mt-4 space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-imperium-line pb-4">
-            <div>
-              <p className="text-xs text-stone-500">
-                Status de {MESES[mes - 1]}/{ano}
-              </p>
-              <p className={`font-display text-lg ${fechamento.status === "fechado" ? "text-success-bright" : "text-gold"}`}>
-                {fechamento.status === "fechado" ? "Fechado" : "Aberto (números ainda podem mudar)"}
-              </p>
-              {fechamento.status === "fechado" && (
-                <p className="text-[11px] text-stone-600">
-                  pagamento dia 5 e dia 15 de {MESES[mesSeguinte.mes - 1]}/{mesSeguinte.ano}
-                </p>
-              )}
-            </div>
-            {isDiretor && (
-              <div className="flex gap-2">
-                {fechamento.status === "fechado" ? (
-                  <form action={reabrirMes}>
-                    <input type="hidden" name="ano" value={ano} />
-                    <input type="hidden" name="mes" value={mes} />
-                    <button type="submit" className="btn-outline px-3 py-1.5 text-xs">
-                      Reabrir
-                    </button>
-                  </form>
-                ) : (
-                  <form action={fecharMes}>
-                    <input type="hidden" name="ano" value={ano} />
-                    <input type="hidden" name="mes" value={mes} />
-                    <button
-                      type="submit"
-                      disabled={pendencias.length > 0}
-                      className="btn-gold px-3 py-1.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Fechar {MESES[mes - 1]}
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
-          </div>
-
-          {isDiretor && pendencias.length > 0 && (
-            <div>
-              <p className="mb-2 text-xs uppercase tracking-wide text-gold">
-                Comissão de parceiro acima do padrão — aguardando aprovação ({pendencias.length})
-              </p>
-              <ul className="space-y-2">
-                {pendencias.map((p) => (
-                  <li
-                    key={p.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-gold/30 bg-gold/5 p-2 text-xs"
-                  >
-                    <span className="text-stone-300">
-                      {p.nomeParceiro} · {p.percentual}% de {moeda(p.valorOperacao)}
-                      {p.cliente && <> ({p.cliente})</>} = <span className="text-gold-bright">{moeda(p.valorComissao)}</span>
-                    </span>
-                    <form action={aprovarComissaoParceiro}>
-                      <input type="hidden" name="id" value={p.id} />
-                      <button type="submit" className="btn-outline px-2 py-1 text-[10px]">
-                        Aprovar
-                      </button>
-                    </form>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <div>
-            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">
-              Nota do mês (crédito pago no mês — pra mandar ao banco)
-            </p>
-            {nota.length > 0 ? (
-              <>
-                <Table minWidth="min-w-[640px]">
-                  <thead>
-                    <tr>
-                      <Th className="pr-2">Data</Th>
-                      <Th className="pr-2">Cliente</Th>
-                      <Th className="pr-2">ID cliente</Th>
-                      <Th align="right" className="pr-2">Crédito</Th>
-                      <Th className="pr-2">Parceiro</Th>
-                      <Th align="right">Extra %</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {nota.map((l) => (
-                      <Tr key={l.weeklyOperacaoId}>
-                        <Td className="pr-2 whitespace-nowrap text-stone-300">
-                          {new Date(l.data + "T00:00:00").toLocaleDateString("pt-BR")}
-                        </Td>
-                        <Td className="pr-2 text-stone-300">{l.cliente ?? "—"}</Td>
-                        <Td className="pr-2 text-stone-600">{l.clienteId ?? "—"}</Td>
-                        <Td align="right" className="pr-2 whitespace-nowrap text-stone-100">{moeda(l.valor)}</Td>
-                        <Td className="pr-2 text-stone-400">{l.parceiro?.nomeParceiro ?? "—"}</Td>
-                        <Td align="right" className="whitespace-nowrap text-gold">
-                          {l.parceiro ? moeda(l.parceiro.extra) : "—"}
-                        </Td>
-                      </Tr>
-                    ))}
-                  </tbody>
-                </Table>
-                <p className="mt-2 text-[11px] text-stone-600">
-                  Total crédito: {moeda(nota.reduce((s, l) => s + l.valor, 0))} · Total extra de parceiro:{" "}
-                  {moeda(nota.reduce((s, l) => s + (l.parceiro?.extra ?? 0), 0))}
-                </p>
-              </>
-            ) : (
-              <p className="text-xs text-stone-600">Nenhuma operação paga esse mês ainda.</p>
-            )}
-          </div>
-
-          {fechamento.status === "fechado" ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Dia 5 · Fixo + Bônus</p>
-                <ul className="space-y-1">
-                  {fechamento.pessoas.map((p) => (
-                    <li key={p.profileId} className="flex justify-between text-xs">
-                      <span className="text-stone-300">{p.nome}</span>
-                      <span className="text-gold-bright">{moeda(p.fixo + p.bonus)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Dia 15 · Comissão + Parceiros</p>
-                <ul className="space-y-1">
-                  {fechamento.pessoas
-                    .filter((p) => p.variavel > 0)
-                    .map((p) => (
-                      <li key={p.profileId} className="flex justify-between text-xs">
-                        <span className="text-stone-300">{p.nome}</span>
-                        <span className="text-gold-bright">{moeda(p.variavel)}</span>
-                      </li>
-                    ))}
-                  {fechamento.parceiros.map((p, i) => (
-                    <li key={i} className="flex justify-between border-t border-imperium-line pt-1 text-xs">
-                      <span className="text-stone-400">
-                        {p.nomeParceiro} · Pix {p.chavePix}
-                      </span>
-                      <span className="text-gold-bright">{moeda(p.valorRepassado)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs text-stone-600">Feche o mês pra travar quem recebe quanto dia 5 e dia 15.</p>
-          )}
-        </div>
-      </details>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card title="Receita">

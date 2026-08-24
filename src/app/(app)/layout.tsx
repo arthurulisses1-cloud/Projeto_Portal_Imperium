@@ -34,10 +34,19 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider", "diretor"] },
   { type: "link", href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
   { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor", "investidor"] },
+  { type: "link", href: "/parceiros", label: "Parceiros", roles: ["closer", "lider", "diretor"] },
   { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor", "investidor"] },
   { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/auditoria", label: "Auditoria", roles: ["diretor"] },
-  { type: "link", href: "/dre", label: "DRE", roles: ["diretor", "investidor"] },
+  {
+    type: "group",
+    label: "Financeiro",
+    roles: ["diretor", "investidor"],
+    items: [
+      { href: "/dre", label: "DRE" },
+      { href: "/fechamento", label: "Fechamento de Mês" },
+    ],
+  },
   {
     type: "group",
     label: "Pessoas",
