@@ -104,6 +104,63 @@ export async function criarCampanha(formData: FormData) {
   revalidatePath("/");
 }
 
+// Edita os dados de uma campanha já criada — título, descrição,
+// requisitos, recompensa, imagem, métrica/papel, meta e período. NÃO
+// mexe em alvo/participantes de propósito: trocar quem duela no meio do
+// mês seria confuso (se precisar mudar isso, é mais simples excluir e
+// criar de novo).
+export async function atualizarCampanha(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+  await exigirLiderOuDiretor(supabase, user.id);
+
+  const id = String(formData.get("id"));
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  const descricao = String(formData.get("descricao") ?? "").trim();
+  const requisitosMinimos = String(formData.get("requisitos_minimos") ?? "").trim();
+  const recompensa = String(formData.get("recompensa") ?? "").trim();
+  const metrica = String(formData.get("metrica") ?? "credito");
+  const papelCreditoRaw = String(formData.get("papel_credito") ?? "total");
+  const papelCredito = ["sdr", "closer", "total"].includes(papelCreditoRaw) ? papelCreditoRaw : "total";
+  const imagemPosicaoRaw = String(formData.get("imagem_posicao") ?? "center");
+  const imagemPosicao = ["top", "center", "bottom"].includes(imagemPosicaoRaw) ? imagemPosicaoRaw : "center";
+  const metaValorRaw = String(formData.get("meta_valor") ?? "").trim();
+  const dataInicio = String(formData.get("data_inicio") ?? "");
+  const dataFim = String(formData.get("data_fim") ?? "");
+  if (!id || !titulo || !dataInicio || !dataFim) throw new Error("Título e período são obrigatórios.");
+
+  const payload: Record<string, unknown> = {
+    titulo,
+    descricao: descricao || null,
+    requisitos_minimos: requisitosMinimos || null,
+    recompensa: recompensa || null,
+    metrica,
+    papel_credito: papelCredito,
+    imagem_posicao: imagemPosicao,
+    meta_valor: metaValorRaw ? Number(metaValorRaw) : null,
+    data_inicio: dataInicio,
+    data_fim: dataFim,
+  };
+
+  const imagem = formData.get("imagem") as File | null;
+  if (imagem && imagem.size > 0) {
+    const ext = imagem.name.split(".").pop() || "jpg";
+    const path = `${user.id}/${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from("campanhas").upload(path, imagem, { contentType: imagem.type });
+    if (uploadError) throw new Error(uploadError.message);
+    payload.imagem_url = supabase.storage.from("campanhas").getPublicUrl(path).data.publicUrl;
+  }
+
+  const { error } = await supabase.from("campanhas").update(payload).eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/campanhas");
+  revalidatePath("/");
+}
+
 // Ajuste rápido pra campanha já criada com foto cortada errado — sem crop
 // de verdade (arrastar/soltar), troca qual parte da foto fica visível.
 export async function atualizarEnquadramentoCampanha(formData: FormData) {

@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import CampanhaForm from "./campanha-form";
+import EditarCampanhaForm from "./editar-campanha-form";
 import { excluirCampanha, atualizarEnquadramentoCampanha } from "./actions";
 import { buscarCampanhasAtivas } from "@/lib/campanhas";
 import Card from "@/components/ui/Card";
@@ -25,7 +26,9 @@ export default async function CampanhasPage() {
 
   const { data: todasCampanhas } = await supabase
     .from("campanhas")
-    .select("id, titulo, data_inicio, data_fim, imagem_url, imagem_posicao")
+    .select(
+      "id, titulo, descricao, requisitos_minimos, recompensa, metrica, papel_credito, alvo, meta_valor, data_inicio, data_fim, imagem_url, imagem_posicao"
+    )
     .order("data_inicio", { ascending: false });
 
   const ativas = await buscarCampanhasAtivas(supabase);
@@ -80,6 +83,22 @@ export default async function CampanhasPage() {
                     </button>
                   </form>
                 </div>
+                <EditarCampanhaForm
+                  campanha={{
+                    id: c.id,
+                    titulo: c.titulo,
+                    descricao: c.descricao,
+                    requisitosMinimos: c.requisitos_minimos,
+                    recompensa: c.recompensa,
+                    metrica: c.metrica,
+                    papelCredito: c.papel_credito ?? "total",
+                    alvo: c.alvo,
+                    imagemPosicao: c.imagem_posicao ?? "center",
+                    metaValor: c.meta_valor,
+                    dataInicio: c.data_inicio,
+                    dataFim: c.data_fim,
+                  }}
+                />
               </li>
             ))}
           </ul>
