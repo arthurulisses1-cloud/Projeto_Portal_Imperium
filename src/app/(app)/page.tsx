@@ -553,7 +553,7 @@ function CampanhasCard({
                 <img
                   src={c.imagemUrl}
                   alt={c.titulo}
-                  className="h-32 w-full object-cover"
+                  className="aspect-[4/3] w-full object-cover"
                   style={{ objectPosition: c.imagemPosicao === "top" ? "center top" : c.imagemPosicao === "bottom" ? "center bottom" : "center" }}
                 />
               )}
