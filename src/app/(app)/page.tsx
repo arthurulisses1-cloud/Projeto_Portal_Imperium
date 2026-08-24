@@ -5,6 +5,7 @@ import { excluirCampanha } from "./campanhas/actions";
 import Card from "@/components/ui/Card";
 import Laurel from "@/components/ui/Laurel";
 import BarraMeta from "@/components/ui/BarraMeta";
+import BarraMetaToggle from "@/components/ui/BarraMetaToggle";
 import ConfrontoWidget from "@/components/ui/Confronto";
 import EnquetePoll, { type EnqueteData } from "@/components/ui/EnquetePoll";
 import CentralNotificacoes from "@/components/CentralNotificacoes";
@@ -248,12 +249,13 @@ export default async function MuralPage() {
         </Card>
       )}
 
-      {meRole === "closer" && metaTribo > 0 && (
-        <Card title={`Meta do mês · Tribo ${triboAtual?.nome ?? ""}`}>
-          <BarraMeta realizado={pagoTriboMes} meta={metaTribo} />
-          <p className="mt-2 text-[11px] text-stone-600">
-            Meta do time inteiro (você + seus SDRs) — sua produção pessoal fica em Minha Produção.
-          </p>
+      {meRole === "closer" && (metaTribo > 0 || metaIndividual > 0) && (
+        <Card title="Meta do mês">
+          <BarraMetaToggle
+            individual={{ realizado: pagosMes, meta: metaIndividual }}
+            tribo={{ realizado: pagoTriboMes, meta: metaTribo }}
+            triboNome={triboAtual?.nome ?? "sua Tribo"}
+          />
         </Card>
       )}
 
