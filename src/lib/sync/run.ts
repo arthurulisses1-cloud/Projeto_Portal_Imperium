@@ -225,13 +225,19 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // sem essa informação ainda pra aquela linha), cai pro heurístico antigo
   // como fallback: mantém o pago_em já gravado, ou usa hoje se acabou de
   // virar PAGO nesta sync — melhor que nada até a planilha preencher.
-  const chavesOperacoes = operacoes.linhas.map((l) => l.chaveNatural);
+  // Busca por INTERVALO DE DATA (não por lista de chave_natural) — a lista
+  // chegou a ~1000 chaves nomes longos (cliente+SDR+Closer embutidos na
+  // chave), e mesmo em lotes de 500 o filtro `.in()` virava uma URL grande
+  // demais pro PostgREST (achado 2026-08-24: sync passou a quebrar com
+  // "Bad Request" assim que a planilha cresceu o suficiente). Intervalo de
+  // data é uma query normal, sem esse limite.
   const statusAnteriorPorChave = new Map<string, { status: string; pago_em: string | null }>();
-  for (const chavesBatch of chunk(chavesOperacoes, 500)) {
+  if (operacoes.menorData && operacoes.maiorData) {
     const { data: existentes, error: existentesError } = await supabase
       .from("weekly_operacoes")
       .select("chave_natural, status, pago_em")
-      .in("chave_natural", chavesBatch);
+      .gte("data", operacoes.menorData)
+      .lte("data", operacoes.maiorData);
     if (existentesError) throw new Error("Erro lendo status anterior de weekly_operacoes: " + existentesError.message);
     for (const e of existentes ?? []) statusAnteriorPorChave.set(e.chave_natural, { status: e.status, pago_em: e.pago_em });
   }
@@ -272,13 +278,16 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     if (error) throw new Error("Erro gravando weekly_operacoes: " + error.message);
   }
 
-  const chavesVendas = Array.from(new Set(assinado.vendas.map((v) => v.chaveNatural)));
+  // Mesmo ajuste do bloco acima: intervalo de data em vez de `.in()` com
+  // centenas de chave_natural (nomes longos embutidos na chave estouravam
+  // a URL do PostgREST — "Bad Request").
   const weeklyIdPorChave = new Map<string, string>();
-  for (const chavesBatch of chunk(chavesVendas, 500)) {
+  if (assinado.menorData && assinado.maiorData) {
     const { data: idsRows, error } = await supabase
       .from("weekly_operacoes")
       .select("id, chave_natural")
-      .in("chave_natural", chavesBatch);
+      .gte("data", assinado.menorData)
+      .lte("data", assinado.maiorData);
     if (error) throw new Error("Erro buscando ids de weekly_operacoes pra vincular vendas: " + error.message);
     for (const row of idsRows ?? []) weeklyIdPorChave.set(row.chave_natural, row.id);
   }
