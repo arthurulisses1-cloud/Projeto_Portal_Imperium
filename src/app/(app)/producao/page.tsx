@@ -206,6 +206,15 @@ export default async function ProducaoPage({
     .filter((d) => d.tentativas > 0)
     .sort((a, b) => b.taxa - a.taxa);
 
+  // O Simulador de meta precisa da meta DE VERDADE (metaFunilIndividual,
+  // derivada de crédito ÷ ticket médio ÷ taxas esperadas) — producao_funil.meta
+  // nunca é preenchido pelo sync (fica sempre 0, mesmo motivo já documentado
+  // acima no card "Volume"), então passar totaisMes puro deixava o Simulador
+  // sempre achando que a meta de Pagos era 0 (achado 2026-08-24).
+  const totaisParaSimulador = Object.fromEntries(
+    FUNNEL_STAGES.map((etapa) => [etapa, { realizado: totaisMes[etapa].realizado, meta: metaFunilIndividual[etapa] ?? 0 }])
+  ) as Record<FunilEtapa, { realizado: number; meta: number }>;
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       <div className="flex items-center justify-between">
@@ -423,7 +432,7 @@ export default async function ProducaoPage({
         </ul>
       </Card>
 
-      <SimuladorMeta totais={totaisMes} />
+      <SimuladorMeta totais={totaisParaSimulador} />
     </main>
   );
 }
