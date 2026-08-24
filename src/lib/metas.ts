@@ -41,9 +41,21 @@ export function calcularFunilMeta(
   return resultado;
 }
 
-// Meta de crédito individual do mês: meta da firma dividida por Exército →
-// Tribo → membros da Tribo. Também devolve a tabela de taxas de conversão
-// esperadas e a meta de ticket médio, pra reaproveitar em várias telas.
+// Meta de crédito individual do mês: meta da TRIBO (já com a regra especial
+// de Inbound = metade de uma Tribo lógica — ver mapaMetaCreditoPorTribo)
+// dividida pelos membros dela. Também devolve a tabela de taxas de
+// conversão esperadas e a meta de ticket médio, pra reaproveitar em várias
+// telas.
+//
+// Achado 2026-08-24: essa função tinha sua PRÓPRIA divisão (firma ÷
+// Exércitos ÷ Tribos do Exército ÷ membros), separada da de
+// mapaMetaCreditoPorTribo/buscarMetaTribo — ignorava a regra do Inbound
+// por completo. Pra alguém sozinho numa Tribo Inbound (ex.: Cristina em
+// Inbound Templários), isso mostrava R$ 833k de meta pessoal em vez dos
+// R$ 500k corretos (Inbound Templários tratada como 1 de 3 Tribos normais
+// do Exército, não como metade de UMA Tribo lógica dividida com a outra
+// metade do Inbound). Agora reaproveita a mesma fonte, garantindo que
+// "Tribo" e "Individual" nunca mais divirjam.
 export async function buscarMetaIndividual(supabase: SupabaseClient, userId: string) {
   const { data: profile } = await supabase
     .from("profiles")
@@ -69,25 +81,12 @@ export async function buscarMetaIndividual(supabase: SupabaseClient, userId: str
 
   let metaIndividual = 0;
   if (profile?.tribo_id && metaMes?.meta_credito_total) {
-    const { data: triboRow } = await supabase
-      .from("tribos")
-      .select("id, exercito_id")
-      .eq("id", profile.tribo_id)
-      .single();
-    if (triboRow) {
-      const [{ count: numExercitos }, { count: numTribos }, { count: numMembros }] = await Promise.all([
-        supabase.from("exercitos").select("id", { count: "exact", head: true }),
-        supabase.from("tribos").select("id", { count: "exact", head: true }).eq("exercito_id", triboRow.exercito_id),
-        supabase
-          .from("profiles")
-          .select("id", { count: "exact", head: true })
-          .eq("tribo_id", triboRow.id)
-          .in("role", ["sdr", "closer"]),
-      ]);
-      if (numExercitos && numTribos && numMembros) {
-        metaIndividual = metaMes.meta_credito_total / numExercitos / numTribos / numMembros;
-      }
-    }
+    const [mapaPorTribo, { count: numMembros }] = await Promise.all([
+      mapaMetaCreditoPorTribo(supabase, metaMes.meta_credito_total),
+      supabase.from("profiles").select("id", { count: "exact", head: true }).eq("tribo_id", profile.tribo_id).in("role", ["sdr", "closer"]),
+    ]);
+    const metaTribo = mapaPorTribo.get(profile.tribo_id) ?? 0;
+    if (numMembros) metaIndividual = metaTribo / numMembros;
   }
 
   return {

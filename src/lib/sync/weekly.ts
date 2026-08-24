@@ -12,6 +12,7 @@ type AssinadoRow = {
   PRODUTO?: string;
   ORIGEM?: string;
   STATUS?: string;
+  "DIA DO PAGAMENTO"?: string;
 };
 
 export type OperacaoLinha = {
@@ -25,6 +26,11 @@ export type OperacaoLinha = {
   produto: string | null;
   origem: string | null;
   status: string;
+  // Data real de pagamento, direto da planilha (coluna "DIA DO PAGAMENTO")
+  // — não é mais inferida por "quando a sync percebeu que virou PAGO"
+  // (achado 2026-08-24: a planilha já tem a data real o tempo todo, a
+  // sync só nunca lia essa coluna). Null quando a célula está vazia.
+  pagoEmPlanilha: string | null;
 };
 
 // Espelha a aba Assinado linha a linha (sem filtrar por status) — alimenta
@@ -79,6 +85,7 @@ export async function buscarOperacoes(): Promise<{
       produto: row.PRODUTO?.trim() || null,
       origem: row.ORIGEM?.trim() || null,
       status: (row.STATUS ?? "").trim().toUpperCase() || "ASSINADO",
+      pagoEmPlanilha: parseDataBR(row["DIA DO PAGAMENTO"] ?? ""),
     });
   }
 

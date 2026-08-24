@@ -214,13 +214,17 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // observacao que o closer/líder preenche no Forecast — ver migration 0024.
   const operacoes = await buscarOperacoes();
 
-  // weekly_operacoes.data é a data de ASSINATURA, não de pagamento — sem
-  // isso, "pagos de ontem" (Central de Notificações) só pegaria operação
-  // assinada E paga no mesmo dia, quase nunca o caso real. pago_em grava a
-  // data em que a sync PRIMEIRO viu o status virar PAGO: busca o status
-  // atual de cada chave_natural já existente antes de upsertar, e só
-  // escreve pago_em = hoje pra quem tava diferente de PAGO e virou agora —
-  // quem já era PAGO mantém o pago_em antigo (nunca sobrescreve).
+  // weekly_operacoes.data é a data de ASSINATURA, não de pagamento —
+  // pago_em guarda a data real de pagamento. Fonte primária: a coluna
+  // "DIA DO PAGAMENTO" da própria planilha (achado 2026-08-24 — ela
+  // sempre existiu, a sync só nunca lia; até aqui pago_em vinha só de
+  // "quando a sync PRIMEIRO percebeu que o status virou PAGO", uma
+  // aproximação que atrasava o crédito pro dia em que o sync rodasse, não
+  // o dia real do pagamento — por isso "pagos de sexta" só apareciam se a
+  // sync tivesse rodado na própria sexta). Se a célula vier vazia (planilha
+  // sem essa informação ainda pra aquela linha), cai pro heurístico antigo
+  // como fallback: mantém o pago_em já gravado, ou usa hoje se acabou de
+  // virar PAGO nesta sync — melhor que nada até a planilha preencher.
   const chavesOperacoes = operacoes.linhas.map((l) => l.chaveNatural);
   const statusAnteriorPorChave = new Map<string, { status: string; pago_em: string | null }>();
   for (const chavesBatch of chunk(chavesOperacoes, 500)) {
@@ -235,9 +239,16 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
 
   const weeklyRows = operacoes.linhas.map((l) => {
     const anterior = statusAnteriorPorChave.get(l.chaveNatural);
-    let pagoEm: string | null = anterior?.pago_em ?? null;
-    if (l.status === "PAGO" && anterior?.status !== "PAGO") pagoEm = hojeStr;
-    else if (l.status !== "PAGO") pagoEm = null;
+    let pagoEm: string | null;
+    if (l.status !== "PAGO") {
+      pagoEm = null;
+    } else if (l.pagoEmPlanilha) {
+      pagoEm = l.pagoEmPlanilha;
+    } else if (anterior?.pago_em) {
+      pagoEm = anterior.pago_em;
+    } else {
+      pagoEm = hojeStr;
+    }
 
     return {
       chave_natural: l.chaveNatural,
