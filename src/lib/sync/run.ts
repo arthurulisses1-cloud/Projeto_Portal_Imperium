@@ -333,14 +333,21 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // é keyed pela data de assinatura, não de pagamento — mesmo cuidado já
   // documentado em CentralNotificacoes). Só atualiza compromissos que JÁ
   // existem (a pessoa precisa ter lançado a meta do dia) — nunca cria linha.
-  const sessentaDiasAtras = new Date();
-  sessentaDiasAtras.setDate(sessentaDiasAtras.getDate() - 60);
-  const dataMinimaReal = sessentaDiasAtras.toISOString().slice(0, 10);
+  //
+  // Janela de só 5 dias (não os 60 do streak): uma vez que o dia real de
+  // uma pessoa está gravado, ele não muda mais (a produção daquele dia já
+  // fechou) — recalcular passado inteiro a cada sync só soma latência sem
+  // ganho, e quase estourou o tempo do Server Action de "Sincronizar agora"
+  // (achado 2026-08-24: sync manual voltava com erro genérico do Next
+  // escondendo a causa — corte de escopo aqui é a correção).
+  const dataMinimaReal = new Date();
+  dataMinimaReal.setDate(dataMinimaReal.getDate() - 5);
+  const dataMinimaRealStr = dataMinimaReal.toISOString().slice(0, 10);
 
   const { data: compromissosExistentes, error: compromissosError } = await supabase
     .from("compromissos")
     .select("id, profile_id, data")
-    .gte("data", dataMinimaReal);
+    .gte("data", dataMinimaRealStr);
   if (compromissosError) throw new Error("Erro lendo compromissos pra atualizar realizado: " + compromissosError.message);
 
   if (compromissosExistentes && compromissosExistentes.length > 0) {
@@ -351,13 +358,13 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
         .select("profile_id, data, etapa, realizado")
         .in("profile_id", idsCompromisso)
         .in("etapa", ["entrevistas", "assinaturas"])
-        .gte("data", dataMinimaReal),
+        .gte("data", dataMinimaRealStr),
       supabase
         .from("weekly_operacoes")
         .select("sdr_profile_id, closer_profile_id, pago_em")
         .eq("status", "PAGO")
         .not("pago_em", "is", null)
-        .gte("pago_em", dataMinimaReal),
+        .gte("pago_em", dataMinimaRealStr),
     ]);
     if (funilRealError) throw new Error("Erro lendo producao_funil pra compromissos.real: " + funilRealError.message);
     if (opsPagasError) throw new Error("Erro lendo weekly_operacoes pra compromissos.real: " + opsPagasError.message);
