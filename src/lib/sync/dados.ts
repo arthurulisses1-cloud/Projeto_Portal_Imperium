@@ -32,7 +32,10 @@ export async function buscarProducaoDados(): Promise<{
   linhas: ProducaoLinha[];
   nomesEncontrados: Set<string>;
 }> {
-  const res = await fetch(csvUrl(SHEET_GIDS.dados));
+  // no-store: sem isso, o próprio Next.js pode cachear essa resposta entre
+  // execuções (ver comentário em csvUrl, config.ts) e uma sync manual
+  // logo depois de editar a planilha continuaria vendo o estado antigo.
+  const res = await fetch(csvUrl(SHEET_GIDS.dados), { cache: "no-store" });
   if (!res.ok) throw new Error(`Falha ao buscar aba Dados: ${res.status}`);
   const text = await res.text();
 

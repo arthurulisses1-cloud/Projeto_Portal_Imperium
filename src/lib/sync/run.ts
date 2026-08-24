@@ -164,7 +164,7 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // Uma leitura SÓ da aba, reaproveitada aqui e em buscarOperacoes() logo
   // abaixo — ver comentário em weekly.ts sobre a corrida entre duas
   // requisições separadas pra mesma planilha viva (achado 2026-08-24).
-  const resAssinado = await fetch(csvUrl(SHEET_GIDS.assinado));
+  const resAssinado = await fetch(csvUrl(SHEET_GIDS.assinado), { cache: "no-store" });
   if (!resAssinado.ok) throw new Error(`Falha ao buscar aba Assinado: ${resAssinado.status}`);
   const assinadoText = await resAssinado.text();
 

@@ -21,7 +21,8 @@ export async function buscarEntrevistas(): Promise<{
   linhas: ProducaoLinha[];
   nomesEncontrados: Set<string>;
 }> {
-  const res = await fetch(csvUrl(SHEET_GIDS.entrevistas));
+  // no-store: ver comentário em dados.ts / config.ts.
+  const res = await fetch(csvUrl(SHEET_GIDS.entrevistas), { cache: "no-store" });
   if (!res.ok) throw new Error(`Falha ao buscar aba Entrevistas: ${res.status}`);
   const text = await res.text();
 
