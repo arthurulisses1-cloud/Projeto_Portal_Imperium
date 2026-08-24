@@ -1,5 +1,4 @@
 import Papa from "papaparse";
-import { csvUrl, SHEET_GIDS } from "./config";
 import { normalizarNome, parseDataBR, parseMoedaBR, multiplicadorPorValor } from "./parse";
 import type { FunilEtapa } from "@/lib/funil";
 
@@ -37,17 +36,16 @@ export type ProducaoLinha = {
   papel: "sdr" | "closer" | "ambos";
 };
 
-export async function buscarAssinado(): Promise<{
+// Recebe o texto do CSV já baixado (pelo chamador, run.ts) — buscarOperacoes()
+// (weekly.ts) lê essa MESMA aba pra weekly_operacoes. Ver comentário lá:
+// duas requisições HTTP separadas davam corrida real com a planilha viva.
+export async function buscarAssinado(text: string): Promise<{
   vendas: VendaLinha[];
   funil: ProducaoLinha[];
   nomesEncontrados: Set<string>;
   menorData: string | null;
   maiorData: string | null;
 }> {
-  const res = await fetch(csvUrl(SHEET_GIDS.assinado));
-  if (!res.ok) throw new Error(`Falha ao buscar aba Assinado: ${res.status}`);
-  const text = await res.text();
-
   const { data: rows } = Papa.parse<AssinadoRow>(text, { header: true, skipEmptyLines: true });
 
   const vendas: VendaLinha[] = [];

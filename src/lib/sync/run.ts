@@ -4,6 +4,7 @@ import { buscarAssinado } from "./assinado";
 import { buscarEntrevistas } from "./entrevistas";
 import { buscarOperacoes } from "./weekly";
 import { normalizarNome } from "./parse";
+import { csvUrl, SHEET_GIDS } from "./config";
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -160,7 +161,14 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   }
 
   // ---------- aba Assinado: funil (assinaturas/pagos) + vendas ----------
-  const assinado = await buscarAssinado();
+  // Uma leitura SÓ da aba, reaproveitada aqui e em buscarOperacoes() logo
+  // abaixo — ver comentário em weekly.ts sobre a corrida entre duas
+  // requisições separadas pra mesma planilha viva (achado 2026-08-24).
+  const resAssinado = await fetch(csvUrl(SHEET_GIDS.assinado));
+  if (!resAssinado.ok) throw new Error(`Falha ao buscar aba Assinado: ${resAssinado.status}`);
+  const assinadoText = await resAssinado.text();
+
+  const assinado = await buscarAssinado(assinadoText);
 
   const funilRowsAssinado = assinado.funil
     .map((l) => {
@@ -212,7 +220,7 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // cliente com acentuação/espaço diferente já quebrava esse match).
   // Upsert por chave_natural (não apaga+recria) pra preservar status_manual/
   // observacao que o closer/líder preenche no Forecast — ver migration 0024.
-  const operacoes = await buscarOperacoes();
+  const operacoes = await buscarOperacoes(assinadoText);
 
   // weekly_operacoes.data é a data de ASSINATURA, não de pagamento —
   // pago_em guarda a data real de pagamento. Fonte primária: a coluna

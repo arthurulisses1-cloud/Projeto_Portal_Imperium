@@ -1,5 +1,4 @@
 import Papa from "papaparse";
-import { csvUrl, SHEET_GIDS } from "./config";
 import { normalizarNome, parseDataBR, parseMoedaBR } from "./parse";
 
 type AssinadoRow = {
@@ -35,15 +34,21 @@ export type OperacaoLinha = {
 
 // Espelha a aba Assinado linha a linha (sem filtrar por status) — alimenta
 // só a Weekly de Receita, ver comentário na migration 0023.
-export async function buscarOperacoes(): Promise<{
+//
+// Recebe o texto do CSV já baixado (pelo chamador) em vez de buscar de
+// novo — buscarAssinado() (assinado.ts) lê essa MESMA aba pra funil/vendas.
+// Duas requisições HTTP separadas pra planilha viva davam uma corrida real:
+// se alguém editava o STATUS de uma venda no Google Sheets entre as duas
+// leituras, weekly_operacoes e vendas/producao_funil viam fotografias
+// DIFERENTES da mesma aba (achado 2026-08-24 — Forecast mostrou uma venda
+// como PAGA que o Ranking não contava, porque a leitura de vendas rodou
+// segundos antes da mudança na planilha, e a de weekly_operacoes rodou
+// depois). Uma leitura só, reaproveitada nos dois, elimina a corrida.
+export async function buscarOperacoes(text: string): Promise<{
   linhas: OperacaoLinha[];
   menorData: string | null;
   maiorData: string | null;
 }> {
-  const res = await fetch(csvUrl(SHEET_GIDS.assinado));
-  if (!res.ok) throw new Error(`Falha ao buscar aba Assinado: ${res.status}`);
-  const text = await res.text();
-
   const { data: rows } = Papa.parse<AssinadoRow>(text, { header: true, skipEmptyLines: true });
 
   const linhas: OperacaoLinha[] = [];
