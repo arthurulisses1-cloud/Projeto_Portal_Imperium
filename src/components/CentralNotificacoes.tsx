@@ -48,10 +48,13 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   const hoje = new Date().toISOString().slice(0, 10);
 
   const { data: compromissosHoje } = ids.length
-    ? await supabase.from("compromissos").select("profile_id, lancado").eq("data", hoje).in("profile_id", ids)
+    ? await supabase.from("compromissos").select("profile_id, lancado, falta").eq("data", hoje).in("profile_id", ids)
     : { data: [] };
   const lancouHoje = new Set((compromissosHoje ?? []).filter((c) => c.lancado).map((c) => c.profile_id));
-  const naoLancaram = (pessoas ?? []).filter((p) => !lancouHoje.has(p.id));
+  // Quem já foi marcado como falta hoje não "esqueceu" de lançar — não faz
+  // sentido cobrar compromisso de quem tá ausente.
+  const faltouHoje = new Set((compromissosHoje ?? []).filter((c) => c.falta).map((c) => c.profile_id));
+  const naoLancaram = (pessoas ?? []).filter((p) => !lancouHoje.has(p.id) && !faltouHoje.has(p.id));
 
   const { data: marcos } = await supabase.from("marcos").select("nome, threshold, icone").order("ordem");
   // Mesma base que buscarProgressoMarcos (src/lib/marcos.ts): mês corrente,
