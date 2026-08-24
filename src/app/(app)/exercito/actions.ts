@@ -71,4 +71,5 @@ export async function marcarFaltaTime(formData: FormData) {
   if (error) throw new Error(error.message);
   revalidatePath("/exercito");
   revalidatePath("/tribo");
+  revalidatePath("/compromissos");
 }

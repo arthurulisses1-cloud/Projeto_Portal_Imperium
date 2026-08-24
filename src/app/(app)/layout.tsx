@@ -24,6 +24,7 @@ type NavConfigEntry = (NavEntry | { type: "group"; label: string; items: { href:
 // Campanhas virou um atalho na lateral do Mural em vez de aba fixa.
 const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/", label: "Mural", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
+  { type: "link", href: "/compromissos", label: "Compromissos", roles: ["diretor"] },
   { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer"] },
   { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
   { type: "link", href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
@@ -31,19 +32,19 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/minha-producao", label: "Minha Produção", roles: ["lider"] },
   { type: "link", href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/estrelas", label: "Estrelas", roles: ["sdr", "closer"] },
-  { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider", "diretor"] },
+  { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
   { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor", "investidor"] },
-  { type: "link", href: "/parceiros", label: "Parceiros", roles: ["closer", "lider", "diretor"] },
+  { type: "link", href: "/parceiros", label: "Parceiros", roles: ["closer", "lider"] },
   { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor", "investidor"] },
   { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
-  { type: "link", href: "/auditoria", label: "Auditoria", roles: ["diretor"] },
-  { type: "link", href: "/compromissos", label: "Compromissos", roles: ["diretor"] },
   {
     type: "group",
     label: "Financeiro",
     roles: ["diretor", "investidor"],
     items: [
+      { href: "/comissao", label: "Comissão do Mês" },
+      { href: "/parceiros", label: "Parceiros" },
       { href: "/dre", label: "DRE" },
       { href: "/fechamento", label: "Fechamento de Mês" },
     ],
@@ -63,6 +64,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
     label: "Validações",
     roles: ["diretor"],
     items: [
+      { href: "/auditoria", label: "Auditoria" },
       { href: "/validacao", label: "Fila de Validação" },
       { href: "/aprovacoes", label: "Aprovações de Carreira" },
       { href: "/contestacoes", label: "Fila de Contestação" },
