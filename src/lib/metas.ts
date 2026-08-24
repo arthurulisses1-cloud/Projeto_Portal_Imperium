@@ -253,6 +253,91 @@ export async function buscarProducaoPagaExercito(
     .reduce((s, o) => s + Number(o.valor), 0);
 }
 
+// Resolve o time (Tribo ou Exército) de cada profile_id — mesmo padrão de
+// buscarProducaoPagaTribo/Exercito, extraído aqui pra reaproveitar em
+// buscarRealizadoHoje sem duplicar a lógica de fallback do Legado.
+async function resolverTimeId(
+  supabase: SupabaseClient,
+  profileIds: string[],
+  tipo: "tribo" | "exercito"
+): Promise<Map<string, string | null>> {
+  if (profileIds.length === 0) return new Map();
+  const [{ data: pessoas }, { data: exercitos }] = await Promise.all([
+    supabase.from("profiles").select("id, tribo_id, tribo:tribos!profiles_tribo_id_fkey(exercito_id)").in("id", profileIds),
+    tipo === "exercito" ? supabase.from("exercitos").select("id, legado_id") : Promise.resolve({ data: [] }),
+  ]);
+  const exercitoIdPorLegadoId = new Map((exercitos ?? []).map((e) => [e.legado_id, e.id]));
+  return new Map(
+    (pessoas ?? []).map((p) => {
+      const tribo = p.tribo as unknown as { exercito_id: string } | null;
+      const timeId = tipo === "tribo" ? p.tribo_id : (tribo?.exercito_id ?? exercitoIdPorLegadoId.get(p.id) ?? null);
+      return [p.id, timeId];
+    })
+  );
+}
+
+// "Até agora seu time está fazendo" (Central de Notificações) — HOJE, ao
+// vivo. Cuidado que já custou 2 bugs achados nesta sessão (campanhas e a
+// barra do Mural do Closer): SDR e Closer recebem crédito PRÓPRIO pra
+// mesma entrevista/venda (um agenda/vende, o outro conduz/fecha) — somar
+// todo mundo do time sem cuidado conta a MESMA coisa duas vezes sempre
+// que os dois são do mesmo time (o caso normal).
+//
+// Assinaturas/Pagos: recalculado de weekly_operacoes (1 linha por
+// OPERAÇÃO, não por papel) com dono = time do Closer, SDR de fallback —
+// mesma convenção de buscarProducaoPagaTribo/Exercito, sem duplicar.
+// Entrevistas: producao_funil não tem id de evento pra dedupear de
+// verdade (só agregado por pessoa/dia/papel) — conta só o lado SDR/ambos
+// (quem AGENDOU, ver src/lib/sync/entrevistas.ts), que dá 1 crédito por
+// entrevista real na prática.
+export async function buscarRealizadoHoje(
+  supabase: SupabaseClient,
+  escopo: EscopoTime,
+  idsEquipe: string[]
+): Promise<{ entrevistas: number; assinaturas: number; pagos: number }> {
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  const [{ data: entrevistasRows }, { data: assinadasHoje }, { data: pagasHoje }] = await Promise.all([
+    idsEquipe.length > 0
+      ? supabase
+          .from("producao_funil")
+          .select("realizado")
+          .in("profile_id", idsEquipe)
+          .eq("etapa", "entrevistas")
+          .eq("data", hoje)
+          .neq("papel", "closer")
+      : Promise.resolve({ data: [] }),
+    supabase.from("weekly_operacoes").select("sdr_profile_id, closer_profile_id").eq("data", hoje),
+    supabase.from("weekly_operacoes").select("sdr_profile_id, closer_profile_id").eq("status", "PAGO").eq("pago_em", hoje),
+  ]);
+  const entrevistas = (entrevistasRows ?? []).reduce((s, r) => s + r.realizado, 0);
+
+  if (!escopo) {
+    // Firma inteira: toda operação de hoje conta, sem filtro de dono.
+    return { entrevistas, assinaturas: (assinadasHoje ?? []).length, pagos: (pagasHoje ?? []).length };
+  }
+
+  const idsEnvolvidos = Array.from(
+    new Set(
+      [...(assinadasHoje ?? []), ...(pagasHoje ?? [])]
+        .flatMap((o) => [o.sdr_profile_id, o.closer_profile_id])
+        .filter((x): x is string => !!x)
+    )
+  );
+  const timePorProfileId = await resolverTimeId(supabase, idsEnvolvidos, escopo.tipo);
+  const idAlvo = escopo.tipo === "tribo" ? escopo.triboId : escopo.exercitoId;
+
+  const contar = (ops: { sdr_profile_id: string | null; closer_profile_id: string | null }[]) =>
+    ops.filter((o) => {
+      const dono =
+        (o.closer_profile_id && timePorProfileId.get(o.closer_profile_id)) ||
+        (o.sdr_profile_id && timePorProfileId.get(o.sdr_profile_id));
+      return dono === idAlvo;
+    }).length;
+
+  return { entrevistas, assinaturas: contar(assinadasHoje ?? []), pagos: contar(pagasHoje ?? []) };
+}
+
 // Meta de crédito da FIRMA inteira do mês — é só o valor bruto cadastrado
 // pelo Diretor em metas_mensais, sem nenhuma divisão (a mesma base que as
 // funções de Exército/Tribo dividem entre si).

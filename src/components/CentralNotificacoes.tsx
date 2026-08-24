@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { IconLaurel } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
 import { calcularThreshold } from "@/lib/marcos";
-import { buscarMetaComTaxas, calcularFunilMeta, type EscopoTime } from "@/lib/metas";
+import { buscarMetaComTaxas, calcularFunilMeta, buscarRealizadoHoje, type EscopoTime } from "@/lib/metas";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 
 function moeda(v: number) {
@@ -103,7 +103,7 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   const ontemStr = ontem.toISOString().slice(0, 10);
   const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
 
-  const [{ data: funilOntem }, { data: opsAssinadoOntem }, { data: opsPagoOntem }, { metaCredito, metaTicketMedio, taxas }] =
+  const [{ data: funilOntem }, { data: opsAssinadoOntem }, { data: opsPagoOntem }, { metaCredito, metaTicketMedio, taxas }, realizadoHoje] =
     await Promise.all([
       ids.length
         ? supabase
@@ -128,6 +128,7 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
             .or(`sdr_profile_id.in.(${ids.join(",")}),closer_profile_id.in.(${ids.join(",")})`)
         : Promise.resolve({ data: [] }),
       buscarMetaComTaxas(supabase, escopo),
+      buscarRealizadoHoje(supabase, escopo, ids),
     ]);
 
   const realizadoOntem = Object.fromEntries(FUNNEL_STAGES.map((e) => [e, 0])) as Record<FunilEtapa, number>;
@@ -157,6 +158,22 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
         </span>
       </summary>
       <div className="space-y-5">
+        {temAlgumaMeta && (
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Até agora, seu time está fazendo</p>
+            <ul className="grid grid-cols-3 gap-x-4 gap-y-1.5 text-sm">
+              {(["entrevistas", "assinaturas", "pagos"] as const).map((etapa) => (
+                <li key={etapa} className="flex items-center justify-between">
+                  <span className="text-stone-400">{FUNNEL_LABELS[etapa]}</span>
+                  <span className="text-stone-200">
+                    {realizadoHoje[etapa]}/{metaOntemPorEtapa[etapa] ?? "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {temAlgumaMeta && (
           <div>
             <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Ontem, seu time fez</p>
