@@ -24,6 +24,8 @@ export async function criarCampanha(formData: FormData) {
   const recompensa = String(formData.get("recompensa") ?? "").trim();
   const alvo = String(formData.get("alvo") ?? "geral");
   const metrica = String(formData.get("metrica") ?? "credito");
+  const imagemPosicaoRaw = String(formData.get("imagem_posicao") ?? "center");
+  const imagemPosicao = ["top", "center", "bottom"].includes(imagemPosicaoRaw) ? imagemPosicaoRaw : "center";
   const metaValorRaw = String(formData.get("meta_valor") ?? "").trim();
   const dataInicio = String(formData.get("data_inicio") ?? "");
   const dataFim = String(formData.get("data_fim") ?? "");
@@ -47,6 +49,7 @@ export async function criarCampanha(formData: FormData) {
       requisitos_minimos: requisitosMinimos || null,
       recompensa: recompensa || null,
       imagem_url: imagemUrl,
+      imagem_posicao: imagemPosicao,
       alvo,
       metrica,
       meta_valor: metaValorRaw ? Number(metaValorRaw) : null,
@@ -93,6 +96,27 @@ export async function criarCampanha(formData: FormData) {
       if (partError) throw new Error(partError.message);
     }
   }
+
+  revalidatePath("/campanhas");
+  revalidatePath("/");
+}
+
+// Ajuste rápido pra campanha já criada com foto cortada errado — sem crop
+// de verdade (arrastar/soltar), troca qual parte da foto fica visível.
+export async function atualizarEnquadramentoCampanha(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+  await exigirLiderOuDiretor(supabase, user.id);
+
+  const id = String(formData.get("id"));
+  const imagemPosicaoRaw = String(formData.get("imagem_posicao") ?? "center");
+  const imagemPosicao = ["top", "center", "bottom"].includes(imagemPosicaoRaw) ? imagemPosicaoRaw : "center";
+
+  const { error } = await supabase.from("campanhas").update({ imagem_posicao: imagemPosicao }).eq("id", id);
+  if (error) throw new Error(error.message);
 
   revalidatePath("/campanhas");
   revalidatePath("/");

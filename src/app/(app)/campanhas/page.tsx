@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import CampanhaForm from "./campanha-form";
-import { excluirCampanha } from "./actions";
+import { excluirCampanha, atualizarEnquadramentoCampanha } from "./actions";
 import { buscarCampanhasAtivas } from "@/lib/campanhas";
 import Card from "@/components/ui/Card";
 
@@ -25,7 +25,7 @@ export default async function CampanhasPage() {
 
   const { data: todasCampanhas } = await supabase
     .from("campanhas")
-    .select("id, titulo, data_inicio, data_fim")
+    .select("id, titulo, data_inicio, data_fim, imagem_url, imagem_posicao")
     .order("data_inicio", { ascending: false });
 
   const ativas = await buscarCampanhasAtivas(supabase);
@@ -50,7 +50,7 @@ export default async function CampanhasPage() {
         {todasCampanhas && todasCampanhas.length > 0 ? (
           <ul className="space-y-2">
             {todasCampanhas.map((c) => (
-              <li key={c.id} className="flex items-center justify-between border-t border-imperium-line pt-2 text-sm first:border-0 first:pt-0">
+              <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-imperium-line pt-2 text-sm first:border-0 first:pt-0">
                 <span className="text-stone-200">
                   {c.titulo}{" "}
                   {idsAtivas.has(c.id) && <span className="ml-1 text-[10px] uppercase text-success-bright">ativa</span>}
@@ -60,6 +60,19 @@ export default async function CampanhasPage() {
                     {new Date(c.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")} –{" "}
                     {new Date(c.data_fim + "T00:00:00").toLocaleDateString("pt-BR")}
                   </span>
+                  {c.imagem_url && (
+                    <form action={atualizarEnquadramentoCampanha} className="flex items-center gap-1">
+                      <input type="hidden" name="id" value={c.id} />
+                      <select name="imagem_posicao" defaultValue={c.imagem_posicao ?? "center"} className="input-imp px-1.5 py-1 text-[10px]">
+                        <option value="top">Topo</option>
+                        <option value="center">Centro</option>
+                        <option value="bottom">Base</option>
+                      </select>
+                      <button type="submit" className="text-[10px] text-stone-500 hover:text-gold">
+                        Ajustar foto
+                      </button>
+                    </form>
+                  )}
                   <form action={excluirCampanha}>
                     <input type="hidden" name="id" value={c.id} />
                     <button type="submit" className="text-xs text-stone-600 hover:text-wine-bright">

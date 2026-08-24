@@ -72,6 +72,19 @@ export default function CampanhaForm({
       <div>
         <label className="mb-1 block text-xs text-stone-400">Imagem (opcional)</label>
         <input type="file" name="imagem" accept="image/*" className="text-sm text-stone-300" />
+        <p className="mt-1 text-[11px] text-stone-600">
+          O card corta a imagem pra caber numa faixa larga e baixa — o ideal é uma foto na horizontal
+          (~1200×400px, proporção 3:1). Se a foto for mais quadrada/vertical, use &ldquo;Enquadramento&rdquo;
+          abaixo pra escolher qual parte fica visível.
+        </p>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-stone-400">Enquadramento da imagem</label>
+        <select name="imagem_posicao" defaultValue="center" className="input-imp w-40">
+          <option value="top">Topo</option>
+          <option value="center">Centro</option>
+          <option value="bottom">Base</option>
+        </select>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

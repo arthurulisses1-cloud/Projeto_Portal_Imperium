@@ -550,7 +550,12 @@ function CampanhasCard({
             <div key={c.id} id={`campanha-${c.id}`} className="scroll-mt-20 overflow-hidden rounded-lg border border-gold/30">
               {c.imagemUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.imagemUrl} alt={c.titulo} className="h-32 w-full object-cover" />
+                <img
+                  src={c.imagemUrl}
+                  alt={c.titulo}
+                  className="h-32 w-full object-cover"
+                  style={{ objectPosition: c.imagemPosicao === "top" ? "center top" : c.imagemPosicao === "bottom" ? "center bottom" : "center" }}
+                />
               )}
               <div className="p-3">
                 <div className="flex items-start justify-between gap-2">

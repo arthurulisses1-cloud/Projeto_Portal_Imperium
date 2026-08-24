@@ -8,6 +8,8 @@ export type CampanhaParticipanteProgresso = {
   valor: number;
 };
 
+export type ImagemPosicao = "top" | "center" | "bottom";
+
 export type CampanhaComProgresso = {
   id: string;
   titulo: string;
@@ -15,6 +17,7 @@ export type CampanhaComProgresso = {
   requisitosMinimos: string | null;
   recompensa: string | null;
   imagemUrl: string | null;
+  imagemPosicao: ImagemPosicao;
   alvo: CampanhaAlvo;
   metrica: string;
   metaValor: number | null;
@@ -29,10 +32,11 @@ export type CampanhaComProgresso = {
 export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<CampanhaComProgresso[]> {
   const hoje = new Date().toISOString().slice(0, 10);
 
-  // requisitos_minimos/recompensa vêm da migration 0034 — se ela ainda não
-  // rodou nesse banco, o select com essas colunas falha e cai no fallback
-  // sem elas, pra não quebrar o Mural inteiro enquanto a migration pendente
-  // não roda (mesmo padrão do Forecast com motivo_queda).
+  // requisitos_minimos/recompensa vêm da migration 0034, imagem_posicao da
+  // 0046 — se alguma ainda não rodou nesse banco, o select com essas
+  // colunas falha e cai no fallback sem elas, pra não quebrar o Mural
+  // inteiro enquanto a migration pendente não roda (mesmo padrão do
+  // Forecast com motivo_queda).
   let campanhas: {
     id: string;
     titulo: string;
@@ -40,6 +44,7 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
     requisitos_minimos: string | null;
     recompensa: string | null;
     imagem_url: string | null;
+    imagem_posicao: string | null;
     alvo: string;
     metrica: string;
     meta_valor: number | null;
@@ -48,7 +53,9 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
   }[] | null;
   const comColunasNovas = await supabase
     .from("campanhas")
-    .select("id, titulo, descricao, requisitos_minimos, recompensa, imagem_url, alvo, metrica, meta_valor, data_inicio, data_fim")
+    .select(
+      "id, titulo, descricao, requisitos_minimos, recompensa, imagem_url, imagem_posicao, alvo, metrica, meta_valor, data_inicio, data_fim"
+    )
     .lte("data_inicio", hoje)
     .gte("data_fim", hoje)
     .order("created_at", { ascending: false });
@@ -59,7 +66,7 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
       .lte("data_inicio", hoje)
       .gte("data_fim", hoje)
       .order("created_at", { ascending: false });
-    campanhas = (fallback.data ?? []).map((c) => ({ ...c, requisitos_minimos: null, recompensa: null }));
+    campanhas = (fallback.data ?? []).map((c) => ({ ...c, requisitos_minimos: null, recompensa: null, imagem_posicao: null }));
   } else {
     campanhas = comColunasNovas.data;
   }
@@ -142,6 +149,7 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
       requisitosMinimos: c.requisitos_minimos,
       recompensa: c.recompensa,
       imagemUrl: c.imagem_url,
+      imagemPosicao: (c.imagem_posicao as ImagemPosicao | null) ?? "center",
       alvo: c.alvo as CampanhaAlvo,
       metrica: c.metrica,
       metaValor: c.meta_valor,
