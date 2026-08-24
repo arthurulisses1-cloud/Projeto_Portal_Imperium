@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { registrarCompromisso } from "./actions";
+import { registrarCompromisso, atualizarCompromisso } from "./actions";
 import { marcarFaltaTime } from "@/app/(app)/exercito/actions";
 import Card from "@/components/ui/Card";
 import { buscarMetaIndividual, calcularFunilMeta } from "@/lib/metas";
@@ -368,6 +368,43 @@ export default async function CompromissoPage() {
               O &quot;realizado&quot; atualiza automaticamente quando a integração com a
               planilha estiver ligada.
             </p>
+
+            {profile?.role === "sdr" && (
+              <details className="mt-4 group">
+                <summary className="cursor-pointer text-[11px] uppercase tracking-wide text-stone-500 hover:text-gold [&::-webkit-details-marker]:hidden">
+                  Editar meta de hoje <span className="transition group-open:rotate-180">▾</span>
+                </summary>
+                <form action={atualizarCompromisso} className="mt-3 grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="mb-1 block text-xs text-stone-400">Entrevistas</label>
+                    <input
+                      name="entrevistas_comp"
+                      type="number"
+                      min={0}
+                      defaultValue={hojeRow.entrevistas_comp}
+                      className="input-imp"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-stone-400">Assinaturas</label>
+                    <input
+                      name="assinaturas_comp"
+                      type="number"
+                      min={0}
+                      defaultValue={hojeRow.assinaturas_comp}
+                      className="input-imp"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs text-stone-400">Pagos</label>
+                    <input name="pagos_comp" type="number" min={0} defaultValue={hojeRow.pagos_comp} className="input-imp" />
+                  </div>
+                  <button type="submit" className="btn-outline col-span-3 py-2 text-xs">
+                    Salvar
+                  </button>
+                </form>
+              </details>
+            )}
           </div>
         )}
       </Card>
