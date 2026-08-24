@@ -93,15 +93,23 @@ export default async function MuralPage() {
   const ehExecutivo = meRole === "sdr" || meRole === "closer";
 
   // Central de Notificações: Diretor vê a firma inteira (sem escopo), Líder só
-  // o próprio Exército, Closer só a própria Tribo. Líder não tem tribo_id (lidera
-  // o Exército inteiro, não uma Tribo) — resolve via exercitos.legado_id.
+  // o próprio Exército, Closer só a própria Tribo, SDR só a própria produção
+  // (individual — "seu time" viraria "só você" pra quem não lidera ninguém).
+  // Líder não tem tribo_id (lidera o Exército inteiro, não uma Tribo) —
+  // resolve via exercitos.legado_id.
   const triboAtual = profile?.tribo as unknown as { id: string; nome: string; exercito: { nome: string } | null } | null;
-  let escopoCentral: { tipo: "exercito"; exercitoId: string } | { tipo: "tribo"; triboId: string } | null = null;
+  let escopoCentral:
+    | { tipo: "exercito"; exercitoId: string }
+    | { tipo: "tribo"; triboId: string }
+    | { tipo: "individual"; profileId: string }
+    | null = null;
   if (meRole === "lider") {
     const { data: exercitoLiderado } = await supabase.from("exercitos").select("id").eq("legado_id", meId).maybeSingle();
     if (exercitoLiderado) escopoCentral = { tipo: "exercito", exercitoId: exercitoLiderado.id };
   } else if (meRole === "closer" && triboAtual?.id) {
     escopoCentral = { tipo: "tribo", triboId: triboAtual.id };
+  } else if (meRole === "sdr") {
+    escopoCentral = { tipo: "individual", profileId: meId };
   }
 
   // Líder ganha a mesma barra "quanto fez × quanto devia × quanto falta" que
@@ -239,7 +247,7 @@ export default async function MuralPage() {
         </p>
       </div>
 
-      {(meRole === "diretor" || meRole === "lider" || meRole === "closer") && (
+      {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr") && (
         <CentralNotificacoes escopo={escopoCentral} />
       )}
 

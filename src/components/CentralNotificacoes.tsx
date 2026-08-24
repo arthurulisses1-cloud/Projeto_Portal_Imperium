@@ -2,20 +2,31 @@ import { createClient } from "@/lib/supabase/server";
 import { IconLaurel } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
 import { calcularThreshold } from "@/lib/marcos";
-import { buscarMetaComTaxas, calcularFunilMeta, buscarRealizadoHoje, type EscopoTime } from "@/lib/metas";
+import { buscarMetaComTaxas, calcularFunilMeta, buscarRealizadoDia, type EscopoTime } from "@/lib/metas";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
+// Pula fim de semana — só se trabalha seg-sex, então "ontem" numa segunda
+// (ou domingo/sábado, se alguém abrir fora de hora) é a última sexta.
+function ultimoDiaUtilAntes(data: Date): Date {
+  const d = new Date(data);
+  d.setDate(d.getDate() - 1);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+  return d;
+}
+
 // Antes era a aba "/central" — agora embutido direto no Mural, escopado por
 // quem tá vendo: Diretor vê a firma inteira, Líder só o próprio Exército,
-// Closer só a própria Tribo (via `escopo`; sem escopo = sem filtro extra).
+// Closer só a própria Tribo, SDR só a própria produção (via `escopo`; sem
+// escopo = sem filtro extra = firma inteira).
 type Escopo = EscopoTime;
 
 export default async function CentralNotificacoes({ escopo = null }: { escopo?: Escopo }) {
   const supabase = await createClient();
+  const pessoal = escopo?.tipo === "individual";
 
   const { data: pessoasRaw } = await supabase
     .from("profiles")
@@ -27,6 +38,7 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
     .filter((p) => {
       if (!escopo) return true;
       const tribo = p.tribo as unknown as { id: string; exercito_id: string } | null;
+      if (escopo.tipo === "individual") return p.id === escopo.profileId;
       if (escopo.tipo === "tribo") return tribo?.id === escopo.triboId;
       return tribo?.exercito_id === escopo.exercitoId;
     })
@@ -98,13 +110,18 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   // real em que cada operação virou PAGO) tanto pra R$ Pago quanto pra
   // contagem de "pagos", em vez do producao_funil.etapa='pagos' (que tem a
   // mesma limitação de ser keyed pela data de assinatura).
-  const ontem = new Date(agora);
-  ontem.setDate(ontem.getDate() - 1);
-  const ontemStr = ontem.toISOString().slice(0, 10);
+  const ontemStr = ultimoDiaUtilAntes(agora).toISOString().slice(0, 10);
+  const hojeStr = hoje;
   const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
 
-  const [{ data: funilOntem }, { data: opsAssinadoOntem }, { data: opsPagoOntem }, { metaCredito, metaTicketMedio, taxas }, realizadoHoje] =
-    await Promise.all([
+  const [
+    { data: funilOntem },
+    { data: opsAssinadoOntem },
+    { data: opsPagoOntem },
+    { metaCredito, metaTicketMedio, taxas },
+    realizadoHoje,
+    realizadoOntemCorrigido,
+  ] = await Promise.all([
       ids.length
         ? supabase
             .from("producao_funil")
@@ -128,12 +145,18 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
             .or(`sdr_profile_id.in.(${ids.join(",")}),closer_profile_id.in.(${ids.join(",")})`)
         : Promise.resolve({ data: [] }),
       buscarMetaComTaxas(supabase, escopo),
-      buscarRealizadoHoje(supabase, escopo, ids),
+      buscarRealizadoDia(supabase, escopo, ids, hojeStr),
+      buscarRealizadoDia(supabase, escopo, ids, ontemStr),
     ]);
 
+  // tentativas/alôs/conexões só têm o lado SDR (sem risco de duplicar com
+  // Closer) — segue vindo direto do funil. Entrevistas/assinaturas/pagos
+  // usam a versão sem duplicar (buscarRealizadoDia, ver src/lib/metas.ts).
   const realizadoOntem = Object.fromEntries(FUNNEL_STAGES.map((e) => [e, 0])) as Record<FunilEtapa, number>;
   for (const r of funilOntem ?? []) realizadoOntem[r.etapa as FunilEtapa] += r.realizado;
-  realizadoOntem.pagos = (opsPagoOntem ?? []).length;
+  realizadoOntem.entrevistas = realizadoOntemCorrigido.entrevistas;
+  realizadoOntem.assinaturas = realizadoOntemCorrigido.assinaturas;
+  realizadoOntem.pagos = realizadoOntemCorrigido.pagos;
 
   const metaMensalPorEtapa = calcularFunilMeta(metaCredito, metaTicketMedio, taxas);
   const metaOntemPorEtapa = Object.fromEntries(
@@ -160,7 +183,9 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
       <div className="space-y-5">
         {temAlgumaMeta && (
           <div>
-            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Até agora, seu time está fazendo</p>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">
+              {pessoal ? "Até agora, você está fazendo" : "Até agora, seu time está fazendo"}
+            </p>
             <ul className="grid grid-cols-3 gap-x-4 gap-y-1.5 text-sm">
               {(["entrevistas", "assinaturas", "pagos"] as const).map((etapa) => (
                 <li key={etapa} className="flex items-center justify-between">
@@ -176,7 +201,7 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
 
         {temAlgumaMeta && (
           <div>
-            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Ontem, seu time fez</p>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">{pessoal ? "Ontem, você fez" : "Ontem, seu time fez"}</p>
             <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-3">
               {FUNNEL_STAGES.map((etapa) => (
                 <li key={etapa} className="flex items-center justify-between">
@@ -201,17 +226,19 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
         {naoLancaram.length > 0 && (
           <div>
             <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">
-              Não lançaram o compromisso hoje ({naoLancaram.length})
+              {pessoal ? "Você ainda não lançou o compromisso hoje" : `Não lançaram o compromisso hoje (${naoLancaram.length})`}
             </p>
-            <ul className="flex flex-wrap gap-2">
-              {naoLancaram.map((p) => (
-                <li key={p.id}>
-                  <Badge tone="warning" variant="tag">
-                    {p.full_name}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
+            {!pessoal && (
+              <ul className="flex flex-wrap gap-2">
+                {naoLancaram.map((p) => (
+                  <li key={p.id}>
+                    <Badge tone="warning" variant="tag">
+                      {p.full_name}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 

@@ -314,6 +314,78 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     vendasInseridas += batch.length;
   }
 
+  // ---------- compromissos.*_real: liga a integração pendente ----------
+  // Mesmo caminho que o Ranking já usa pro individual (producao_funil por
+  // pessoa/dia, contando os dois papéis — sem risco de duplicar entre
+  // PESSOAS diferentes aqui, é a produção da própria pessoa que lançou o
+  // compromisso). Pagos usa pago_em (não producao_funil.etapa='pagos', que
+  // é keyed pela data de assinatura, não de pagamento — mesmo cuidado já
+  // documentado em CentralNotificacoes). Só atualiza compromissos que JÁ
+  // existem (a pessoa precisa ter lançado a meta do dia) — nunca cria linha.
+  const sessentaDiasAtras = new Date();
+  sessentaDiasAtras.setDate(sessentaDiasAtras.getDate() - 60);
+  const dataMinimaReal = sessentaDiasAtras.toISOString().slice(0, 10);
+
+  const { data: compromissosExistentes, error: compromissosError } = await supabase
+    .from("compromissos")
+    .select("id, profile_id, data")
+    .gte("data", dataMinimaReal);
+  if (compromissosError) throw new Error("Erro lendo compromissos pra atualizar realizado: " + compromissosError.message);
+
+  if (compromissosExistentes && compromissosExistentes.length > 0) {
+    const idsCompromisso = Array.from(new Set(compromissosExistentes.map((c) => c.profile_id)));
+    const [{ data: funilReal, error: funilRealError }, { data: opsPagasReal, error: opsPagasError }] = await Promise.all([
+      supabase
+        .from("producao_funil")
+        .select("profile_id, data, etapa, realizado")
+        .in("profile_id", idsCompromisso)
+        .in("etapa", ["entrevistas", "assinaturas"])
+        .gte("data", dataMinimaReal),
+      supabase
+        .from("weekly_operacoes")
+        .select("sdr_profile_id, closer_profile_id, pago_em")
+        .eq("status", "PAGO")
+        .not("pago_em", "is", null)
+        .gte("pago_em", dataMinimaReal),
+    ]);
+    if (funilRealError) throw new Error("Erro lendo producao_funil pra compromissos.real: " + funilRealError.message);
+    if (opsPagasError) throw new Error("Erro lendo weekly_operacoes pra compromissos.real: " + opsPagasError.message);
+
+    const entrevistasPorChave = new Map<string, number>();
+    const assinaturasPorChave = new Map<string, number>();
+    for (const r of funilReal ?? []) {
+      const chave = `${r.profile_id}|${r.data}`;
+      const mapa = r.etapa === "entrevistas" ? entrevistasPorChave : assinaturasPorChave;
+      mapa.set(chave, (mapa.get(chave) ?? 0) + r.realizado);
+    }
+    // Venda "ambos" (mesma pessoa SDR e Closer): profile_id só entra 1x no
+    // Set, então conta 1 pago, não 2 — mesmo cuidado de sempre.
+    const pagosPorChave = new Map<string, number>();
+    for (const o of opsPagasReal ?? []) {
+      const pessoasDaOperacao = Array.from(new Set([o.sdr_profile_id, o.closer_profile_id].filter((x): x is string => !!x)));
+      for (const pid of pessoasDaOperacao) {
+        const chave = `${pid}|${o.pago_em}`;
+        pagosPorChave.set(chave, (pagosPorChave.get(chave) ?? 0) + 1);
+      }
+    }
+
+    for (const grupo of chunk(compromissosExistentes, 20)) {
+      await Promise.all(
+        grupo.map((c) => {
+          const chave = `${c.profile_id}|${c.data}`;
+          return supabase
+            .from("compromissos")
+            .update({
+              entrevistas_real: entrevistasPorChave.get(chave) ?? 0,
+              assinaturas_real: assinaturasPorChave.get(chave) ?? 0,
+              pagos_real: pagosPorChave.get(chave) ?? 0,
+            })
+            .eq("id", c.id);
+        })
+      );
+    }
+  }
+
   const detalhe = JSON.stringify({
     funilLinhasGravadas,
     vendasInseridas,

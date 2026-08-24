@@ -152,7 +152,11 @@ export async function buscarMetaTribo(supabase: SupabaseClient, triboId: string)
   };
 }
 
-export type EscopoTime = { tipo: "exercito"; exercitoId: string } | { tipo: "tribo"; triboId: string } | null;
+export type EscopoTime =
+  | { tipo: "exercito"; exercitoId: string }
+  | { tipo: "tribo"; triboId: string }
+  | { tipo: "individual"; profileId: string }
+  | null;
 
 // Meta de crédito do escopo (Tribo/Exército/firma inteira) + ticket médio e
 // taxas esperadas do mês — usado pra derivar a meta de CADA etapa do funil
@@ -167,6 +171,11 @@ export async function buscarMetaComTaxas(
   if (escopo?.tipo === "tribo") {
     const r = await buscarMetaTribo(supabase, escopo.triboId);
     return { metaCredito: r.metaCreditoTribo, metaTicketMedio: r.metaTicketMedio, taxas: r.taxas };
+  }
+
+  if (escopo?.tipo === "individual") {
+    const r = await buscarMetaIndividual(supabase, escopo.profileId);
+    return { metaCredito: r.metaCreditoIndividual, metaTicketMedio: r.metaTicketMedio, taxas: r.taxas };
   }
 
   const agora = new Date();
@@ -276,12 +285,13 @@ async function resolverTimeId(
   );
 }
 
-// "Até agora seu time está fazendo" (Central de Notificações) — HOJE, ao
-// vivo. Cuidado que já custou 2 bugs achados nesta sessão (campanhas e a
-// barra do Mural do Closer): SDR e Closer recebem crédito PRÓPRIO pra
-// mesma entrevista/venda (um agenda/vende, o outro conduz/fecha) — somar
-// todo mundo do time sem cuidado conta a MESMA coisa duas vezes sempre
-// que os dois são do mesmo time (o caso normal).
+// "Até agora seu time está fazendo" / "Ontem seu time fez" (Central de
+// Notificações) — realizado de UM dia (hoje ou ontem), pro escopo dado.
+// Cuidado que já custou 2 bugs achados nesta sessão (campanhas e a barra
+// do Mural do Closer): SDR e Closer recebem crédito PRÓPRIO pra mesma
+// entrevista/venda (um agenda/vende, o outro conduz/fecha) — somar todo
+// mundo do time sem cuidado conta a MESMA coisa duas vezes sempre que os
+// dois são do mesmo time (o caso normal).
 //
 // Assinaturas/Pagos: recalculado de weekly_operacoes (1 linha por
 // OPERAÇÃO, não por papel) com dono = time do Closer, SDR de fallback —
@@ -290,36 +300,47 @@ async function resolverTimeId(
 // verdade (só agregado por pessoa/dia/papel) — conta só o lado SDR/ambos
 // (quem AGENDOU, ver src/lib/sync/entrevistas.ts), que dá 1 crédito por
 // entrevista real na prática.
-export async function buscarRealizadoHoje(
+//
+// Escopo "individual" (SDR vendo o PRÓPRIO dia, não o time): não tem risco
+// de duplicar entre PESSOAS diferentes, então conta todo o papel (SDR e
+// Closer) da própria pessoa — é a mesma produção dela, exercida nos dois
+// papéis possíveis, igual ao Ranking individual já faz.
+export async function buscarRealizadoDia(
   supabase: SupabaseClient,
   escopo: EscopoTime,
-  idsEquipe: string[]
+  idsEquipe: string[],
+  data: string
 ): Promise<{ entrevistas: number; assinaturas: number; pagos: number }> {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const individual = escopo?.tipo === "individual";
 
-  const [{ data: entrevistasRows }, { data: assinadasHoje }, { data: pagasHoje }] = await Promise.all([
+  const [{ data: entrevistasRows }, { data: assinadasDia }, { data: pagasDia }] = await Promise.all([
     idsEquipe.length > 0
-      ? supabase
-          .from("producao_funil")
-          .select("realizado")
-          .in("profile_id", idsEquipe)
-          .eq("etapa", "entrevistas")
-          .eq("data", hoje)
-          .neq("papel", "closer")
+      ? (() => {
+          let q = supabase.from("producao_funil").select("realizado").in("profile_id", idsEquipe).eq("etapa", "entrevistas").eq("data", data);
+          if (!individual) q = q.neq("papel", "closer");
+          return q;
+        })()
       : Promise.resolve({ data: [] }),
-    supabase.from("weekly_operacoes").select("sdr_profile_id, closer_profile_id").eq("data", hoje),
-    supabase.from("weekly_operacoes").select("sdr_profile_id, closer_profile_id").eq("status", "PAGO").eq("pago_em", hoje),
+    supabase.from("weekly_operacoes").select("sdr_profile_id, closer_profile_id").eq("data", data),
+    supabase.from("weekly_operacoes").select("sdr_profile_id, closer_profile_id").eq("status", "PAGO").eq("pago_em", data),
   ]);
   const entrevistas = (entrevistasRows ?? []).reduce((s, r) => s + r.realizado, 0);
 
   if (!escopo) {
-    // Firma inteira: toda operação de hoje conta, sem filtro de dono.
-    return { entrevistas, assinaturas: (assinadasHoje ?? []).length, pagos: (pagasHoje ?? []).length };
+    // Firma inteira: toda operação do dia conta, sem filtro de dono.
+    return { entrevistas, assinaturas: (assinadasDia ?? []).length, pagos: (pagasDia ?? []).length };
+  }
+
+  if (escopo.tipo === "individual") {
+    const meuId = escopo.profileId;
+    const contarIndividual = (ops: { sdr_profile_id: string | null; closer_profile_id: string | null }[]) =>
+      ops.filter((o) => o.sdr_profile_id === meuId || o.closer_profile_id === meuId).length;
+    return { entrevistas, assinaturas: contarIndividual(assinadasDia ?? []), pagos: contarIndividual(pagasDia ?? []) };
   }
 
   const idsEnvolvidos = Array.from(
     new Set(
-      [...(assinadasHoje ?? []), ...(pagasHoje ?? [])]
+      [...(assinadasDia ?? []), ...(pagasDia ?? [])]
         .flatMap((o) => [o.sdr_profile_id, o.closer_profile_id])
         .filter((x): x is string => !!x)
     )
@@ -335,7 +356,7 @@ export async function buscarRealizadoHoje(
       return dono === idAlvo;
     }).length;
 
-  return { entrevistas, assinaturas: contar(assinadasHoje ?? []), pagos: contar(pagasHoje ?? []) };
+  return { entrevistas, assinaturas: contar(assinadasDia ?? []), pagos: contar(pagasDia ?? []) };
 }
 
 // Meta de crédito da FIRMA inteira do mês — é só o valor bruto cadastrado
