@@ -32,14 +32,20 @@ export type CampanhaComProgresso = {
 // participante já calculado (geral = um único total; duelo = um valor
 // por pessoa/Tribo/Exército participante).
 //
-// Métrica "credito": lê de weekly_operacoes (status PAGO, pago_em dentro
-// do período) — NÃO da tabela `vendas`. Dois motivos (achado 2026-08-24):
-// `vendas.data` é data de ASSINATURA, não de pagamento (mesma classe de
-// bug já corrigida em weekly_operacoes com pago_em/migration 0041); e
-// `vendas` tem uma linha por PAPEL (SDR e Closer separados), então somar
-// todo mundo de um time contava a mesma venda duas vezes sempre que SDR e
-// Closer eram do mesmo Tribo/Exército. weekly_operacoes tem uma linha por
-// OPERAÇÃO — dedupe natural.
+// Métrica "credito": lê de weekly_operacoes (status PAGO, DATA DE
+// ASSINATURA dentro do período — não pago_em) — NÃO da tabela `vendas`.
+// Data de assinatura de propósito, pra bater com a mesma convenção que
+// DRE/Comissão/Fechamento já usam pra "crédito do mês" em todo o resto do
+// sistema (buscarFolha/buscarRemuneracaoMes filtram por `data`, não por
+// `pago_em`) — usar pago_em aqui (tentativa anterior, 2026-08-24) deixava
+// a campanha "geral" contando 3,47M quando o resto do sistema já mostrava
+// 2,91M pro mesmo mês, porque um crédito assinado em julho e só marcado
+// pago em agosto entrava na campanha de agosto mas na comissão de julho.
+// `vendas` continua fora por outro motivo, que esse sim persiste: tem uma
+// linha por PAPEL (SDR e Closer separados), então somar todo mundo de um
+// time contava a mesma venda duas vezes sempre que SDR e Closer eram do
+// mesmo Tribo/Exército. weekly_operacoes tem uma linha por OPERAÇÃO —
+// dedupe natural.
 export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<CampanhaComProgresso[]> {
   const hoje = new Date().toISOString().slice(0, 10);
 
@@ -121,11 +127,10 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
   const [{ data: opsPagas }, { data: funilRows }] = await Promise.all([
     supabase
       .from("weekly_operacoes")
-      .select("id, valor, sdr_profile_id, closer_profile_id, pago_em")
+      .select("id, valor, sdr_profile_id, closer_profile_id, data")
       .eq("status", "PAGO")
-      .not("pago_em", "is", null)
-      .gte("pago_em", menorData)
-      .lte("pago_em", maiorData),
+      .gte("data", menorData)
+      .lte("data", maiorData),
     todosIds.length > 0
       ? supabase
           .from("producao_funil")
@@ -137,7 +142,7 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
   ]);
 
   function creditoNoPeriodo(dataInicio: string, dataFim: string) {
-    return (opsPagas ?? []).filter((o) => o.pago_em! >= dataInicio && o.pago_em! <= dataFim);
+    return (opsPagas ?? []).filter((o) => o.data >= dataInicio && o.data <= dataFim);
   }
 
   // Time DONO da operação = time do Closer, com o SDR como fallback só
