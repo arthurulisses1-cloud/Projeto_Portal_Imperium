@@ -58,7 +58,28 @@ export async function criarCampanha(formData: FormData) {
     .single();
   if (error) throw new Error(error.message);
 
-  if (alvo !== "geral") {
+  if (alvo === "grupo_rank") {
+    // Participante não é marcado pessoa por pessoa — é auto-populado por
+    // Cargo (Legionário, Centurião...) na hora de criar. Ranking/progresso
+    // depois disso é igual "individual" (ver membrosDe em lib/campanhas.ts).
+    const ranks = formData.getAll("rank_participante").map((v) => String(v)).filter(Boolean);
+    if (ranks.length > 0) {
+      const { data: pessoasDoCargo } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("role", ["sdr", "closer", "lider"])
+        .in("rank", ranks);
+      const linhas = (pessoasDoCargo ?? []).map((p) => ({
+        campanha_id: campanha.id,
+        ref_id: p.id,
+        label: p.full_name,
+      }));
+      if (linhas.length > 0) {
+        const { error: partError } = await supabase.from("campanha_participantes").insert(linhas);
+        if (partError) throw new Error(partError.message);
+      }
+    }
+  } else if (alvo !== "geral") {
     const participantesRaw = formData.getAll("participante"); // "ref_id::label"
     const linhas = participantesRaw
       .map((v) => String(v))

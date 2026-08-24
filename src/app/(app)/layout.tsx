@@ -9,7 +9,7 @@ import MencoesBell from "@/components/ui/MencoesBell";
 import MinervaWidget from "@/components/minerva/MinervaWidget";
 import { limparPreview } from "./preview-actions";
 import { IconLaurel, IconEye } from "@/components/ui/icons";
-import { buscarPendencias } from "@/lib/pendencias";
+import { buscarPendencias, temNovidadeMural } from "@/lib/pendencias";
 import { buscarMencoesPendentes } from "@/lib/social";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 
@@ -134,6 +134,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // já trata como lista vazia em vez de quebrar o layout inteiro.
   const mencoesPendentes = user ? await buscarMencoesPendentes(supabase, previewPessoa?.id ?? user.id) : [];
 
+  const destaques: Record<string, boolean> = {};
+  if (user && profile) {
+    const temNovidade = await temNovidadeMural(supabase, previewPessoa?.id ?? user.id);
+    if (temNovidade) destaques["/"] = true;
+  }
+
   return (
     <div className="flex min-h-screen">
       {user && (
@@ -156,7 +162,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
 
           <div className="overflow-y-auto p-3">
-            <AppNav items={itensVisiveis} pendencias={pendencias} />
+            <AppNav items={itensVisiveis} pendencias={pendencias} destaques={destaques} />
           </div>
 
           <NoticiasCompactas />

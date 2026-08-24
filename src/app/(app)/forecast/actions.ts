@@ -136,3 +136,48 @@ export async function salvarMotivoQueda(formData: FormData) {
   revalidatePath("/forecast");
   revalidatePath("/weekly");
 }
+
+// Closer/Líder registram, por venda, se existe repasse a um parceiro —
+// padrão é 1% (dre_configuracoes.pct_receita_parceiro), acima disso a
+// linha entra como "pendente_aprovacao" até o Diretor aprovar em /dre
+// (aprovarComissaoParceiro). Qualquer edição recalcula o status do zero —
+// mexer numa comissão já aprovada pede aprovação de novo.
+export async function salvarComissaoParceiro(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const operacaoId = String(formData.get("operacao_id"));
+  const nomeParceiro = String(formData.get("nome_parceiro") ?? "").trim();
+  const percentual = Number(formData.get("percentual"));
+  const chavePix = String(formData.get("chave_pix") ?? "").trim();
+  if (!nomeParceiro || !chavePix || !percentual || percentual <= 0) {
+    throw new Error("Preencha nome do parceiro, % e chave Pix.");
+  }
+
+  const admin = createAdminClient();
+  await exigirPermissaoOperacao(admin, user.id, operacaoId);
+
+  const { data: config } = await admin.from("dre_configuracoes").select("pct_receita_parceiro").eq("id", true).single();
+  const pctPadrao = Number(config?.pct_receita_parceiro ?? 0.01) * 100;
+  const status = percentual > pctPadrao ? "pendente_aprovacao" : "ok";
+
+  const { error } = await admin.from("comissoes_parceiro").upsert(
+    {
+      weekly_operacao_id: operacaoId,
+      nome_parceiro: nomeParceiro,
+      percentual,
+      chave_pix: chavePix,
+      status,
+      criado_por: user.id,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "weekly_operacao_id" }
+  );
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/forecast");
+  revalidatePath("/dre");
+}

@@ -46,6 +46,11 @@ export default async function MuralPage() {
     .order("created_at", { ascending: false })
     .limit(8);
 
+  // Marca que essa pessoa abriu o Mural agora — some a bolinha vermelha da
+  // lateral (ver temNovidadeMural em src/lib/pendencias.ts). Melhor-esforço:
+  // se falhar, só a bolinha continua acesa, nada quebra na página.
+  await supabase.from("profiles").update({ mural_visto_em: new Date().toISOString() }).eq("id", meId);
+
   const hoje = new Date().toISOString().slice(0, 10);
   const { data: compromissoHoje } = await supabase
     .from("compromissos")
@@ -478,6 +483,41 @@ export default async function MuralPage() {
   );
 }
 
+function ParticipanteBarra({
+  p,
+  i,
+  c,
+  fmt,
+  max,
+}: {
+  p: CampanhaComProgresso["participantes"][number];
+  i: number;
+  c: CampanhaComProgresso;
+  fmt: (v: number) => string;
+  max: number;
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs">
+        <span className={`flex items-center gap-1 ${i === 0 && c.alvo !== "geral" ? "text-gold-bright" : "text-stone-300"}`}>
+          {i === 0 && c.alvo !== "geral" && <IconCrown className="h-3.5 w-3.5" />}
+          {p.label}
+        </span>
+        <span className="text-stone-400">
+          {fmt(p.valor)}
+          {c.metaValor ? ` / ${fmt(c.metaValor)}` : ""}
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-imperium-line">
+        <div
+          className={`h-full rounded-full ${i === 0 ? "bg-gradient-to-r from-gold to-gold-bright" : "bg-wine"}`}
+          style={{ width: `${Math.min(100, (p.valor / max) * 100)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function CampanhasCard({
   campanhas,
   podeGerenciar,
@@ -541,30 +581,27 @@ function CampanhasCard({
                   até {new Date(c.dataFim + "T00:00:00").toLocaleDateString("pt-BR")}
                 </p>
 
+                {/* Ranking já vem ordenado (mais perto da meta primeiro) —
+                    mostra só o top 3 de cara, resto fica atrás de "Ver
+                    todos" (pedido do Diretor, 2026-08-24 — evita expor
+                    quem tá bem atrás pra quem só quer ver os líderes). */}
                 <div className="mt-3 space-y-2">
-                  {c.participantes.map((p, i) => (
-                    <div key={p.refId}>
-                      <div className="mb-1 flex items-center justify-between text-xs">
-                        <span className={`flex items-center gap-1 ${i === 0 && c.alvo !== "geral" ? "text-gold-bright" : "text-stone-300"}`}>
-                          {i === 0 && c.alvo !== "geral" && <IconCrown className="h-3.5 w-3.5" />}
-                          {p.label}
-                        </span>
-                        <span className="text-stone-400">
-                          {fmt(p.valor)}
-                          {c.metaValor ? ` / ${fmt(c.metaValor)}` : ""}
-                        </span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-imperium-line">
-                        <div
-                          className={`h-full rounded-full ${
-                            i === 0 ? "bg-gradient-to-r from-gold to-gold-bright" : "bg-wine"
-                          }`}
-                          style={{ width: `${Math.min(100, (p.valor / max) * 100)}%` }}
-                        />
-                      </div>
-                    </div>
+                  {c.participantes.slice(0, 3).map((p, i) => (
+                    <ParticipanteBarra key={p.refId} p={p} i={i} c={c} fmt={fmt} max={max} />
                   ))}
                 </div>
+                {c.participantes.length > 3 && (
+                  <details className="group/rank mt-2">
+                    <summary className="cursor-pointer list-none text-[10px] uppercase tracking-wide text-stone-500 hover:text-gold [&::-webkit-details-marker]:hidden">
+                      Ver todos ({c.participantes.length}) <span className="transition group-open/rank:rotate-180">▾</span>
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                      {c.participantes.slice(3).map((p, i) => (
+                        <ParticipanteBarra key={p.refId} p={p} i={i + 3} c={c} fmt={fmt} max={max} />
+                      ))}
+                    </div>
+                  </details>
+                )}
 
                 <ComentariosReacoes
                   alvoTipo="campanha"

@@ -47,9 +47,13 @@ export type NavEntry = NavLink | NavGroup;
 export default function AppNav({
   items,
   pendencias,
+  destaques,
 }: {
   items: NavEntry[];
   pendencias?: Record<string, number>;
+  // Bolinha vermelha simples (sem número) pra "tem coisa nova pra ver" —
+  // diferente de `pendencias`, que é contagem de tarefa acionável.
+  destaques?: Record<string, boolean>;
 }) {
   const pathname = usePathname();
 
@@ -57,7 +61,14 @@ export default function AppNav({
     <nav className="flex flex-col gap-1">
       {items.map((item) =>
         item.type === "link" ? (
-          <NavLinkItem key={item.href} href={item.href} label={item.label} pendente={pendencias?.[item.href] ?? 0} active={pathname === item.href} />
+          <NavLinkItem
+            key={item.href}
+            href={item.href}
+            label={item.label}
+            pendente={pendencias?.[item.href] ?? 0}
+            destaque={destaques?.[item.href] ?? false}
+            active={pathname === item.href}
+          />
         ) : (
           <NavGroupItem key={item.label} group={item} pathname={pathname} pendencias={pendencias} />
         )
@@ -70,17 +81,24 @@ function NavLinkItem({
   href,
   label,
   pendente,
+  destaque,
   active,
 }: {
   href: string;
   label: string;
   pendente: number;
+  destaque?: boolean;
   active: boolean;
 }) {
   const Icon = ICONS[href] ?? IconScroll;
   return (
     <Link href={href} className={`nav-link relative whitespace-nowrap ${active ? "nav-link-active" : ""}`}>
-      <Icon className="h-3.5 w-3.5" />
+      <span className="relative shrink-0">
+        <Icon className="h-3.5 w-3.5" />
+        {destaque && (
+          <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-wine-bright" title="Novidade" />
+        )}
+      </span>
       <span className="flex-1">{label}</span>
       {pendente > 0 && (
         <span className="flex h-4 min-w-[1rem] shrink-0 items-center justify-center rounded-full bg-wine px-1 text-[9px] font-medium text-stone-100">

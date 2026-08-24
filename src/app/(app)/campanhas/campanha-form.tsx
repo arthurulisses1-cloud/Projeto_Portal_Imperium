@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { criarCampanha } from "./actions";
 import { FUNNEL_STAGES, FUNNEL_LABELS } from "@/lib/funil";
+import { RANK_ORDER } from "@/lib/carreira";
+import { RANK_LABELS } from "@/lib/labels";
 
 type Opcao = { id: string; label: string };
 
@@ -15,7 +17,7 @@ export default function CampanhaForm({
   tribos: Opcao[];
   exercitos: Opcao[];
 }) {
-  const [alvo, setAlvo] = useState<"geral" | "individual" | "tribo" | "exercito">("geral");
+  const [alvo, setAlvo] = useState<"geral" | "individual" | "tribo" | "exercito" | "grupo_rank">("geral");
 
   const opcoes = alvo === "individual" ? pessoas : alvo === "tribo" ? tribos : alvo === "exercito" ? exercitos : [];
 
@@ -80,6 +82,7 @@ export default function CampanhaForm({
             <option value="individual">Duelo entre pessoas</option>
             <option value="tribo">Duelo entre Tribos</option>
             <option value="exercito">Duelo entre Exércitos</option>
+            <option value="grupo_rank">Grupo Específico (por Cargo)</option>
           </select>
         </div>
         <div>
@@ -95,18 +98,35 @@ export default function CampanhaForm({
         </div>
       </div>
 
-      {alvo !== "geral" && (
+      {alvo === "grupo_rank" ? (
         <div>
-          <label className="mb-1 block text-xs text-stone-400">Participantes do duelo</label>
-          <div className="grid max-h-40 grid-cols-2 gap-1.5 overflow-y-auto rounded border border-imperium-line p-2 sm:grid-cols-3">
-            {opcoes.map((o) => (
-              <label key={o.id} className="flex items-center gap-1.5 text-xs text-stone-300">
-                <input type="checkbox" name="participante" value={`${o.id}::${o.label}`} />
-                {o.label}
+          <label className="mb-1 block text-xs text-stone-400">Cargos participantes</label>
+          <p className="mb-1.5 text-[11px] text-stone-600">
+            Todo mundo com esse Cargo entra no duelo automaticamente — não precisa marcar pessoa por pessoa.
+          </p>
+          <div className="flex flex-wrap gap-3 rounded border border-imperium-line p-2">
+            {RANK_ORDER.map((r) => (
+              <label key={r} className="flex items-center gap-1.5 text-xs text-stone-300">
+                <input type="checkbox" name="rank_participante" value={r} />
+                {RANK_LABELS[r] ?? r}
               </label>
             ))}
           </div>
         </div>
+      ) : (
+        alvo !== "geral" && (
+          <div>
+            <label className="mb-1 block text-xs text-stone-400">Participantes do duelo</label>
+            <div className="grid max-h-40 grid-cols-2 gap-1.5 overflow-y-auto rounded border border-imperium-line p-2 sm:grid-cols-3">
+              {opcoes.map((o) => (
+                <label key={o.id} className="flex items-center gap-1.5 text-xs text-stone-300">
+                  <input type="checkbox" name="participante" value={`${o.id}::${o.label}`} />
+                  {o.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        )
       )}
 
       <div>

@@ -47,6 +47,13 @@ export const STATUS_SHEET_COR: Record<string, string> = {
   DESISTIU: "#78716c",
 };
 
+export type ComissaoParceiro = {
+  nomeParceiro: string;
+  percentual: number;
+  chavePix: string;
+  status: "ok" | "pendente_aprovacao" | "aprovado";
+};
+
 export type ForecastOp = {
   id: string;
   data: string;
@@ -64,6 +71,7 @@ export type ForecastOp = {
   motivoQueda: MotivoQueda | null;
   motivoQuedaObs: string | null;
   podeEditar: boolean;
+  comissaoParceiro: ComissaoParceiro | null;
 };
 
 export function podeEditarOperacao(

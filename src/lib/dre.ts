@@ -467,6 +467,164 @@ export async function buscarResumoDre(supabase: SupabaseClient, ano: number, mes
 // PAGAMENTO como se já tivesse virado receita, e a Folha recalculada na
 // mesma base (ver buscarFolhaForecast) — é uma projeção pra "se tudo que
 // tá pra pagar realmente pagar", não o número oficial do mês.
+// --- Fechamento Mensal + Comissão de Parceiro -------------------------
+// Mesma restrição estrita de "nunca fora de /dre" das funções acima —
+// fixo/bônus/variável por pessoa e Pix de parceiro são dado de folha.
+
+export type LinhaNota = {
+  weeklyOperacaoId: string;
+  data: string;
+  cliente: string | null;
+  clienteId: string | null;
+  valor: number;
+  parceiro: { nomeParceiro: string; percentual: number; extra: number; status: string } | null;
+};
+
+// Mesma base de "crédito do mês" que buscarProducaoPagaFirma/buscarFolha
+// usam pro resto da DRE (status PAGO, data de assinatura dentro do mês) —
+// pra o total da nota bater com receitaPropria/comissão do mesmo fechamento,
+// em vez de inventar um terceiro critério.
+export async function buscarNotaMes(supabase: SupabaseClient, ano: number, mes: number): Promise<LinhaNota[]> {
+  const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
+  const fimMes = new Date(ano, mes, 0).toISOString().slice(0, 10);
+
+  const { data: ops } = await supabase
+    .from("weekly_operacoes")
+    .select("id, data, cliente, cliente_id, valor")
+    .eq("status", "PAGO")
+    .gte("data", inicioMes)
+    .lte("data", fimMes)
+    .order("data");
+  if (!ops || ops.length === 0) return [];
+
+  const { data: comissoes } = await supabase
+    .from("comissoes_parceiro")
+    .select("weekly_operacao_id, nome_parceiro, percentual, status")
+    .in(
+      "weekly_operacao_id",
+      ops.map((o) => o.id)
+    );
+  const comissaoPorOp = new Map((comissoes ?? []).map((c) => [c.weekly_operacao_id, c]));
+
+  return ops.map((o) => {
+    const c = comissaoPorOp.get(o.id);
+    return {
+      weeklyOperacaoId: o.id,
+      data: o.data,
+      cliente: o.cliente,
+      clienteId: o.cliente_id,
+      valor: Number(o.valor),
+      parceiro: c
+        ? {
+            nomeParceiro: c.nome_parceiro,
+            percentual: Number(c.percentual),
+            extra: (Number(c.percentual) / 100) * Number(o.valor),
+            status: c.status,
+          }
+        : null,
+    };
+  });
+}
+
+export type PendenciaComissaoParceiro = {
+  id: string;
+  weeklyOperacaoId: string;
+  nomeParceiro: string;
+  percentual: number;
+  chavePix: string;
+  cliente: string | null;
+  valorOperacao: number;
+  valorComissao: number;
+};
+
+export async function buscarPendenciasAprovacao(
+  supabase: SupabaseClient,
+  ano: number,
+  mes: number
+): Promise<PendenciaComissaoParceiro[]> {
+  const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
+  const fimMes = new Date(ano, mes, 0).toISOString().slice(0, 10);
+
+  const { data: ops } = await supabase.from("weekly_operacoes").select("id, cliente, valor").gte("data", inicioMes).lte("data", fimMes);
+  if (!ops || ops.length === 0) return [];
+  const opPorId = new Map(ops.map((o) => [o.id, o]));
+
+  const { data: pendentes } = await supabase
+    .from("comissoes_parceiro")
+    .select("id, weekly_operacao_id, nome_parceiro, percentual, chave_pix")
+    .eq("status", "pendente_aprovacao")
+    .in(
+      "weekly_operacao_id",
+      ops.map((o) => o.id)
+    );
+
+  return (pendentes ?? []).map((p) => {
+    const op = opPorId.get(p.weekly_operacao_id);
+    const valorOperacao = Number(op?.valor ?? 0);
+    return {
+      id: p.id,
+      weeklyOperacaoId: p.weekly_operacao_id,
+      nomeParceiro: p.nome_parceiro,
+      percentual: Number(p.percentual),
+      chavePix: p.chave_pix,
+      cliente: op?.cliente ?? null,
+      valorOperacao,
+      valorComissao: (Number(p.percentual) / 100) * valorOperacao,
+    };
+  });
+}
+
+export type FechamentoStatus = {
+  existe: boolean;
+  status: "aberto" | "fechado";
+  fechadoEm: string | null;
+  pessoas: { profileId: string; nome: string; fixo: number; bonus: number; variavel: number }[];
+  parceiros: { nomeParceiro: string; chavePix: string; valorTotal: number; valorRepassado: number; valorRetido: number }[];
+};
+
+export async function buscarFechamento(supabase: SupabaseClient, ano: number, mes: number): Promise<FechamentoStatus> {
+  const { data: fechamento } = await supabase
+    .from("fechamentos_mensais")
+    .select("id, status, fechado_em")
+    .eq("ano", ano)
+    .eq("mes", mes)
+    .maybeSingle();
+  if (!fechamento) return { existe: false, status: "aberto", fechadoEm: null, pessoas: [], parceiros: [] };
+
+  const fechado = fechamento.status === "fechado";
+  const [{ data: pessoas }, { data: parceiros }] = await Promise.all([
+    fechado
+      ? supabase.from("fechamento_pessoas").select("profile_id, nome, fixo, bonus, variavel").eq("fechamento_id", fechamento.id).order("nome")
+      : Promise.resolve({ data: [] }),
+    fechado
+      ? supabase
+          .from("fechamento_parceiros")
+          .select("nome_parceiro, chave_pix, valor_total, valor_repassado, valor_retido")
+          .eq("fechamento_id", fechamento.id)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  return {
+    existe: true,
+    status: fechamento.status as "aberto" | "fechado",
+    fechadoEm: fechamento.fechado_em,
+    pessoas: (pessoas ?? []).map((p) => ({
+      profileId: p.profile_id,
+      nome: p.nome,
+      fixo: Number(p.fixo),
+      bonus: Number(p.bonus),
+      variavel: Number(p.variavel),
+    })),
+    parceiros: (parceiros ?? []).map((p) => ({
+      nomeParceiro: p.nome_parceiro,
+      chavePix: p.chave_pix,
+      valorTotal: Number(p.valor_total),
+      valorRepassado: Number(p.valor_repassado),
+      valorRetido: Number(p.valor_retido),
+    })),
+  };
+}
+
 export async function buscarResumoDreForecast(supabase: SupabaseClient, ano: number, mes: number): Promise<ResumoDre> {
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const fimMes = new Date(ano, mes, 0).toISOString().slice(0, 10);

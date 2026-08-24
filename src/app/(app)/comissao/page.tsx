@@ -72,6 +72,39 @@ export default async function ComissaoPage() {
 
   const { marcos } = await buscarProgressoMarcos(supabase, meId, role);
 
+  // "O que você recebe": último mês FECHADO (não o mês corrente, que ainda
+  // está em andamento) em que essa pessoa aparece em fechamento_pessoas —
+  // é o snapshot travado pelo Diretor no dia 1, não o número live, pra não
+  // mudar debaixo do funcionário entre o dia 1 e o pagamento.
+  const { data: fechamentosRecentes } = await supabase
+    .from("fechamentos_mensais")
+    .select("id, ano, mes")
+    .eq("status", "fechado")
+    .order("ano", { ascending: false })
+    .order("mes", { ascending: false })
+    .limit(3);
+
+  let recebimento: { ano: number; mes: number; fixo: number; bonus: number; variavel: number } | null = null;
+  for (const f of fechamentosRecentes ?? []) {
+    const { data: minhaLinha } = await supabase
+      .from("fechamento_pessoas")
+      .select("fixo, bonus, variavel")
+      .eq("fechamento_id", f.id)
+      .eq("profile_id", meId)
+      .maybeSingle();
+    if (minhaLinha) {
+      recebimento = {
+        ano: f.ano,
+        mes: f.mes,
+        fixo: Number(minhaLinha.fixo),
+        bonus: Number(minhaLinha.bonus),
+        variavel: Number(minhaLinha.variavel),
+      };
+      break;
+    }
+  }
+  const mesPagamento = recebimento ? (recebimento.mes === 12 ? { ano: recebimento.ano + 1, mes: 1 } : { ano: recebimento.ano, mes: recebimento.mes + 1 }) : null;
+
   const { data: contestacoes } = await supabase
     .from("contestacoes")
     .select("id, referencia, valor_contestado, motivo, status, resposta, created_at")
@@ -90,6 +123,29 @@ export default async function ComissaoPage() {
         <h1 className="font-display text-2xl text-gold-bright">Comissão do Mês</h1>
         <p className="text-xs text-stone-400">Visão privada — só você e o Diretor veem isso</p>
       </div>
+
+      {recebimento && mesPagamento && (
+        <section className="card-imp">
+          <h2 className="kicker mb-3">O que você recebe</h2>
+          <p className="mb-3 text-[11px] text-stone-600">
+            Fechado com base em {MESES[recebimento.mes - 1]}/{recebimento.ano}
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded border border-imperium-line bg-imperium-bg/40 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-stone-500">
+                Dia 5/{MESES[mesPagamento.mes - 1]} · Fixo + Bônus
+              </p>
+              <p className="text-lg text-gold-bright">{moeda(recebimento.fixo + recebimento.bonus)}</p>
+            </div>
+            <div className="rounded border border-imperium-line bg-imperium-bg/40 p-3">
+              <p className="text-[11px] uppercase tracking-wide text-stone-500">
+                Dia 15/{MESES[mesPagamento.mes - 1]} · Comissão
+              </p>
+              <p className="text-lg text-gold-bright">{moeda(recebimento.variavel)}</p>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="card-imp">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">

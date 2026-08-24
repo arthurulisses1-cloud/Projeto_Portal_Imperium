@@ -106,3 +106,16 @@ export async function buscarPendencias(
 
   return pend;
 }
+
+// Bolinha vermelha no Mural (lateral) quando surge notícia/enquete nova —
+// compara o post mais recente com a última vez que essa pessoa abriu o
+// Mural (profiles.mural_visto_em, atualizado quando a página "/" carrega).
+export async function temNovidadeMural(supabase: SupabaseClient, userId: string): Promise<boolean> {
+  const [{ data: ultimoPost }, { data: perfil }] = await Promise.all([
+    supabase.from("mural_posts").select("created_at").order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("profiles").select("mural_visto_em").eq("id", userId).maybeSingle(),
+  ]);
+  if (!ultimoPost) return false;
+  if (!perfil?.mural_visto_em) return true;
+  return new Date(ultimoPost.created_at) > new Date(perfil.mural_visto_em);
+}

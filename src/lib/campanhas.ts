@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type CampanhaAlvo = "geral" | "individual" | "tribo" | "exercito";
+export type CampanhaAlvo = "geral" | "individual" | "tribo" | "exercito" | "grupo_rank";
 
 export type CampanhaParticipanteProgresso = {
   refId: string;
@@ -97,7 +97,10 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
   ]);
 
   function membrosDe(alvo: CampanhaAlvo, refId: string): string[] {
-    if (alvo === "individual") return [refId];
+    // "grupo_rank" foi auto-populado com um participante por PESSOA (o
+    // cargo já foi resolvido na hora de criar a campanha, ver
+    // criarCampanha) — daqui pra frente é ranking por pessoa, igual "individual".
+    if (alvo === "individual" || alvo === "grupo_rank") return [refId];
     if (alvo === "tribo") return (pessoas ?? []).filter((p) => p.tribo_id === refId).map((p) => p.id);
     if (alvo === "exercito") {
       const tribosDoExercito = new Set((tribos ?? []).filter((t) => t.exercito_id === refId).map((t) => t.id));
