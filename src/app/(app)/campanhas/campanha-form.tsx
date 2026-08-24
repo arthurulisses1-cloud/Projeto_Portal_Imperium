@@ -18,6 +18,7 @@ export default function CampanhaForm({
   exercitos: Opcao[];
 }) {
   const [alvo, setAlvo] = useState<"geral" | "individual" | "tribo" | "exercito" | "grupo_rank">("geral");
+  const [metrica, setMetrica] = useState("credito");
 
   const opcoes = alvo === "individual" ? pessoas : alvo === "tribo" ? tribos : alvo === "exercito" ? exercitos : [];
 
@@ -100,7 +101,7 @@ export default function CampanhaForm({
         </div>
         <div>
           <label className="mb-1 block text-xs text-stone-400">Métrica</label>
-          <select name="metrica" className="input-imp">
+          <select name="metrica" value={metrica} onChange={(e) => setMetrica(e.target.value)} className="input-imp">
             <option value="credito">Crédito (R$)</option>
             {FUNNEL_STAGES.map((e) => (
               <option key={e} value={e}>
@@ -110,6 +111,21 @@ export default function CampanhaForm({
           </select>
         </div>
       </div>
+
+      {metrica === "credito" && (alvo === "individual" || alvo === "grupo_rank") && (
+        <div>
+          <label className="mb-1 block text-xs text-stone-400">Contar produção como</label>
+          <select name="papel_credito" defaultValue="total" className="input-imp w-64">
+            <option value="total">Total (SDR + Closer, sem duplicar)</option>
+            <option value="sdr">Só produção como SDR</option>
+            <option value="closer">Só produção como Closer</option>
+          </select>
+          <p className="mt-1 text-[11px] text-stone-600">
+            Pago como SDR e pago como Closer são coisas diferentes pra quem faz os dois papéis — se o duelo é
+            &ldquo;melhor Closer do mês&rdquo;, escolha &ldquo;Só produção como Closer&rdquo;.
+          </p>
+        </div>
+      )}
 
       {alvo === "grupo_rank" ? (
         <div>

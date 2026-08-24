@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type CampanhaAlvo = "geral" | "individual" | "tribo" | "exercito" | "grupo_rank";
+export type PapelCredito = "sdr" | "closer" | "total";
 
 export type CampanhaParticipanteProgresso = {
   refId: string;
@@ -20,6 +21,7 @@ export type CampanhaComProgresso = {
   imagemPosicao: ImagemPosicao;
   alvo: CampanhaAlvo;
   metrica: string;
+  papelCredito: PapelCredito;
   metaValor: number | null;
   dataInicio: string;
   dataFim: string;
@@ -29,14 +31,23 @@ export type CampanhaComProgresso = {
 // Todas as campanhas cujo período cobre hoje, com o progresso de cada
 // participante já calculado (geral = um único total; duelo = um valor
 // por pessoa/Tribo/Exército participante).
+//
+// Métrica "credito": lê de weekly_operacoes (status PAGO, pago_em dentro
+// do período) — NÃO da tabela `vendas`. Dois motivos (achado 2026-08-24):
+// `vendas.data` é data de ASSINATURA, não de pagamento (mesma classe de
+// bug já corrigida em weekly_operacoes com pago_em/migration 0041); e
+// `vendas` tem uma linha por PAPEL (SDR e Closer separados), então somar
+// todo mundo de um time contava a mesma venda duas vezes sempre que SDR e
+// Closer eram do mesmo Tribo/Exército. weekly_operacoes tem uma linha por
+// OPERAÇÃO — dedupe natural.
 export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<CampanhaComProgresso[]> {
   const hoje = new Date().toISOString().slice(0, 10);
 
   // requisitos_minimos/recompensa vêm da migration 0034, imagem_posicao da
-  // 0046 — se alguma ainda não rodou nesse banco, o select com essas
-  // colunas falha e cai no fallback sem elas, pra não quebrar o Mural
-  // inteiro enquanto a migration pendente não roda (mesmo padrão do
-  // Forecast com motivo_queda).
+  // 0046, papel_credito da 0047 — se alguma ainda não rodou nesse banco, o
+  // select com essas colunas falha e cai no fallback sem elas, pra não
+  // quebrar o Mural inteiro enquanto a migration pendente não roda (mesmo
+  // padrão do Forecast com motivo_queda).
   let campanhas: {
     id: string;
     titulo: string;
@@ -47,6 +58,7 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
     imagem_posicao: string | null;
     alvo: string;
     metrica: string;
+    papel_credito: string | null;
     meta_valor: number | null;
     data_inicio: string;
     data_fim: string;
@@ -54,7 +66,7 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
   const comColunasNovas = await supabase
     .from("campanhas")
     .select(
-      "id, titulo, descricao, requisitos_minimos, recompensa, imagem_url, imagem_posicao, alvo, metrica, meta_valor, data_inicio, data_fim"
+      "id, titulo, descricao, requisitos_minimos, recompensa, imagem_url, imagem_posicao, alvo, metrica, papel_credito, meta_valor, data_inicio, data_fim"
     )
     .lte("data_inicio", hoje)
     .gte("data_fim", hoje)
@@ -66,7 +78,13 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
       .lte("data_inicio", hoje)
       .gte("data_fim", hoje)
       .order("created_at", { ascending: false });
-    campanhas = (fallback.data ?? []).map((c) => ({ ...c, requisitos_minimos: null, recompensa: null, imagem_posicao: null }));
+    campanhas = (fallback.data ?? []).map((c) => ({
+      ...c,
+      requisitos_minimos: null,
+      recompensa: null,
+      imagem_posicao: null,
+      papel_credito: null,
+    }));
   } else {
     campanhas = comColunasNovas.data;
   }
@@ -81,18 +99,33 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
 
   const { data: pessoas } = await supabase
     .from("profiles")
-    .select("id, tribo_id")
-    .in("role", ["sdr", "closer"]);
-  const { data: tribos } = await supabase.from("tribos").select("id, exercito_id");
+    .select("id, tribo_id, tribo:tribos!profiles_tribo_id_fkey(exercito_id)")
+    .in("role", ["sdr", "closer", "lider"]);
+  // Legado do Exército não tem tribo_id (lidera o time inteiro, não uma
+  // Tribo) — sem esse fallback, uma operação fechada por ele "perde" o
+  // time (mesma regra usada em forecast/page.tsx e guerra.ts).
+  const { data: exercitos } = await supabase.from("exercitos").select("id, legado_id");
+  const exercitoIdPorLegadoId = new Map((exercitos ?? []).map((e) => [e.legado_id, e.id]));
+  const triboIdPorProfileId = new Map((pessoas ?? []).map((p) => [p.id, p.tribo_id]));
+  const exercitoIdPorProfileId = new Map(
+    (pessoas ?? []).map((p) => {
+      const tribo = p.tribo as unknown as { exercito_id: string } | null;
+      return [p.id, tribo?.exercito_id ?? exercitoIdPorLegadoId.get(p.id) ?? null];
+    })
+  );
+  const todosIds = (pessoas ?? []).map((p) => p.id);
 
   const menorData = campanhas.reduce((min, c) => (c.data_inicio < min ? c.data_inicio : min), campanhas[0].data_inicio);
   const maiorData = campanhas.reduce((max, c) => (c.data_fim > max ? c.data_fim : max), campanhas[0].data_fim);
-  const todosIds = (pessoas ?? []).map((p) => p.id);
 
-  const [{ data: vendasRows }, { data: funilRows }] = await Promise.all([
-    todosIds.length > 0
-      ? supabase.from("vendas").select("profile_id, valor, data").in("profile_id", todosIds).gte("data", menorData).lte("data", maiorData)
-      : Promise.resolve({ data: [] }),
+  const [{ data: opsPagas }, { data: funilRows }] = await Promise.all([
+    supabase
+      .from("weekly_operacoes")
+      .select("id, valor, sdr_profile_id, closer_profile_id, pago_em")
+      .eq("status", "PAGO")
+      .not("pago_em", "is", null)
+      .gte("pago_em", menorData)
+      .lte("pago_em", maiorData),
     todosIds.length > 0
       ? supabase
           .from("producao_funil")
@@ -103,44 +136,93 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
       : Promise.resolve({ data: [] }),
   ]);
 
-  function membrosDe(alvo: CampanhaAlvo, refId: string): string[] {
-    // "grupo_rank" foi auto-populado com um participante por PESSOA (o
-    // cargo já foi resolvido na hora de criar a campanha, ver
-    // criarCampanha) — daqui pra frente é ranking por pessoa, igual "individual".
-    if (alvo === "individual" || alvo === "grupo_rank") return [refId];
-    if (alvo === "tribo") return (pessoas ?? []).filter((p) => p.tribo_id === refId).map((p) => p.id);
-    if (alvo === "exercito") {
-      const tribosDoExercito = new Set((tribos ?? []).filter((t) => t.exercito_id === refId).map((t) => t.id));
-      return (pessoas ?? []).filter((p) => p.tribo_id && tribosDoExercito.has(p.tribo_id)).map((p) => p.id);
-    }
-    return todosIds; // geral
+  function creditoNoPeriodo(dataInicio: string, dataFim: string) {
+    return (opsPagas ?? []).filter((o) => o.pago_em! >= dataInicio && o.pago_em! <= dataFim);
   }
 
-  function valorMetrica(profileIds: string[], metrica: string, dataInicio: string, dataFim: string): number {
-    const idsSet = new Set(profileIds);
-    if (metrica === "credito") {
-      return (vendasRows ?? [])
-        .filter((v) => idsSet.has(v.profile_id) && v.data >= dataInicio && v.data <= dataFim)
-        .reduce((s, v) => s + Number(v.valor), 0);
+  // Time DONO da operação = time do Closer, com o SDR como fallback só
+  // quando o Closer não resolve pra time nenhum — mesma convenção usada em
+  // toda atribuição de time do sistema (Weekly, Guerra Civil, Forecast).
+  // Evita contar a mesma venda duas vezes quando SDR e Closer são do
+  // mesmo Tribo/Exército (quase sempre).
+  function creditoPorTimeDono(dataInicio: string, dataFim: string, timePorProfileId: Map<string, string | null>) {
+    const totais = new Map<string, number>();
+    for (const o of creditoNoPeriodo(dataInicio, dataFim)) {
+      const dono =
+        (o.closer_profile_id && timePorProfileId.get(o.closer_profile_id)) ||
+        (o.sdr_profile_id && timePorProfileId.get(o.sdr_profile_id)) ||
+        null;
+      if (!dono) continue;
+      totais.set(dono, (totais.get(dono) ?? 0) + Number(o.valor));
     }
+    return totais;
+  }
+
+  function creditoDaPessoa(dataInicio: string, dataFim: string, profileId: string, papel: PapelCredito) {
+    return creditoNoPeriodo(dataInicio, dataFim)
+      .filter((o) => {
+        if (papel === "sdr") return o.sdr_profile_id === profileId;
+        if (papel === "closer") return o.closer_profile_id === profileId;
+        return o.sdr_profile_id === profileId || o.closer_profile_id === profileId;
+      })
+      .reduce((s, o) => s + Number(o.valor), 0);
+  }
+
+  function valorFunil(profileIds: string[], metrica: string, dataInicio: string, dataFim: string): number {
+    const idsSet = new Set(profileIds);
     return (funilRows ?? [])
       .filter((f) => idsSet.has(f.profile_id) && f.etapa === metrica && f.data >= dataInicio && f.data <= dataFim)
       .reduce((s, f) => s + f.realizado, 0);
   }
 
+  function membrosGeral(): string[] {
+    return todosIds;
+  }
+
   return campanhas.map((c) => {
+    const alvo = c.alvo as CampanhaAlvo;
+    const papelCredito = (c.papel_credito as PapelCredito | null) ?? "total";
     const participantesDaCampanha = (participantesRows ?? []).filter((p) => p.campanha_id === c.id);
 
-    const participantes: CampanhaParticipanteProgresso[] =
-      c.alvo === "geral"
-        ? [{ refId: "geral", label: c.titulo, valor: valorMetrica(membrosDe("geral", ""), c.metrica, c.data_inicio, c.data_fim) }]
-        : participantesDaCampanha
-            .map((p) => ({
-              refId: p.ref_id,
-              label: p.label,
-              valor: valorMetrica(membrosDe(c.alvo as CampanhaAlvo, p.ref_id), c.metrica, c.data_inicio, c.data_fim),
-            }))
-            .sort((a, b) => b.valor - a.valor);
+    let participantes: CampanhaParticipanteProgresso[];
+
+    if (c.metrica !== "credito") {
+      // Métricas de funil (tentativas, alôs, conexões...) continuam por
+      // pessoa, sem o problema de dedupe — cada pessoa credita sua própria
+      // atividade, SDR e Closer não competem pelo mesmo número.
+      const membrosFunil = (refId: string): string[] => {
+        if (alvo === "individual" || alvo === "grupo_rank") return [refId];
+        if (alvo === "tribo") return (pessoas ?? []).filter((p) => p.tribo_id === refId).map((p) => p.id);
+        if (alvo === "exercito") return (pessoas ?? []).filter((p) => exercitoIdPorProfileId.get(p.id) === refId).map((p) => p.id);
+        return membrosGeral();
+      };
+      participantes =
+        alvo === "geral"
+          ? [{ refId: "geral", label: c.titulo, valor: valorFunil(membrosGeral(), c.metrica, c.data_inicio, c.data_fim) }]
+          : participantesDaCampanha
+              .map((p) => ({ refId: p.ref_id, label: p.label, valor: valorFunil(membrosFunil(p.ref_id), c.metrica, c.data_inicio, c.data_fim) }))
+              .sort((a, b) => b.valor - a.valor);
+    } else if (alvo === "geral") {
+      const total = creditoNoPeriodo(c.data_inicio, c.data_fim).reduce((s, o) => s + Number(o.valor), 0);
+      participantes = [{ refId: "geral", label: c.titulo, valor: total }];
+    } else if (alvo === "tribo") {
+      const totais = creditoPorTimeDono(c.data_inicio, c.data_fim, triboIdPorProfileId);
+      participantes = participantesDaCampanha
+        .map((p) => ({ refId: p.ref_id, label: p.label, valor: totais.get(p.ref_id) ?? 0 }))
+        .sort((a, b) => b.valor - a.valor);
+    } else if (alvo === "exercito") {
+      const totais = creditoPorTimeDono(c.data_inicio, c.data_fim, exercitoIdPorProfileId);
+      participantes = participantesDaCampanha
+        .map((p) => ({ refId: p.ref_id, label: p.label, valor: totais.get(p.ref_id) ?? 0 }))
+        .sort((a, b) => b.valor - a.valor);
+    } else {
+      // individual / grupo_rank — duelo por pessoa, respeitando papelCredito
+      // (produção como SDR e como Closer são coisas diferentes pro Tribuno
+      // que às vezes ajuda como SDR também).
+      participantes = participantesDaCampanha
+        .map((p) => ({ refId: p.ref_id, label: p.label, valor: creditoDaPessoa(c.data_inicio, c.data_fim, p.ref_id, papelCredito) }))
+        .sort((a, b) => b.valor - a.valor);
+    }
 
     return {
       id: c.id,
@@ -150,8 +232,9 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
       recompensa: c.recompensa,
       imagemUrl: c.imagem_url,
       imagemPosicao: (c.imagem_posicao as ImagemPosicao | null) ?? "center",
-      alvo: c.alvo as CampanhaAlvo,
+      alvo,
       metrica: c.metrica,
+      papelCredito,
       metaValor: c.meta_valor,
       dataInicio: c.data_inicio,
       dataFim: c.data_fim,

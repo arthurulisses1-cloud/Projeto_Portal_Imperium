@@ -26,6 +26,8 @@ export async function criarCampanha(formData: FormData) {
   const metrica = String(formData.get("metrica") ?? "credito");
   const imagemPosicaoRaw = String(formData.get("imagem_posicao") ?? "center");
   const imagemPosicao = ["top", "center", "bottom"].includes(imagemPosicaoRaw) ? imagemPosicaoRaw : "center";
+  const papelCreditoRaw = String(formData.get("papel_credito") ?? "total");
+  const papelCredito = ["sdr", "closer", "total"].includes(papelCreditoRaw) ? papelCreditoRaw : "total";
   const metaValorRaw = String(formData.get("meta_valor") ?? "").trim();
   const dataInicio = String(formData.get("data_inicio") ?? "");
   const dataFim = String(formData.get("data_fim") ?? "");
@@ -52,6 +54,7 @@ export async function criarCampanha(formData: FormData) {
       imagem_posicao: imagemPosicao,
       alvo,
       metrica,
+      papel_credito: papelCredito,
       meta_valor: metaValorRaw ? Number(metaValorRaw) : null,
       data_inicio: dataInicio,
       data_fim: dataFim,
