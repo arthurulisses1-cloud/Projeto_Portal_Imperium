@@ -59,15 +59,32 @@ async function pagosMesPorGrupo(
   const totais = new Map<string, { nome: string; exercitoNome: string | null; valor: number }>();
   let foraDoGrupo = 0;
   for (const o of ops) {
-    // Time do negócio = time do Closer, com fallback pro SDR — mesma regra da Weekly de Receita.
+    if (agrupar === "tribo") {
+      // Regra do Diretor (2026-08-25, mesma de Minha Produção): só conta pra
+      // uma Tribo quando SDR e Closer são da MESMA Tribo (inclusive quando é
+      // a mesma pessoa nos dois papéis) — senão vai pro "Fora das Tribos",
+      // mesmo que os dois lados sejam de Tribos válidas, só que diferentes
+      // (ex.: Closer da Tribo A fechou com SDR da Tribo B).
+      const sdrGrupo = o.sdr_profile_id ? grupoPorProfile.get(o.sdr_profile_id) : undefined;
+      const closerGrupo = o.closer_profile_id ? grupoPorProfile.get(o.closer_profile_id) : undefined;
+      if (sdrGrupo && closerGrupo && sdrGrupo.chave === closerGrupo.chave) {
+        const atual = totais.get(sdrGrupo.chave);
+        totais.set(sdrGrupo.chave, { nome: sdrGrupo.nome, exercitoNome: sdrGrupo.exercitoNome, valor: (atual?.valor ?? 0) + Number(o.valor) });
+      } else {
+        foraDoGrupo += Number(o.valor);
+      }
+      continue;
+    }
+    // Exército (Guerra Civil): time do negócio = time do Closer, com
+    // fallback pro SDR — a regra "mesma Tribo" é só pro corte de Tribo.
     const grupo =
       (o.closer_profile_id && grupoPorProfile.get(o.closer_profile_id)) ||
       (o.sdr_profile_id && grupoPorProfile.get(o.sdr_profile_id));
     if (!grupo) {
-      // Ninguém dos dois lados pertence a uma Tribo/Exército resolvível (ex.:
+      // Ninguém dos dois lados pertence a um Exército resolvível (ex.:
       // Legado do Exército fechou sozinho, sem SDR de nenhuma Tribo envolvido).
-      // Não descarta o valor — sem isso a soma da Guerra de Tribos fica menor
-      // que a da Guerra Civil, que é a mesma grana vista de outro corte.
+      // Não descarta o valor — sem isso a soma da Guerra Civil fica menor
+      // que a grana real paga no mês.
       foraDoGrupo += Number(o.valor);
       continue;
     }
