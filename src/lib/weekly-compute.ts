@@ -288,10 +288,16 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
     const opsTeamCheio = baseOps.filter((o) => o.time === tm);
     const a = agg(opsTeamCheio.filter(contaComoCredito), opsTeamCheio);
     const basePeople = buildPeople(false, false, baseOps);
-    const pl = Object.entries(basePeople)
-      .filter(([id]) => dataset.people[id]?.time === tm)
-      .map(([, p]) => p);
-    const f = (k: "t" | "alo" | "conex" | "e") => pl.reduce((s, p) => s + p[k], 0);
+    const plEntries = Object.entries(basePeople).filter(([id]) => dataset.people[id]?.time === tm);
+    const pl = plEntries.map(([, p]) => p);
+    const f = (k: "t" | "alo" | "conex") => pl.reduce((s, p) => s + p[k], 0);
+    // Entrevistas: cada uma gera crédito tanto pro SDR quanto pro Closer em
+    // producao_funil (cada um vê a própria atividade) — somar todo mundo do
+    // time contaria a mesma entrevista 2x. Pro total do time, conta só o
+    // lado de quem conduz (Closer/Líder), que é quem "gera o resultado".
+    const e = plEntries
+      .filter(([id]) => dataset.people[id]?.role !== "sdr")
+      .reduce((s, [, p]) => s + p.e, 0);
     byTeam[tm] = {
       ...a,
       lider: dataset.liderPorTime[tm] || "—",
@@ -299,17 +305,17 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
       t: f("t"),
       alo: f("alo"),
       conex: f("conex"),
-      e: f("e"),
+      e,
       meta: metaFor(dataset, tm, from, to),
     };
   }
 
   const funnel = { t: 0, alo: 0, conex: 0, e: 0 };
-  for (const p of Object.values(people)) {
+  for (const [id, p] of Object.entries(people)) {
     funnel.t += p.t;
     funnel.alo += p.alo;
     funnel.conex += p.conex;
-    funnel.e += p.e;
+    if (dataset.people[id]?.role !== "sdr") funnel.e += p.e;
   }
 
   const byOrigem: Record<string, { cred: number; n: number }> = {};
