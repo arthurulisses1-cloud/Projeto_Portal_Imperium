@@ -18,15 +18,22 @@ import type { FunilEtapa } from "@/lib/funil";
 // O bloco 0 é especial: a legenda dele mora na célula A1 (linha 0, coluna
 // 0), que também é a linha de números de semana do cabeçalho — por isso
 // não segue o padrão "linha de legenda sozinha" dos blocos seguintes.
-const CAPTION_ETAPA: Record<string, FunilEtapa | null> = {
-  "tentativas api": "tentativas",
-  "tentativas vonix": "tentativas",
-  "alos api": "alos",
-  "alo vonix": "alos",
-  "conexao api": "conexoes",
-  "conexao vonix": "conexoes",
-  entrevistas: null, // vem da aba dedicada (SDR + Closer), ver sync/entrevistas.ts
-  "fechamentos inbound": null, // ainda não sabemos se soma em cima de "Entrevistas" ou é disjunto
+//
+// "Alô Vônix" soma em DOIS lugares: alos (óbvio) e tentativas — o discador
+// Vônix não separa tentativa de alô (confirmado com o Diretor 2026-08-25:
+// Tentativas API + Alô Vônix bateu exato com a contagem manual de ontem,
+// 364 + 372 = 736). Não existe "Tentativas Vônix" porque, pra esse canal,
+// toda tentativa que completa JÁ é um alô — um bloco separado seria a
+// mesma coisa duas vezes.
+const CAPTION_ETAPA: Record<string, FunilEtapa[]> = {
+  "tentativas api": ["tentativas"],
+  "tentativas vonix": ["tentativas"],
+  "alos api": ["alos"],
+  "alo vonix": ["alos", "tentativas"],
+  "conexao api": ["conexoes"],
+  "conexao vonix": ["conexoes"],
+  entrevistas: [], // vem da aba dedicada (SDR + Closer), ver sync/entrevistas.ts
+  "fechamentos inbound": [], // ainda não sabemos se soma em cima de "Entrevistas" ou é disjunto
 };
 
 export type ProducaoLinha = {
@@ -67,10 +74,11 @@ export async function buscarProducaoDados(): Promise<{
 
   for (let bloco = 0; bloco < headerIdxs.length; bloco++) {
     const legenda = normalizarNome(legendaDoBloco(bloco));
-    const etapa = CAPTION_ETAPA[legenda];
+    const etapas = CAPTION_ETAPA[legenda];
     // undefined = legenda desconhecida (bloco novo que ainda não mapeamos)
     // — ignora esse bloco com segurança em vez de quebrar a sync inteira.
-    if (!etapa) continue;
+    // [] = legenda conhecida mas de propósito fora do funil (Entrevistas etc).
+    if (!etapas || etapas.length === 0) continue;
 
     const headerRow = rows[headerIdxs[bloco]];
     const inicio = headerIdxs[bloco] + 1;
@@ -92,11 +100,14 @@ export async function buscarProducaoDados(): Promise<{
         const [dia, mes, ano] = dataStr.split("/");
         const data = `${ano}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
         // Tentativas/Alôs/Conexões são prospecção pura — sempre papel SDR.
-        const chave = `${nomeNormalizado}|${data}|${etapa}`;
-
-        const existente = acumulado.get(chave);
-        if (existente) existente.realizado += valor;
-        else acumulado.set(chave, { nomeNormalizado, data, etapa, realizado: valor, papel: "sdr" });
+        // Um bloco pode contribuir com MAIS de uma etapa (Alô Vônix conta
+        // como alô E como tentativa, ver comentário acima).
+        for (const etapa of etapas) {
+          const chave = `${nomeNormalizado}|${data}|${etapa}`;
+          const existente = acumulado.get(chave);
+          if (existente) existente.realizado += valor;
+          else acumulado.set(chave, { nomeNormalizado, data, etapa, realizado: valor, papel: "sdr" });
+        }
       }
     }
   }
