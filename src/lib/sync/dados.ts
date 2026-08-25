@@ -3,22 +3,31 @@ import { csvUrl, SHEET_GIDS } from "./config";
 import { normalizarNome } from "./parse";
 import type { FunilEtapa } from "@/lib/funil";
 
-// A aba "Dados" empilha 7 blocos (um por métrica), cada um com:
-// [linha de rótulo] [cabeçalho "Execultivos" + uma coluna por dia] [uma linha por pessoa] [linha "Total"]
-// Ordem confirmada: Tentativas, Alôs API, Conexão API, Alô Vônix, Conexão Vônix, Entrevistas, Entrevistas Inbound.
-// Alôs e Conexões somam API + Vônix na mesma etapa. O bloco de Entrevistas fica de fora (null) — só
-// reflete o SDR que agendou; a etapa "entrevistas" vem da aba dedicada (SDR + Closer), ver sync/entrevistas.ts.
-// Entrevistas Inbound também fica de fora por enquanto (ainda não sabemos se soma em cima de
-// "Entrevistas" ou é um conjunto disjunto de pessoas).
-const BLOCO_ETAPA: (FunilEtapa | null)[] = [
-  "tentativas",
-  "alos",
-  "conexoes",
-  "alos",
-  "conexoes",
-  null,
-  null,
-];
+// A aba "Dados" empilha N blocos (um por métrica), cada um com:
+// [linha de legenda] [cabeçalho "Execultivos" + uma coluna por dia] [uma linha por pessoa] [linha "Total"]
+//
+// Lê a etapa de cada bloco pela PRÓPRIA LEGENDA da planilha (não mais por
+// posição fixa) — achado 2026-08-25: o bloco 0 ("Tentativas") tinha zero
+// linhas de Vônix, só API, e ninguém tinha percebido porque a legenda da
+// célula A1 estava errada ("w" em vez de "Tentativas API"). Com posição
+// fixa, se algum dia surgir um bloco novo "Tentativas Vônix" (mesmo padrão
+// que "Alô Vônix"/"Conexão Vônix" já têm), ele ficaria mudo até alguém
+// lembrar de atualizar este arquivo. Por legenda, um bloco novo já entra
+// somando sozinho, contanto que a legenda bata com um dos nomes abaixo.
+//
+// O bloco 0 é especial: a legenda dele mora na célula A1 (linha 0, coluna
+// 0), que também é a linha de números de semana do cabeçalho — por isso
+// não segue o padrão "linha de legenda sozinha" dos blocos seguintes.
+const CAPTION_ETAPA: Record<string, FunilEtapa | null> = {
+  "tentativas api": "tentativas",
+  "tentativas vonix": "tentativas",
+  "alos api": "alos",
+  "alo vonix": "alos",
+  "conexao api": "conexoes",
+  "conexao vonix": "conexoes",
+  entrevistas: null, // vem da aba dedicada (SDR + Closer), ver sync/entrevistas.ts
+  "fechamentos inbound": null, // ainda não sabemos se soma em cima de "Entrevistas" ou é disjunto
+};
 
 export type ProducaoLinha = {
   nomeNormalizado: string;
@@ -48,11 +57,19 @@ export async function buscarProducaoDados(): Promise<{
     if (row[0] === "Total") totalIdxs.push(i);
   });
 
+  function legendaDoBloco(bloco: number): string {
+    if (bloco === 0) return (rows[0]?.[0] ?? "").trim();
+    return (rows[headerIdxs[bloco] - 1]?.[0] ?? "").trim();
+  }
+
   const acumulado = new Map<string, ProducaoLinha>();
   const nomesEncontrados = new Set<string>();
 
-  for (let bloco = 0; bloco < headerIdxs.length && bloco < BLOCO_ETAPA.length; bloco++) {
-    const etapa = BLOCO_ETAPA[bloco];
+  for (let bloco = 0; bloco < headerIdxs.length; bloco++) {
+    const legenda = normalizarNome(legendaDoBloco(bloco));
+    const etapa = CAPTION_ETAPA[legenda];
+    // undefined = legenda desconhecida (bloco novo que ainda não mapeamos)
+    // — ignora esse bloco com segurança em vez de quebrar a sync inteira.
     if (!etapa) continue;
 
     const headerRow = rows[headerIdxs[bloco]];
