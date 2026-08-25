@@ -177,7 +177,7 @@
 .weekly-dash nav.wd-nav button:hover { color: var(--paper); background: var(--chipbg); }
 .weekly-dash nav.wd-nav button[aria-selected="true"] { background: var(--flame); color: #fff; }
 
-.weekly-dash .wd-grid2 { display: grid; grid-template-columns: repeat(auto-fit,minmax(330px,1fr)); gap: 13px; }
+.weekly-dash .wd-grid2 { display: grid; grid-template-columns: repeat(auto-fit,minmax(400px,1fr)); gap: 13px; }
 .weekly-dash .wd-grid3 { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 13px; }
 .weekly-dash .wd-card { background: var(--surface); border: 1px solid var(--line); border-radius: 13px; padding: 16px 17px; box-shadow: var(--shadow); }
 .weekly-dash .wd-card h3 { font-size: 9.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--mute); font-weight: 800; margin-bottom: 13px; }
@@ -197,8 +197,8 @@
 .weekly-dash .wd-bar span { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, var(--flame), var(--ember)); transition: width .5s ease; }
 .weekly-dash .wd-bar .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--paper); opacity: .8; }
 .weekly-dash .wd-team-meta { display: flex; justify-content: space-between; font-size: 10px; color: var(--mute); margin-top: 7px; }
-.weekly-dash .wd-team-stats { display: grid; grid-template-columns: repeat(5,1fr); gap: 8px; margin-top: 13px; border-top: 1px solid var(--line); padding-top: 12px; }
-.weekly-dash .wd-ts { font-size: 9.5px; color: var(--mute); } .weekly-dash .wd-ts b { display: block; font-size: 14px; color: var(--paper); font-weight: 800; margin-top: 3px; }
+.weekly-dash .wd-team-stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px 8px; margin-top: 13px; border-top: 1px solid var(--line); padding-top: 12px; }
+.weekly-dash .wd-ts { font-size: 9.5px; color: var(--mute); } .weekly-dash .wd-ts b { display: block; font-size: 14px; color: var(--paper); font-weight: 800; margin-top: 3px; white-space: nowrap; }
 
 .weekly-dash .wd-fn { display: flex; flex-direction: column; gap: 8px; }
 .weekly-dash .wd-fnrow { display: grid; grid-template-columns: 110px 1fr 64px; gap: 10px; align-items: center; }
