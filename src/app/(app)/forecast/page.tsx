@@ -3,6 +3,7 @@ import ForecastView from "@/components/forecast/ForecastView";
 import { podeEditarOperacao, type ForecastOp } from "@/lib/forecast";
 import { getViewerContext } from "@/lib/preview";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
+import { SDR_FORECAST_LIBERADO } from "@/lib/acessos-especiais";
 
 export default async function ForecastPage() {
   const supabase = await createClient();
@@ -10,8 +11,12 @@ export default async function ForecastPage() {
   if (!viewer) return null;
   const meId = viewer.effectiveId;
   const meRole = viewer.effectiveRole;
+  // Exceção pontual (ver src/lib/acessos-especiais.ts) — vê como se fosse
+  // Closer (só as próprias operações), mas nunca edita: podeEditarOperacao
+  // não reconhece papel "sdr", então os controles continuam bloqueados.
+  const sdrComForecastLiberado = meRole === "sdr" && SDR_FORECAST_LIBERADO.has(meId);
 
-  if (!["closer", "lider", "diretor", "investidor"].includes(meRole)) {
+  if (!["closer", "lider", "diretor", "investidor"].includes(meRole) && !sdrComForecastLiberado) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>
@@ -151,7 +156,7 @@ export default async function ForecastPage() {
   // Maximus; o líder dos Templários não deve vê-la no Forecast dele, mesmo
   // com um SDR seu envolvido, porque o crédito não é do time dele.
   let ops: ForecastOp[];
-  if (meRole === "closer") {
+  if (meRole === "closer" || sdrComForecastLiberado) {
     ops = (opRows ?? [])
       .map((o, i) => ({ raw: o, computed: todasOps[i] }))
       .filter(({ raw }) => raw.closer_profile_id === meId || raw.sdr_profile_id === meId)
@@ -185,7 +190,7 @@ export default async function ForecastPage() {
     });
 
   const escopoBase =
-    meRole === "closer"
+    meRole === "closer" || sdrComForecastLiberado
       ? "Seus assinados do mês"
       : meRole === "lider"
         ? `${exercitoLideradoNome ?? "Seu Exército"} · todas as tribos`
@@ -195,7 +200,7 @@ export default async function ForecastPage() {
     <ForecastView
       ops={ops}
       escopoLabel={viewer.isPreview ? `${escopoBase} (pré-visualizando como ${viewer.effectiveNome})` : escopoBase}
-      tribos={meRole === "closer" ? [] : tribosFiltro}
+      tribos={meRole === "closer" || sdrComForecastLiberado ? [] : tribosFiltro}
     />
   );
 }

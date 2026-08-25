@@ -10,6 +10,7 @@ import MinervaWidget from "@/components/minerva/MinervaWidget";
 import { limparPreview } from "./preview-actions";
 import { IconLaurel, IconEye } from "@/components/ui/icons";
 import { buscarPendencias, temNovidadeMural } from "@/lib/pendencias";
+import { SDR_FORECAST_LIBERADO } from "@/lib/acessos-especiais";
 import { buscarMencoesPendentes } from "@/lib/social";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 
@@ -117,6 +118,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     void roles;
     return rest;
   });
+
+  // Exceção pontual (ver src/lib/acessos-especiais.ts): Forecast liberado
+  // pra 2 SDRs específicos, sem virar um papel novo — não usa
+  // previewPessoa de propósito, é sempre sobre a conta real logada.
+  if (user && profile?.role === "sdr" && SDR_FORECAST_LIBERADO.has(user.id)) {
+    const posProducao = itensVisiveis.findIndex((i) => i.type === "link" && i.href === "/producao");
+    itensVisiveis.splice(posProducao + 1, 0, { type: "link", href: "/forecast", label: "Forecast" });
+  }
 
   const ehExecutivo = papelVisualizado === "sdr" || papelVisualizado === "closer" || papelVisualizado === "lider";
   // Diretor também ganha a lateral (2026-08-22, a pedido) — o conteúdo já
