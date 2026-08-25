@@ -90,11 +90,17 @@ export default async function MinhaProducaoLiderPage() {
   const hoje = new Date();
   const { data: metaMesAtual } = await supabase
     .from("metas_mensais")
-    .select("meta_credito_total")
+    .select("id, meta_credito_total")
     .eq("ano", hoje.getFullYear())
     .eq("mes", hoje.getMonth() + 1)
     .maybeSingle();
   const { count: numExercitos } = await supabase.from("exercitos").select("id", { count: "exact", head: true });
+
+  const { data: conversoesMes } = metaMesAtual
+    ? await supabase.from("metas_conversao").select("etapa_de, etapa_para, taxa_esperada").eq("meta_mensal_id", metaMesAtual.id)
+    : { data: [] };
+  const metaConversao: Record<string, number> = {};
+  for (const c of conversoesMes ?? []) metaConversao[`${c.etapa_de}_${c.etapa_para}`] = Number(c.taxa_esperada);
 
   const membrosPorTribo = new Map<string, number>();
   for (const p of pessoas ?? []) {
@@ -234,7 +240,7 @@ export default async function MinhaProducaoLiderPage() {
   const entrevistaEventos: EntrevistaEvento[] = eventosRows.flatMap((ev): EntrevistaEvento[] => {
     const time = resolverTimeTribo(ev.sdr_profile_id, ev.closer_profile_id);
     if (!time) return [];
-    return [{ data: ev.data, time, quantidade: ev.quantidade }];
+    return [{ data: ev.data, time, sdrId: ev.sdr_profile_id, closerId: ev.closer_profile_id, quantidade: ev.quantidade }];
   });
 
   const lastData = ops.length > 0 ? ops[ops.length - 1].data : hoje.toISOString().slice(0, 10);
@@ -270,6 +276,7 @@ export default async function MinhaProducaoLiderPage() {
     anoReferenciaMeta: hoje.getFullYear(),
     mesReferenciaMeta: hoje.getMonth() + 1,
     entrevistaEventos,
+    metaConversao,
   };
 
   return (

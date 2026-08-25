@@ -240,7 +240,7 @@ export default function WeeklyDashboard({
             <PanelResultado C={CConsolidado} dataset={dataset} team={team} person={person} onClickTeam={clickTeam} />
           )}
           {tab === "p2" && (
-            <PanelFunil C={CConsolidado} team={team} person={person} onClickPerson={clickPerson} />
+            <PanelFunil C={CConsolidado} dataset={dataset} team={team} person={person} onClickPerson={clickPerson} />
           )}
           {tab === "p3" && <PanelForecast C={CConsolidado} />}
           {tab === "p4" && <PanelIndividual C={CConsolidado} person={person} onClickPerson={clickPerson} />}
@@ -575,10 +575,20 @@ function PanelResultado({
 
 /* ---------------- Panel: Funil ---------------- */
 
+const ETAPA_LABEL: Record<"t" | "alo" | "conex" | "e" | "n" | "nPago", string> = {
+  t: "tentativas",
+  alo: "alos",
+  conex: "conexoes",
+  e: "entrevistas",
+  n: "assinaturas",
+  nPago: "pagos",
+};
+
 function PanelFunil({
-  C, team, person, onClickPerson,
+  C, dataset, team, person, onClickPerson,
 }: {
   C: ReturnType<typeof compute>;
+  dataset: WeeklyDataset;
   team: string | null;
   person: string | null;
   onClickPerson: (id: string) => void;
@@ -610,10 +620,12 @@ function PanelFunil({
     return C.funnel[key];
   }
 
+  // Time todo de SDR — inclui Tribunos/Closers, mas só com a produção deles
+  // COMO sdr (eSdr/opsSdr/credSdr/pagoSdr), pra não duplicar o que já conta
+  // pro lado Closer deles. Sem limite de top-10: é o time inteiro.
   const pessoasList = Object.entries(C.people)
-    .filter(([, p]) => p.t + p.alo + p.e > 0)
-    .sort((a, b) => b[1].e - a[1].e)
-    .slice(0, 10);
+    .filter(([, p]) => p.ativo && (p.role === "sdr" || p.role === "closer"))
+    .sort((a, b) => b[1].eSdr - a[1].eSdr || b[1].opsSdr - a[1].opsSdr);
 
   return (
     <div>
@@ -651,7 +663,10 @@ function PanelFunil({
         <div className="wd-tblwrap">
           <table className="wd-table">
             <thead>
-              <tr><th>Etapa</th>{show.map((n) => <th key={n}>{n.slice(0, 4)}.</th>)}{show.length > 1 && <th>Δ</th>}<th>Geral</th></tr>
+              <tr>
+                <th>Etapa</th>{show.map((n) => <th key={n}>{n.slice(0, 4)}.</th>)}{show.length > 1 && <th>Δ</th>}
+                <th>Geral</th><th>Meta</th><th>Dif.</th>
+              </tr>
             </thead>
             <tbody>
               {conv.map(([l, a, b]) => {
@@ -664,6 +679,8 @@ function PanelFunil({
                 const chaveGeral = b as "t" | "alo" | "conex" | "e" | "n" | "nPago";
                 const denomGeral = valorGeral(chaveGeral);
                 const vGeral = denomGeral ? valorGeral(a as typeof chaveGeral) / denomGeral : NaN;
+                const vMeta = dataset.metaConversao?.[`${ETAPA_LABEL[chaveGeral]}_${ETAPA_LABEL[a as typeof chaveGeral]}`];
+                const dMeta = vMeta !== undefined && isFinite(vGeral) ? vGeral - vMeta : NaN;
                 return (
                   <tr key={l}>
                     <td className="wd-nm">{l}</td>
@@ -673,6 +690,8 @@ function PanelFunil({
                       return <td><span className={`wd-pill ${!isFinite(dd) || Math.abs(dd) < 0.03 ? "wd-p-mut" : dd > 0 ? "wd-p-go" : "wd-p-bad"}`}>{isFinite(dd) ? (dd > 0 ? "+" : "") + PC(dd) : "—"}</span></td>;
                     })()}
                     <td><b>{PC(vGeral)}</b></td>
+                    <td>{vMeta !== undefined ? PC(vMeta) : "—"}</td>
+                    <td>{isFinite(dMeta) ? <span className={`wd-pill ${Math.abs(dMeta) < 0.03 ? "wd-p-mut" : dMeta > 0 ? "wd-p-go" : "wd-p-bad"}`}>{(dMeta > 0 ? "+" : "") + PC(dMeta)}</span> : "—"}</td>
                   </tr>
                 );
               })}
@@ -681,7 +700,7 @@ function PanelFunil({
         </div>
       </div>
       <div className="wd-card" style={{ marginTop: 13 }}>
-        <h3>Volume por etapa e por pessoa <em>— top atividade</em></h3>
+        <h3>Volume por etapa e por pessoa <em>— time de SDR (Tribunos só com a produção como SDR)</em></h3>
         <div className="wd-tblwrap">
           <table className="wd-table">
             {pessoasList.length ? (
@@ -694,14 +713,14 @@ function PanelFunil({
                 </thead>
                 <tbody>
                   {pessoasList.map(([id, p]) => {
-                    const ed = C.duDec ? p.e / C.duDec : 0;
+                    const ed = C.duDec ? p.eSdr / C.duDec : 0;
                     return (
                       <tr key={id} className={`row ${person === id ? "sel" : ""}`} onClick={() => onClickPerson(id)}>
-                        <td className="wd-nm">{p.nome}<small>{p.time || "—"}</small></td>
-                        <td>{p.t.toLocaleString("pt-BR")}</td><td>{p.alo.toLocaleString("pt-BR")}</td><td>{p.conex}</td><td>{p.e}</td>
+                        <td className="wd-nm">{p.nome}<small>{p.time || "—"}{p.role === "closer" ? " · Tribuno" : ""}</small></td>
+                        <td>{p.t.toLocaleString("pt-BR")}</td><td>{p.alo.toLocaleString("pt-BR")}</td><td>{p.conex}</td><td>{p.eSdr}</td>
                         <td><span className={`wd-pill ${ed >= 1.5 ? "wd-p-go" : ed >= 0.75 ? "wd-p-warn" : "wd-p-bad"}`}>{N1(ed)}</span></td>
-                        <td>{p.ops || "—"}</td><td>{p.cred ? K(p.cred) : "—"}</td>
-                        <td>{p.nPago || "—"}</td><td>{p.pago ? K(p.pago) : "—"}</td>
+                        <td>{p.opsSdr || "—"}</td><td>{p.credSdr ? K(p.credSdr) : "—"}</td>
+                        <td>{p.nPagoSdr || "—"}</td><td>{p.pagoSdr ? K(p.pagoSdr) : "—"}</td>
                       </tr>
                     );
                   })}
@@ -825,12 +844,19 @@ function PanelIndividual({
   if (C.tot.n) T.push(<div key="liq" className="wd-al g"><div className="txt"><b>Liquidação</b> — {PC0(C.tot.n ? C.tot.nPago / C.tot.n : 0)} das assinaturas viraram pago, contra meta de 60%.<em>Confirmar se o patamar se sustenta no mês seguinte antes de virar premissa.</em></div></div>);
 
   const closerList = list.filter(([, p]) => p.role === "closer");
-  const sdrList = list.filter(([, p]) => p.role === "sdr");
+  // SDR ganha os Tribunos também (com a produção deles COMO sdr, não a
+  // mista) — pra não sumir de vista quem também prospecta. Ordenado por
+  // atividade como SDR, não pelo crédito total (senão os Tribunos, que em
+  // geral têm crédito bem maior via Closer, iam pro topo de uma lista que é
+  // sobre o lado SDR deles).
+  const sdrList = list
+    .filter(([, p]) => p.role === "sdr" || p.role === "closer")
+    .sort((a, b) => b[1].eSdr - a[1].eSdr || b[1].opsSdr - a[1].opsSdr);
 
-  function tabelaPapel(titulo: string, rows: [string, ReturnType<typeof compute>["people"][string]][]) {
+  function tabelaPapel(titulo: string, rows: [string, ReturnType<typeof compute>["people"][string]][], variant: "closer" | "sdr") {
     return (
       <div className="wd-card" style={{ marginTop: titulo === "SDR" ? 13 : 0 }}>
-        <h3>{titulo} <em>— clique numa linha para filtrar todo o painel</em></h3>
+        <h3>{titulo} <em>— clique numa linha para filtrar todo o painel{variant === "sdr" ? "; Tribunos aparecem só com a produção como SDR" : ""}</em></h3>
         <div className="wd-tblwrap">
           <table className="wd-table">
             {rows.length ? (
@@ -844,19 +870,23 @@ function PanelIndividual({
                 </thead>
                 <tbody>
                   {rows.map(([id, i]) => {
-                    const at = i.meta > 0 ? i.pago / i.meta : null;
-                    const ed = C.duDec ? i.e / C.duDec : 0;
+                    const e = variant === "closer" ? i.eCloser : i.eSdr;
+                    const ops = variant === "closer" ? i.opsCloser : i.opsSdr;
+                    const nPago = variant === "closer" ? i.nPagoCloser : i.nPagoSdr;
+                    const pago = variant === "closer" ? i.pagoCloser : i.pagoSdr;
+                    const at = i.meta > 0 ? pago / i.meta : null;
+                    const ed = C.duDec ? e / C.duDec : 0;
                     const dc = i.dsp >= 30 ? "wd-p-bad" : i.dsp >= 15 ? "wd-p-warn" : "wd-p-go";
                     return (
                       <tr key={id} className={`row ${person === id ? "sel" : ""}`} onClick={() => onClickPerson(id)}>
                         <td className="wd-nm">{i.nome}<small>{i.time || "—"} · {i.rank}</small></td>
                         <td>{i.t.toLocaleString("pt-BR")}</td>
-                        <td>{i.e}</td>
+                        <td>{e}</td>
                         <td><span className={`wd-pill ${ed >= 1.5 ? "wd-p-go" : ed >= 0.75 ? "wd-p-warn" : "wd-p-bad"}`}>{N1(ed)}</span></td>
-                        <td>{i.ops || "—"}</td>
-                        <td>{i.nPago || "—"}</td>
+                        <td>{ops || "—"}</td>
+                        <td>{nPago || "—"}</td>
                         <td><span className={`wd-pill ${dc}`}>{i.dsp >= 99999 ? "—" : i.dsp}</span></td>
-                        <td><b>{i.pago ? K(i.pago) : "—"}</b></td>
+                        <td><b>{pago ? K(pago) : "—"}</b></td>
                         <td>{i.meta ? K(i.meta) : "—"}</td>
                         <td>{at !== null ? <><span className="wd-minibar"><span className={at >= 1 ? "ok" : ""} style={{ width: `${Math.min(100, at * 100)}%` }} /></span> {PC0(at)}</> : "—"}</td>
                       </tr>
@@ -875,8 +905,8 @@ function PanelIndividual({
 
   return (
     <div>
-      {tabelaPapel("Closer", closerList)}
-      {tabelaPapel("SDR", sdrList)}
+      {tabelaPapel("Closer", closerList, "closer")}
+      {tabelaPapel("SDR", sdrList, "sdr")}
       <div className="wd-grid2" style={{ marginTop: 13 }}>
         <div className="wd-card"><h3>Precisa de atenção nesta weekly</h3><div className="wd-alerts">{A.length ? A : <div className="wd-empty">Nenhum alerta neste recorte.</div>}</div></div>
         <div className="wd-card"><h3>Destaques do período</h3><div className="wd-alerts">{T.length ? T : <div className="wd-empty">Sem destaques no recorte.</div>}</div></div>

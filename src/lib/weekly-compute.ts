@@ -50,7 +50,13 @@ export type WeeklyState = {
 // resolvido); a Weekly do Diretor (por Exército) não usa essa regra.
 export const FORA_DA_TRIBO = "Fora da Tribo";
 
-export type EntrevistaEvento = { data: string; time: string | null; quantidade: number };
+export type EntrevistaEvento = {
+  data: string;
+  time: string | null;
+  sdrId: string | null;
+  closerId: string | null;
+  quantidade: number;
+};
 
 export type WeeklyDataset = {
   teams: string[];
@@ -66,8 +72,13 @@ export type WeeklyDataset = {
   mesReferenciaMeta: number;
   // Opcional: quando presente, byTeam.e/funnel.e passam a contar entrevistas
   // por este evento resolvido (SDR+Closer mesma Tribo) em vez da aproximação
-  // por papel (crédito de quem não é 'sdr'). Ver FORA_DA_TRIBO.
+  // por papel (crédito de quem não é 'sdr'). Ver FORA_DA_TRIBO. Também
+  // alimenta eSdr/eCloser por pessoa (ver ComputedPerson).
   entrevistaEventos?: EntrevistaEvento[];
+  // Taxa esperada de conversão configurada em Metas Mensais, chave
+  // "${etapa_de}_${etapa_para}" (mesmo formato de metas.ts) — usado pra
+  // mostrar "Meta" na tabela de Conversão entre etapas.
+  metaConversao?: Record<string, number>;
 };
 
 export function isDiaUtil(dataISO: string): boolean {
@@ -160,6 +171,21 @@ export type ComputedPerson = {
   ops: number;
   pago: number;
   nPago: number;
+  // Mesmas métricas acima, mas separadas por papel exercido NA OPERAÇÃO —
+  // uma pessoa que às vezes é SDR e às vezes Closer numa operação (comum
+  // com Tribuno/Closer que também prospecta) tinha os dois lados somados
+  // juntos em cred/ops/pago/nPago. Usado pra separar Closer de SDR na aba
+  // Individual e no volume por pessoa do Funil sem duplicar produção.
+  eSdr: number;
+  eCloser: number;
+  credSdr: number;
+  opsSdr: number;
+  pagoSdr: number;
+  nPagoSdr: number;
+  credCloser: number;
+  opsCloser: number;
+  pagoCloser: number;
+  nPagoCloser: number;
 };
 
 export type Computed = {
@@ -264,6 +290,16 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
           ops: 0,
           pago: 0,
           nPago: 0,
+          eSdr: 0,
+          eCloser: 0,
+          credSdr: 0,
+          opsSdr: 0,
+          pagoSdr: 0,
+          nPagoSdr: 0,
+          credCloser: 0,
+          opsCloser: 0,
+          pagoCloser: 0,
+          nPagoCloser: 0,
         };
       }
     }
@@ -278,6 +314,33 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
           p.pago += o.valor;
           p.nPago++;
         }
+      }
+      if (o.sdrId && out[o.sdrId]) {
+        const p = out[o.sdrId];
+        p.credSdr += o.valor;
+        p.opsSdr++;
+        if (o.status === "PAGO") {
+          p.pagoSdr += o.valor;
+          p.nPagoSdr++;
+        }
+      }
+      if (o.closerId && out[o.closerId]) {
+        const p = out[o.closerId];
+        p.credCloser += o.valor;
+        p.opsCloser++;
+        if (o.status === "PAGO") {
+          p.pagoCloser += o.valor;
+          p.nPagoCloser++;
+        }
+      }
+    }
+    if (dataset.entrevistaEventos) {
+      for (const ev of dataset.entrevistaEventos) {
+        if (ev.data < from || ev.data > to) continue;
+        if (useTeam && team && ev.time !== team) continue;
+        if (usePerson && person && ev.sdrId !== person && ev.closerId !== person) continue;
+        if (ev.sdrId && out[ev.sdrId]) out[ev.sdrId].eSdr += ev.quantidade;
+        if (ev.closerId && out[ev.closerId]) out[ev.closerId].eCloser += ev.quantidade;
       }
     }
     return out;

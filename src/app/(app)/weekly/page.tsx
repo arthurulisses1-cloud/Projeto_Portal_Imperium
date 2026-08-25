@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
 import WeeklyDashboard from "@/components/weekly/WeeklyDashboard";
-import type { WeeklyDataset, WeeklyOp, PersonInfo } from "@/lib/weekly-compute";
+import type { WeeklyDataset, WeeklyOp, PersonInfo, EntrevistaEvento } from "@/lib/weekly-compute";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 import { mapaMetaCreditoPorTribo } from "@/lib/metas";
 
@@ -50,10 +50,16 @@ export default async function WeeklyPage() {
   const hoje = new Date();
   const { data: metaMesAtual } = await supabase
     .from("metas_mensais")
-    .select("meta_credito_total")
+    .select("id, meta_credito_total")
     .eq("ano", hoje.getFullYear())
     .eq("mes", hoje.getMonth() + 1)
     .maybeSingle();
+
+  const { data: conversoesMes } = metaMesAtual
+    ? await supabase.from("metas_conversao").select("etapa_de, etapa_para, taxa_esperada").eq("meta_mensal_id", metaMesAtual.id)
+    : { data: [] };
+  const metaConversao: Record<string, number> = {};
+  for (const c of conversoesMes ?? []) metaConversao[`${c.etapa_de}_${c.etapa_para}`] = Number(c.taxa_esperada);
 
   const membrosPorTribo = new Map<string, number>();
   for (const p of pessoas ?? []) {
@@ -180,6 +186,38 @@ export default async function WeeklyPage() {
     };
   });
 
+  // Entrevistas com o par SDR+Closer preservado (migration 0048) — usado
+  // aqui só pra separar, por pessoa, quanto foi feito como SDR vs. como
+  // Closer (Tribuno que também prospecta não deve ter as duas produções
+  // somadas juntas). O byTeam.e/funnel.e por Exército aproveitam de brinde
+  // (contagem de evento em vez de crédito por papel), mesma regra `closerTime
+  // ?? sdrTime` já usada em `ops` — sem a regra "mesma Tribo" (essa é só de
+  // Minha Produção, ver FORA_DA_TRIBO).
+  const eventosRows = await buscarTudoPaginado<{
+    data: string;
+    sdr_profile_id: string | null;
+    closer_profile_id: string | null;
+    quantidade: number;
+  }>((from, to) =>
+    supabase
+      .from("entrevistas_eventos")
+      .select("data, sdr_profile_id, closer_profile_id, quantidade")
+      .gte("data", inicioAno)
+      .order("data")
+      .range(from, to)
+  );
+  const entrevistaEventos: EntrevistaEvento[] = eventosRows.map((ev) => {
+    const sdrTime = ev.sdr_profile_id ? people[ev.sdr_profile_id]?.time ?? null : null;
+    const closerTime = ev.closer_profile_id ? people[ev.closer_profile_id]?.time ?? null : null;
+    return {
+      data: ev.data,
+      time: closerTime ?? sdrTime,
+      sdrId: ev.sdr_profile_id,
+      closerId: ev.closer_profile_id,
+      quantidade: ev.quantidade,
+    };
+  });
+
   const lastData = ops.length > 0 ? ops[ops.length - 1].data : hoje.toISOString().slice(0, 10);
 
   // metas por mês (Império e por Exército — divisão igual entre exércitos)
@@ -205,6 +243,8 @@ export default async function WeeklyPage() {
     lastData,
     anoReferenciaMeta: hoje.getFullYear(),
     mesReferenciaMeta: hoje.getMonth() + 1,
+    entrevistaEventos,
+    metaConversao,
   };
 
   return <WeeklyDashboard dataset={dataset} anoAtual={hoje.getFullYear()} />;
