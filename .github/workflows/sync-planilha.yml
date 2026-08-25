@@ -1,0 +1,20 @@
+name: Sincronizar planilha
+
+# Chama o endpoint de sync do próprio app em horário comercial, de 2 em 2
+# horas, sem precisar de ninguém clicando manualmente. Além do cron
+# automático de 1x/dia que já roda no Vercel (madrugada), isso cobre o
+# dia inteiro sem custar nada (GitHub Actions é grátis pra esse volume de
+# chamadas — cada execução é só um curl, dura segundos).
+on:
+  schedule:
+    # Todo horário em UTC. 11h-23h UTC = 8h-20h em Brasília (UTC-3).
+    - cron: "0 11-23/2 * * *"
+  workflow_dispatch: {} # também dá pra rodar na mão, pelo botão "Run workflow" no GitHub
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/sync
+        run: |
+          curl -sf --retry 2 "https://projeto-portal-imperium-chi.vercel.app/api/sync?secret=${{ secrets.CRON_SECRET }}"
