@@ -552,7 +552,7 @@ function PanelResultado({
                 <span className="wd-bar-empagamento" style={{ width: `${pEmPagamento}%` }} />
                 <div className="mark" style={{ left: `${(duDec / (duTot || 1)) * 100}%` }} />
               </div>
-              <div className="wd-team-meta"><span>{SM(t.cred)} de {SM(t.meta.v)}</span><span>pace: {SM((t.meta.v * duDec) / (duTot || 1))}</span></div>
+              <div className="wd-team-meta"><span>{SM(t.pagoOuAguardando)} de {SM(t.meta.v)}</span><span>pace: {SM((t.meta.v * duDec) / (duTot || 1))}</span></div>
               <div className="wd-team-stats">
                 <div className="wd-ts">Assinaturas<b>{t.n}</b></div>
                 <div className="wd-ts">Assinado<b>{SM(t.cred)}</b></div>

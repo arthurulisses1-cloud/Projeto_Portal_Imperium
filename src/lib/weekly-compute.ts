@@ -130,6 +130,7 @@ export type ComputedTeam = {
   hc: number;
   cred: number;
   pago: number;
+  pagoOuAguardando: number;
   caiu: number;
   n: number;
   nPago: number;
@@ -163,7 +164,7 @@ export type ComputedPerson = {
 export type Computed = {
   ops: WeeklyOp[];
   people: Record<string, ComputedPerson>;
-  tot: { cred: number; n: number; pago: number; nPago: number; caiu: number; nCaiu: number };
+  tot: { cred: number; n: number; pago: number; pagoOuAguardando: number; nPago: number; caiu: number; nCaiu: number };
   byTeam: Record<string, ComputedTeam>;
   funnel: { t: number; alo: number; conex: number; e: number };
   byOrigem: Record<string, { cred: number; n: number }>;
@@ -290,6 +291,12 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
     cred: arr.reduce((s, o) => s + o.valor, 0),
     n: arr.length,
     pago: arr.filter((o) => o.status === "PAGO").reduce((s, o) => s + o.valor, 0),
+    // "Executado" pro leitor da Weekly: pago de verdade + o que já tá
+    // marcado como aguardando pagamento no Forecast (assinado, faltando só
+    // o dinheiro cair) — não inclui o resto do assinado ainda em aberto.
+    pagoOuAguardando: arr
+      .filter((o) => o.status === "PAGO" || o.statusManual === "aguardando_pagamento")
+      .reduce((s, o) => s + o.valor, 0),
     nPago: arr.filter((o) => o.status === "PAGO").length,
     caiu: arrCheio.filter((o) => o.status === "CAIU").reduce((s, o) => s + o.valor, 0),
     nCaiu: arrCheio.filter((o) => o.status === "CAIU").length,
