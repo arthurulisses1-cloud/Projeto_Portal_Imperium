@@ -530,6 +530,8 @@ function PanelResultado({
           const t = byTeam[tm];
           if (!t) return null;
           const p = t.meta.v ? t.cred / t.meta.v : 0;
+          const pPago = t.meta.v ? Math.min(100, (t.pago / t.meta.v) * 100) : 0;
+          const pEmPagamento = Math.max(0, Math.min(100, p * 100) - pPago);
           const gap = Math.max(0, t.meta.v - t.cred);
           const sel = team === tm, dim = !!team && !sel;
           return (
@@ -545,7 +547,11 @@ function PanelResultado({
                 <div className="wd-team-n">{tm}<small>{t.lider} · {t.hc} pessoas ativas</small></div>
                 <div className="wd-team-p" style={{ color: p >= duDec / (duTot || 1) ? "var(--go)" : "var(--bad)" }}>{PC0(p)}</div>
               </div>
-              <div className="wd-bar"><span style={{ width: `${Math.min(100, p * 100)}%` }} /><div className="mark" style={{ left: `${(duDec / (duTot || 1)) * 100}%` }} /></div>
+              <div className="wd-bar">
+                <span className="wd-bar-pago" style={{ width: `${pPago}%` }} />
+                <span className="wd-bar-empagamento" style={{ width: `${pEmPagamento}%` }} />
+                <div className="mark" style={{ left: `${(duDec / (duTot || 1)) * 100}%` }} />
+              </div>
               <div className="wd-team-meta"><span>{SM(t.cred)} de {SM(t.meta.v)}</span><span>pace: {SM((t.meta.v * duDec) / (duTot || 1))}</span></div>
               <div className="wd-team-stats">
                 <div className="wd-ts">Assinaturas<b>{t.n}</b></div>
