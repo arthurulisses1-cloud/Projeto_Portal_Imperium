@@ -599,6 +599,16 @@ function PanelFunil({
     ["Entrevista → Assinatura", "n", "e"],
     ["Assinatura → Pago", "nPago", "n"],
   ];
+  // Geral = empresa toda (ou o Exército/Tribo inteiro, se já tiver algum
+  // filtro de escopo aplicado) — não é a soma dos times mostrados na
+  // tabela, é o funil consolidado de verdade (C.funnel/C.tot), senão duas
+  // Tribos "Fora da Tribo" incluídas em ambas contariam a mesma entrevista
+  // 2x na soma.
+  function valorGeral(key: "t" | "alo" | "conex" | "e" | "n" | "nPago"): number {
+    if (key === "n") return C.tot.n;
+    if (key === "nPago") return C.tot.nPago;
+    return C.funnel[key];
+  }
 
   const pessoasList = Object.entries(C.people)
     .filter(([, p]) => p.t + p.alo + p.e > 0)
@@ -636,62 +646,71 @@ function PanelFunil({
         </div>
       </div>
 
-      <div className="wd-grid2" style={{ marginTop: 13 }}>
-        <div className="wd-card">
-          <h3>Conversão entre etapas <em>— onde está o gargalo</em></h3>
-          <div className="wd-tblwrap">
-            <table className="wd-table">
-              <thead>
-                <tr><th>Etapa</th>{show.map((n) => <th key={n}>{n.slice(0, 4)}.</th>)}{show.length > 1 && <th>Δ</th>}</tr>
-              </thead>
-              <tbody>
-                {conv.map(([l, a, b]) => {
-                  const vs = show.map((n) => {
-                    const team = C.byTeam[n];
-                    const denom = Number(team?.[b] ?? 0);
-                    const numer = Number(team?.[a] ?? 0);
-                    return denom ? numer / denom : NaN;
-                  });
-                  return (
-                    <tr key={l}>
-                      <td className="wd-nm">{l}</td>
-                      {vs.map((v, i) => <td key={i}>{PC(v)}</td>)}
-                      {show.length > 1 && (() => {
-                        const dd = vs[0] - vs[1];
-                        return <td><span className={`wd-pill ${!isFinite(dd) || Math.abs(dd) < 0.03 ? "wd-p-mut" : dd > 0 ? "wd-p-go" : "wd-p-bad"}`}>{isFinite(dd) ? (dd > 0 ? "+" : "") + PC(dd) : "—"}</span></td>;
-                      })()}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      <div className="wd-card" style={{ marginTop: 13 }}>
+        <h3>Conversão entre etapas <em>— onde está o gargalo</em></h3>
+        <div className="wd-tblwrap">
+          <table className="wd-table">
+            <thead>
+              <tr><th>Etapa</th>{show.map((n) => <th key={n}>{n.slice(0, 4)}.</th>)}{show.length > 1 && <th>Δ</th>}<th>Geral</th></tr>
+            </thead>
+            <tbody>
+              {conv.map(([l, a, b]) => {
+                const vs = show.map((n) => {
+                  const team = C.byTeam[n];
+                  const denom = Number(team?.[b] ?? 0);
+                  const numer = Number(team?.[a] ?? 0);
+                  return denom ? numer / denom : NaN;
+                });
+                const chaveGeral = b as "t" | "alo" | "conex" | "e" | "n" | "nPago";
+                const denomGeral = valorGeral(chaveGeral);
+                const vGeral = denomGeral ? valorGeral(a as typeof chaveGeral) / denomGeral : NaN;
+                return (
+                  <tr key={l}>
+                    <td className="wd-nm">{l}</td>
+                    {vs.map((v, i) => <td key={i}>{PC(v)}</td>)}
+                    {show.length > 1 && (() => {
+                      const dd = vs[0] - vs[1];
+                      return <td><span className={`wd-pill ${!isFinite(dd) || Math.abs(dd) < 0.03 ? "wd-p-mut" : dd > 0 ? "wd-p-go" : "wd-p-bad"}`}>{isFinite(dd) ? (dd > 0 ? "+" : "") + PC(dd) : "—"}</span></td>;
+                    })()}
+                    <td><b>{PC(vGeral)}</b></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-        <div className="wd-card">
-          <h3>Volume por etapa e por pessoa <em>— top atividade</em></h3>
-          <div className="wd-tblwrap">
-            <table className="wd-table">
-              {pessoasList.length ? (
-                <>
-                  <thead><tr><th>Pessoa</th><th>Tent.</th><th>Alôs</th><th>Conex.</th><th>Entrev.</th><th>Ent./dia</th></tr></thead>
-                  <tbody>
-                    {pessoasList.map(([id, p]) => {
-                      const ed = C.duDec ? p.e / C.duDec : 0;
-                      return (
-                        <tr key={id} className={`row ${person === id ? "sel" : ""}`} onClick={() => onClickPerson(id)}>
-                          <td className="wd-nm">{p.nome}<small>{p.time || "—"}</small></td>
-                          <td>{p.t.toLocaleString("pt-BR")}</td><td>{p.alo.toLocaleString("pt-BR")}</td><td>{p.conex}</td><td>{p.e}</td>
-                          <td><span className={`wd-pill ${ed >= 1.5 ? "wd-p-go" : ed >= 0.75 ? "wd-p-warn" : "wd-p-bad"}`}>{N1(ed)}</span></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </>
-              ) : (
-                <tbody><tr><td className="wd-empty">Sem atividade registrada.</td></tr></tbody>
-              )}
-            </table>
-          </div>
+      </div>
+      <div className="wd-card" style={{ marginTop: 13 }}>
+        <h3>Volume por etapa e por pessoa <em>— top atividade</em></h3>
+        <div className="wd-tblwrap">
+          <table className="wd-table">
+            {pessoasList.length ? (
+              <>
+                <thead>
+                  <tr>
+                    <th>Pessoa</th><th>Tent.</th><th>Alôs</th><th>Conex.</th><th>Entrev.</th><th>Ent./dia</th>
+                    <th>Assin.</th><th>Assin. R$</th><th>Pago</th><th>Pago R$</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pessoasList.map(([id, p]) => {
+                    const ed = C.duDec ? p.e / C.duDec : 0;
+                    return (
+                      <tr key={id} className={`row ${person === id ? "sel" : ""}`} onClick={() => onClickPerson(id)}>
+                        <td className="wd-nm">{p.nome}<small>{p.time || "—"}</small></td>
+                        <td>{p.t.toLocaleString("pt-BR")}</td><td>{p.alo.toLocaleString("pt-BR")}</td><td>{p.conex}</td><td>{p.e}</td>
+                        <td><span className={`wd-pill ${ed >= 1.5 ? "wd-p-go" : ed >= 0.75 ? "wd-p-warn" : "wd-p-bad"}`}>{N1(ed)}</span></td>
+                        <td>{p.ops || "—"}</td><td>{p.cred ? K(p.cred) : "—"}</td>
+                        <td>{p.nPago || "—"}</td><td>{p.pago ? K(p.pago) : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </>
+            ) : (
+              <tbody><tr><td className="wd-empty">Sem atividade registrada.</td></tr></tbody>
+            )}
+          </table>
         </div>
       </div>
     </div>
