@@ -721,9 +721,14 @@ function PanelFunil({
 
 function PanelForecast({ C }: { C: ReturnType<typeof compute> }) {
   const { tot, meta, duRest, duDec, duTot, funnel } = C;
-  const falta = Math.max(0, meta.v - tot.cred);
+  // "Falta"/"Ritmo"/"O que falta" precisam refletir o que já é executado de
+  // verdade (pago + aguardando pagamento), não o crédito assinado inteiro —
+  // senão dá a entender que já bateu a meta quando ainda falta o dinheiro
+  // cair (mesmo raciocínio já aplicado no card de Tribo/Time em Resultado).
+  const executado = tot.pagoOuAguardando;
+  const falta = Math.max(0, meta.v - executado);
   const tkm = tot.n ? tot.cred / tot.n : 0;
-  const proj = duDec ? (tot.cred / duDec) * duTot : 0;
+  const proj = duDec ? (executado / duDec) * duTot : 0;
   const opsNeed = tkm ? Math.ceil(falta / tkm) : 0;
   const eaConv = funnel.e ? tot.n / funnel.e : 0;
   const entrNeed = eaConv ? Math.ceil(opsNeed / eaConv) : 0;
@@ -762,7 +767,7 @@ function PanelForecast({ C }: { C: ReturnType<typeof compute> }) {
             <table className="wd-table">
               <thead><tr><th>Para fechar {SM(meta.v)}</th><th>Total</th><th>Por dia útil</th></tr></thead>
               <tbody>
-                <tr><td className="wd-nm">Crédito a assinar</td><td>{SM(falta)}</td><td>{duRest ? SM(falta / duRest) : "—"}</td></tr>
+                <tr><td className="wd-nm">Crédito a executar<small>pago + aguardando pagamento</small></td><td>{SM(falta)}</td><td>{duRest ? SM(falta / duRest) : "—"}</td></tr>
                 <tr><td className="wd-nm">Operações<small>ticket médio de {tkm ? K(tkm) : "—"}</small></td><td>{opsNeed || "—"}</td><td>{duRest && opsNeed ? N1(opsNeed / duRest) : "—"}</td></tr>
                 <tr><td className="wd-nm">Entrevistas<small>conversão atual de {PC(eaConv)}</small></td><td>{entrNeed || "—"}</td><td>{duRest && entrNeed ? N1(entrNeed / duRest) : "—"}</td></tr>
                 <tr><td className="wd-nm">Conexões<small>conversão atual de {PC(ceConv)}</small></td><td>{conexNeed || "—"}</td><td>{duRest && conexNeed ? N1(conexNeed / duRest) : "—"}</td></tr>
@@ -819,34 +824,41 @@ function PanelIndividual({
   if (topE.length) T.push(<div key="topE" className="wd-al g"><div className="txt"><b>Top atividade</b> — {topE.map(([, t]) => `${t.nome} (${t.e} entrevistas)`).join(" · ")}.<em>Reconhecer na weekly: atividade é o que o líder controla, resultado é consequência.</em></div></div>);
   if (C.tot.n) T.push(<div key="liq" className="wd-al g"><div className="txt"><b>Liquidação</b> — {PC0(C.tot.n ? C.tot.nPago / C.tot.n : 0)} das assinaturas viraram pago, contra meta de 60%.<em>Confirmar se o patamar se sustenta no mês seguinte antes de virar premissa.</em></div></div>);
 
-  return (
-    <div>
-      <div className="wd-card">
-        <h3>Produção por cabeça <em>— clique numa linha para filtrar todo o painel</em></h3>
+  const closerList = list.filter(([, p]) => p.role === "closer");
+  const sdrList = list.filter(([, p]) => p.role === "sdr");
+
+  function tabelaPapel(titulo: string, rows: [string, ReturnType<typeof compute>["people"][string]][]) {
+    return (
+      <div className="wd-card" style={{ marginTop: titulo === "SDR" ? 13 : 0 }}>
+        <h3>{titulo} <em>— clique numa linha para filtrar todo o painel</em></h3>
         <div className="wd-tblwrap">
           <table className="wd-table">
-            {list.length ? (
+            {rows.length ? (
               <>
                 <thead>
-                  <tr><th>Pessoa</th><th>Meta</th><th>Crédito</th><th>Atingimento</th><th>Ops</th><th>Entrev.</th><th>Ent./dia</th><th>Tentativas</th><th>Dias s/ pago</th><th>Estrelas</th></tr>
+                  <tr>
+                    <th>Pessoa</th><th>Tentativas</th><th>Entrevistas</th><th>Ent./dia</th>
+                    <th>Assinaturas</th><th>Pagos</th><th>Dias s/ pago</th><th>Crédito Pago</th>
+                    <th>Meta</th><th>Atingimento</th>
+                  </tr>
                 </thead>
                 <tbody>
-                  {list.map(([id, i]) => {
-                    const at = i.meta > 0 ? i.cred / i.meta : null;
+                  {rows.map(([id, i]) => {
+                    const at = i.meta > 0 ? i.pago / i.meta : null;
                     const ed = C.duDec ? i.e / C.duDec : 0;
                     const dc = i.dsp >= 30 ? "wd-p-bad" : i.dsp >= 15 ? "wd-p-warn" : "wd-p-go";
                     return (
                       <tr key={id} className={`row ${person === id ? "sel" : ""}`} onClick={() => onClickPerson(id)}>
                         <td className="wd-nm">{i.nome}<small>{i.time || "—"} · {i.rank}</small></td>
-                        <td>{i.meta ? K(i.meta) : "—"}</td>
-                        <td><b>{i.cred ? K(i.cred) : "—"}</b></td>
-                        <td>{at !== null ? <><span className="wd-minibar"><span className={at >= 1 ? "ok" : ""} style={{ width: `${Math.min(100, at * 100)}%` }} /></span> {PC0(at)}</> : "—"}</td>
-                        <td>{i.ops || "—"}</td>
+                        <td>{i.t.toLocaleString("pt-BR")}</td>
                         <td>{i.e}</td>
                         <td><span className={`wd-pill ${ed >= 1.5 ? "wd-p-go" : ed >= 0.75 ? "wd-p-warn" : "wd-p-bad"}`}>{N1(ed)}</span></td>
-                        <td>{i.t.toLocaleString("pt-BR")}</td>
+                        <td>{i.ops || "—"}</td>
+                        <td>{i.nPago || "—"}</td>
                         <td><span className={`wd-pill ${dc}`}>{i.dsp >= 99999 ? "—" : i.dsp}</span></td>
-                        <td>{i.estrelas ? "★".repeat(i.estrelas) : "—"}</td>
+                        <td><b>{i.pago ? K(i.pago) : "—"}</b></td>
+                        <td>{i.meta ? K(i.meta) : "—"}</td>
+                        <td>{at !== null ? <><span className="wd-minibar"><span className={at >= 1 ? "ok" : ""} style={{ width: `${Math.min(100, at * 100)}%` }} /></span> {PC0(at)}</> : "—"}</td>
                       </tr>
                     );
                   })}
@@ -858,6 +870,13 @@ function PanelIndividual({
           </table>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div>
+      {tabelaPapel("Closer", closerList)}
+      {tabelaPapel("SDR", sdrList)}
       <div className="wd-grid2" style={{ marginTop: 13 }}>
         <div className="wd-card"><h3>Precisa de atenção nesta weekly</h3><div className="wd-alerts">{A.length ? A : <div className="wd-empty">Nenhum alerta neste recorte.</div>}</div></div>
         <div className="wd-card"><h3>Destaques do período</h3><div className="wd-alerts">{T.length ? T : <div className="wd-empty">Sem destaques no recorte.</div>}</div></div>
@@ -881,10 +900,11 @@ function PanelCanais({
   const totOrigem = ent.reduce((s, [, v]) => s + v.cred, 0);
   const mxOrigem = Math.max(...ent.map(([, v]) => v.cred), 1);
 
-  const months = Object.entries(C.byMonth).map(([m, v]) => [+m, v] as [number, { cred: number; n: number }]).sort((a, b) => a[0] - b[0]);
+  const months = Object.entries(C.byMonth).map(([m, v]) => [+m, v] as [number, { cred: number; n: number; pago: number }]).sort((a, b) => a[0] - b[0]);
   const scope = S.team || "IMP";
   const metaM = (m: number) => (S.person ? 0 : scope === "IMP" ? dataset.metaImp[m] || 0 : dataset.metaTeam[scope]?.[m] || 0);
   const topHist = Math.max(...months.map(([m, v]) => Math.max(v.cred, metaM(m))), 1);
+  const topHistPago = Math.max(...months.map(([m, v]) => Math.max(v.pago, metaM(m))), 1);
 
   const pauta: [string, string, string][] = [
     ["01 · 15 min", "Abertura de resultado", "Faturamento, crédito e pago por equipe frente à meta do Império"],
@@ -927,6 +947,24 @@ function PanelCanais({
               );
             }) : <div className="wd-empty">Sem histórico.</div>}
           </div>
+        </div>
+      </div>
+      <div className="wd-card" style={{ marginTop: 13 }}>
+        <h3>Histórico {new Date().getFullYear()} <em>— crédito pago; tracejado = meta do mês</em></h3>
+        <div className="wd-hist">
+          {months.length ? months.map(([m, v]) => {
+            const mt = metaM(m), ok = mt > 0 && v.pago >= mt;
+            return (
+              <div key={m} className="wd-hb">
+                <div className="plot">
+                  <div className="vl" style={{ bottom: `${(v.pago / topHistPago) * 100}%` }}>{(v.pago / 1e6).toFixed(1).replace(".", ",")}M</div>
+                  <div className="col" style={{ height: `${(v.pago / topHistPago) * 100}%`, background: ok ? "linear-gradient(180deg,var(--go),color-mix(in srgb,var(--go) 55%,#000))" : undefined }} />
+                  {mt > 0 && <div className="goal" style={{ bottom: `${(mt / topHistPago) * 100}%` }} />}
+                </div>
+                <div className="lb">{MESES_ABREV[m]}</div>
+              </div>
+            );
+          }) : <div className="wd-empty">Sem histórico.</div>}
         </div>
       </div>
       <div className="wd-card" style={{ marginTop: 13 }}>

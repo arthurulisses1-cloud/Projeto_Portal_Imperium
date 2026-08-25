@@ -146,6 +146,7 @@ export type ComputedPerson = {
   nome: string;
   time: string | null;
   rank: string;
+  role: string;
   ativo: boolean;
   estrelas: number;
   meta: number;
@@ -169,7 +170,7 @@ export type Computed = {
   funnel: { t: number; alo: number; conex: number; e: number };
   byOrigem: Record<string, { cred: number; n: number }>;
   byDay: Record<string, { cred: number; n: number }>;
-  byMonth: Record<number, { cred: number; n: number }>;
+  byMonth: Record<number, { cred: number; n: number; pago: number }>;
   meta: { v: number; partial: boolean };
   duTot: number;
   duDec: number;
@@ -249,6 +250,7 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
           nome: info.nome,
           time: info.time,
           rank: info.rank,
+          role: info.role,
           ativo: info.ativo,
           estrelas: info.estrelas,
           meta: info.metaMensal * metaProp,
@@ -370,7 +372,7 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
     byDay[o.data].n++;
   }
 
-  const byMonth: Record<number, { cred: number; n: number }> = {};
+  const byMonth: Record<number, { cred: number; n: number; pago: number }> = {};
   for (const o of dataset.ops) {
     if (team && o.time !== team) continue;
     if (person && o.sdrId !== person && o.closerId !== person) continue;
@@ -378,9 +380,10 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
     if (!passaStatus(o, status)) continue;
     if (!contaComoCredito(o)) continue;
     const m = +o.data.slice(5, 7);
-    (byMonth[m] = byMonth[m] || { cred: 0, n: 0 });
+    (byMonth[m] = byMonth[m] || { cred: 0, n: 0, pago: 0 });
     byMonth[m].cred += o.valor;
     byMonth[m].n++;
+    if (o.status === "PAGO") byMonth[m].pago += o.valor;
   }
 
   const scope = team || "IMP";
