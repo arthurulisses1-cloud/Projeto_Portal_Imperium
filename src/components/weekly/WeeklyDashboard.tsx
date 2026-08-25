@@ -121,6 +121,15 @@ export default function WeeklyDashboard({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- S é reconstruído a cada render; os campos abaixo já cobrem a reatividade real
   const C = useMemo(() => compute(dataset, S), [dataset, from, to, team, person, origem, status]);
 
+  // O filtro de Status (Tudo/Pago/Quase certo) só deve afetar o Ritmo e os
+  // KPIs do meio — as abas de baixo (Resultado, Funil, Forecast, Individual,
+  // Canais) sempre mostram o consolidado real do período inteiro, senão os
+  // números "descasam" entre o que a Weekly mostra ali no meio vs. embaixo
+  // (pedido do Diretor, 2026-08-25).
+  const SConsolidado: WeeklyState = { from, to, team, person, origem, status: "all" };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const CConsolidado = useMemo(() => compute(dataset, SConsolidado), [dataset, from, to, team, person, origem]);
+
   function teamOf(personId: string | null): string | null {
     if (!personId) return null;
     return dataset.people[personId]?.time ?? null;
@@ -228,15 +237,15 @@ export default function WeeklyDashboard({
           </nav>
 
           {tab === "p1" && (
-            <PanelResultado C={C} dataset={dataset} team={team} person={person} onClickTeam={clickTeam} />
+            <PanelResultado C={CConsolidado} dataset={dataset} team={team} person={person} onClickTeam={clickTeam} />
           )}
           {tab === "p2" && (
-            <PanelFunil C={C} team={team} person={person} onClickPerson={clickPerson} />
+            <PanelFunil C={CConsolidado} team={team} person={person} onClickPerson={clickPerson} />
           )}
-          {tab === "p3" && <PanelForecast C={C} />}
-          {tab === "p4" && <PanelIndividual C={C} person={person} onClickPerson={clickPerson} />}
+          {tab === "p3" && <PanelForecast C={CConsolidado} />}
+          {tab === "p4" && <PanelIndividual C={CConsolidado} person={person} onClickPerson={clickPerson} />}
           {tab === "p5" && (
-            <PanelCanais C={C} dataset={dataset} S={S} origem={origem} onClickOrigem={clickOrigem} />
+            <PanelCanais C={CConsolidado} dataset={dataset} S={SConsolidado} origem={origem} onClickOrigem={clickOrigem} />
           )}
 
           <footer className="mt-6 flex flex-wrap justify-between gap-3 border-t pt-3 text-[9.5px]" style={{ borderColor: "var(--line)", color: "var(--mute)" }}>

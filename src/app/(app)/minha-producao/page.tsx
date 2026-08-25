@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
 import WeeklyDashboard from "@/components/weekly/WeeklyDashboard";
 import { getViewerContext } from "@/lib/preview";
-import type { WeeklyDataset, WeeklyOp, PersonInfo } from "@/lib/weekly-compute";
+import { FORA_DA_TRIBO, type WeeklyDataset, type WeeklyOp, type PersonInfo, type EntrevistaEvento } from "@/lib/weekly-compute";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 import { mapaMetaCreditoPorTribo } from "@/lib/metas";
 
@@ -57,9 +57,34 @@ export default async function MinhaProducaoLiderPage() {
   const nomeTriboPorId = new Map((tribos ?? []).map((t) => [t.id, t.nome]));
   const nomePorProfileId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name]));
 
-  const liderPorTime: Record<string, string> = {};
+  const liderPorTime: Record<string, string> = { [FORA_DA_TRIBO]: "—" };
   for (const t of tribos ?? []) {
     liderPorTime[t.nome] = t.closer_id ? nomePorProfileId.get(t.closer_id) ?? "—" : "—";
+  }
+
+  // tribo_id de QUALQUER pessoa da firma (não só desse Exército) — precisa
+  // pra saber se o outro lado de uma operação/entrevista é de uma Tribo
+  // diferente, mesmo fora daqui.
+  const { data: todosPerfis } = await supabase.from("profiles").select("id, tribo_id");
+  const triboIdPorProfileId = new Map((todosPerfis ?? []).map((p) => [p.id, p.tribo_id]));
+  const meusTriboIds = new Set(triboIds);
+
+  // Regra do Diretor (2026-08-25): entrevista/assinatura/pago só conta pra
+  // uma Tribo quando SDR e Closer são da MESMA Tribo (inclusive quando é a
+  // mesma pessoa nos dois papéis — mesma Tribo trivialmente). Caso
+  // contrário — inclusive quando o Closer da Tribo agiu como SDR de uma
+  // operação fechada pelo Líder — vai pro balde "Fora da Tribo", desde que
+  // pelo menos um dos dois lados seja alguém desse Exército (senão a
+  // operação nem aparece aqui, é assunto de outro Exército).
+  function resolverTimeTribo(sdrProfileId: string | null, closerProfileId: string | null): string | null {
+    const sdrTriboId = sdrProfileId ? triboIdPorProfileId.get(sdrProfileId) ?? null : null;
+    const closerTriboId = closerProfileId ? triboIdPorProfileId.get(closerProfileId) ?? null : null;
+    if (sdrTriboId && closerTriboId && sdrTriboId === closerTriboId) {
+      return meusTriboIds.has(sdrTriboId) ? nomeTriboPorId.get(sdrTriboId) ?? null : null;
+    }
+    const envolveMeuExercito =
+      (!!sdrTriboId && meusTriboIds.has(sdrTriboId)) || (!!closerTriboId && meusTriboIds.has(closerTriboId));
+    return envolveMeuExercito ? FORA_DA_TRIBO : null;
   }
 
   const hoje = new Date();
@@ -135,8 +160,8 @@ export default async function MinhaProducaoLiderPage() {
     if (idx !== undefined) pessoa.d[row.data][idx] += row.realizado;
   }
 
-  // Operações do Exército inteiro: pertence a uma Tribo se o SDR ou o Closer
-  // (preferindo o Closer, mesma regra da Weekly) for membro de uma Tribo daqui.
+  // Operações do Exército inteiro (empresa toda, na verdade — resolverTimeTribo
+  // descarta quem não toca esse Exército de jeito nenhum).
   const opRows = await buscarTudoPaginado<{
     id: string;
     data: string;
@@ -161,9 +186,7 @@ export default async function MinhaProducaoLiderPage() {
   );
 
   const ops: WeeklyOp[] = opRows.flatMap((o): WeeklyOp[] => {
-    const sdrTime = o.sdr_profile_id ? people[o.sdr_profile_id]?.time ?? null : null;
-    const closerTime = o.closer_profile_id ? people[o.closer_profile_id]?.time ?? null : null;
-    const time = closerTime ?? sdrTime;
+    const time = resolverTimeTribo(o.sdr_profile_id, o.closer_profile_id);
     if (!time) return [];
     return [
       {
@@ -185,6 +208,29 @@ export default async function MinhaProducaoLiderPage() {
     ];
   });
 
+  // Entrevistas: mesma regra "mesma Tribo" (ver resolverTimeTribo) em vez de
+  // aproximar pelo papel de quem conduz — entrevistas_eventos guarda o par
+  // SDR+Closer de cada entrevista (migration 0048), diferente de
+  // producao_funil que só guarda crédito solto por pessoa.
+  const eventosRows = await buscarTudoPaginado<{
+    data: string;
+    sdr_profile_id: string | null;
+    closer_profile_id: string | null;
+    quantidade: number;
+  }>((from, to) =>
+    supabase
+      .from("entrevistas_eventos")
+      .select("data, sdr_profile_id, closer_profile_id, quantidade")
+      .gte("data", inicioAno)
+      .order("data")
+      .range(from, to)
+  );
+  const entrevistaEventos: EntrevistaEvento[] = eventosRows.flatMap((ev): EntrevistaEvento[] => {
+    const time = resolverTimeTribo(ev.sdr_profile_id, ev.closer_profile_id);
+    if (!time) return [];
+    return [{ data: ev.data, time, quantidade: ev.quantidade }];
+  });
+
   const lastData = ops.length > 0 ? ops[ops.length - 1].data : hoje.toISOString().slice(0, 10);
 
   const { data: metasAno } = await supabase
@@ -193,7 +239,7 @@ export default async function MinhaProducaoLiderPage() {
     .eq("ano", hoje.getFullYear());
   const metaImp: Record<number, number> = {};
   const metaTeam: Record<string, Record<number, number>> = {};
-  const nomesTribos = (tribos ?? []).map((t) => t.nome);
+  const nomesTribos = [...(tribos ?? []).map((t) => t.nome), FORA_DA_TRIBO];
   for (const tm of nomesTribos) metaTeam[tm] = {};
   for (const m of metasAno ?? []) {
     const metaExercito = Number(m.meta_credito_total) / (numExercitos || 1);
@@ -217,6 +263,7 @@ export default async function MinhaProducaoLiderPage() {
     lastData,
     anoReferenciaMeta: hoje.getFullYear(),
     mesReferenciaMeta: hoje.getMonth() + 1,
+    entrevistaEventos,
   };
 
   return (

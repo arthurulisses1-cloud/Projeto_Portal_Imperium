@@ -43,6 +43,15 @@ export type WeeklyState = {
   status: "all" | "PAGO" | "QUASE_CERTO";
 };
 
+// Nome do "time" fictício pra entrevista/assinatura/pago cujo SDR e Closer
+// são de Tribos diferentes — regra do Diretor (2026-08-25): produção de uma
+// Tribo só conta quando SDR e Closer são da MESMA Tribo. Usado hoje só em
+// Minha Produção do Líder (ops/entrevistaEventos já vêm com esse time
+// resolvido); a Weekly do Diretor (por Exército) não usa essa regra.
+export const FORA_DA_TRIBO = "Fora da Tribo";
+
+export type EntrevistaEvento = { data: string; time: string | null; quantidade: number };
+
 export type WeeklyDataset = {
   teams: string[];
   liderPorTime: Record<string, string>;
@@ -55,6 +64,10 @@ export type WeeklyDataset = {
   // pra proporcionar a meta individual ao tamanho do período selecionado.
   anoReferenciaMeta: number;
   mesReferenciaMeta: number;
+  // Opcional: quando presente, byTeam.e/funnel.e passam a contar entrevistas
+  // por este evento resolvido (SDR+Closer mesma Tribo) em vez da aproximação
+  // por papel (crédito de quem não é 'sdr'). Ver FORA_DA_TRIBO.
+  entrevistaEventos?: EntrevistaEvento[];
 };
 
 export function isDiaUtil(dataISO: string): boolean {
@@ -293,11 +306,14 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
     const f = (k: "t" | "alo" | "conex") => pl.reduce((s, p) => s + p[k], 0);
     // Entrevistas: cada uma gera crédito tanto pro SDR quanto pro Closer em
     // producao_funil (cada um vê a própria atividade) — somar todo mundo do
-    // time contaria a mesma entrevista 2x. Pro total do time, conta só o
-    // lado de quem conduz (Closer/Líder), que é quem "gera o resultado".
-    const e = plEntries
-      .filter(([id]) => dataset.people[id]?.role !== "sdr")
-      .reduce((s, [, p]) => s + p.e, 0);
+    // time contaria a mesma entrevista 2x. Com entrevistaEventos (Minha
+    // Produção), usa a regra "mesma Tribo" de verdade; sem isso (Weekly do
+    // Diretor), aproxima contando só o lado de quem conduz (Closer/Líder).
+    const e = dataset.entrevistaEventos
+      ? dataset.entrevistaEventos
+          .filter((ev) => ev.time === tm && ev.data >= from && ev.data <= to)
+          .reduce((s, ev) => s + ev.quantidade, 0)
+      : plEntries.filter(([id]) => dataset.people[id]?.role !== "sdr").reduce((s, [, p]) => s + p.e, 0);
     byTeam[tm] = {
       ...a,
       lider: dataset.liderPorTime[tm] || "—",
@@ -315,7 +331,16 @@ export function compute(dataset: WeeklyDataset, S: WeeklyState): Computed {
     funnel.t += p.t;
     funnel.alo += p.alo;
     funnel.conex += p.conex;
-    if (dataset.people[id]?.role !== "sdr") funnel.e += p.e;
+    if (!dataset.entrevistaEventos && dataset.people[id]?.role !== "sdr") funnel.e += p.e;
+  }
+  // entrevistaEventos não carrega quem é a pessoa (só o par SDR+Closer já
+  // resolvido em Tribo/Fora da Tribo) — só dá pra usar quando não há um
+  // "person" selecionado; com pessoa selecionada, cai no fallback acima
+  // (que já é por pessoa via `people`).
+  if (dataset.entrevistaEventos && !person) {
+    funnel.e = dataset.entrevistaEventos
+      .filter((ev) => ev.data >= from && ev.data <= to && (!team || ev.time === team))
+      .reduce((s, ev) => s + ev.quantidade, 0);
   }
 
   const byOrigem: Record<string, { cred: number; n: number }> = {};

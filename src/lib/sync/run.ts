@@ -160,6 +160,32 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     funilLinhasGravadas += batch.length;
   }
 
+  // ---------- aba Entrevistas: pares SDR+Closer (pra checar "mesma Tribo") ----------
+  // Nomes sem match viram null (não some a entrevista, só perde o lado sem
+  // match) — diferente do bloco de crédito acima, aqui não tem como "unmatched"
+  // pular a linha inteira, senão perderíamos o outro lado do par.
+  const eventosEntrevistas = entrevistas.pares.map((p) => {
+    if (p.sdrNorm && !nomeParaId.has(p.sdrNorm)) unmatched.add(p.sdrNorm);
+    if (p.closerNorm && !nomeParaId.has(p.closerNorm)) unmatched.add(p.closerNorm);
+    return {
+      data: p.data,
+      sdr_profile_id: p.sdrNorm ? nomeParaId.get(p.sdrNorm) ?? null : null,
+      closer_profile_id: p.closerNorm ? nomeParaId.get(p.closerNorm) ?? null : null,
+      quantidade: p.quantidade,
+      synced_at: new Date().toISOString(),
+    };
+  });
+
+  // Mesmo raciocínio do bloco de crédito: a aba Entrevistas sempre vem com o
+  // histórico completo, então apaga tudo antes de regravar.
+  const { error: limpezaEventosError } = await supabase.from("entrevistas_eventos").delete().not("id", "is", null);
+  if (limpezaEventosError) throw new Error("Erro limpando entrevistas_eventos: " + limpezaEventosError.message);
+
+  for (const batch of chunk(eventosEntrevistas, 1000)) {
+    const { error } = await supabase.from("entrevistas_eventos").insert(batch);
+    if (error) throw new Error("Erro gravando entrevistas_eventos: " + error.message);
+  }
+
   // ---------- aba Assinado: funil (assinaturas/pagos) + vendas ----------
   // Uma leitura SÓ da aba, reaproveitada aqui e em buscarOperacoes() logo
   // abaixo — ver comentário em weekly.ts sobre a corrida entre duas

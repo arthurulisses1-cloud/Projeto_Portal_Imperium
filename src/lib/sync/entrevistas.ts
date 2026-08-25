@@ -17,8 +17,19 @@ export type ProducaoLinha = {
   papel: "sdr" | "closer" | "ambos";
 };
 
+// Par SDR+Closer de cada entrevista — ao contrário de `linhas` (crédito
+// solto por pessoa), preserva quem fez o quê JUNTO, pra dar pra checar se
+// os dois eram da mesma Tribo (ver entrevistas_eventos, migration 0048).
+export type ParEntrevista = {
+  data: string;
+  sdrNorm: string | null;
+  closerNorm: string | null;
+  quantidade: number;
+};
+
 export async function buscarEntrevistas(): Promise<{
   linhas: ProducaoLinha[];
+  pares: ParEntrevista[];
   nomesEncontrados: Set<string>;
 }> {
   // no-store: ver comentário em dados.ts / config.ts.
@@ -29,6 +40,7 @@ export async function buscarEntrevistas(): Promise<{
   const { data: rows } = Papa.parse<EntrevistaRow>(text, { header: true, skipEmptyLines: true });
 
   const acumulado = new Map<string, ProducaoLinha>();
+  const paresAcumulado = new Map<string, ParEntrevista>();
   const nomesEncontrados = new Set<string>();
 
   function acumular(nomeNormalizado: string, data: string, papel: "sdr" | "closer" | "ambos") {
@@ -37,6 +49,13 @@ export async function buscarEntrevistas(): Promise<{
     const existente = acumulado.get(chave);
     if (existente) existente.realizado += 1;
     else acumulado.set(chave, { nomeNormalizado, data, etapa: "entrevistas", realizado: 1, papel });
+  }
+
+  function acumularPar(data: string, sdrNorm: string | null, closerNorm: string | null) {
+    const chave = `${data}|${sdrNorm ?? ""}|${closerNorm ?? ""}`;
+    const existente = paresAcumulado.get(chave);
+    if (existente) existente.quantidade += 1;
+    else paresAcumulado.set(chave, { data, sdrNorm, closerNorm, quantidade: 1 });
   }
 
   for (const row of rows) {
@@ -55,7 +74,8 @@ export async function buscarEntrevistas(): Promise<{
       if (sdrNorm) acumular(sdrNorm, data, "sdr");
       if (closerNorm) acumular(closerNorm, data, "closer");
     }
+    acumularPar(data, sdrNorm, closerNorm);
   }
 
-  return { linhas: Array.from(acumulado.values()), nomesEncontrados };
+  return { linhas: Array.from(acumulado.values()), pares: Array.from(paresAcumulado.values()), nomesEncontrados };
 }
