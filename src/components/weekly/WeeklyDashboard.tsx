@@ -540,6 +540,7 @@ function PanelResultado({
               <div className="wd-team-meta"><span>{SM(t.cred)} de {SM(t.meta.v)}</span><span>pace: {SM((t.meta.v * duDec) / (duTot || 1))}</span></div>
               <div className="wd-team-stats">
                 <div className="wd-ts">Operações<b>{t.n}</b></div>
+                <div className="wd-ts">Assinaturas<b>{SM(t.cred)}</b></div>
                 <div className="wd-ts">Pago<b>{SM(t.pago)}</b></div>
                 <div className="wd-ts">Entrevistas<b>{t.e}</b></div>
                 <div className="wd-ts">Gap p/ meta<b style={{ color: gap > 0 ? "var(--bad)" : "var(--go)" }}>{gap > 0 ? SM(gap) : "—"}</b></div>
