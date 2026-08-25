@@ -4,6 +4,7 @@ import WeeklyDashboard from "@/components/weekly/WeeklyDashboard";
 import { getViewerContext } from "@/lib/preview";
 import type { WeeklyDataset, WeeklyOp, PersonInfo } from "@/lib/weekly-compute";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
+import { mapaMetaCreditoPorTribo } from "@/lib/metas";
 
 export default async function MinhaProducaoLiderPage() {
   const supabase = await createClient();
@@ -197,7 +198,13 @@ export default async function MinhaProducaoLiderPage() {
   for (const m of metasAno ?? []) {
     const metaExercito = Number(m.meta_credito_total) / (numExercitos || 1);
     metaImp[m.mes] = metaExercito;
-    for (const tm of nomesTribos) metaTeam[tm][m.mes] = metaExercito / (nomesTribos.length || 1);
+    // Divide pela mesma regra da firma inteira (Tribo normal = 1 fatia,
+    // Inbound = meia fatia) em vez de repartir igualmente as tribos deste
+    // Exército — senão a Tribo Inbound aparecia com o dobro da meta certa.
+    const metaPorTriboId = await mapaMetaCreditoPorTribo(supabase, Number(m.meta_credito_total));
+    for (const t of tribos ?? []) {
+      metaTeam[t.nome][m.mes] = metaPorTriboId.get(t.id) ?? 0;
+    }
   }
 
   const dataset: WeeklyDataset = {
