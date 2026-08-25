@@ -101,12 +101,18 @@ export default async function MinhaProducaoLiderPage() {
     if (!p.tribo_id || (p.role !== "sdr" && p.role !== "closer")) continue;
     membrosPorTribo.set(p.tribo_id, (membrosPorTribo.get(p.tribo_id) ?? 0) + 1);
   }
+  // Mesma fonte usada em Mural/Tribo/Exército e no card por Tribo desta
+  // página (mapaMetaCreditoPorTribo) — achado numa auditoria 2026-08-25:
+  // essa função tinha sua PRÓPRIA divisão (metaTotal/exércitos/tribos/
+  // membros) que nunca tratava Inbound como meia fatia, reproduzindo o bug
+  // antigo da Cristina na aba Individual desta página.
+  const metaPorTriboIdMesAtual = await mapaMetaCreditoPorTribo(supabase, metaMesAtual?.meta_credito_total ?? 0);
   function metaIndividual(p: { tribo_id: string | null; role: string }): number {
     if (!p.tribo_id || (p.role !== "sdr" && p.role !== "closer")) return 0;
-    const metaTotal = metaMesAtual?.meta_credito_total ?? 0;
-    if (!metaTotal || !numExercitos) return 0;
+    const metaTribo = metaPorTriboIdMesAtual.get(p.tribo_id) ?? 0;
+    if (!metaTribo) return 0;
     const numMembros = membrosPorTribo.get(p.tribo_id) || 1;
-    return metaTotal / numExercitos / (tribos?.length || 1) / numMembros;
+    return metaTribo / numMembros;
   }
 
   const idsPessoas = (pessoas ?? []).map((p) => p.id);

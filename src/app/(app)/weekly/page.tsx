@@ -3,6 +3,7 @@ import { RANK_LABELS } from "@/lib/labels";
 import WeeklyDashboard from "@/components/weekly/WeeklyDashboard";
 import type { WeeklyDataset, WeeklyOp, PersonInfo } from "@/lib/weekly-compute";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
+import { mapaMetaCreditoPorTribo } from "@/lib/metas";
 
 export default async function WeeklyPage() {
   const supabase = await createClient();
@@ -34,7 +35,6 @@ export default async function WeeklyPage() {
   ]);
 
   const nomeExercitoPorId = new Map((exercitos ?? []).map((e) => [e.id, e.nome]));
-  const exercitoIdPorTribo = new Map((tribos ?? []).map((t) => [t.id, t.exercito_id]));
   const nomeExercitoPorTriboId = new Map(
     (tribos ?? []).map((t) => [t.id, nomeExercitoPorId.get(t.exercito_id) ?? null])
   );
@@ -55,25 +55,23 @@ export default async function WeeklyPage() {
     .eq("mes", hoje.getMonth() + 1)
     .maybeSingle();
 
-  const tribosPorExercito = new Map<string, number>();
-  for (const t of tribos ?? []) {
-    tribosPorExercito.set(t.exercito_id, (tribosPorExercito.get(t.exercito_id) ?? 0) + 1);
-  }
   const membrosPorTribo = new Map<string, number>();
   for (const p of pessoas ?? []) {
     if (!p.tribo_id || (p.role !== "sdr" && p.role !== "closer")) continue;
     membrosPorTribo.set(p.tribo_id, (membrosPorTribo.get(p.tribo_id) ?? 0) + 1);
   }
+  // Mesma fonte usada em Mural/Tribo/Exército (mapaMetaCreditoPorTribo) —
+  // achado numa auditoria 2026-08-25: essa página tinha sua PRÓPRIA divisão
+  // (metaTotal/exércitos/tribos/membros) que nunca tratava Inbound como
+  // meia fatia, reproduzindo o bug antigo da Cristina só que na aba
+  // Individual da Weekly de Receita.
+  const metaPorTriboId = await mapaMetaCreditoPorTribo(supabase, metaMesAtual?.meta_credito_total ?? 0);
   function metaIndividual(p: { tribo_id: string | null; role: string }): number {
     if (!p.tribo_id || (p.role !== "sdr" && p.role !== "closer")) return 0;
-    const metaTotal = metaMesAtual?.meta_credito_total ?? 0;
-    if (!metaTotal) return 0;
-    const exercitoId = exercitoIdPorTribo.get(p.tribo_id);
-    if (!exercitoId) return 0;
-    const numExercitos = (exercitos ?? []).length || 1;
-    const numTribos = tribosPorExercito.get(exercitoId) || 1;
+    const metaTribo = metaPorTriboId.get(p.tribo_id) ?? 0;
+    if (!metaTribo) return 0;
     const numMembros = membrosPorTribo.get(p.tribo_id) || 1;
-    return metaTotal / numExercitos / numTribos / numMembros;
+    return metaTribo / numMembros;
   }
 
   // últimas vendas pagas por pessoa ("dias sem pago")
