@@ -11,6 +11,7 @@ import { limparPreview } from "./preview-actions";
 import { IconLaurel, IconEye } from "@/components/ui/icons";
 import { buscarPendencias, temNovidadeMural } from "@/lib/pendencias";
 import { SDR_FORECAST_LIBERADO } from "@/lib/acessos-especiais";
+import { buscarUltimaSyncOk } from "@/lib/sync/status";
 import { buscarMencoesPendentes } from "@/lib/social";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 
@@ -211,6 +212,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               avatarUrl={profile?.avatar_url ?? null}
               nome={profile?.full_name ?? user.email ?? "?"}
               role={profile?.role}
+              ultimaSync={
+                profile?.role === "diretor" || profile?.role === "lider" ? await buscarUltimaSyncOk(supabase) : null
+              }
             />
           )}
         </header>

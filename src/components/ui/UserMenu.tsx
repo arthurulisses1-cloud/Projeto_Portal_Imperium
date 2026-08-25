@@ -14,10 +14,12 @@ export default function UserMenu({
   avatarUrl,
   nome,
   role,
+  ultimaSync,
 }: {
   avatarUrl: string | null;
   nome: string;
   role?: string;
+  ultimaSync?: string | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -87,7 +89,7 @@ export default function UserMenu({
                 <p className="mb-1.5 text-[10px] uppercase tracking-wide text-stone-500">
                   Planilha
                 </p>
-                <SincronizarPlanilha compact />
+                <SincronizarPlanilha compact ultimaSyncInicial={ultimaSync} />
               </div>
             )}
 

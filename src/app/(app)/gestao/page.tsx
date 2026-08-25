@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { RANK_LABELS, ROLE_LABELS } from "@/lib/labels";
 import { RANK_ORDER } from "@/lib/carreira";
 import { listarNomesPlanilha } from "@/lib/sync/nomes";
+import { buscarUltimaSyncOk } from "@/lib/sync/status";
 import { atualizarCargo, atualizarTribo, atualizarLegado } from "./actions";
 import Card from "@/components/ui/Card";
 import SincronizarPlanilha from "@/components/ui/SincronizarPlanilha";
@@ -35,6 +36,7 @@ export default async function GestaoPage() {
 
   const lideres = (pessoas ?? []).filter((p) => p.role === "lider");
   const nomesPlanilha = await listarNomesPlanilha();
+  const ultimaSync = await buscarUltimaSyncOk(supabase);
 
   // Email mora só em auth.users (profiles não tem essa coluna) — só o
   // service role enxerga essa tabela, daí o client admin. listUsers pagina
@@ -61,7 +63,7 @@ export default async function GestaoPage() {
       </Card>
 
       <Card title="Sincronização com a Planilha">
-        <SincronizarPlanilha />
+        <SincronizarPlanilha ultimaSyncInicial={ultimaSync} />
       </Card>
 
       <Card title="Exércitos e seus Legados">

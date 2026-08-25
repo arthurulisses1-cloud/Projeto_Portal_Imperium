@@ -3,7 +3,21 @@
 import { useState, useTransition } from "react";
 import { dispararSyncManual } from "@/app/(app)/gestao/actions";
 
-export default function SincronizarPlanilha({ compact = false }: { compact?: boolean }) {
+function formatarHora(iso: string) {
+  return new Date(iso).toLocaleTimeString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export default function SincronizarPlanilha({
+  compact = false,
+  ultimaSyncInicial = null,
+}: {
+  compact?: boolean;
+  ultimaSyncInicial?: string | null;
+}) {
   const [isPending, startTransition] = useTransition();
   const [resultado, setResultado] = useState<{
     funilLinhasGravadas: number;
@@ -11,6 +25,10 @@ export default function SincronizarPlanilha({ compact = false }: { compact?: boo
     naoEncontrados: string[];
   } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // Começa com o que já veio do servidor (última sync — inclusive as
+  // automáticas do GitHub Actions/cron); atualiza na hora se essa mesma
+  // aba disparar uma sync manual com sucesso.
+  const [ultimaSync, setUltimaSync] = useState(ultimaSyncInicial);
 
   function handleClick() {
     setErro(null);
@@ -19,6 +37,7 @@ export default function SincronizarPlanilha({ compact = false }: { compact?: boo
       try {
         const r = await dispararSyncManual();
         setResultado(r);
+        setUltimaSync(new Date().toISOString());
       } catch (e) {
         setErro(e instanceof Error ? e.message : "Erro desconhecido ao sincronizar.");
       }
@@ -31,6 +50,7 @@ export default function SincronizarPlanilha({ compact = false }: { compact?: boo
         <button onClick={handleClick} disabled={isPending} className="btn-gold w-full py-1.5 text-xs">
           {isPending ? "Sincronizando..." : "Sincronizar planilha"}
         </button>
+        {ultimaSync && <p className="mt-1.5 text-[10px] text-stone-500">Última sync em {formatarHora(ultimaSync)}</p>}
         {erro && <p className="mt-1.5 text-[11px] text-wine-bright">{erro}</p>}
         {resultado && (
           <p className="mt-1.5 text-[11px] text-success-bright">
@@ -51,10 +71,12 @@ export default function SincronizarPlanilha({ compact = false }: { compact?: boo
           {isPending ? "Sincronizando..." : "Sincronizar agora"}
         </button>
         <p className="text-xs text-stone-500">
-          O sync automático roda 1x por dia (madrugada). Use isso pra puxar os dados mais recentes da
-          planilha agora.
+          O sync automático roda sozinho de 30 em 30 minutos em horário comercial. Use isso pra puxar os
+          dados mais recentes da planilha na hora.
         </p>
       </div>
+
+      {ultimaSync && <p className="mt-2 text-xs text-stone-500">Última sync em {formatarHora(ultimaSync)}</p>}
 
       {erro && <p className="mt-3 text-sm text-wine-bright">{erro}</p>}
 
