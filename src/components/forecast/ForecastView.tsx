@@ -7,7 +7,7 @@ import ForecastRowQueda from "./ForecastRowQueda";
 import { STATUS_SHEET_LABELS, STATUS_SHEET_COR, type ForecastOp } from "@/lib/forecast";
 import { Table, Th, Td } from "@/components/ui/Table";
 
-type Aba = "assinaturas" | "pagos" | "quedas";
+type Aba = "assinaturas" | "reanalise" | "pagos" | "quedas";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -30,10 +30,17 @@ export default function ForecastView({
     return ops.filter((o) => o.sdrTribo === triboFiltro || o.closerTribo === triboFiltro);
   }, [ops, triboFiltro]);
 
-  // Assinaturas = ainda em aberto (ASSINADO/REANÁLISE); Pagos = liquidado;
-  // Quedas = CAIU/DESISTIU, com o motivo pra registrar.
+  // Assinaturas = em aberto, seguindo o fluxo normal (ASSINADO); Reanálise =
+  // não caiu, mas tá parado num precatório em reanálise (não dá pra
+  // trabalhar agora — pedido do Diretor, 2026-08-26: não deve ficar
+  // misturado com assinatura normal); Pagos = liquidado; Quedas = CAIU/
+  // DESISTIU, com o motivo pra registrar.
   const opsAssinaturas = useMemo(
-    () => opsFiltradas.filter((o) => o.status === "ASSINADO" || o.status === "REANÁLISE"),
+    () => opsFiltradas.filter((o) => o.status === "ASSINADO"),
+    [opsFiltradas]
+  );
+  const opsReanalise = useMemo(
+    () => opsFiltradas.filter((o) => o.status === "REANÁLISE"),
     [opsFiltradas]
   );
   const opsPagos = useMemo(() => opsFiltradas.filter((o) => o.status === "PAGO"), [opsFiltradas]);
@@ -41,7 +48,8 @@ export default function ForecastView({
     () => opsFiltradas.filter((o) => o.status === "CAIU" || o.status === "DESISTIU"),
     [opsFiltradas]
   );
-  const opsDaAba = aba === "assinaturas" ? opsAssinaturas : aba === "pagos" ? opsPagos : opsQuedas;
+  const opsDaAba =
+    aba === "assinaturas" ? opsAssinaturas : aba === "reanalise" ? opsReanalise : aba === "pagos" ? opsPagos : opsQuedas;
 
   const porStatus = useMemo(() => {
     const mapa = new Map<string, number>();
@@ -55,16 +63,18 @@ export default function ForecastView({
       pendencia = 0,
       juridico = 0,
       esfriou = 0,
-      naoClassificado = 0;
+      naoClassificado = 0,
+      reanalise = 0;
     for (const o of opsFiltradas) {
       if (o.status === "PAGO") pago += o.valor;
+      else if (o.status === "REANÁLISE") reanalise += o.valor;
       else if (o.statusManual === "aguardando_pagamento") aguardando += o.valor;
       else if (o.statusManual === "resolvendo_pendencia") pendencia += o.valor;
       else if (o.statusManual === "analise_juridico") juridico += o.valor;
       else if (o.statusManual === "esfriou") esfriou += o.valor;
-      else if (o.status === "ASSINADO" || o.status === "REANÁLISE") naoClassificado += o.valor;
+      else if (o.status === "ASSINADO") naoClassificado += o.valor;
     }
-    return { pago, aguardando, pendencia, juridico, esfriou, naoClassificado };
+    return { pago, aguardando, pendencia, juridico, esfriou, naoClassificado, reanalise };
   }, [opsFiltradas]);
 
   const statusOrdenados = ["PAGO", "ASSINADO", "REANÁLISE", "CAIU", "DESISTIU"].filter((s) => porStatus.has(s));
@@ -102,7 +112,7 @@ export default function ForecastView({
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-7">
         <Card>
           <p className="kicker mb-2">Já pago</p>
           <p className="font-display text-xl text-success-bright">{moeda(resumo.pago)}</p>
@@ -125,9 +135,14 @@ export default function ForecastView({
           <p className="font-display text-xl text-stone-400">{moeda(resumo.esfriou)}</p>
         </Card>
         <Card>
+          <p className="kicker mb-2">Em reanálise</p>
+          <p className="font-display text-xl" style={{ color: "#ffc94d" }}>{moeda(resumo.reanalise)}</p>
+          <p className="mt-1 text-[10px] text-stone-500">não caiu, mas parado — não dá pra trabalhar agora</p>
+        </Card>
+        <Card>
           <p className="kicker mb-2">Ainda não classificado</p>
           <p className="font-display text-xl text-stone-300">{moeda(resumo.naoClassificado)}</p>
-          <p className="mt-1 text-[10px] text-stone-500">assinado/reanálise sem status marcado</p>
+          <p className="mt-1 text-[10px] text-stone-500">assinado sem status marcado</p>
         </Card>
       </div>
 
@@ -154,13 +169,20 @@ export default function ForecastView({
 
       <Card
         title={
-          aba === "assinaturas" ? "Assinaturas do mês" : aba === "pagos" ? "Pagos do mês" : "Quedas do mês"
+          aba === "assinaturas"
+            ? "Assinaturas do mês"
+            : aba === "reanalise"
+            ? "Em reanálise"
+            : aba === "pagos"
+            ? "Pagos do mês"
+            : "Quedas do mês"
         }
         right={
           <div className="flex gap-1.5">
             {(
               [
                 ["assinaturas", `Assinaturas (${opsAssinaturas.length})`],
+                ["reanalise", `Reanálise (${opsReanalise.length})`],
                 ["pagos", `Pagos (${opsPagos.length})`],
                 ["quedas", `Quedas (${opsQuedas.length})`],
               ] as [Aba, string][]
