@@ -259,24 +259,34 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // sem essa informação ainda pra aquela linha), cai pro heurístico antigo
   // como fallback: mantém o pago_em já gravado, ou usa hoje se acabou de
   // virar PAGO nesta sync — melhor que nada até a planilha preencher.
-  // Busca por INTERVALO DE DATA (não por lista de chave_natural) — a lista
-  // chegou a ~1000 chaves nomes longos (cliente+SDR+Closer embutidos na
-  // chave), e mesmo em lotes de 500 o filtro `.in()` virava uma URL grande
-  // demais pro PostgREST (achado 2026-08-24: sync passou a quebrar com
-  // "Bad Request" assim que a planilha cresceu o suficiente). Intervalo de
-  // data é uma query normal, sem esse limite.
+  // Lê a tabela INTEIRA (paginada), não por intervalo de data — tentamos
+  // filtrar por `data` antes (achado 2026-08-24: `.in()` com ~1000 chaves de
+  // nomes longos virava URL grande demais pro PostgREST), mas o intervalo
+  // de data usa o menor/maior DATA da leitura ATUAL da planilha, e uma linha
+  // órfã cuja data antiga tenha ficado fora desse intervalo (ex.: era a
+  // data mais recente da planilha e virou a única com aquela data depois de
+  // alguém editar a data de assinatura) escapava da varredura de órfãs
+  // (achado 2026-08-26 — Luiz Manoel Gomes Junior duplicado no Forecast:
+  // a linha antiga tinha `data` fora do range calculado pela leitura nova).
+  // A tabela é pequena (algumas centenas de linhas), então ler tudo é barato
+  // e elimina esse ponto cego de vez.
   const statusAnteriorPorChave = new Map<string, { status: string; pago_em: string | null }>();
   const idPorChaveAnterior = new Map<string, string>();
-  if (operacoes.menorData && operacoes.maiorData) {
-    const { data: existentes, error: existentesError } = await supabase
-      .from("weekly_operacoes")
-      .select("id, chave_natural, status, pago_em")
-      .gte("data", operacoes.menorData)
-      .lte("data", operacoes.maiorData);
-    if (existentesError) throw new Error("Erro lendo status anterior de weekly_operacoes: " + existentesError.message);
-    for (const e of existentes ?? []) {
-      statusAnteriorPorChave.set(e.chave_natural, { status: e.status, pago_em: e.pago_em });
-      idPorChaveAnterior.set(e.chave_natural, e.id);
+  {
+    let from = 0;
+    const pageSize = 1000;
+    for (;;) {
+      const { data: existentes, error: existentesError } = await supabase
+        .from("weekly_operacoes")
+        .select("id, chave_natural, status, pago_em")
+        .range(from, from + pageSize - 1);
+      if (existentesError) throw new Error("Erro lendo status anterior de weekly_operacoes: " + existentesError.message);
+      for (const e of existentes ?? []) {
+        statusAnteriorPorChave.set(e.chave_natural, { status: e.status, pago_em: e.pago_em });
+        idPorChaveAnterior.set(e.chave_natural, e.id);
+      }
+      if (!existentes || existentes.length < pageSize) break;
+      from += pageSize;
     }
   }
   const hojeStr = new Date().toISOString().slice(0, 10);
