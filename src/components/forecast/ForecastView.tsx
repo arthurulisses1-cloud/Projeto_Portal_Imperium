@@ -9,6 +9,33 @@ import { Table, Th, Td } from "@/components/ui/Table";
 
 type Aba = "assinaturas" | "reanalise" | "pagos" | "quedas";
 
+// Cada card do resumo do topo corresponde a exatamente um desses baldes —
+// clicar no card filtra a tabela de baixo pra mostrar só esses leads, sem
+// duplicar a lógica de classificação (mesma função usada pra somar os
+// valores do resumo e pra filtrar a tabela).
+type Balde = "pago" | "aguardando" | "pendencia" | "juridico" | "esfriou" | "reanalise" | "naoClassificado";
+
+const BALDE_LABELS: Record<Balde, string> = {
+  pago: "Já pago",
+  aguardando: "Certo pra pagar",
+  pendencia: "Em resolução de pendência",
+  juridico: "Análise Jurídico",
+  esfriou: "Esfriou",
+  reanalise: "Em reanálise",
+  naoClassificado: "Ainda não classificado",
+};
+
+function classificar(o: ForecastOp): Balde | null {
+  if (o.status === "PAGO") return "pago";
+  if (o.status === "REANÁLISE") return "reanalise";
+  if (o.statusManual === "aguardando_pagamento") return "aguardando";
+  if (o.statusManual === "resolvendo_pendencia") return "pendencia";
+  if (o.statusManual === "analise_juridico") return "juridico";
+  if (o.statusManual === "esfriou") return "esfriou";
+  if (o.status === "ASSINADO") return "naoClassificado";
+  return null; // CAIU/DESISTIU — fora desses baldes, vivem só na aba Quedas
+}
+
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
@@ -24,6 +51,7 @@ export default function ForecastView({
 }) {
   const [triboFiltro, setTriboFiltro] = useState<string | null>(null);
   const [aba, setAba] = useState<Aba>("assinaturas");
+  const [baldeFiltro, setBaldeFiltro] = useState<Balde | null>(null);
 
   const opsFiltradas = useMemo(() => {
     if (!triboFiltro) return ops;
@@ -48,8 +76,19 @@ export default function ForecastView({
     () => opsFiltradas.filter((o) => o.status === "CAIU" || o.status === "DESISTIU"),
     [opsFiltradas]
   );
-  const opsDaAba =
+  const opsDaAbaBase =
     aba === "assinaturas" ? opsAssinaturas : aba === "reanalise" ? opsReanalise : aba === "pagos" ? opsPagos : opsQuedas;
+  const opsDaAba =
+    baldeFiltro && aba !== "quedas" ? opsDaAbaBase.filter((o) => classificar(o) === baldeFiltro) : opsDaAbaBase;
+
+  function clicarCard(b: Balde) {
+    setBaldeFiltro((atual) => (atual === b ? null : b));
+    setAba(b === "pago" ? "pagos" : b === "reanalise" ? "reanalise" : "assinaturas");
+  }
+  function clicarAba(v: Aba) {
+    setAba(v);
+    setBaldeFiltro(null);
+  }
 
   const porStatus = useMemo(() => {
     const mapa = new Map<string, number>();
@@ -58,23 +97,20 @@ export default function ForecastView({
   }, [opsFiltradas]);
 
   const resumo = useMemo(() => {
-    let pago = 0,
-      aguardando = 0,
-      pendencia = 0,
-      juridico = 0,
-      esfriou = 0,
-      naoClassificado = 0,
-      reanalise = 0;
+    const totais: Record<Balde, number> = {
+      pago: 0,
+      aguardando: 0,
+      pendencia: 0,
+      juridico: 0,
+      esfriou: 0,
+      reanalise: 0,
+      naoClassificado: 0,
+    };
     for (const o of opsFiltradas) {
-      if (o.status === "PAGO") pago += o.valor;
-      else if (o.status === "REANÁLISE") reanalise += o.valor;
-      else if (o.statusManual === "aguardando_pagamento") aguardando += o.valor;
-      else if (o.statusManual === "resolvendo_pendencia") pendencia += o.valor;
-      else if (o.statusManual === "analise_juridico") juridico += o.valor;
-      else if (o.statusManual === "esfriou") esfriou += o.valor;
-      else if (o.status === "ASSINADO") naoClassificado += o.valor;
+      const b = classificar(o);
+      if (b) totais[b] += o.valor;
     }
-    return { pago, aguardando, pendencia, juridico, esfriou, naoClassificado, reanalise };
+    return totais;
   }, [opsFiltradas]);
 
   const statusOrdenados = ["PAGO", "ASSINADO", "REANÁLISE", "CAIU", "DESISTIU"].filter((s) => porStatus.has(s));
@@ -113,37 +149,33 @@ export default function ForecastView({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-7">
-        <Card>
-          <p className="kicker mb-2">Já pago</p>
-          <p className="font-display text-xl text-success-bright">{moeda(resumo.pago)}</p>
-        </Card>
-        <Card>
-          <p className="kicker mb-2">Certo pra pagar</p>
-          <p className="font-display text-xl text-gold-bright">{moeda(resumo.aguardando)}</p>
-          <p className="mt-1 text-[10px] text-stone-500">marcados &ldquo;Aguardando Pagamento&rdquo;</p>
-        </Card>
-        <Card>
-          <p className="kicker mb-2">Em resolução de pendência</p>
-          <p className="font-display text-xl text-wine-bright">{moeda(resumo.pendencia)}</p>
-        </Card>
-        <Card>
-          <p className="kicker mb-2">Análise Jurídico</p>
-          <p className="font-display text-xl text-stone-200">{moeda(resumo.juridico)}</p>
-        </Card>
-        <Card>
-          <p className="kicker mb-2">Esfriou</p>
-          <p className="font-display text-xl text-stone-400">{moeda(resumo.esfriou)}</p>
-        </Card>
-        <Card>
-          <p className="kicker mb-2">Em reanálise</p>
-          <p className="font-display text-xl" style={{ color: "#ffc94d" }}>{moeda(resumo.reanalise)}</p>
-          <p className="mt-1 text-[10px] text-stone-500">não caiu, mas parado — não dá pra trabalhar agora</p>
-        </Card>
-        <Card>
-          <p className="kicker mb-2">Ainda não classificado</p>
-          <p className="font-display text-xl text-stone-300">{moeda(resumo.naoClassificado)}</p>
-          <p className="mt-1 text-[10px] text-stone-500">assinado sem status marcado</p>
-        </Card>
+        {(
+          [
+            ["pago", "Já pago", resumo.pago, "text-success-bright", null],
+            ["aguardando", "Certo pra pagar", resumo.aguardando, "text-gold-bright", "marcados “Aguardando Pagamento”"],
+            ["pendencia", "Em resolução de pendência", resumo.pendencia, "text-wine-bright", null],
+            ["juridico", "Análise Jurídico", resumo.juridico, "text-stone-200", null],
+            ["esfriou", "Esfriou", resumo.esfriou, "text-stone-400", null],
+            ["reanalise", "Em reanálise", resumo.reanalise, "", "não caiu, mas parado — não dá pra trabalhar agora"],
+            ["naoClassificado", "Ainda não classificado", resumo.naoClassificado, "text-stone-300", "assinado sem status marcado"],
+          ] as [Balde, string, number, string, string | null][]
+        ).map(([b, label, valor, cor, sub]) => (
+          <button
+            key={b}
+            type="button"
+            onClick={() => clicarCard(b)}
+            className={`card-imp cursor-pointer text-left transition ${
+              baldeFiltro === b ? "border-gold" : "hover:border-gold/50"
+            }`}
+            style={baldeFiltro === b ? { borderColor: "var(--c-gold)" } : undefined}
+          >
+            <p className="kicker mb-2">{label}</p>
+            <p className={`font-display text-xl ${cor}`} style={b === "reanalise" ? { color: "#ffc94d" } : undefined}>
+              {moeda(valor)}
+            </p>
+            {sub && <p className="mt-1 text-[10px] text-stone-500">{sub}</p>}
+          </button>
+        ))}
       </div>
 
       <Card title="Assinado, pago, caiu e reanálise no mês">
@@ -169,7 +201,9 @@ export default function ForecastView({
 
       <Card
         title={
-          aba === "assinaturas"
+          baldeFiltro
+            ? BALDE_LABELS[baldeFiltro]
+            : aba === "assinaturas"
             ? "Assinaturas do mês"
             : aba === "reanalise"
             ? "Em reanálise"
@@ -189,9 +223,9 @@ export default function ForecastView({
             ).map(([v, label]) => (
               <button
                 key={v}
-                onClick={() => setAba(v)}
+                onClick={() => clicarAba(v)}
                 className={`rounded px-2.5 py-1 text-[10px] uppercase transition ${
-                  aba === v ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-400 hover:border-gold"
+                  aba === v && !baldeFiltro ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-400 hover:border-gold"
                 }`}
               >
                 {label}
@@ -200,6 +234,15 @@ export default function ForecastView({
           </div>
         }
       >
+        {baldeFiltro && (
+          <div className="mb-3 flex items-center gap-2 text-xs">
+            <span className="text-stone-400">Filtrado por:</span>
+            <span className="rounded bg-gold/15 px-2 py-1 text-gold-bright">{BALDE_LABELS[baldeFiltro]}</span>
+            <button onClick={() => setBaldeFiltro(null)} className="text-stone-500 underline hover:text-stone-300">
+              limpar
+            </button>
+          </div>
+        )}
         <Table>
           <thead>
             <tr>
