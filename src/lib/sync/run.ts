@@ -266,14 +266,18 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // "Bad Request" assim que a planilha cresceu o suficiente). Intervalo de
   // data é uma query normal, sem esse limite.
   const statusAnteriorPorChave = new Map<string, { status: string; pago_em: string | null }>();
+  const idPorChaveAnterior = new Map<string, string>();
   if (operacoes.menorData && operacoes.maiorData) {
     const { data: existentes, error: existentesError } = await supabase
       .from("weekly_operacoes")
-      .select("chave_natural, status, pago_em")
+      .select("id, chave_natural, status, pago_em")
       .gte("data", operacoes.menorData)
       .lte("data", operacoes.maiorData);
     if (existentesError) throw new Error("Erro lendo status anterior de weekly_operacoes: " + existentesError.message);
-    for (const e of existentes ?? []) statusAnteriorPorChave.set(e.chave_natural, { status: e.status, pago_em: e.pago_em });
+    for (const e of existentes ?? []) {
+      statusAnteriorPorChave.set(e.chave_natural, { status: e.status, pago_em: e.pago_em });
+      idPorChaveAnterior.set(e.chave_natural, e.id);
+    }
   }
   const hojeStr = new Date().toISOString().slice(0, 10);
 
@@ -310,6 +314,24 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
       .from("weekly_operacoes")
       .upsert(batch, { onConflict: "chave_natural" });
     if (error) throw new Error("Erro gravando weekly_operacoes: " + error.message);
+  }
+
+  // Limpa linhas órfãs: `chave_natural` inclui a data de assinatura, então
+  // editar essa data na planilha (ou apagar a linha) faz o upsert acima
+  // CRIAR uma chave nova em vez de atualizar a antiga — a linha velha nunca
+  // era removida, ficava fantasma em weekly_operacoes e duplicava o lead no
+  // Forecast (achado 2026-08-26). `idPorChaveAnterior` já tem todo mundo que
+  // existia no range lido acima; quem não aparece na leitura atual da
+  // planilha é órfão — some da aba, some do banco. Perde status_manual/
+  // observacao dessa linha específica (inevitável sem ID estável por linha
+  // na planilha), mas é sempre a linha ERRADA que fica pra trás.
+  const chaveAtuais = new Set(operacoes.linhas.map((l) => l.chaveNatural));
+  const idsOrfaos = Array.from(idPorChaveAnterior.entries())
+    .filter(([chave]) => !chaveAtuais.has(chave))
+    .map(([, id]) => id);
+  for (const batch of chunk(idsOrfaos, 200)) {
+    const { error } = await supabase.from("weekly_operacoes").delete().in("id", batch);
+    if (error) throw new Error("Erro removendo weekly_operacoes órfãs: " + error.message);
   }
 
   // Mesmo ajuste do bloco acima: intervalo de data em vez de `.in()` com
