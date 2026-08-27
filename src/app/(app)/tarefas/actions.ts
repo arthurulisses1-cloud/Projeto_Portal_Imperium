@@ -19,6 +19,8 @@ export async function criarTarefa(formData: FormData) {
   const dueDate = String(formData.get("due_date") ?? "");
   const prioridadeRaw = String(formData.get("prioridade") ?? "media");
   const prioridade = ["alta", "media", "baixa"].includes(prioridadeRaw) ? prioridadeRaw : "media";
+  const colunaRaw = String(formData.get("coluna") ?? "afazer");
+  const coluna = ["backlog", "afazer", "andamento", "bloqueado", "concluido"].includes(colunaRaw) ? colunaRaw : "afazer";
   const paraId = String(formData.get("profile_id") ?? "").trim() || user.id;
   if (!titulo) throw new Error("Descreva a tarefa.");
 
@@ -26,7 +28,7 @@ export async function criarTarefa(formData: FormData) {
     profile_id: paraId,
     titulo,
     due_date: dueDate || null,
-    coluna: "afazer",
+    coluna,
     prioridade,
     // null = tarefa própria; só grava "atribuído por" quando é pra outra pessoa.
     atribuido_por: paraId === user.id ? null : user.id,
