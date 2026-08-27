@@ -340,6 +340,11 @@ export function buscarTopSdrsHistorico(supabase: SupabaseClient) {
 export function buscarTopSdrsAtivosHistorico(supabase: SupabaseClient) {
   return top5PorPapel(supabase, "sdr", (p) => p.role === "sdr" && p.ativo);
 }
+// Espelha buscarTopSdrsAtivosHistorico pro lado Closer — só quem hoje
+// ainda É Closer ativo (exclui quem virou Líder ou saiu da firma).
+export function buscarTopClosersAtivosHistorico(supabase: SupabaseClient) {
+  return top5PorPapel(supabase, "closer", (p) => p.role === "closer" && p.ativo);
+}
 
 // Top 5 de entrevistas (producao_funil, não vendas) — igual ao Top 5 de
 // vendas, mas com contagem em vez de valor pago.

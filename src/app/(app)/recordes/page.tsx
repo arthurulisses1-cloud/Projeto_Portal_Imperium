@@ -5,6 +5,7 @@ import {
   buscarTopClosersHistorico,
   buscarTopSdrsHistorico,
   buscarTopSdrsAtivosHistorico,
+  buscarTopClosersAtivosHistorico,
   buscarTopSdrsEntrevistasHistorico,
   buscarContadorGuerraCivil,
   buscarGuerraTribosHistorico,
@@ -338,17 +339,27 @@ export default async function RecordesPage() {
   const { data: profile } = user ? await supabase.from("profiles").select("role").eq("id", user.id).single() : { data: null };
   const souDiretor = profile?.role === "diretor";
 
-  const [recordesAuto, recordesCurados, topClosers, topSdrs, topSdrsAtivos, topSdrsEntrevistas, contadorGuerraCivil, guerraTribos] =
-    await Promise.all([
-      buscarRecordesAuto(supabase),
-      buscarRecordesCurados(supabase),
-      buscarTopClosersHistorico(supabase),
-      buscarTopSdrsHistorico(supabase),
-      buscarTopSdrsAtivosHistorico(supabase),
-      buscarTopSdrsEntrevistasHistorico(supabase),
-      buscarContadorGuerraCivil(supabase),
-      buscarGuerraTribosHistorico(supabase),
-    ]);
+  const [
+    recordesAuto,
+    recordesCurados,
+    topClosers,
+    topSdrs,
+    topSdrsAtivos,
+    topClosersAtivos,
+    topSdrsEntrevistas,
+    contadorGuerraCivil,
+    guerraTribos,
+  ] = await Promise.all([
+    buscarRecordesAuto(supabase),
+    buscarRecordesCurados(supabase),
+    buscarTopClosersHistorico(supabase),
+    buscarTopSdrsHistorico(supabase),
+    buscarTopSdrsAtivosHistorico(supabase),
+    buscarTopClosersAtivosHistorico(supabase),
+    buscarTopSdrsEntrevistasHistorico(supabase),
+    buscarContadorGuerraCivil(supabase),
+    buscarGuerraTribosHistorico(supabase),
+  ]);
 
   const empresa = recordesAuto.filter((r) => r.categoria === "empresa");
   const time = recordesAuto.filter((r) => r.categoria === "time");
@@ -419,6 +430,7 @@ export default async function RecordesPage() {
           <Top5Lista titulo="Top 5 Closers da História" ranking={topClosers} />
           <Top5Lista titulo="Top 5 SDRs da História" ranking={topSdrs} />
           <Top5Lista titulo="Top 5 SDRs Ativos" ranking={topSdrsAtivos} />
+          <Top5Lista titulo="Top 5 Closers Ativos" ranking={topClosersAtivos} />
           <Top5Lista titulo="Top 5 SDRs com mais Entrevistas na História" ranking={topSdrsEntrevistas} formato="num" />
         </div>
       </section>
