@@ -149,6 +149,44 @@ export async function buscarContadorGuerraCivil(supabase: SupabaseClient): Promi
   };
 }
 
+// Guerra de Tribos histórica: diferente da Guerra Civil (só 2 Exércitos),
+// tem várias Tribos — não dá pra fazer "A × B", então vira um ranking de
+// quantos meses cada Tribo levou a coroa (maior crédito pago "mesma
+// Tribo" do mês). "Fora das Tribos" nunca entra (acerto de contas, não
+// concorrente — mesma regra do recorde "melhor mês de Tribo").
+export type VitoriaTribo = { nome: string; vitorias: number; credito: number; crestUrl: string | null };
+
+export async function buscarGuerraTribosHistorico(supabase: SupabaseClient): Promise<VitoriaTribo[]> {
+  const operacoes = await buscarOperacoesPagasPorGrupoHistorico(supabase, "tribo");
+  if (operacoes.length === 0) return [];
+
+  const porMes = new Map<string, typeof operacoes>();
+  for (const op of operacoes) {
+    const mes = op.data.slice(0, 7);
+    if (!porMes.has(mes)) porMes.set(mes, []);
+    porMes.get(mes)!.push(op);
+  }
+
+  const vitoriasPorTribo = new Map<string, number>();
+  for (const [, opsDoMes] of Array.from(porMes.entries())) {
+    const ranking = agregarPorGrupo(opsDoMes);
+    const vencedor = ranking.find((r) => !r.nome.startsWith("Fora"));
+    if (vencedor) vitoriasPorTribo.set(vencedor.nome, (vitoriasPorTribo.get(vencedor.nome) ?? 0) + 1);
+  }
+
+  const rankingTotal = agregarPorGrupo(operacoes).filter((r) => !r.nome.startsWith("Fora"));
+  const crestsTribos = await buscarCrestsTribos(supabase);
+
+  return rankingTotal
+    .map((r) => ({
+      nome: r.nome,
+      vitorias: vitoriasPorTribo.get(r.nome) ?? 0,
+      credito: r.valor,
+      crestUrl: crestsTribos[r.nome] ?? null,
+    }))
+    .sort((a, b) => b.vitorias - a.vitorias || b.credito - a.credito);
+}
+
 async function recordesIndividuais(supabase: SupabaseClient): Promise<RecordeAuto[]> {
   const recordes: RecordeAuto[] = [];
 

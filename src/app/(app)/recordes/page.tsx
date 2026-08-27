@@ -5,10 +5,12 @@ import {
   buscarTopClosersHistorico,
   buscarTopSdrsHistorico,
   buscarContadorGuerraCivil,
+  buscarGuerraTribosHistorico,
   type RecordeAuto,
   type RecordeCurado,
   type RankingHistorico,
   type ContadorGuerraCivil,
+  type VitoriaTribo,
 } from "@/lib/recordes";
 import { MESES_LABEL } from "@/lib/metas";
 import { IconCrown, IconSwords, IconMedal, IconLaurel, IconScroll } from "@/components/ui/icons";
@@ -178,6 +180,38 @@ function ScoreboardGuerraCivil({ contador }: { contador: ContadorGuerraCivil }) 
   );
 }
 
+function CardTribo({ t, vencedora }: { t: VitoriaTribo; vencedora: boolean }) {
+  return (
+    <div className="relative flex min-h-[220px] flex-col items-center justify-center gap-1 overflow-hidden border border-gold/10 p-6">
+      {t.crestUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={t.crestUrl} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-20" />
+      )}
+      {vencedora && <IconCrown className="relative h-5 w-5 text-gold-bright drop-shadow-[0_0_8px_rgba(232,200,116,0.4)]" />}
+      <p className="relative font-display text-3xl text-gold-bright drop-shadow-[0_0_10px_rgba(232,200,116,0.2)]">{t.vitorias}</p>
+      <p className="relative text-sm text-stone-300">meses de {t.nome}</p>
+      <p className="relative mt-1 text-xs text-stone-500">{fmtMoeda(t.credito)} pagos no total</p>
+    </div>
+  );
+}
+
+function ScoreboardGuerraTribos({ ranking }: { ranking: VitoriaTribo[] }) {
+  if (ranking.length === 0) return null;
+  return (
+    <div className="card-imp relative overflow-hidden p-0 sm:col-span-2 lg:col-span-3">
+      <div className="relative flex items-center justify-center gap-2 border-b border-gold/20 p-4">
+        <IconSwords className="h-5 w-5 text-gold-bright" />
+        <h3 className="font-display text-base tracking-wide text-gold-bright">Guerra de Tribos Histórica</h3>
+      </div>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3">
+        {ranking.map((t, i) => (
+          <CardTribo key={t.nome} t={t} vencedora={i === 0} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CardCurado({ r, souDiretor }: { r: RecordeCurado; souDiretor: boolean }) {
   const corpo = (
     <>
@@ -231,12 +265,13 @@ export default async function RecordesPage() {
   const { data: profile } = user ? await supabase.from("profiles").select("role").eq("id", user.id).single() : { data: null };
   const souDiretor = profile?.role === "diretor";
 
-  const [recordesAuto, recordesCurados, topClosers, topSdrs, contadorGuerraCivil] = await Promise.all([
+  const [recordesAuto, recordesCurados, topClosers, topSdrs, contadorGuerraCivil, guerraTribos] = await Promise.all([
     buscarRecordesAuto(supabase),
     buscarRecordesCurados(supabase),
     buscarTopClosersHistorico(supabase),
     buscarTopSdrsHistorico(supabase),
     buscarContadorGuerraCivil(supabase),
+    buscarGuerraTribosHistorico(supabase),
   ]);
 
   const empresa = recordesAuto.filter((r) => r.categoria === "empresa");
@@ -281,6 +316,7 @@ export default async function RecordesPage() {
             <CardRecorde key={r.titulo} r={r} />
           ))}
           {contadorGuerraCivil && <ScoreboardGuerraCivil contador={contadorGuerraCivil} />}
+          <ScoreboardGuerraTribos ranking={guerraTribos} />
         </div>
       </section>
 
