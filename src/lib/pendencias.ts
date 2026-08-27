@@ -131,3 +131,18 @@ export async function temNovidadeMural(supabase: SupabaseClient, userId: string)
   if (!perfil?.mural_visto_em) return true;
   return new Date(ultimoPost.created_at) > new Date(perfil.mural_visto_em);
 }
+
+// Bolinha vermelha em "Meus Leads" quando chega entrevista nova (pedido
+// do Diretor, 2026-08-27) — mesmo padrão do Mural acima, só que aqui o
+// "post mais recente" é escopado por RLS: o select já vem só com os
+// leads que essa pessoa pode ver (dono, líder do Exército, closer da
+// Tribo ou Diretor), então não precisa reconferir escopo aqui.
+export async function temNovidadeLeads(supabase: SupabaseClient, userId: string): Promise<boolean> {
+  const [{ data: ultimoLead }, { data: perfil }] = await Promise.all([
+    supabase.from("entrevistas_leads").select("criado_em").order("criado_em", { ascending: false }).limit(1).maybeSingle(),
+    supabase.from("profiles").select("leads_visto_em").eq("id", userId).maybeSingle(),
+  ]);
+  if (!ultimoLead) return false;
+  if (!perfil?.leads_visto_em) return true;
+  return new Date(ultimoLead.criado_em) > new Date(perfil.leads_visto_em);
+}

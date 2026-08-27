@@ -19,6 +19,10 @@ export default async function LeadsPage() {
     );
   }
 
+  // Apaga a bolinha vermelha da lateral (ver temNovidadeLeads em
+  // src/lib/pendencias.ts). Melhor-esforço: não bloqueia a página se falhar.
+  await supabase.from("profiles").update({ leads_visto_em: new Date().toISOString() }).eq("id", viewer.authUserId);
+
   // Mini-CRM de fluxo de trabalho, não histórico — só mês corrente (pedido
   // do Diretor, 2026-08-27). O sync já limpa mês anterior a cada rodada
   // (run.ts), esse filtro aqui é defesa extra pro intervalo entre um mês

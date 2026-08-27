@@ -10,7 +10,7 @@ import MencoesBell from "@/components/ui/MencoesBell";
 import MinervaWidget from "@/components/minerva/MinervaWidget";
 import { limparPreview } from "./preview-actions";
 import { IconLaurel, IconEye } from "@/components/ui/icons";
-import { buscarPendencias, temNovidadeMural } from "@/lib/pendencias";
+import { buscarPendencias, temNovidadeMural, temNovidadeLeads } from "@/lib/pendencias";
 import { SDR_FORECAST_LIBERADO } from "@/lib/acessos-especiais";
 import { buscarUltimaSyncOk } from "@/lib/sync/status";
 import { buscarMencoesPendentes } from "@/lib/social";
@@ -164,6 +164,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (user && profile) {
     const temNovidade = await temNovidadeMural(supabase, previewPessoa?.id ?? user.id);
     if (temNovidade) destaques["/"] = true;
+
+    if (["closer", "lider", "diretor"].includes(papelVisualizado ?? profile.role)) {
+      const temNovoLead = await temNovidadeLeads(supabase, previewPessoa?.id ?? user.id);
+      if (temNovoLead) destaques["/leads"] = true;
+    }
   }
 
   return (
