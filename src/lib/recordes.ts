@@ -300,7 +300,13 @@ export type RankingHistorico = { posicao: number; nome: string; valor: number; a
 
 // Total pago (histórico inteiro) por pessoa num papel — "ambos" conta pro
 // lado SDR e pro lado Closer, mesma convenção do resto do arquivo/ranking.
-async function top5PorPapel(supabase: SupabaseClient, papel: "sdr" | "closer"): Promise<RankingHistorico[]> {
+// `elegivel` filtra quem pode aparecer no ranking (ex.: só quem ainda é SDR
+// hoje, pra "Top 5 SDRs Ativos" não trazer quem já virou Líder/Closer).
+async function top5PorPapel(
+  supabase: SupabaseClient,
+  papel: "sdr" | "closer",
+  elegivel?: (p: { role: string; ativo: boolean }) => boolean
+): Promise<RankingHistorico[]> {
   const vendas = await buscarTudoPaginado<{ profile_id: string; valor: number; papel: string }>((from, to) =>
     supabase.from("vendas").select("profile_id, valor, papel").range(from, to)
   );
@@ -310,11 +316,13 @@ async function top5PorPapel(supabase: SupabaseClient, papel: "sdr" | "closer"): 
 
   const ids = Array.from(totais.keys());
   if (ids.length === 0) return [];
-  const { data: pessoas } = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", ids);
+  const { data: pessoas } = await supabase.from("profiles").select("id, full_name, avatar_url, role, ativo").in("id", ids);
   const nomePorId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name]));
   const avatarPorId = new Map((pessoas ?? []).map((p) => [p.id, p.avatar_url as string | null]));
+  const elegiveis = elegivel ? new Set((pessoas ?? []).filter(elegivel).map((p) => p.id)) : null;
 
   return Array.from(totais.entries())
+    .filter(([id]) => !elegiveis || elegiveis.has(id))
     .map(([id, valor]) => ({ nome: nomePorId.get(id) ?? "—", valor, avatarUrl: avatarPorId.get(id) ?? null }))
     .sort((a, b) => b.valor - a.valor)
     .slice(0, 5)
@@ -326,6 +334,11 @@ export function buscarTopClosersHistorico(supabase: SupabaseClient) {
 }
 export function buscarTopSdrsHistorico(supabase: SupabaseClient) {
   return top5PorPapel(supabase, "sdr");
+}
+// Só quem hoje ainda É SDR ativo — exclui quem foi promovido a Líder/Closer
+// (mesmo que tenha vendido muito como SDR no passado) e quem saiu da firma.
+export function buscarTopSdrsAtivosHistorico(supabase: SupabaseClient) {
+  return top5PorPapel(supabase, "sdr", (p) => p.role === "sdr" && p.ativo);
 }
 
 export type RecordeCurado = {

@@ -4,6 +4,7 @@ import {
   buscarRecordesCurados,
   buscarTopClosersHistorico,
   buscarTopSdrsHistorico,
+  buscarTopSdrsAtivosHistorico,
   buscarContadorGuerraCivil,
   buscarGuerraTribosHistorico,
   type RecordeAuto,
@@ -265,11 +266,12 @@ export default async function RecordesPage() {
   const { data: profile } = user ? await supabase.from("profiles").select("role").eq("id", user.id).single() : { data: null };
   const souDiretor = profile?.role === "diretor";
 
-  const [recordesAuto, recordesCurados, topClosers, topSdrs, contadorGuerraCivil, guerraTribos] = await Promise.all([
+  const [recordesAuto, recordesCurados, topClosers, topSdrs, topSdrsAtivos, contadorGuerraCivil, guerraTribos] = await Promise.all([
     buscarRecordesAuto(supabase),
     buscarRecordesCurados(supabase),
     buscarTopClosersHistorico(supabase),
     buscarTopSdrsHistorico(supabase),
+    buscarTopSdrsAtivosHistorico(supabase),
     buscarContadorGuerraCivil(supabase),
     buscarGuerraTribosHistorico(supabase),
   ]);
@@ -331,6 +333,7 @@ export default async function RecordesPage() {
           ))}
           <Top5Lista titulo="Top 5 Closers da História" ranking={topClosers} />
           <Top5Lista titulo="Top 5 SDRs da História" ranking={topSdrs} />
+          <Top5Lista titulo="Top 5 SDRs Ativos" ranking={topSdrsAtivos} />
         </div>
       </section>
 
