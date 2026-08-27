@@ -31,8 +31,8 @@ export type MotivoPerda = { id: string; nome: string; ativo: boolean };
 
 // A partir de Fechamento (inclusive), o lead precisa estar qualificado —
 // pedido do Diretor (2026-08-27). Cobre as etapas seguintes também (CCB
-// Enviada, Assinado), senão dava pra arrastar direto pra lá sem qualificar.
-const ETAPAS_QUE_EXIGEM_QUALIFICACAO = new Set(["fechamento", "subido", "ccb_enviada", "assinado"]);
+// Enviada, Assinado, Pago), senão dava pra arrastar direto pra lá sem qualificar.
+const ETAPAS_QUE_EXIGEM_QUALIFICACAO = new Set(["fechamento", "subido", "ccb_enviada", "assinado", "pago"]);
 
 const TEMPERATURAS = [
   { valor: "frio", label: "Frio", cor: "bg-sky-500" },
@@ -45,7 +45,9 @@ function formatarMoeda(v: number) {
 }
 
 // Funil real da operação (migration 0055) — "Perdido" fica fora da
-// esteira principal, é uma saída que precisa de motivo.
+// esteira principal, é uma saída que precisa de motivo. "Pago" (migration
+// 0058) vem depois de Assinado: o sync distingue sozinho, pela aba
+// Assinado, entre operação só assinada e já paga.
 const COLUNAS = [
   { valor: "validacao_entrevista", label: "Validação de Entrevista", cor: "bg-warning" },
   { valor: "entrevista_validada", label: "Entrevista Validada", cor: "bg-gold" },
@@ -53,6 +55,7 @@ const COLUNAS = [
   { valor: "subido", label: "Subido", cor: "bg-stone-400" },
   { valor: "ccb_enviada", label: "CCB Enviada", cor: "bg-gold-bright" },
   { valor: "assinado", label: "Assinado", cor: "bg-success" },
+  { valor: "pago", label: "Pago", cor: "bg-success-bright" },
   { valor: "perdido", label: "Perdido", cor: "bg-wine" },
 ] as const;
 
@@ -76,8 +79,12 @@ export default function LeadsView({
   const [colunaAlvo, setColunaAlvo] = useState<string | null>(null);
   const [leadAberto, setLeadAberto] = useState<string | null>(null);
   const [statusPretendido, setStatusPretendido] = useState<string | null>(null);
-  const [filtroExercito, setFiltroExercito] = useState("");
-  const [filtroCloser, setFiltroCloser] = useState("");
+  // Multi-seleção (pedido do Diretor, 2026-08-27: "tire da forma de filtro
+  // único, coloque de forma que eu possa selecionar vários") — vazio = sem
+  // filtro (mostra tudo), cada Set guarda os valores marcados.
+  const [filtroExercitos, setFiltroExercitos] = useState<Set<string>>(new Set());
+  const [filtroClosers, setFiltroClosers] = useState<Set<string>>(new Set());
+  const [filtroTemperaturas, setFiltroTemperaturas] = useState<Set<string>>(new Set());
   const [, startTransition] = useTransition();
 
   const exercitos = useMemo(
@@ -91,11 +98,15 @@ export default function LeadsView({
 
   const leadsFiltrados = useMemo(() => {
     return leadsState.filter((l) => {
-      if (filtroExercito && (!l.closer_profile_id || exercitoPorProfileId.get(l.closer_profile_id) !== filtroExercito)) return false;
-      if (filtroCloser && l.closer_profile_id !== filtroCloser) return false;
+      if (filtroExercitos.size > 0) {
+        const ex = l.closer_profile_id ? exercitoPorProfileId.get(l.closer_profile_id) : null;
+        if (!ex || !filtroExercitos.has(ex)) return false;
+      }
+      if (filtroClosers.size > 0 && (!l.closer_profile_id || !filtroClosers.has(l.closer_profile_id))) return false;
+      if (filtroTemperaturas.size > 0 && (!l.temperatura || !filtroTemperaturas.has(l.temperatura))) return false;
       return true;
     });
-  }, [leadsState, filtroExercito, filtroCloser, exercitoPorProfileId]);
+  }, [leadsState, filtroExercitos, filtroClosers, filtroTemperaturas, exercitoPorProfileId]);
 
   const porColuna = useMemo(() => {
     const mapa = new Map<string, Lead[]>();
@@ -139,46 +150,48 @@ export default function LeadsView({
 
   return (
     <div className="space-y-4">
-      {(exercitos.length > 1 || closers.length > 1) && (
-        <div className="flex flex-wrap items-center gap-3">
-          {exercitos.length > 1 && (
-            <select value={filtroExercito} onChange={(e) => setFiltroExercito(e.target.value)} className="input-imp text-sm">
-              <option value="">Todos os Exércitos</option>
-              {exercitos.map((ex) => (
-                <option key={ex} value={ex}>
-                  {ex}
-                </option>
-              ))}
-            </select>
-          )}
-          {closers.length > 1 && (
-            <select value={filtroCloser} onChange={(e) => setFiltroCloser(e.target.value)} className="input-imp text-sm">
-              <option value="">Todos os Closers</option>
-              {closers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nome}
-                </option>
-              ))}
-            </select>
-          )}
-          {(filtroExercito || filtroCloser) && (
-            <button
-              type="button"
-              onClick={() => {
-                setFiltroExercito("");
-                setFiltroCloser("");
-              }}
-              className="text-xs text-stone-500 underline hover:text-stone-300"
-            >
-              limpar filtros
-            </button>
-          )}
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        {exercitos.length > 1 && (
+          <MultiSelectFiltro
+            label="Exército"
+            opcoes={exercitos.map((ex) => ({ valor: ex, label: ex }))}
+            selecionados={filtroExercitos}
+            onChange={setFiltroExercitos}
+          />
+        )}
+        {closers.length > 1 && (
+          <MultiSelectFiltro
+            label="Closer"
+            opcoes={closers.map((c) => ({ valor: c.id, label: c.nome }))}
+            selecionados={filtroClosers}
+            onChange={setFiltroClosers}
+          />
+        )}
+        <MultiSelectFiltro
+          label="Forecast"
+          opcoes={TEMPERATURAS.map((t) => ({ valor: t.valor, label: t.label }))}
+          selecionados={filtroTemperaturas}
+          onChange={setFiltroTemperaturas}
+        />
+        {(filtroExercitos.size > 0 || filtroClosers.size > 0 || filtroTemperaturas.size > 0) && (
+          <button
+            type="button"
+            onClick={() => {
+              setFiltroExercitos(new Set());
+              setFiltroClosers(new Set());
+              setFiltroTemperaturas(new Set());
+            }}
+            className="text-xs text-stone-500 underline hover:text-stone-300"
+          >
+            limpar filtros
+          </button>
+        )}
+      </div>
 
       <div className="flex gap-4">
         {COLUNAS.map((c) => {
           const itens = porColuna.get(c.valor) ?? [];
+          const totalValor = itens.reduce((soma, l) => soma + (l.valor_credito ?? 0), 0);
           const emDrop = colunaAlvo === c.valor;
           return (
             <div
@@ -206,6 +219,9 @@ export default function LeadsView({
                 </div>
                 <span className="shrink-0 rounded-full bg-imperium-bg/60 px-2 py-0.5 text-[11px] text-stone-500">{itens.length}</span>
               </div>
+              {totalValor > 0 && (
+                <p className="border-b border-imperium-line px-3 py-1.5 text-[11px] font-medium text-gold-bright">{formatarMoeda(totalValor)}</p>
+              )}
 
               <div className="flex-1 space-y-2 p-2.5">
                 {itens.length === 0 && <p className="text-center text-xs text-stone-600">Vazio.</p>}
@@ -279,6 +295,48 @@ export default function LeadsView({
         />
       )}
     </div>
+  );
+}
+
+// Dropdown de multi-seleção reaproveitado pelos 3 filtros (Exército,
+// Closer, Forecast) — pedido do Diretor (2026-08-27) de trocar filtro
+// único por vários selecionados ao mesmo tempo.
+function MultiSelectFiltro({
+  label,
+  opcoes,
+  selecionados,
+  onChange,
+}: {
+  label: string;
+  opcoes: { valor: string; label: string }[];
+  selecionados: Set<string>;
+  onChange: (novo: Set<string>) => void;
+}) {
+  return (
+    <details className="group relative">
+      <summary className="input-imp flex cursor-pointer list-none items-center gap-1.5 text-sm [&::-webkit-details-marker]:hidden">
+        {label}
+        {selecionados.size > 0 && <span className="rounded-full bg-gold/20 px-1.5 text-[10px] text-gold-bright">{selecionados.size}</span>}
+        <span className="text-[9px] text-stone-500 transition group-open:rotate-180">▾</span>
+      </summary>
+      <div className="absolute z-20 mt-1 max-h-64 w-56 overflow-y-auto rounded-md border border-imperium-line bg-imperium-surface p-1.5 shadow-lg">
+        {opcoes.map((o) => (
+          <label key={o.valor} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-stone-300 hover:bg-imperium-bg/60">
+            <input
+              type="checkbox"
+              checked={selecionados.has(o.valor)}
+              onChange={(e) => {
+                const novo = new Set(selecionados);
+                if (e.target.checked) novo.add(o.valor);
+                else novo.delete(o.valor);
+                onChange(novo);
+              }}
+            />
+            {o.label}
+          </label>
+        ))}
+      </div>
+    </details>
   );
 }
 

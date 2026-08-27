@@ -18,6 +18,7 @@ const STATUS_VALIDOS = new Set([
   "subido",
   "ccb_enviada",
   "assinado",
+  "pago",
   "perdido",
 ]);
 
@@ -27,9 +28,9 @@ const TEMPERATURAS_VALIDAS = new Set(["frio", "morno", "quente"]);
 // pedido do Diretor (2026-08-27): "lead só pode entrar em fechamento ou
 // subido se for preenchido: Forecast (Frio/Morno/Quente) e Valor do
 // Crédito". Cobre também as etapas depois de Fechamento/Subido (CCB
-// Enviada, Assinado) pra fechar a brecha de arrastar direto pra lá sem
-// passar pelas etapas anteriores.
-const ETAPAS_QUE_EXIGEM_QUALIFICACAO = new Set(["fechamento", "subido", "ccb_enviada", "assinado"]);
+// Enviada, Assinado, Pago) pra fechar a brecha de arrastar direto pra lá
+// sem passar pelas etapas anteriores.
+const ETAPAS_QUE_EXIGEM_QUALIFICACAO = new Set(["fechamento", "subido", "ccb_enviada", "assinado", "pago"]);
 
 export async function salvarStatusLead(formData: FormData) {
   const supabase = await createClient();

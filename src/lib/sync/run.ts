@@ -297,35 +297,38 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   const operacoes = await buscarOperacoes(assinadoText);
 
   // ---------- Meus Leads: fecha o loop com a aba Assinado ----------
-  // "Colocou em assinado na planilha, já manda o card pra assinado aqui"
-  // (pedido do Diretor, 2026-08-27) — um fato objetivo que vem de fora
-  // (alguém assinou) sobrepõe o que o Closer tinha deixado manualmente em
-  // status_followup, e já entra qualificado (temperatura quente + valor do
-  // crédito), sem exigir que o Closer preencha de novo o que a planilha já
-  // sabe. Casa por SDR+Closer+nome do cliente normalizado — não dá pra usar
-  // chaveNatural de weekly_operacoes (inclui data/valor: a data da
-  // entrevista e a da assinatura são diferentes por natureza). Quando há
-  // mais de uma operação pro mesmo par, fica com a de data mais recente.
-  const assinadoPorPessoaCliente = new Map<string, { valor: number; data: string }>();
+  // "Colocou em assinado na planilha, já manda o card pra assinado aqui" —
+  // e "quem foi assinado mas tá pago, manda pro pago" (pedido do Diretor,
+  // 2026-08-27) — um fato objetivo que vem de fora (alguém assinou/pagou)
+  // sobrepõe o que o Closer tinha deixado manualmente em status_followup, e
+  // já entra qualificado (temperatura quente + valor do crédito), sem
+  // exigir que o Closer preencha de novo o que a planilha já sabe. Casa por
+  // SDR+Closer+nome do cliente normalizado — não dá pra usar chaveNatural de
+  // weekly_operacoes (inclui data/valor: a data da entrevista e a da
+  // assinatura são diferentes por natureza). Quando há mais de uma operação
+  // pro mesmo par, fica com a de data mais recente.
+  const assinadoPorPessoaCliente = new Map<string, { valor: number; data: string; pago: boolean }>();
   for (const l of operacoes.linhas) {
     if (!l.cliente) continue;
     const chave = `${l.sdrNormalizado ?? ""}|${l.closerNormalizado ?? ""}|${normalizarNome(l.cliente)}`;
     const existente = assinadoPorPessoaCliente.get(chave);
-    if (!existente || l.data >= existente.data) assinadoPorPessoaCliente.set(chave, { valor: l.valor, data: l.data });
+    if (!existente || l.data >= existente.data) {
+      assinadoPorPessoaCliente.set(chave, { valor: l.valor, data: l.data, pago: l.status === "PAGO" });
+    }
   }
   const leadsParaAssinar = entrevistasLeads
     .map((l) => {
       const chave = `${l.sdrNormalizado ?? ""}|${l.closerNormalizado ?? ""}|${normalizarNome(l.leadNome)}`;
       const match = assinadoPorPessoaCliente.get(chave);
-      return match ? { chaveNatural: l.chaveNatural, valor: match.valor } : null;
+      return match ? { chaveNatural: l.chaveNatural, valor: match.valor, statusAlvo: match.pago ? "pago" : "assinado" } : null;
     })
-    .filter((x): x is { chaveNatural: string; valor: number } => x !== null);
+    .filter((x): x is { chaveNatural: string; valor: number; statusAlvo: string } => x !== null);
   for (const grupo of chunk(leadsParaAssinar, 20)) {
     await Promise.all(
       grupo.map((l) =>
         supabase
           .from("entrevistas_leads")
-          .update({ status_followup: "assinado", temperatura: "quente", valor_credito: l.valor })
+          .update({ status_followup: l.statusAlvo, temperatura: "quente", valor_credito: l.valor })
           .eq("chave_natural", l.chaveNatural)
           .neq("status_followup", "perdido")
       )
