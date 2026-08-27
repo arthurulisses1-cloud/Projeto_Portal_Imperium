@@ -292,7 +292,7 @@ export default async function RecordesPage() {
         <img
           src="/crests/imperium.jpg"
           alt=""
-          className="relative mx-auto h-20 w-20 rounded-full border-2 border-gold/50 object-cover shadow-[0_0_25px_rgba(232,200,116,0.35)]"
+          className="relative mx-auto h-40 w-40 rounded-full border-2 border-gold/50 object-cover shadow-[0_0_40px_rgba(232,200,116,0.4)]"
         />
         <div className="relative mt-4 flex items-center justify-center gap-3">
           <IconLaurel className="h-6 w-10 -scale-x-100 text-gold" />
