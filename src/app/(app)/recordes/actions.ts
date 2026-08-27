@@ -21,7 +21,19 @@ export async function criarRecordeCurado(formData: FormData) {
   const valorTexto = String(formData.get("valor_texto") ?? "").trim();
   const dataReferencia = String(formData.get("data_referencia") ?? "").trim();
   const profileId = String(formData.get("profile_id") ?? "").trim();
+  const categoria = String(formData.get("categoria") ?? "").trim();
+  const ordemRaw = String(formData.get("ordem") ?? "").trim();
   if (!titulo) throw new Error("Título é obrigatório.");
+
+  let imagemUrl: string | null = null;
+  const imagem = formData.get("imagem") as File | null;
+  if (imagem && imagem.size > 0) {
+    const ext = imagem.name.split(".").pop() || "jpg";
+    const path = `${user.id}/${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from("recordes-curados").upload(path, imagem, { contentType: imagem.type });
+    if (uploadError) throw new Error(uploadError.message);
+    imagemUrl = supabase.storage.from("recordes-curados").getPublicUrl(path).data.publicUrl;
+  }
 
   const { error } = await supabase.from("recordes_curados").insert({
     titulo,
@@ -29,6 +41,9 @@ export async function criarRecordeCurado(formData: FormData) {
     valor_texto: valorTexto || null,
     data_referencia: dataReferencia || null,
     profile_id: profileId || null,
+    categoria: categoria || null,
+    ordem: ordemRaw ? Number(ordemRaw) : 0,
+    imagem_url: imagemUrl,
     created_by: user.id,
   });
   if (error) throw new Error(error.message);

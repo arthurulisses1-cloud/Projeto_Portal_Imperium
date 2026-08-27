@@ -5,6 +5,7 @@ import {
   buscarTopClosersHistorico,
   buscarTopSdrsHistorico,
   buscarTopSdrsAtivosHistorico,
+  buscarTopSdrsEntrevistasHistorico,
   buscarContadorGuerraCivil,
   buscarGuerraTribosHistorico,
   type RecordeAuto,
@@ -104,8 +105,9 @@ function Secao({ titulo, recordes, icon: Icon }: { titulo: string; recordes: Rec
   );
 }
 
-function Top5Lista({ titulo, ranking }: { titulo: string; ranking: RankingHistorico[] }) {
+function Top5Lista({ titulo, ranking, formato = "moeda" }: { titulo: string; ranking: RankingHistorico[]; formato?: "moeda" | "num" }) {
   if (ranking.length === 0) return null;
+  const fmt = (v: number) => (formato === "moeda" ? fmtMoeda(v) : v.toLocaleString("pt-BR"));
   const [primeiro, ...resto] = ranking;
   return (
     <div className="card-imp relative overflow-hidden p-0">
@@ -122,14 +124,14 @@ function Top5Lista({ titulo, ranking }: { titulo: string; ranking: RankingHistor
             <div className="absolute inset-0 bg-gradient-to-t from-imperium-surface via-imperium-surface/50 to-transparent" />
             <div className="relative flex h-full flex-col items-center justify-end p-3 text-center">
               <p className="font-display text-lg leading-tight text-gold-bright drop-shadow-[0_0_10px_rgba(0,0,0,0.6)]">{primeiro.nome}</p>
-              <p className="text-sm text-stone-100 drop-shadow-[0_0_10px_rgba(0,0,0,0.6)]">{fmtMoeda(primeiro.valor)}</p>
+              <p className="text-sm text-stone-100 drop-shadow-[0_0_10px_rgba(0,0,0,0.6)]">{fmt(primeiro.valor)}</p>
             </div>
           </div>
         ) : (
           <div className="bg-gold/5 p-4 text-center">
             <IconCrown className="mx-auto h-6 w-6 text-gold-bright drop-shadow-[0_0_8px_rgba(232,200,116,0.4)]" />
             <p className="mt-1 font-display text-xl text-gold-bright">{primeiro.nome}</p>
-            <p className="text-sm text-stone-300">{fmtMoeda(primeiro.valor)}</p>
+            <p className="text-sm text-stone-300">{fmt(primeiro.valor)}</p>
           </div>
         )}
       </div>
@@ -141,7 +143,7 @@ function Top5Lista({ titulo, ranking }: { titulo: string; ranking: RankingHistor
               <span className="text-stone-400">
                 {r.posicao}. {r.nome}
               </span>
-              <span className="text-stone-300">{fmtMoeda(r.valor)}</span>
+              <span className="text-stone-300">{fmt(r.valor)}</span>
             </li>
           ))}
         </ol>
@@ -236,12 +238,13 @@ function CardCurado({ r, souDiretor }: { r: RecordeCurado; souDiretor: boolean }
     </>
   );
 
-  if (r.avatarUrl) {
+  const foto = r.imagemUrl ?? r.avatarUrl;
+  if (foto) {
     return (
       <div className="card-imp relative flex overflow-hidden p-0">
         <div className="relative w-2/5 shrink-0">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={r.avatarUrl} alt="" className="h-full w-full object-cover" />
+          <img src={foto} alt="" className="h-full w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-imperium-surface" />
         </div>
         <div className="flex-1 p-5">{corpo}</div>
@@ -258,6 +261,75 @@ function CardCurado({ r, souDiretor }: { r: RecordeCurado; souDiretor: boolean }
   );
 }
 
+// Crônicas com a MESMA categoria viram um ranking só (ex.: "Melhor
+// comemoração da História": 1º Os Vendedores, 2º Bar do Pix, 3º Pagode
+// dos Subidos) — o 1º lugar ganha o mesmo tratamento de foto grande do
+// Top 5, os demais entram como lista simples abaixo.
+function RankingCurado({ categoria, itens, souDiretor }: { categoria: string; itens: RecordeCurado[]; souDiretor: boolean }) {
+  const [primeiro, ...resto] = itens;
+  const foto = primeiro.imagemUrl ?? primeiro.avatarUrl;
+  return (
+    <div className="card-imp relative overflow-hidden p-0">
+      <div className="relative flex items-center gap-2 p-6 pb-0">
+        <IconScroll className="h-5 w-5 text-gold-bright" />
+        <h3 className="font-display text-base tracking-wide text-gold-bright">{categoria}</h3>
+      </div>
+
+      <div className={`relative mx-6 mt-4 overflow-hidden rounded border border-gold/40 ${resto.length === 0 ? "mb-3" : ""}`}>
+        {foto ? (
+          <div className="relative h-56">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={foto} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-imperium-surface via-imperium-surface/50 to-transparent" />
+            <div className="relative flex h-full flex-col items-center justify-end p-3 text-center">
+              <p className="font-display text-lg leading-tight text-gold-bright drop-shadow-[0_0_10px_rgba(0,0,0,0.6)]">{primeiro.titulo}</p>
+              {primeiro.valorTexto && (
+                <p className="text-sm text-stone-100 drop-shadow-[0_0_10px_rgba(0,0,0,0.6)]">{primeiro.valorTexto}</p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="bg-gold/5 p-4 text-center">
+            <IconCrown className="mx-auto h-6 w-6 text-gold-bright drop-shadow-[0_0_8px_rgba(232,200,116,0.4)]" />
+            <p className="mt-1 font-display text-xl text-gold-bright">{primeiro.titulo}</p>
+            {primeiro.valorTexto && <p className="text-sm text-stone-300">{primeiro.valorTexto}</p>}
+          </div>
+        )}
+      </div>
+      {primeiro.descricao && <p className="relative mx-6 mt-2 text-xs text-stone-500">{primeiro.descricao}</p>}
+      {souDiretor && (
+        <form action={excluirRecordeCurado} className="relative mx-6 mt-2">
+          <input type="hidden" name="id" value={primeiro.id} />
+          <button type="submit" className="text-[11px] text-wine hover:underline">
+            Remover
+          </button>
+        </form>
+      )}
+
+      {resto.length > 0 && (
+        <ol className="relative space-y-2 p-6 pt-3">
+          {resto.map((r, i) => (
+            <li key={r.id} className="flex items-center justify-between text-sm">
+              <span className="text-stone-400">
+                {i + 2}º {r.titulo}
+                {r.valorTexto && <span className="text-stone-600"> · {r.valorTexto}</span>}
+              </span>
+              {souDiretor && (
+                <form action={excluirRecordeCurado}>
+                  <input type="hidden" name="id" value={r.id} />
+                  <button type="submit" className="text-[11px] text-wine hover:underline">
+                    Remover
+                  </button>
+                </form>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 export default async function RecordesPage() {
   const supabase = await createClient();
   const {
@@ -266,19 +338,32 @@ export default async function RecordesPage() {
   const { data: profile } = user ? await supabase.from("profiles").select("role").eq("id", user.id).single() : { data: null };
   const souDiretor = profile?.role === "diretor";
 
-  const [recordesAuto, recordesCurados, topClosers, topSdrs, topSdrsAtivos, contadorGuerraCivil, guerraTribos] = await Promise.all([
-    buscarRecordesAuto(supabase),
-    buscarRecordesCurados(supabase),
-    buscarTopClosersHistorico(supabase),
-    buscarTopSdrsHistorico(supabase),
-    buscarTopSdrsAtivosHistorico(supabase),
-    buscarContadorGuerraCivil(supabase),
-    buscarGuerraTribosHistorico(supabase),
-  ]);
+  const [recordesAuto, recordesCurados, topClosers, topSdrs, topSdrsAtivos, topSdrsEntrevistas, contadorGuerraCivil, guerraTribos] =
+    await Promise.all([
+      buscarRecordesAuto(supabase),
+      buscarRecordesCurados(supabase),
+      buscarTopClosersHistorico(supabase),
+      buscarTopSdrsHistorico(supabase),
+      buscarTopSdrsAtivosHistorico(supabase),
+      buscarTopSdrsEntrevistasHistorico(supabase),
+      buscarContadorGuerraCivil(supabase),
+      buscarGuerraTribosHistorico(supabase),
+    ]);
 
   const empresa = recordesAuto.filter((r) => r.categoria === "empresa");
   const time = recordesAuto.filter((r) => r.categoria === "time");
   const individuais = recordesAuto.filter((r) => r.categoria === "individual");
+
+  // Crônicas com `categoria` preenchida viram um ranking agrupado (ver
+  // RankingCurado); sem categoria, seguem soltas como hoje. `ordem` decide
+  // a posição dentro do grupo (buscarRecordesCurados já ordena por ela).
+  const avulsas = recordesCurados.filter((r) => !r.categoria);
+  const porCategoria = new Map<string, RecordeCurado[]>();
+  for (const r of recordesCurados) {
+    if (!r.categoria) continue;
+    if (!porCategoria.has(r.categoria)) porCategoria.set(r.categoria, []);
+    porCategoria.get(r.categoria)!.push(r);
+  }
 
   let pessoas: { id: string; full_name: string }[] = [];
   if (souDiretor) {
@@ -334,6 +419,7 @@ export default async function RecordesPage() {
           <Top5Lista titulo="Top 5 Closers da História" ranking={topClosers} />
           <Top5Lista titulo="Top 5 SDRs da História" ranking={topSdrs} />
           <Top5Lista titulo="Top 5 SDRs Ativos" ranking={topSdrsAtivos} />
+          <Top5Lista titulo="Top 5 SDRs com mais Entrevistas na História" ranking={topSdrsEntrevistas} formato="num" />
         </div>
       </section>
 
@@ -346,8 +432,11 @@ export default async function RecordesPage() {
           <p className="text-xs text-stone-600">Nenhuma crônica registrada ainda.</p>
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {recordesCurados.map((r) => (
+            {avulsas.map((r) => (
               <CardCurado key={r.id} r={r} souDiretor={souDiretor} />
+            ))}
+            {Array.from(porCategoria.entries()).map(([categoria, itens]) => (
+              <RankingCurado key={categoria} categoria={categoria} itens={itens} souDiretor={souDiretor} />
             ))}
           </div>
         )}

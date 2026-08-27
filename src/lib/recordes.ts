@@ -341,6 +341,28 @@ export function buscarTopSdrsAtivosHistorico(supabase: SupabaseClient) {
   return top5PorPapel(supabase, "sdr", (p) => p.role === "sdr" && p.ativo);
 }
 
+// Top 5 de entrevistas (producao_funil, não vendas) — igual ao Top 5 de
+// vendas, mas com contagem em vez de valor pago.
+export async function buscarTopSdrsEntrevistasHistorico(supabase: SupabaseClient): Promise<RankingHistorico[]> {
+  const rows = await buscarTudoPaginado<{ profile_id: string; realizado: number; papel: string }>((from, to) =>
+    supabase.from("producao_funil").select("profile_id, realizado, papel").eq("etapa", "entrevistas").in("papel", ["sdr", "ambos"]).range(from, to)
+  );
+  const totais = new Map<string, number>();
+  for (const r of rows) totais.set(r.profile_id, (totais.get(r.profile_id) ?? 0) + r.realizado);
+
+  const ids = Array.from(totais.keys());
+  if (ids.length === 0) return [];
+  const { data: pessoas } = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", ids);
+  const nomePorId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name]));
+  const avatarPorId = new Map((pessoas ?? []).map((p) => [p.id, p.avatar_url as string | null]));
+
+  return Array.from(totais.entries())
+    .map(([id, valor]) => ({ nome: nomePorId.get(id) ?? "—", valor, avatarUrl: avatarPorId.get(id) ?? null }))
+    .sort((a, b) => b.valor - a.valor)
+    .slice(0, 5)
+    .map((r, i) => ({ posicao: i + 1, ...r }));
+}
+
 export type RecordeCurado = {
   id: string;
   titulo: string;
@@ -349,13 +371,15 @@ export type RecordeCurado = {
   dataReferencia: string | null;
   nomePessoa: string | null;
   avatarUrl: string | null;
+  imagemUrl: string | null;
+  categoria: string | null;
   ordem: number;
 };
 
 export async function buscarRecordesCurados(supabase: SupabaseClient): Promise<RecordeCurado[]> {
   const { data, error } = await supabase
     .from("recordes_curados")
-    .select("id, titulo, descricao, valor_texto, data_referencia, ordem, pessoa:profiles(full_name, avatar_url)")
+    .select("id, titulo, descricao, valor_texto, data_referencia, imagem_url, categoria, ordem, pessoa:profiles(full_name, avatar_url)")
     .order("ordem", { ascending: true })
     .order("data_referencia", { ascending: false });
   logErroSupabase("recordes: buscarRecordesCurados", error);
@@ -367,6 +391,8 @@ export async function buscarRecordesCurados(supabase: SupabaseClient): Promise<R
       descricao: r.descricao,
       valorTexto: r.valor_texto,
       dataReferencia: r.data_referencia,
+      imagemUrl: r.imagem_url,
+      categoria: r.categoria,
       nomePessoa: pessoa?.full_name ?? null,
       avatarUrl: pessoa?.avatar_url ?? null,
       ordem: r.ordem,

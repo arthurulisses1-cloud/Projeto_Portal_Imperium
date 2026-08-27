@@ -36,6 +36,27 @@ export default function RecordeForm({ pessoas }: { pessoas: Pessoa[] }) {
           ))}
         </select>
       </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="mb-1 block text-xs text-stone-400">Categoria (opcional)</label>
+          <input
+            name="categoria"
+            placeholder="Ex: Melhor comemoração da História"
+            className="input-imp"
+          />
+          <p className="mt-1 text-[11px] text-stone-600">
+            Crônicas com a MESMA categoria viram um ranking só (1º, 2º, 3º...), ordenado pelo campo Posição abaixo.
+          </p>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-stone-400">Posição no ranking (opcional)</label>
+          <input type="number" name="ordem" min={1} placeholder="Ex: 1" className="input-imp" />
+        </div>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-stone-400">Imagem (opcional)</label>
+        <input type="file" name="imagem" accept="image/*" className="text-sm text-stone-300" />
+      </div>
       <button type="submit" className="btn-gold">
         Registrar nos Anais
       </button>
