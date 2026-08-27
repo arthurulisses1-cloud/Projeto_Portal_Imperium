@@ -120,6 +120,13 @@ export const IconCrown = ({ className }: P) => (
     <path d="M6 19h12" />
   </svg>
 );
+export const IconTrophy = ({ className }: P) => (
+  <svg {...props(className)}>
+    <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
+    <path d="M7 5H4.5A2.5 2.5 0 0 0 7 9.5M17 5h2.5A2.5 2.5 0 0 1 17 9.5" />
+    <path d="M12 14v3M9 20h6M9 17h6v3H9Z" />
+  </svg>
+);
 export const IconCheck = ({ className }: P) => (
   <svg {...props(className)}>
     <path d="M4 12.5l5 5L20 6" />

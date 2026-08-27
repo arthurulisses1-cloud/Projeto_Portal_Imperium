@@ -1,9 +1,21 @@
 import { createClient } from "@/lib/supabase/server";
-import { buscarRecordesAuto, buscarRecordesCurados, type RecordeAuto, type RecordeCurado } from "@/lib/recordes";
+import {
+  buscarRecordesAuto,
+  buscarRecordesCurados,
+  buscarTopClosersHistorico,
+  buscarTopSdrsHistorico,
+  buscarContadorGuerraCivil,
+  type RecordeAuto,
+  type RecordeCurado,
+  type RankingHistorico,
+  type ContadorGuerraCivil,
+} from "@/lib/recordes";
 import { MESES_LABEL } from "@/lib/metas";
 import { IconCrown, IconSwords, IconMedal, IconLaurel, IconScroll } from "@/components/ui/icons";
 import RecordeForm from "./recorde-form";
 import { excluirRecordeCurado } from "./actions";
+
+const fmtMoeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 function formatarValor(r: Pick<RecordeAuto, "valor" | "formato">) {
   if (r.formato === "moeda") return r.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -60,6 +72,64 @@ function Secao({ titulo, recordes, icon: Icon }: { titulo: string; recordes: Rec
   );
 }
 
+function Top5Lista({ titulo, ranking }: { titulo: string; ranking: RankingHistorico[] }) {
+  if (ranking.length === 0) return null;
+  const [primeiro, ...resto] = ranking;
+  return (
+    <div className="card-imp relative overflow-hidden p-6">
+      <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br from-gold/25 to-transparent blur-2xl" />
+      <div className="relative flex items-center gap-2">
+        <IconMedal className="h-5 w-5 text-gold-bright" />
+        <h3 className="font-display text-base tracking-wide text-gold-bright">{titulo}</h3>
+      </div>
+      <div className="relative mt-4 rounded border border-gold/40 bg-gold/5 p-4 text-center">
+        <IconCrown className="mx-auto h-6 w-6 text-gold-bright drop-shadow-[0_0_8px_rgba(232,200,116,0.4)]" />
+        <p className="mt-1 font-display text-xl text-gold-bright">{primeiro.nome}</p>
+        <p className="text-sm text-stone-300">{fmtMoeda(primeiro.valor)}</p>
+      </div>
+      {resto.length > 0 && (
+        <ol className="relative mt-3 space-y-1.5">
+          {resto.map((r) => (
+            <li key={r.nome} className="flex items-center justify-between text-sm">
+              <span className="text-stone-400">
+                {r.posicao}. {r.nome}
+              </span>
+              <span className="text-stone-300">{fmtMoeda(r.valor)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function ScoreboardGuerraCivil({ contador }: { contador: ContadorGuerraCivil }) {
+  const total = contador.vitoriasA + contador.vitoriasB;
+  return (
+    <div className="card-imp relative overflow-hidden p-6">
+      <div className="relative flex items-center justify-center gap-2">
+        <IconSwords className="h-5 w-5 text-gold-bright" />
+        <h3 className="font-display text-base tracking-wide text-gold-bright">Guerra Civil Histórica</h3>
+      </div>
+      <p className="relative mt-1 text-center text-[11px] uppercase tracking-wide text-stone-600">
+        Meses vencidos por maior crédito pago
+      </p>
+      <div className="relative mt-4 flex items-center justify-center gap-6">
+        <div className="text-center">
+          <p className="font-display text-3xl text-gold-bright">{contador.vitoriasA}</p>
+          <p className="text-sm text-stone-300">{contador.nomeA}</p>
+        </div>
+        <span className="font-display text-xl text-stone-600">×</span>
+        <div className="text-center">
+          <p className="font-display text-3xl text-gold-bright">{contador.vitoriasB}</p>
+          <p className="text-sm text-stone-300">{contador.nomeB}</p>
+        </div>
+      </div>
+      {total === 0 && <p className="relative mt-3 text-center text-xs text-stone-600">Sem meses computados ainda.</p>}
+    </div>
+  );
+}
+
 function CardCurado({ r, souDiretor }: { r: RecordeCurado; souDiretor: boolean }) {
   return (
     <div className="card-imp relative overflow-hidden p-6">
@@ -94,7 +164,13 @@ export default async function RecordesPage() {
   const { data: profile } = user ? await supabase.from("profiles").select("role").eq("id", user.id).single() : { data: null };
   const souDiretor = profile?.role === "diretor";
 
-  const [recordesAuto, recordesCurados] = await Promise.all([buscarRecordesAuto(supabase), buscarRecordesCurados(supabase)]);
+  const [recordesAuto, recordesCurados, topClosers, topSdrs, contadorGuerraCivil] = await Promise.all([
+    buscarRecordesAuto(supabase),
+    buscarRecordesCurados(supabase),
+    buscarTopClosersHistorico(supabase),
+    buscarTopSdrsHistorico(supabase),
+    buscarContadorGuerraCivil(supabase),
+  ]);
 
   const empresa = recordesAuto.filter((r) => r.categoria === "empresa");
   const time = recordesAuto.filter((r) => r.categoria === "time");
@@ -127,8 +203,33 @@ export default async function RecordesPage() {
       </div>
 
       <Secao titulo="Recordes da Empresa" recordes={empresa} icon={IconCrown} />
-      <Secao titulo="Recordes de Time" recordes={time} icon={IconSwords} />
-      <Secao titulo="Recordes Individuais" recordes={individuais} icon={IconMedal} />
+
+      <section>
+        <div className="mb-4 flex items-center gap-2.5 border-b border-gold/20 pb-2">
+          <IconSwords className="h-5 w-5 text-gold-bright" />
+          <h2 className="font-display text-lg tracking-wide text-gold-bright">Recordes de Time</h2>
+        </div>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {time.map((r) => (
+            <CardRecorde key={r.titulo} r={r} />
+          ))}
+          {contadorGuerraCivil && <ScoreboardGuerraCivil contador={contadorGuerraCivil} />}
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-4 flex items-center gap-2.5 border-b border-gold/20 pb-2">
+          <IconMedal className="h-5 w-5 text-gold-bright" />
+          <h2 className="font-display text-lg tracking-wide text-gold-bright">Recordes Individuais</h2>
+        </div>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {individuais.map((r) => (
+            <CardRecorde key={r.titulo} r={r} />
+          ))}
+          <Top5Lista titulo="Top 5 Closers da História" ranking={topClosers} />
+          <Top5Lista titulo="Top 5 SDRs da História" ranking={topSdrs} />
+        </div>
+      </section>
 
       <section>
         <div className="mb-4 flex items-center gap-2.5 border-b border-gold/20 pb-2">

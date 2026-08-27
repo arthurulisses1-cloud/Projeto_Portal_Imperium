@@ -29,23 +29,6 @@ function maiorEntrada(totais: Map<string, number>): { chave: string; valor: numb
   return melhor;
 }
 
-// Maior sequência de dias corridos (calendário) dentro de uma lista de datas
-// distintas "YYYY-MM-DD" — usado pro recorde de streak de vendas.
-function maiorSequenciaDeDias(datas: string[]): number {
-  const unicas = Array.from(new Set(datas)).sort();
-  if (unicas.length === 0) return 0;
-  let maior = 1;
-  let atual = 1;
-  for (let i = 1; i < unicas.length; i++) {
-    const anterior = new Date(unicas[i - 1] + "T00:00:00Z");
-    const hoje = new Date(unicas[i] + "T00:00:00Z");
-    const diffDias = Math.round((hoje.getTime() - anterior.getTime()) / 86400000);
-    atual = diffDias === 1 ? atual + 1 : 1;
-    if (atual > maior) maior = atual;
-  }
-  return maior;
-}
-
 async function recordesEmpresa(supabase: SupabaseClient): Promise<RecordeAuto[]> {
   const ops = await buscarTudoPaginado<{ valor: number; data: string }>((from, to) =>
     supabase.from("weekly_operacoes").select("valor, data").eq("status", "PAGO").range(from, to)
@@ -88,7 +71,12 @@ async function recordesTime(supabase: SupabaseClient): Promise<RecordeAuto[]> {
     let melhor: { nome: string; valor: number; mes: string } | null = null;
     for (const [mes, opsDoMes] of Array.from(porMes.entries())) {
       const ranking = agregarPorGrupo(opsDoMes);
-      const primeiro = ranking[0];
+      // "Fora dos Exércitos"/"Fora das Tribos" é acerto de contas, não um
+      // time de verdade — não pode ganhar o recorde de "melhor mês de time"
+      // mesmo que seja a única entrada do mês (achado 2026-08-27: em meses
+      // sem nenhuma venda "mesma Tribo", a Tribo virava "Fora das Tribos"
+      // por ser a única linha do ranking daquele mês).
+      const primeiro = ranking.find((r) => !r.nome.startsWith("Fora"));
       if (primeiro && (!melhor || primeiro.valor > melhor.valor)) {
         melhor = { nome: primeiro.nome, valor: primeiro.valor, mes };
       }
@@ -99,6 +87,37 @@ async function recordesTime(supabase: SupabaseClient): Promise<RecordeAuto[]> {
   }
 
   return recordes;
+}
+
+// Contagem de quantos meses cada Exército levou o crédito mensal (maior
+// faturamento pago) — os dois únicos Exércitos reais do sistema (ver
+// memória "Tribos reais"). Meses sem operação resolvível pra nenhum dos
+// dois (ex.: só "Fora dos Exércitos") não contam pra ninguém.
+export type ContadorGuerraCivil = { nomeA: string; nomeB: string; vitoriasA: number; vitoriasB: number };
+
+export async function buscarContadorGuerraCivil(supabase: SupabaseClient): Promise<ContadorGuerraCivil | null> {
+  const operacoes = await buscarOperacoesPagasPorGrupoHistorico(supabase, "exercito");
+  if (operacoes.length === 0) return null;
+
+  const porMes = new Map<string, typeof operacoes>();
+  for (const op of operacoes) {
+    const mes = op.data.slice(0, 7);
+    if (!porMes.has(mes)) porMes.set(mes, []);
+    porMes.get(mes)!.push(op);
+  }
+
+  let vitoriasMaximus = 0;
+  let vitoriasTemplarios = 0;
+  for (const [, opsDoMes] of Array.from(porMes.entries())) {
+    const ranking = agregarPorGrupo(opsDoMes);
+    const maximus = ranking.find((r) => r.nome === "Maximus")?.valor ?? 0;
+    const templarios = ranking.find((r) => r.nome === "Templários")?.valor ?? 0;
+    if (maximus === 0 && templarios === 0) continue;
+    if (maximus > templarios) vitoriasMaximus++;
+    else if (templarios > maximus) vitoriasTemplarios++;
+  }
+
+  return { nomeA: "Maximus", nomeB: "Templários", vitoriasA: vitoriasMaximus, vitoriasB: vitoriasTemplarios };
 }
 
 async function recordesIndividuais(supabase: SupabaseClient): Promise<RecordeAuto[]> {
@@ -150,30 +169,23 @@ async function recordesIndividuais(supabase: SupabaseClient): Promise<RecordeAut
     }
   }
 
-  // Maior sequência de dias corridos vendendo (SDR ou Closer, operação paga).
-  const opsHistorico = await buscarTudoPaginado<{ data: string; sdr_profile_id: string | null; closer_profile_id: string | null }>((from, to) =>
-    supabase.from("weekly_operacoes").select("data, sdr_profile_id, closer_profile_id").eq("status", "PAGO").range(from, to)
+  // Maior número de assinaturas de um SDR num único dia (producao_funil,
+  // etapa='assinaturas' — "ambos" conta pro lado SDR também, mesma
+  // convenção usada no resto do arquivo/ranking).
+  const assinaturasSdr = await buscarTudoPaginado<{ profile_id: string; data: string; realizado: number }>((from, to) =>
+    supabase.from("producao_funil").select("profile_id, data, realizado").eq("etapa", "assinaturas").in("papel", ["sdr", "ambos"]).range(from, to)
   );
-  const datasPorPessoa = new Map<string, string[]>();
-  for (const op of opsHistorico) {
-    for (const id of [op.sdr_profile_id, op.closer_profile_id]) {
-      if (!id) continue;
-      if (!datasPorPessoa.has(id)) datasPorPessoa.set(id, []);
-      datasPorPessoa.get(id)!.push(op.data);
-    }
-  }
-  let melhorStreak: { profileId: string; dias: number } | null = null;
-  for (const [profileId, datas] of Array.from(datasPorPessoa.entries())) {
-    const dias = maiorSequenciaDeDias(datas);
-    if (!melhorStreak || dias > melhorStreak.dias) melhorStreak = { profileId, dias };
-  }
-  if (melhorStreak && melhorStreak.dias > 1) {
+  const porSdrDia = melhorPorChave(assinaturasSdr, (r) => `${r.profile_id}|${r.data}`, (r) => r.realizado);
+  const melhorAssinaturasDia = maiorEntrada(porSdrDia);
+  if (melhorAssinaturasDia) {
+    const [profileId, data] = melhorAssinaturasDia.chave.split("|");
     recordes.push({
       categoria: "individual",
-      titulo: "Maior sequência de dias seguidos vendendo",
-      nome: nomePorProfile.get(melhorStreak.profileId) ?? "—",
-      valor: melhorStreak.dias,
-      formato: "dias",
+      titulo: "Maior número de assinaturas de um SDR no dia",
+      nome: nomePorProfile.get(profileId) ?? "—",
+      valor: melhorAssinaturasDia.valor,
+      formato: "num",
+      data,
     });
   }
 
@@ -187,6 +199,37 @@ export async function buscarRecordesAuto(supabase: SupabaseClient): Promise<Reco
     recordesIndividuais(supabase),
   ]);
   return [...empresa, ...time, ...individuais];
+}
+
+export type RankingHistorico = { posicao: number; nome: string; valor: number };
+
+// Total pago (histórico inteiro) por pessoa num papel — "ambos" conta pro
+// lado SDR e pro lado Closer, mesma convenção do resto do arquivo/ranking.
+async function top5PorPapel(supabase: SupabaseClient, papel: "sdr" | "closer"): Promise<RankingHistorico[]> {
+  const vendas = await buscarTudoPaginado<{ profile_id: string; valor: number; papel: string }>((from, to) =>
+    supabase.from("vendas").select("profile_id, valor, papel").range(from, to)
+  );
+  const relevantes = vendas.filter((v) => v.papel === papel || v.papel === "ambos");
+  const totais = new Map<string, number>();
+  for (const v of relevantes) totais.set(v.profile_id, (totais.get(v.profile_id) ?? 0) + Number(v.valor));
+
+  const ids = Array.from(totais.keys());
+  if (ids.length === 0) return [];
+  const { data: pessoas } = await supabase.from("profiles").select("id, full_name").in("id", ids);
+  const nomePorId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name]));
+
+  return Array.from(totais.entries())
+    .map(([id, valor]) => ({ nome: nomePorId.get(id) ?? "—", valor }))
+    .sort((a, b) => b.valor - a.valor)
+    .slice(0, 5)
+    .map((r, i) => ({ posicao: i + 1, ...r }));
+}
+
+export function buscarTopClosersHistorico(supabase: SupabaseClient) {
+  return top5PorPapel(supabase, "closer");
+}
+export function buscarTopSdrsHistorico(supabase: SupabaseClient) {
+  return top5PorPapel(supabase, "sdr");
 }
 
 export type RecordeCurado = {

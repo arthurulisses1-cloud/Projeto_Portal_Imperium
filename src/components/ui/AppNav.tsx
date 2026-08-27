@@ -16,6 +16,7 @@ import {
   IconScales,
   IconTarget,
   IconTablet,
+  IconTrophy,
 } from "./icons";
 
 const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
@@ -29,6 +30,7 @@ const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> =
   "/comissao": IconCoin,
   "/dre": IconCoin,
   "/ranking": IconLaurel,
+  "/recordes": IconTrophy,
   "/forecast": IconTarget,
   "/parceiros": IconScales,
   "/weekly": IconEagle,
