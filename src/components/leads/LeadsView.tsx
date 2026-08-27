@@ -27,14 +27,16 @@ export type Lead = {
 };
 export type MotivoPerda = { id: string; nome: string; ativo: boolean };
 
+// Funil real da operação (migration 0055) — "Perdido" fica fora da
+// esteira principal, é uma saída que precisa de motivo.
 const COLUNAS = [
-  { valor: "a_contatar", label: "A Contatar", cor: "bg-warning" },
-  { valor: "em_negociacao", label: "Em Negociação", cor: "bg-gold" },
-  { valor: "proposta_enviada", label: "Proposta Enviada", cor: "bg-purpura" },
-  { valor: "aguardando_documentos", label: "Aguardando Docs", cor: "bg-stone-400" },
-  { valor: "convertido", label: "Convertido", cor: "bg-success" },
+  { valor: "validacao_entrevista", label: "Validação de Entrevista", cor: "bg-warning" },
+  { valor: "entrevista_validada", label: "Entrevista Validada", cor: "bg-gold" },
+  { valor: "fechamento", label: "Fechamento", cor: "bg-purpura" },
+  { valor: "subido", label: "Subido", cor: "bg-stone-400" },
+  { valor: "ccb_enviada", label: "CCB Enviada", cor: "bg-gold-bright" },
+  { valor: "assinado", label: "Assinado", cor: "bg-success" },
   { valor: "perdido", label: "Perdido", cor: "bg-wine" },
-  { valor: "esfriou", label: "Esfriou", cor: "bg-stone-600" },
 ] as const;
 
 function dbr(s: string) {
@@ -45,23 +47,44 @@ export default function LeadsView({
   leads,
   nomePorId,
   motivosPerda,
+  exercitoPorProfileId,
 }: {
   leads: Lead[];
   nomePorId: Map<string, string>;
   motivosPerda: MotivoPerda[];
+  exercitoPorProfileId: Map<string, string | null>;
 }) {
   const [leadsState, setLeadsState] = useState(leads);
   const [arrastando, setArrastando] = useState<string | null>(null);
   const [colunaAlvo, setColunaAlvo] = useState<string | null>(null);
   const [leadAberto, setLeadAberto] = useState<string | null>(null);
+  const [filtroExercito, setFiltroExercito] = useState("");
+  const [filtroCloser, setFiltroCloser] = useState("");
   const [, startTransition] = useTransition();
+
+  const exercitos = useMemo(
+    () => Array.from(new Set(leadsState.map((l) => (l.closer_profile_id ? exercitoPorProfileId.get(l.closer_profile_id) : null)).filter((x): x is string => !!x))).sort(),
+    [leadsState, exercitoPorProfileId]
+  );
+  const closers = useMemo(() => {
+    const ids = Array.from(new Set(leadsState.map((l) => l.closer_profile_id).filter((x): x is string => !!x)));
+    return ids.map((id) => ({ id, nome: nomePorId.get(id) ?? "—" })).sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [leadsState, nomePorId]);
+
+  const leadsFiltrados = useMemo(() => {
+    return leadsState.filter((l) => {
+      if (filtroExercito && (!l.closer_profile_id || exercitoPorProfileId.get(l.closer_profile_id) !== filtroExercito)) return false;
+      if (filtroCloser && l.closer_profile_id !== filtroCloser) return false;
+      return true;
+    });
+  }, [leadsState, filtroExercito, filtroCloser, exercitoPorProfileId]);
 
   const porColuna = useMemo(() => {
     const mapa = new Map<string, Lead[]>();
     for (const c of COLUNAS) mapa.set(c.valor, []);
-    for (const l of leadsState) mapa.get(l.status_followup)?.push(l);
+    for (const l of leadsFiltrados) mapa.get(l.status_followup)?.push(l);
     return mapa;
-  }, [leadsState]);
+  }, [leadsFiltrados]);
 
   function moverStatus(leadId: string, novoStatus: string) {
     const lead = leadsState.find((l) => l.id === leadId);
@@ -89,67 +112,120 @@ export default function LeadsView({
   }
 
   return (
-    <div className="flex gap-4">
-      {COLUNAS.map((c) => {
-        const itens = porColuna.get(c.valor) ?? [];
-        const emDrop = colunaAlvo === c.valor;
-        return (
-          <div
-            key={c.valor}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setColunaAlvo(c.valor);
-            }}
-            onDragLeave={() => setColunaAlvo((cur) => (cur === c.valor ? null : cur))}
-            onDrop={(e) => {
-              e.preventDefault();
-              setColunaAlvo(null);
-              const id = arrastando;
-              setArrastando(null);
-              if (id) moverStatus(id, c.valor);
-            }}
-            className={`flex min-w-0 flex-1 flex-col rounded-lg border bg-imperium-surface/60 transition ${
-              emDrop ? "border-gold/60 bg-gold/5" : "border-imperium-line"
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2 border-b border-imperium-line px-3 py-2.5">
-              <div className="flex min-w-0 items-center gap-2">
-                <span className={`h-2 w-2 shrink-0 rounded-full ${c.cor}`} />
-                <h2 className="truncate text-sm font-medium text-stone-200">{c.label}</h2>
-              </div>
-              <span className="shrink-0 rounded-full bg-imperium-bg/60 px-2 py-0.5 text-[11px] text-stone-500">{itens.length}</span>
-            </div>
-
-            <div className="flex-1 space-y-2 p-2.5">
-              {itens.length === 0 && <p className="text-center text-xs text-stone-600">Vazio.</p>}
-              {itens.map((l) => (
-                <div
-                  key={l.id}
-                  draggable
-                  onDragStart={(e) => {
-                    setArrastando(l.id);
-                    e.dataTransfer.effectAllowed = "move";
-                  }}
-                  onDragEnd={() => {
-                    setArrastando(null);
-                    setColunaAlvo(null);
-                  }}
-                  onClick={() => setLeadAberto(l.id)}
-                  className={`cursor-grab rounded-md border border-imperium-line bg-imperium-bg/70 p-2.5 text-sm shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:cursor-grabbing ${
-                    arrastando === l.id ? "opacity-40" : ""
-                  }`}
-                >
-                  <p className="text-stone-100">{l.lead_nome}</p>
-                  <p className="mt-0.5 text-[10px] text-stone-500">{dbr(l.data)}</p>
-                  {l.closer_profile_id && (
-                    <p className="mt-1 text-[10px] text-stone-600">{nomePorId.get(l.closer_profile_id) ?? "—"}</p>
-                  )}
-                </div>
+    <div className="space-y-4">
+      {(exercitos.length > 1 || closers.length > 1) && (
+        <div className="flex flex-wrap items-center gap-3">
+          {exercitos.length > 1 && (
+            <select value={filtroExercito} onChange={(e) => setFiltroExercito(e.target.value)} className="input-imp text-sm">
+              <option value="">Todos os Exércitos</option>
+              {exercitos.map((ex) => (
+                <option key={ex} value={ex}>
+                  {ex}
+                </option>
               ))}
+            </select>
+          )}
+          {closers.length > 1 && (
+            <select value={filtroCloser} onChange={(e) => setFiltroCloser(e.target.value)} className="input-imp text-sm">
+              <option value="">Todos os Closers</option>
+              {closers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+          )}
+          {(filtroExercito || filtroCloser) && (
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroExercito("");
+                setFiltroCloser("");
+              }}
+              className="text-xs text-stone-500 underline hover:text-stone-300"
+            >
+              limpar filtros
+            </button>
+          )}
+        </div>
+      )}
+
+      <div className="flex gap-4">
+        {COLUNAS.map((c) => {
+          const itens = porColuna.get(c.valor) ?? [];
+          const emDrop = colunaAlvo === c.valor;
+          return (
+            <div
+              key={c.valor}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setColunaAlvo(c.valor);
+              }}
+              onDragLeave={() => setColunaAlvo((cur) => (cur === c.valor ? null : cur))}
+              onDrop={(e) => {
+                e.preventDefault();
+                setColunaAlvo(null);
+                const id = arrastando;
+                setArrastando(null);
+                if (id) moverStatus(id, c.valor);
+              }}
+              className={`flex min-w-0 flex-1 flex-col rounded-lg border bg-imperium-surface/60 transition ${
+                emDrop ? "border-gold/60 bg-gold/5" : "border-imperium-line"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 border-b border-imperium-line px-3 py-2.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${c.cor}`} />
+                  <h2 className="truncate text-xs font-medium text-stone-200">{c.label}</h2>
+                </div>
+                <span className="shrink-0 rounded-full bg-imperium-bg/60 px-2 py-0.5 text-[11px] text-stone-500">{itens.length}</span>
+              </div>
+
+              <div className="flex-1 space-y-2 p-2.5">
+                {itens.length === 0 && <p className="text-center text-xs text-stone-600">Vazio.</p>}
+                {itens.map((l) => (
+                  <div
+                    key={l.id}
+                    draggable
+                    onDragStart={(e) => {
+                      setArrastando(l.id);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragEnd={() => {
+                      setArrastando(null);
+                      setColunaAlvo(null);
+                    }}
+                    onClick={() => setLeadAberto(l.id)}
+                    className={`cursor-grab space-y-1 rounded-md border border-imperium-line bg-imperium-bg/70 p-2.5 text-sm shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:cursor-grabbing ${
+                      arrastando === l.id ? "opacity-40" : ""
+                    }`}
+                  >
+                    <p className="text-stone-100">{l.lead_nome}</p>
+                    <p className="text-[10px] text-stone-500">{dbr(l.data)}</p>
+                    {l.closer_profile_id && (
+                      <p className="text-[10px] text-stone-500">
+                        {nomePorId.get(l.closer_profile_id) ?? "—"}
+                        {exercitoPorProfileId.get(l.closer_profile_id) ? ` · ${exercitoPorProfileId.get(l.closer_profile_id)}` : ""}
+                      </p>
+                    )}
+                    <div className="space-y-0.5 border-t border-imperium-line pt-1 text-[10px] text-stone-500">
+                      {l.lead_telefone && <p>📞 {l.lead_telefone}</p>}
+                      {l.canal && <p>Canal: {l.canal}</p>}
+                      {l.origem && <p>Origem: {l.origem}</p>}
+                      {l.entrevistado && <p>Entrevistado: {l.entrevistado}</p>}
+                      {l.estado_civil && <p>Est. civil: {l.estado_civil}</p>}
+                      {l.decisor && <p>Decisor: {l.decisor}</p>}
+                      {l.dores && <p className="line-clamp-2 text-stone-400">Dores: {l.dores}</p>}
+                      {l.documentacao_ciente && <p>Doc. ciente: {l.documentacao_ciente}</p>}
+                      {l.valores_apresentados && <p>Valores apresentados: {l.valores_apresentados}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
 
       {leadAberto && (
         <LeadModal

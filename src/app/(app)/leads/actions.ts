@@ -8,13 +8,16 @@ import { revalidatePath } from "next/cache";
 // Diretor) — não precisa reconferir permissão aqui, o Postgres barra
 // sozinho quem tentar editar um lead fora do escopo.
 
+// Funil real da operação (migration 0055) — "perdido" é saída, fora da
+// esteira principal. "esfriou" ficou órfão da renomeação (sem etapa nova
+// equivalente) e não é mais usado por aqui de propósito.
 const STATUS_VALIDOS = new Set([
-  "a_contatar",
-  "em_negociacao",
-  "proposta_enviada",
-  "aguardando_documentos",
-  "esfriou",
-  "convertido",
+  "validacao_entrevista",
+  "entrevista_validada",
+  "fechamento",
+  "subido",
+  "ccb_enviada",
+  "assinado",
   "perdido",
 ]);
 

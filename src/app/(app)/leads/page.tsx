@@ -48,8 +48,26 @@ export default async function LeadsPage() {
   const idsPessoas = Array.from(
     new Set(leads.flatMap((l) => [l.sdr_profile_id, l.closer_profile_id]).filter((x): x is string => !!x))
   );
-  const { data: pessoas } = idsPessoas.length > 0 ? await supabase.from("profiles").select("id, full_name").in("id", idsPessoas) : { data: [] };
+  const [{ data: pessoas }, { data: exercitosRaw }] = await Promise.all([
+    idsPessoas.length > 0
+      ? supabase
+          .from("profiles")
+          .select("id, full_name, tribo:tribos!profiles_tribo_id_fkey(exercito:exercitos(nome))")
+          .in("id", idsPessoas)
+      : Promise.resolve({ data: [] as { id: string; full_name: string; tribo: unknown }[] }),
+    // Legado do Exército não tem tribo_id (lidera o Exército inteiro) —
+    // sem esse fallback, um lead cujo Closer é líder "perde" o filtro de
+    // Exército (mesma pegadinha documentada em guerra.ts/forecast.ts).
+    supabase.from("exercitos").select("nome, legado_id"),
+  ]);
   const nomePorId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name as string]));
+  const exercitoIdPorLegado = new Map((exercitosRaw ?? []).map((e) => [e.legado_id, e.nome]));
+  const exercitoPorProfileId = new Map(
+    (pessoas ?? []).map((p) => {
+      const tribo = p.tribo as unknown as { exercito: { nome: string } | null } | null;
+      return [p.id, tribo?.exercito?.nome ?? exercitoIdPorLegado.get(p.id) ?? null] as const;
+    })
+  );
 
   return (
     <main className="mx-auto max-w-[1600px] space-y-6 px-6 py-8">
@@ -58,7 +76,7 @@ export default async function LeadsPage() {
         <p className="kicker mt-1">Entrevistas recebidas este mês — acompanhe, envie proposta, faça follow-up</p>
       </div>
 
-      <LeadsView leads={leads} nomePorId={nomePorId} motivosPerda={motivosAtivos} />
+      <LeadsView leads={leads} nomePorId={nomePorId} motivosPerda={motivosAtivos} exercitoPorProfileId={exercitoPorProfileId} />
 
       {meRole === "diretor" && <MotivosPerdaForm motivos={motivosTodos} />}
     </main>
