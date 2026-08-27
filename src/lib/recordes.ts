@@ -247,21 +247,37 @@ async function recordesIndividuais(supabase: SupabaseClient): Promise<RecordeAut
     }
   }
 
-  // Maior número de assinaturas de um SDR num único dia (producao_funil,
-  // etapa='assinaturas' — "ambos" conta pro lado SDR também, mesma
-  // convenção usada no resto do arquivo/ranking).
-  const assinaturasSdr = await buscarTudoPaginado<{ profile_id: string; data: string; realizado: number }>((from, to) =>
-    supabase.from("producao_funil").select("profile_id, data, realizado").eq("etapa", "assinaturas").in("papel", ["sdr", "ambos"]).range(from, to)
+  // Assinaturas/Entrevistas de SDR/Closer (producao_funil) — uma leitura só
+  // das duas etapas, reaproveitada pros 4 recordes abaixo (dia+mês, SDR e
+  // Closer). "ambos" conta pro lado SDR e pro lado Closer, mesma convenção
+  // do resto do arquivo/ranking.
+  const funilRows = await buscarTudoPaginado<{ profile_id: string; data: string; etapa: string; realizado: number; papel: string }>((from, to) =>
+    supabase.from("producao_funil").select("profile_id, data, etapa, realizado, papel").in("etapa", ["assinaturas", "entrevistas"]).range(from, to)
   );
-  const porSdrDia = melhorPorChave(assinaturasSdr, (r) => `${r.profile_id}|${r.data}`, (r) => r.realizado);
-  const melhorAssinaturasDia = maiorEntrada(porSdrDia);
-  if (melhorAssinaturasDia) {
-    const [profileId, data] = melhorAssinaturasDia.chave.split("|");
+
+  function melhorFunil(etapa: string, papel: "sdr" | "closer", granularidade: "data" | "mes") {
+    const relevantes = funilRows.filter((r) => r.etapa === etapa && (r.papel === papel || r.papel === "ambos"));
+    const chaveDe = (r: (typeof funilRows)[number]) => `${r.profile_id}|${granularidade === "mes" ? r.data.slice(0, 7) : r.data}`;
+    const porPessoaPeriodo = melhorPorChave(relevantes, chaveDe, (r) => r.realizado);
+    return maiorEntrada(porPessoaPeriodo);
+  }
+
+  const recordesFunil: { titulo: string; etapa: string; papel: "sdr" | "closer"; granularidade: "data" | "mes" }[] = [
+    { titulo: "Maior número de assinaturas de um SDR no dia", etapa: "assinaturas", papel: "sdr", granularidade: "data" },
+    { titulo: "SDR com mais assinaturas no mês", etapa: "assinaturas", papel: "sdr", granularidade: "mes" },
+    { titulo: "SDR com mais entrevistas no mês", etapa: "entrevistas", papel: "sdr", granularidade: "mes" },
+    { titulo: "Closer com mais assinaturas no mês", etapa: "assinaturas", papel: "closer", granularidade: "mes" },
+  ];
+
+  for (const { titulo, etapa, papel, granularidade } of recordesFunil) {
+    const melhor = melhorFunil(etapa, papel, granularidade);
+    if (!melhor) continue;
+    const [profileId, data] = melhor.chave.split("|");
     recordes.push({
       categoria: "individual",
-      titulo: "Maior número de assinaturas de um SDR no dia",
+      titulo,
       nome: nomePorProfile.get(profileId) ?? "—",
-      valor: melhorAssinaturasDia.valor,
+      valor: melhor.valor,
       formato: "num",
       data,
       avatarUrls: [avatarPorProfile.get(profileId) ?? null],
