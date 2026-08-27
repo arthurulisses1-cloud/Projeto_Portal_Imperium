@@ -45,10 +45,23 @@ export type EntrevistaLeadLinha = {
 // (que AGREGA por par SDR+Closer+dia, perdendo a identidade do lead de
 // propósito — é o que a regra de Tribo em entrevistas_eventos precisa),
 // esta preserva CADA linha como um lead individual.
+// Só um número puro conta como "ID do MSP" de verdade — a coluna também
+// tem valores tipo "Não há" / "Não está no MSP" (achado 2026-08-27: 101
+// valores duplicados na planilha real, incluindo esses dois textos
+// aparecendo dezenas de vezes cada, colidindo leads completamente
+// diferentes na mesma chave e quebrando o upsert com "ON CONFLICT DO
+// UPDATE command cannot affect row a second time"). Qualquer coisa que
+// não seja só dígitos cai no fallback textual, igual a quando a célula
+// está vazia.
+function idMspValido(bruto: string | null): string | null {
+  if (!bruto) return null;
+  return /^\d+$/.test(bruto) ? bruto : null;
+}
+
 export async function buscarEntrevistasLeads(textoCsv: string): Promise<EntrevistaLeadLinha[]> {
   const { data: rows } = Papa.parse<EntrevistaLeadRow>(textoCsv, { header: true, skipEmptyLines: true });
 
-  const linhas: EntrevistaLeadLinha[] = [];
+  const porChave = new Map<string, EntrevistaLeadLinha>();
   const ocorrencias = new Map<string, number>();
 
   for (const row of rows) {
@@ -59,13 +72,13 @@ export async function buscarEntrevistasLeads(textoCsv: string): Promise<Entrevis
 
     const sdrNormalizado = row.SDR && row.SDR.trim() ? normalizarNome(row.SDR) : null;
     const closerNormalizado = row.Closer && row.Closer.trim() ? normalizarNome(row.Closer) : null;
-    const idMsp = row["ID do MSP"]?.trim() || null;
+    const idMsp = idMspValido(row["ID do MSP"]?.trim() || null);
 
     // "ID do MSP" é bem mais estável que uma fórmula com data (evita a
     // classe de bug "data mudou -> duplicata" já corrigida pra
     // weekly_operacoes essa sessão) — só cai no fallback textual (com
-    // sufixo de ocorrência, mesmo padrão de weekly.ts) pras raras linhas
-    // sem ID do MSP.
+    // sufixo de ocorrência, mesmo padrão de weekly.ts) pras linhas sem ID
+    // do MSP válido.
     let chaveNatural: string;
     if (idMsp) {
       chaveNatural = `msp:${idMsp}`;
@@ -76,7 +89,13 @@ export async function buscarEntrevistasLeads(textoCsv: string): Promise<Entrevis
       chaveNatural = n > 1 ? `${chaveBase}#${n}` : chaveBase;
     }
 
-    linhas.push({
+    // Mesmo lead pode ter sido entrevistado mais de uma vez de verdade (ID
+    // do MSP se repete legitimamente às vezes) — um upsert com a MESMA
+    // chave duas vezes no mesmo lote quebra no Postgres ("cannot affect
+    // row a second time"), então colapsa aqui: a ocorrência mais recente
+    // na planilha vence (`Map.set` sobrescreve), igual ao resto do sync
+    // trata "a planilha é a fonte da verdade do estado atual".
+    porChave.set(chaveNatural, {
       chaveNatural,
       data,
       leadNome,
@@ -95,5 +114,5 @@ export async function buscarEntrevistasLeads(textoCsv: string): Promise<Entrevis
     });
   }
 
-  return linhas;
+  return Array.from(porChave.values());
 }
