@@ -379,7 +379,9 @@ export type RecordeCurado = {
 export async function buscarRecordesCurados(supabase: SupabaseClient): Promise<RecordeCurado[]> {
   const { data, error } = await supabase
     .from("recordes_curados")
-    .select("id, titulo, descricao, valor_texto, data_referencia, imagem_url, categoria, ordem, pessoa:profiles(full_name, avatar_url)")
+    .select(
+      "id, titulo, descricao, valor_texto, data_referencia, imagem_url, categoria, ordem, pessoa:profiles!recordes_curados_profile_id_fkey(full_name, avatar_url)"
+    )
     .order("ordem", { ascending: true })
     .order("data_referencia", { ascending: false });
   logErroSupabase("recordes: buscarRecordesCurados", error);
