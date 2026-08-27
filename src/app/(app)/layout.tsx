@@ -4,6 +4,7 @@ import AppNav, { type NavEntry } from "@/components/ui/AppNav";
 import NoticiasCompactas from "@/components/ui/NoticiasCompactas";
 import CampanhasCompactas from "@/components/ui/CampanhasCompactas";
 import SidebarRight from "@/components/ui/SidebarRight";
+import SidebarRightGate from "@/components/ui/SidebarRightGate";
 import UserMenu from "@/components/ui/UserMenu";
 import MencoesBell from "@/components/ui/MencoesBell";
 import MinervaWidget from "@/components/minerva/MinervaWidget";
@@ -223,7 +224,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         <div className="flex flex-1">
           <div className="min-w-0 flex-1">{children}</div>
-          {user && mostraSidebarPapel && mostraSidebarRight && <SidebarRight userId={previewPessoa?.id ?? user.id} />}
+          {user && mostraSidebarPapel && mostraSidebarRight && (
+            <SidebarRightGate>
+              <SidebarRight userId={previewPessoa?.id ?? user.id} />
+            </SidebarRightGate>
+          )}
         </div>
 
         <footer className="flex items-center justify-center gap-3 py-6">

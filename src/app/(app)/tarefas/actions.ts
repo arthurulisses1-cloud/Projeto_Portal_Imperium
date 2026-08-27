@@ -37,6 +37,21 @@ export async function criarTarefa(formData: FormData) {
   revalidatePath("/tarefas");
 }
 
+export async function editarTarefa(formData: FormData) {
+  const supabase = await createClient();
+  const id = String(formData.get("id") ?? "");
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  const dueDate = String(formData.get("due_date") ?? "");
+  const prioridadeRaw = String(formData.get("prioridade") ?? "media");
+  const prioridade = ["alta", "media", "baixa"].includes(prioridadeRaw) ? prioridadeRaw : "media";
+  if (!id) throw new Error("Tarefa inválida.");
+  if (!titulo) throw new Error("Descreva a tarefa.");
+
+  const { error } = await supabase.from("tasks").update({ titulo, due_date: dueDate || null, prioridade }).eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/tarefas");
+}
+
 export async function moverTarefa(formData: FormData) {
   const supabase = await createClient();
   const id = String(formData.get("id") ?? "");
