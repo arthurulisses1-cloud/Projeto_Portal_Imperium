@@ -85,6 +85,7 @@ export default function LeadsView({
   const [filtroExercitos, setFiltroExercitos] = useState<Set<string>>(new Set());
   const [filtroClosers, setFiltroClosers] = useState<Set<string>>(new Set());
   const [filtroTemperaturas, setFiltroTemperaturas] = useState<Set<string>>(new Set());
+  const [busca, setBusca] = useState("");
   const [, startTransition] = useTransition();
 
   const exercitos = useMemo(
@@ -96,6 +97,8 @@ export default function LeadsView({
     return ids.map((id) => ({ id, nome: nomePorId.get(id) ?? "—" })).sort((a, b) => a.nome.localeCompare(b.nome));
   }, [leadsState, nomePorId]);
 
+  const buscaNormalizada = busca.trim().toLowerCase();
+
   const leadsFiltrados = useMemo(() => {
     return leadsState.filter((l) => {
       if (filtroExercitos.size > 0) {
@@ -104,9 +107,13 @@ export default function LeadsView({
       }
       if (filtroClosers.size > 0 && (!l.closer_profile_id || !filtroClosers.has(l.closer_profile_id))) return false;
       if (filtroTemperaturas.size > 0 && (!l.temperatura || !filtroTemperaturas.has(l.temperatura))) return false;
+      if (buscaNormalizada) {
+        const alvo = `${l.lead_nome} ${l.lead_telefone ?? ""}`.toLowerCase();
+        if (!alvo.includes(buscaNormalizada)) return false;
+      }
       return true;
     });
-  }, [leadsState, filtroExercitos, filtroClosers, filtroTemperaturas, exercitoPorProfileId]);
+  }, [leadsState, filtroExercitos, filtroClosers, filtroTemperaturas, buscaNormalizada, exercitoPorProfileId]);
 
   const porColuna = useMemo(() => {
     const mapa = new Map<string, Lead[]>();
@@ -151,6 +158,13 @@ export default function LeadsView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="text"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Pesquisar por nome ou telefone..."
+          className="input-imp w-60 text-sm"
+        />
         {exercitos.length > 1 && (
           <MultiSelectFiltro
             label="Exército"
@@ -173,13 +187,14 @@ export default function LeadsView({
           selecionados={filtroTemperaturas}
           onChange={setFiltroTemperaturas}
         />
-        {(filtroExercitos.size > 0 || filtroClosers.size > 0 || filtroTemperaturas.size > 0) && (
+        {(filtroExercitos.size > 0 || filtroClosers.size > 0 || filtroTemperaturas.size > 0 || busca) && (
           <button
             type="button"
             onClick={() => {
               setFiltroExercitos(new Set());
               setFiltroClosers(new Set());
               setFiltroTemperaturas(new Set());
+              setBusca("");
             }}
             className="text-xs text-stone-500 underline hover:text-stone-300"
           >
