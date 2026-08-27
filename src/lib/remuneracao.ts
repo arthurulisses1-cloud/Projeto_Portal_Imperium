@@ -130,8 +130,18 @@ export async function buscarRemuneracaoMes(
     const producaoGestao = opsDoEscopo
       .filter((o) => o.sdr_profile_id !== profileId && o.closer_profile_id !== profileId)
       .reduce((s, o) => s + Number(o.valor), 0);
+    // Toda operação do escopo cai em exatamente um dos 4 baldes acima, então
+    // isso já é a soma de todos eles — produção TOTAL do time/firma, própria
+    // inclusa.
+    const producaoTotal = opsDoEscopo.reduce((s, o) => s + Number(o.valor), 0);
 
-    const remuneracao = calcularRemuneracao(tiers, producaoGestao, {
+    // O GRADE (tier) avança pela produção TOTAL (própria + do time) — pedido
+    // do Diretor (2026-08-27): ele/o líder não deixam de "contar" pro próprio
+    // avanço só porque fecharam a venda pessoalmente. Mas a % de Gestão que
+    // vira comissão continua incidindo só sobre `producaoGestao` (exclui a
+    // própria venda) — essa já foi remunerada pela % de SDR/Closer, contar
+    // de novo pela % de Gestão pagaria a mesma venda duas vezes.
+    const remuneracao = calcularRemuneracao(tiers, producaoTotal, {
       sdr: producaoPessoalSdr,
       closer: producaoPessoalCloser,
       ambos: producaoPessoalAmbos,
@@ -166,9 +176,7 @@ export async function buscarRemuneracaoMes(
       closerNome: o.closer_profile_id ? (nomePorId.get(o.closer_profile_id) ?? null) : null,
     }));
 
-    const producaoTotal = opsDoEscopo.reduce((s, o) => s + Number(o.valor), 0);
-
-    return { tiers, remuneracao, extrato, papelPrincipal, producaoPrincipal: producaoGestao, producaoTotal };
+    return { tiers, remuneracao, extrato, papelPrincipal, producaoPrincipal: producaoTotal, producaoTotal };
   }
 
   const { data: vendasRaw, error: vendasError } = await supabase

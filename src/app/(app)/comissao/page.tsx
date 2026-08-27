@@ -195,8 +195,11 @@ export default async function ComissaoPage() {
             </div>
 
             <p className="text-xs text-stone-500">
-              Tier definido pela produção como {PAPEL_LABEL[papelPrincipal] ?? papelPrincipal}:{" "}
-              <span className="text-gold">{moeda(producaoPrincipal)}</span>
+              Tier definido pela produção{" "}
+              {papelPrincipal === "gestao"
+                ? "total do time/firma (inclui suas vendas pessoais)"
+                : `como ${PAPEL_LABEL[papelPrincipal] ?? papelPrincipal}`}
+              : <span className="text-gold">{moeda(producaoPrincipal)}</span>
               {proximo && (
                 <>
                   {" "}

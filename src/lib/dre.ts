@@ -285,9 +285,13 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
       .filter((o) => o.sdr_profile_id === p.id && o.closer_profile_id === p.id)
       .reduce((s, o) => s + Number(o.valor), 0);
 
+    // Gestão: o GRADE avança pela produção TOTAL do time/firma (própria
+    // inclusa) — mesma regra de buscarRemuneracaoMes (src/lib/remuneracao.ts,
+    // 2026-08-27). A % de Gestão continua incidindo só sobre `producaoGestao`
+    // (abaixo, em `calcularRemuneracao`) pra não pagar a mesma venda 2x.
     const producaoPrincipal =
       papelPrincipal === "gestao"
-        ? producaoGestao
+        ? producaoGestao + producaoPessoalSdr + producaoPessoalCloser + producaoPessoalAmbos
         : papelPrincipal === "sdr"
           ? producaoPessoalSdr + producaoPessoalAmbos
           : producaoPessoalCloser + producaoPessoalAmbos;
