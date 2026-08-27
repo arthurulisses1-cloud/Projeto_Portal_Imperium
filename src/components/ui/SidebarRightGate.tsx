@@ -8,7 +8,7 @@ import { usePathname } from "next/navigation";
 // continua sendo um Server Component normal — passado como `children`
 // aqui, ele já chega renderizado do servidor; esse componente só decide
 // se mostra o slot ou não, conforme a rota atual.
-const ROTAS_SEM_SIDEBAR = ["/tarefas"];
+const ROTAS_SEM_SIDEBAR = ["/tarefas", "/leads"];
 
 export default function SidebarRightGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

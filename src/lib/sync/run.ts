@@ -198,7 +198,19 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // Upsert por chave_natural (não apaga+recria) pra preservar
   // status_followup/observacao que o Closer preenche em /leads — mesmo
   // cuidado que weekly_operacoes já tem com status_manual/observacao.
-  const entrevistasLeads = await buscarEntrevistasLeads(entrevistasText);
+  //
+  // "Meus Leads" é um mini-CRM de fluxo de trabalho, não um histórico —
+  // pedido do Diretor (2026-08-27): só o mês corrente pra frente, mês
+  // passado descarta. Filtra ANTES de gravar (nem entra) e limpa o que
+  // já tiver de mês anterior a cada sync (a janela "mês corrente" anda
+  // conforme o calendário — sem essa limpeza, lead de julho ficaria
+  // preso pra sempre assim que agosto virasse).
+  const inicioMesLeads = new Date().toISOString().slice(0, 7) + "-01";
+  const entrevistasLeads = (await buscarEntrevistasLeads(entrevistasText)).filter((l) => l.data >= inicioMesLeads);
+
+  const { error: limpezaLeadsError } = await supabase.from("entrevistas_leads").delete().lt("data", inicioMesLeads);
+  if (limpezaLeadsError) throw new Error("Erro limpando entrevistas_leads de meses anteriores: " + limpezaLeadsError.message);
+
   const leadRows = entrevistasLeads.map((l) => ({
     chave_natural: l.chaveNatural,
     data: l.data,

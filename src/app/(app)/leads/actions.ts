@@ -15,6 +15,7 @@ const STATUS_VALIDOS = new Set([
   "aguardando_documentos",
   "esfriou",
   "convertido",
+  "perdido",
 ]);
 
 export async function salvarStatusLead(formData: FormData) {
@@ -39,6 +40,69 @@ export async function salvarStatusLead(formData: FormData) {
       status_em: new Date().toISOString(),
     })
     .eq("id", leadId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/leads");
+}
+
+// Cadastrar perda — igual ao "motivo de queda" que weekly_operacoes já
+// tem, só que aqui o catálogo de motivos é editável pelo Diretor
+// (motivos_perda_lead) em vez de um enum fixo no código.
+export async function salvarPerdaLead(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const leadId = String(formData.get("lead_id") ?? "");
+  const motivoId = String(formData.get("motivo_perda_id") ?? "").trim();
+  const motivoObs = String(formData.get("motivo_perda_obs") ?? "").trim();
+  if (!leadId) throw new Error("Lead inválido.");
+  if (!motivoId) throw new Error("Selecione um motivo de perda.");
+
+  const { error } = await supabase
+    .from("entrevistas_leads")
+    .update({
+      status_followup: "perdido",
+      motivo_perda_id: motivoId,
+      motivo_perda_obs: motivoObs || null,
+      status_por: user.id,
+      status_em: new Date().toISOString(),
+    })
+    .eq("id", leadId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/leads");
+}
+
+// ---------- Catálogo de motivos de perda (Diretor) ----------
+// RLS (migration 0054) já restringe a is_director() — mesmo padrão de
+// marcos/campanhas.
+
+export async function criarMotivoPerda(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const nome = String(formData.get("nome") ?? "").trim();
+  if (!nome) throw new Error("Descreva o motivo.");
+
+  const { error } = await supabase.from("motivos_perda_lead").insert({ nome, created_by: user.id });
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/leads");
+}
+
+export async function alternarMotivoPerdaAtivo(formData: FormData) {
+  const supabase = await createClient();
+  const id = String(formData.get("id") ?? "");
+  const ativoAtual = String(formData.get("ativo") ?? "") === "true";
+  if (!id) throw new Error("Motivo inválido.");
+
+  const { error } = await supabase.from("motivos_perda_lead").update({ ativo: !ativoAtual }).eq("id", id);
   if (error) throw new Error(error.message);
 
   revalidatePath("/leads");
