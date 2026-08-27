@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import TarefasApp, { type Tarefa, type ChecklistItem, type Comentario, type Dependencia } from "./TarefasApp";
+import ForcarTemaClaro from "./ForcarTemaClaro";
 
 export default async function TarefasPage() {
   const supabase = await createClient();
@@ -93,6 +94,7 @@ export default async function TarefasPage() {
 
   return (
     <main className="mx-auto max-w-[1600px] space-y-6 px-6 py-8">
+      <ForcarTemaClaro />
       <div>
         <h1 className="font-display text-2xl text-gold-bright">Tarefas</h1>
         <p className="kicker mt-1">Rotina, lembretes e demandas do time</p>

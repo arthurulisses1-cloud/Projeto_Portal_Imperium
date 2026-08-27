@@ -219,7 +219,10 @@ export default function TarefasApp({
     <div className="space-y-4">
       {/* Quick Add — sempre visível, cria pra mim mesmo com data/hora por texto */}
       <form
-        action={onCriarRapida}
+        onSubmit={(e) => {
+          e.preventDefault();
+          onCriarRapida();
+        }}
         className="flex items-center gap-2 rounded-lg border border-gold/30 bg-imperium-surface/60 p-2"
       >
         <span className="pl-1 text-gold-bright">⚡</span>
@@ -327,7 +330,10 @@ export default function TarefasApp({
 
                   {composerAberto === c.valor ? (
                     <form
-                      action={onCriar}
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        onCriar(new FormData(e.currentTarget));
+                      }}
                       className="space-y-1.5 rounded-md border border-gold/30 bg-imperium-bg/70 p-2"
                       onKeyDown={(e) => {
                         if (e.key === "Escape") setComposerAberto(null);
@@ -832,7 +838,13 @@ function TaskModal({
     >
       <div className="card-imp my-8 w-full max-w-2xl space-y-5 p-6">
         <div className="flex items-start justify-between gap-3">
-          <form action={onSalvarDetalhes} className="flex-1 space-y-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onSalvarDetalhes(new FormData(e.currentTarget));
+            }}
+            className="flex-1 space-y-3"
+          >
             <input type="hidden" name="id" value={tarefa.id} />
             <textarea
               name="titulo"
@@ -883,8 +895,9 @@ function TaskModal({
           </span>
           {liderados.length > 0 && (
             <form
-              action={async (fd) => {
-                await transferirTarefa(fd);
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await transferirTarefa(new FormData(e.currentTarget));
                 router.refresh();
               }}
               className="flex items-center gap-1.5"
@@ -907,18 +920,19 @@ function TaskModal({
             </form>
           )}
           {souDono && (
-            <form
-              action={async (fd) => {
+            <button
+              type="button"
+              onClick={async () => {
+                const fd = new FormData();
+                fd.set("id", tarefa.id);
+                fd.set("privado", String(tarefa.privado));
                 await alternarPrivado(fd);
                 router.refresh();
               }}
+              className={tarefa.privado ? "text-gold-bright" : "text-stone-500 hover:text-gold-bright"}
             >
-              <input type="hidden" name="id" value={tarefa.id} />
-              <input type="hidden" name="privado" value={String(tarefa.privado)} />
-              <button type="submit" className={tarefa.privado ? "text-gold-bright" : "text-stone-500 hover:text-gold-bright"}>
-                {tarefa.privado ? "🔒 Oculta dos superiores" : "🔓 Ocultar dos superiores"}
-              </button>
-            </form>
+              {tarefa.privado ? "🔒 Oculta dos superiores" : "🔓 Ocultar dos superiores"}
+            </button>
           )}
         </div>
 

@@ -9,6 +9,7 @@ import BarraMetaToggle from "@/components/ui/BarraMetaToggle";
 import ConfrontoWidget from "@/components/ui/Confronto";
 import EnquetePoll, { type EnqueteData } from "@/components/ui/EnquetePoll";
 import CentralNotificacoes from "@/components/CentralNotificacoes";
+import TarefasMuralWidget from "@/components/TarefasMuralWidget";
 import { IconSwords, IconShield, IconCoin, IconHorn, IconBallot, IconMedal, IconScroll, IconCrown } from "@/components/ui/icons";
 import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
 import { buscarMetaIndividual, buscarMetaExercito, buscarProducaoPagaExercito, buscarMetaTribo, buscarProducaoPagaTribo, buscarMetaFirma, buscarProducaoPagaFirma, buscarPainelFinanceiroTribo, buscarPainelFinanceiroPessoa, type PainelFinanceiro } from "@/lib/metas";
@@ -248,7 +249,11 @@ export default async function MuralPage() {
       </div>
 
       {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr") && (
-        <CentralNotificacoes escopo={escopoCentral} userId={meId} />
+        <TarefasMuralWidget userId={meId} />
+      )}
+
+      {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr") && (
+        <CentralNotificacoes escopo={escopoCentral} />
       )}
 
       {meRole === "sdr" && metaIndividual > 0 && (
