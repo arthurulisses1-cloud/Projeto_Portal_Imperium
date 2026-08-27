@@ -21,6 +21,16 @@ const STATUS_VALIDOS = new Set([
   "perdido",
 ]);
 
+const TEMPERATURAS_VALIDAS = new Set(["frio", "morno", "quente"]);
+
+// A partir de Fechamento (inclusive) o lead precisa estar qualificado —
+// pedido do Diretor (2026-08-27): "lead só pode entrar em fechamento ou
+// subido se for preenchido: Forecast (Frio/Morno/Quente) e Valor do
+// Crédito". Cobre também as etapas depois de Fechamento/Subido (CCB
+// Enviada, Assinado) pra fechar a brecha de arrastar direto pra lá sem
+// passar pelas etapas anteriores.
+const ETAPAS_QUE_EXIGEM_QUALIFICACAO = new Set(["fechamento", "subido", "ccb_enviada", "assinado"]);
+
 export async function salvarStatusLead(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -31,18 +41,38 @@ export async function salvarStatusLead(formData: FormData) {
   const leadId = String(formData.get("lead_id") ?? "");
   const statusRaw = String(formData.get("status_followup") ?? "");
   const observacao = String(formData.get("observacao") ?? "").trim();
+  const temperaturaRaw = String(formData.get("temperatura") ?? "").trim();
+  const valorCreditoRaw = String(formData.get("valor_credito") ?? "").trim();
   if (!leadId) throw new Error("Lead inválido.");
   if (!STATUS_VALIDOS.has(statusRaw)) throw new Error("Status inválido.");
 
-  const { error } = await supabase
-    .from("entrevistas_leads")
-    .update({
-      status_followup: statusRaw,
-      observacao: observacao || null,
-      status_por: user.id,
-      status_em: new Date().toISOString(),
-    })
-    .eq("id", leadId);
+  const temperatura = TEMPERATURAS_VALIDAS.has(temperaturaRaw) ? temperaturaRaw : null;
+  const valorCredito = valorCreditoRaw ? Number(valorCreditoRaw.replace(",", ".")) : null;
+  const valorCreditoValido = valorCredito !== null && Number.isFinite(valorCredito) && valorCredito > 0;
+
+  const update: Record<string, unknown> = {
+    status_followup: statusRaw,
+    observacao: observacao || null,
+    status_por: user.id,
+    status_em: new Date().toISOString(),
+  };
+  if (temperatura) update.temperatura = temperatura;
+  if (valorCreditoValido) update.valor_credito = valorCredito;
+
+  if (ETAPAS_QUE_EXIGEM_QUALIFICACAO.has(statusRaw)) {
+    const { data: atual } = await supabase
+      .from("entrevistas_leads")
+      .select("temperatura, valor_credito")
+      .eq("id", leadId)
+      .maybeSingle();
+    const temperaturaFinal = temperatura ?? atual?.temperatura ?? null;
+    const valorFinal = valorCreditoValido ? valorCredito : atual?.valor_credito ?? null;
+    if (!temperaturaFinal || !valorFinal) {
+      throw new Error("Pra entrar em Fechamento (ou etapas depois), preencha o Forecast (Frio/Morno/Quente) e o Valor do Crédito.");
+    }
+  }
+
+  const { error } = await supabase.from("entrevistas_leads").update(update).eq("id", leadId);
   if (error) throw new Error(error.message);
 
   revalidatePath("/leads");

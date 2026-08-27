@@ -24,8 +24,25 @@ export type Lead = {
   observacao: string | null;
   motivo_perda_id: string | null;
   motivo_perda_obs: string | null;
+  temperatura: "frio" | "morno" | "quente" | null;
+  valor_credito: number | null;
 };
 export type MotivoPerda = { id: string; nome: string; ativo: boolean };
+
+// A partir de Fechamento (inclusive), o lead precisa estar qualificado —
+// pedido do Diretor (2026-08-27). Cobre as etapas seguintes também (CCB
+// Enviada, Assinado), senão dava pra arrastar direto pra lá sem qualificar.
+const ETAPAS_QUE_EXIGEM_QUALIFICACAO = new Set(["fechamento", "subido", "ccb_enviada", "assinado"]);
+
+const TEMPERATURAS = [
+  { valor: "frio", label: "Frio", cor: "bg-sky-500" },
+  { valor: "morno", label: "Morno", cor: "bg-warning" },
+  { valor: "quente", label: "Quente", cor: "bg-wine" },
+] as const;
+
+function formatarMoeda(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+}
 
 // Funil real da operação (migration 0055) — "Perdido" fica fora da
 // esteira principal, é uma saída que precisa de motivo.
@@ -58,6 +75,7 @@ export default function LeadsView({
   const [arrastando, setArrastando] = useState<string | null>(null);
   const [colunaAlvo, setColunaAlvo] = useState<string | null>(null);
   const [leadAberto, setLeadAberto] = useState<string | null>(null);
+  const [statusPretendido, setStatusPretendido] = useState<string | null>(null);
   const [filtroExercito, setFiltroExercito] = useState("");
   const [filtroCloser, setFiltroCloser] = useState("");
   const [, startTransition] = useTransition();
@@ -93,6 +111,14 @@ export default function LeadsView({
       // Perda precisa de motivo — não move sozinho, abre o card pra
       // preencher o motivo em vez de silenciosamente marcar como perdido
       // sem explicação nenhuma.
+      setLeadAberto(leadId);
+      return;
+    }
+    if (ETAPAS_QUE_EXIGEM_QUALIFICACAO.has(novoStatus) && !(lead.temperatura && lead.valor_credito)) {
+      // Mesma lógica: sem Forecast (temperatura) + Valor do Crédito
+      // preenchidos, não move sozinho — abre o card já com a etapa alvo
+      // selecionada, só falta a pessoa completar e salvar.
+      setStatusPretendido(novoStatus);
       setLeadAberto(leadId);
       return;
     }
@@ -200,8 +226,20 @@ export default function LeadsView({
                       arrastando === l.id ? "opacity-40" : ""
                     }`}
                   >
-                    <p className="text-stone-100">{l.lead_nome}</p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-stone-100">{l.lead_nome}</p>
+                      {l.temperatura && (
+                        <span
+                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${
+                            TEMPERATURAS.find((t) => t.valor === l.temperatura)?.cor ?? ""
+                          }`}
+                        >
+                          {TEMPERATURAS.find((t) => t.valor === l.temperatura)?.label}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[10px] text-stone-500">{dbr(l.data)}</p>
+                    {l.valor_credito != null && <p className="text-[11px] font-medium text-gold-bright">{formatarMoeda(l.valor_credito)}</p>}
                     {l.closer_profile_id && (
                       <p className="text-[10px] text-stone-500">
                         {nomePorId.get(l.closer_profile_id) ?? "—"}
@@ -230,9 +268,13 @@ export default function LeadsView({
       {leadAberto && (
         <LeadModal
           lead={leadsState.find((l) => l.id === leadAberto)!}
+          statusPretendido={statusPretendido}
           nomePorId={nomePorId}
           motivosPerda={motivosPerda}
-          onFechar={() => setLeadAberto(null)}
+          onFechar={() => {
+            setLeadAberto(null);
+            setStatusPretendido(null);
+          }}
           onAtualizarLocal={(atualizado) => setLeadsState((prev) => prev.map((l) => (l.id === atualizado.id ? atualizado : l)))}
         />
       )}
@@ -242,25 +284,32 @@ export default function LeadsView({
 
 function LeadModal({
   lead,
+  statusPretendido,
   nomePorId,
   motivosPerda,
   onFechar,
   onAtualizarLocal,
 }: {
   lead: Lead;
+  statusPretendido: string | null;
   nomePorId: Map<string, string>;
   motivosPerda: MotivoPerda[];
   onFechar: () => void;
   onAtualizarLocal: (l: Lead) => void;
 }) {
   const router = useRouter();
-  const [status, setStatus] = useState(lead.status_followup);
+  const [status, setStatus] = useState(statusPretendido ?? lead.status_followup);
   const [observacao, setObservacao] = useState(lead.observacao ?? "");
   const [motivoId, setMotivoId] = useState(lead.motivo_perda_id ?? "");
   const [motivoObs, setMotivoObs] = useState(lead.motivo_perda_obs ?? "");
+  const [temperatura, setTemperatura] = useState(lead.temperatura ?? "");
+  const [valorCredito, setValorCredito] = useState(lead.valor_credito != null ? String(lead.valor_credito) : "");
   const [isPending, startTransition] = useTransition();
   const [salvo, setSalvo] = useState(false);
   const [lembreteCriado, setLembreteCriado] = useState(false);
+
+  const precisaQualificar = ETAPAS_QUE_EXIGEM_QUALIFICACAO.has(status);
+  const qualificacaoIncompleta = precisaQualificar && !(temperatura && Number(valorCredito) > 0);
 
   function salvarStatus() {
     if (status === "perdido") {
@@ -278,13 +327,22 @@ function LeadModal({
       });
       return;
     }
+    if (qualificacaoIncompleta) return;
     const fd = new FormData();
     fd.set("lead_id", lead.id);
     fd.set("status_followup", status);
     fd.set("observacao", observacao);
+    if (temperatura) fd.set("temperatura", temperatura);
+    if (valorCredito) fd.set("valor_credito", valorCredito);
     startTransition(async () => {
       await salvarStatusLead(fd);
-      onAtualizarLocal({ ...lead, status_followup: status, observacao: observacao || null });
+      onAtualizarLocal({
+        ...lead,
+        status_followup: status,
+        observacao: observacao || null,
+        temperatura: (temperatura || lead.temperatura) as Lead["temperatura"],
+        valor_credito: valorCredito ? Number(valorCredito) : lead.valor_credito,
+      });
       setSalvo(true);
       setTimeout(() => setSalvo(false), 1500);
       router.refresh();
@@ -370,13 +428,48 @@ function LeadModal({
               )}
             </>
           ) : (
-            <textarea
-              value={observacao}
-              onChange={(e) => setObservacao(e.target.value)}
-              placeholder="Observação (follow-up, proposta enviada, etc.)"
-              rows={2}
-              className="input-imp w-full text-sm"
-            />
+            <>
+              {precisaQualificar && (
+                <div className="space-y-2 rounded-md border border-gold/30 bg-gold/5 p-2.5">
+                  <p className="text-[10px] uppercase tracking-wide text-gold-bright">
+                    Qualificação obrigatória a partir de Fechamento
+                  </p>
+                  <div className="flex gap-1.5">
+                    {TEMPERATURAS.map((t) => (
+                      <button
+                        key={t.valor}
+                        type="button"
+                        onClick={() => setTemperatura(t.valor)}
+                        className={`flex-1 rounded-md py-1.5 text-[11px] font-medium uppercase tracking-wide transition ${
+                          temperatura === t.valor ? `${t.cor} text-white` : "border border-imperium-line text-stone-400 hover:border-gold/40"
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={valorCredito}
+                    onChange={(e) => setValorCredito(e.target.value)}
+                    placeholder="Valor do crédito (R$)"
+                    className="input-imp w-full text-sm"
+                  />
+                  {qualificacaoIncompleta && (
+                    <p className="text-[11px] text-warning-bright">Selecione o Forecast e preencha o Valor do Crédito pra salvar.</p>
+                  )}
+                </div>
+              )}
+              <textarea
+                value={observacao}
+                onChange={(e) => setObservacao(e.target.value)}
+                placeholder="Observação (follow-up, proposta enviada, etc.)"
+                rows={2}
+                className="input-imp w-full text-sm"
+              />
+            </>
           )}
 
           <div className="flex items-center justify-between gap-2">
@@ -386,7 +479,7 @@ function LeadModal({
             <button
               type="button"
               onClick={salvarStatus}
-              disabled={isPending || (status === "perdido" && !motivoId)}
+              disabled={isPending || (status === "perdido" && !motivoId) || qualificacaoIncompleta}
               className="btn-outline px-3 py-1.5 text-xs"
             >
               {isPending ? "..." : salvo ? <IconCheck className="mx-auto h-3 w-3" /> : "Salvar"}
