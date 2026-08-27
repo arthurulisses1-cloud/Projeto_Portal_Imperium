@@ -223,58 +223,53 @@ export default function LeadsView({
                 <p className="border-b border-imperium-line px-3 py-1.5 text-[11px] font-medium text-gold-bright">{formatarMoeda(totalValor)}</p>
               )}
 
-              <div className="flex-1 space-y-2 p-2.5">
+              <div className="flex-1 space-y-1.5 p-2">
                 {itens.length === 0 && <p className="text-center text-xs text-stone-600">Vazio.</p>}
-                {itens.map((l) => (
-                  <div
-                    key={l.id}
-                    draggable
-                    onDragStart={(e) => {
-                      setArrastando(l.id);
-                      e.dataTransfer.effectAllowed = "move";
-                    }}
-                    onDragEnd={() => {
-                      setArrastando(null);
-                      setColunaAlvo(null);
-                    }}
-                    onClick={() => setLeadAberto(l.id)}
-                    className={`cursor-grab space-y-1 rounded-md border border-imperium-line bg-imperium-bg/70 p-2.5 text-sm shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:cursor-grabbing ${
-                      arrastando === l.id ? "opacity-40" : ""
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-stone-100">{l.lead_nome}</p>
-                      {l.temperatura && (
-                        <span
-                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${
-                            TEMPERATURAS.find((t) => t.valor === l.temperatura)?.cor ?? ""
-                          }`}
-                        >
-                          {TEMPERATURAS.find((t) => t.valor === l.temperatura)?.label}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-stone-500">{dbr(l.data)}</p>
-                    {l.valor_credito != null && <p className="text-[11px] font-medium text-gold-bright">{formatarMoeda(l.valor_credito)}</p>}
-                    {l.closer_profile_id && (
-                      <p className="text-[10px] text-stone-500">
-                        {nomePorId.get(l.closer_profile_id) ?? "—"}
-                        {exercitoPorProfileId.get(l.closer_profile_id) ? ` · ${exercitoPorProfileId.get(l.closer_profile_id)}` : ""}
+                {itens.map((l) => {
+                  // Card compacto (pedido do Diretor, 2026-08-27: "diminui o
+                  // tamanho dos cards... visualização tá muito limitada") —
+                  // dores/entrevistado/canal só aparecem no modal de detalhe
+                  // (clicar pra abrir), aqui vira só uma linha resumida com
+                  // o resto, truncada em vez de uma lista de parágrafos.
+                  const extras = [l.lead_telefone, l.origem, l.estado_civil, l.decisor].filter(Boolean).join(" · ");
+                  return (
+                    <div
+                      key={l.id}
+                      draggable
+                      onDragStart={(e) => {
+                        setArrastando(l.id);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragEnd={() => {
+                        setArrastando(null);
+                        setColunaAlvo(null);
+                      }}
+                      onClick={() => setLeadAberto(l.id)}
+                      className={`cursor-grab rounded-md border border-imperium-line bg-imperium-bg/70 px-2 py-1.5 text-sm shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:cursor-grabbing ${
+                        arrastando === l.id ? "opacity-40" : ""
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-stone-100">{l.lead_nome}</p>
+                        {l.temperatura && (
+                          <span
+                            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${
+                              TEMPERATURAS.find((t) => t.valor === l.temperatura)?.cor ?? ""
+                            }`}
+                          >
+                            {TEMPERATURAS.find((t) => t.valor === l.temperatura)?.label}
+                          </span>
+                        )}
+                      </div>
+                      <p className="truncate text-[10px] text-stone-500">
+                        {dbr(l.data)}
+                        {l.valor_credito != null && ` · ${formatarMoeda(l.valor_credito)}`}
+                        {l.closer_profile_id && ` · ${nomePorId.get(l.closer_profile_id) ?? "—"}`}
                       </p>
-                    )}
-                    <div className="space-y-0.5 border-t border-imperium-line pt-1 text-[10px] text-stone-500">
-                      {l.lead_telefone && <p>📞 {l.lead_telefone}</p>}
-                      {l.canal && <p>Canal: {l.canal}</p>}
-                      {l.origem && <p>Origem: {l.origem}</p>}
-                      {l.entrevistado && <p>Entrevistado: {l.entrevistado}</p>}
-                      {l.estado_civil && <p>Est. civil: {l.estado_civil}</p>}
-                      {l.decisor && <p>Decisor: {l.decisor}</p>}
-                      {l.dores && <p className="line-clamp-2 text-stone-400">Dores: {l.dores}</p>}
-                      {l.documentacao_ciente && <p>Doc. ciente: {l.documentacao_ciente}</p>}
-                      {l.valores_apresentados && <p>Valores apresentados: {l.valores_apresentados}</p>}
+                      {extras && <p className="truncate text-[10px] text-stone-600">{extras}</p>}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );
