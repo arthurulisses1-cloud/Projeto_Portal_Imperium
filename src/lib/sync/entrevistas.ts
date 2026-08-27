@@ -27,15 +27,24 @@ export type ParEntrevista = {
   quantidade: number;
 };
 
-export async function buscarEntrevistas(): Promise<{
+// Aceita o texto do CSV já baixado (pelo chamador) em vez de buscar de novo
+// — buscarEntrevistasLeads() (entrevistas-leads.ts) lê essa MESMA aba pra
+// preservar o lead por entrevista. Duas requisições HTTP separadas pra
+// planilha viva dão uma corrida real (mesmo achado 2026-08-24 documentado em
+// weekly.ts/assinado.ts) — uma leitura só, reaproveitada nas duas, elimina
+// isso. Ainda busca sozinho quando chamado sem argumento (compatibilidade).
+export async function buscarEntrevistas(textoCsv?: string): Promise<{
   linhas: ProducaoLinha[];
   pares: ParEntrevista[];
   nomesEncontrados: Set<string>;
 }> {
-  // no-store: ver comentário em dados.ts / config.ts.
-  const res = await fetch(csvUrl(SHEET_GIDS.entrevistas), { cache: "no-store" });
-  if (!res.ok) throw new Error(`Falha ao buscar aba Entrevistas: ${res.status}`);
-  const text = await res.text();
+  let text = textoCsv;
+  if (text === undefined) {
+    // no-store: ver comentário em dados.ts / config.ts.
+    const res = await fetch(csvUrl(SHEET_GIDS.entrevistas), { cache: "no-store" });
+    if (!res.ok) throw new Error(`Falha ao buscar aba Entrevistas: ${res.status}`);
+    text = await res.text();
+  }
 
   const { data: rows } = Papa.parse<EntrevistaRow>(text, { header: true, skipEmptyLines: true });
 

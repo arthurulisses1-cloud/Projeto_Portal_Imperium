@@ -38,6 +38,8 @@ export type Tarefa = {
   tempo_gasto_seg: number;
   cronometro_iniciado_em: string | null;
   updated_at: string;
+  lead_id: string | null;
+  leadNome: string | null;
 };
 export type ChecklistItem = { id: string; task_id: string; titulo: string; feito: boolean; ordem: number };
 export type Comentario = { id: string; task_id: string; autor_id: string; texto: string; created_at: string };
@@ -472,6 +474,8 @@ function CartaoTarefa({
       <button type="button" onClick={onAbrir} className="block w-full text-left">
         <p className="text-sm text-stone-100">{t.titulo}</p>
       </button>
+
+      {t.leadNome && <p className="mt-1.5 text-[10px] text-gold">🎯 lead: {t.leadNome}</p>}
 
       {dependePendente.length > 0 && (
         <p className="mt-1.5 text-[10px] text-warning-bright">🔗 aguardando: {dependePendente.map((d) => d.titulo).join(", ")}</p>

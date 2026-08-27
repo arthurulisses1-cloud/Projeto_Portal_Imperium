@@ -49,12 +49,18 @@ export default async function TarefasPage() {
   const { data: tarefasRaw } = await supabase
     .from("tasks")
     .select(
-      "id, titulo, descricao, due_date, due_time, coluna, prioridade, privado, profile_id, atribuido_por, tags, tempo_estimado_min, tempo_gasto_seg, cronometro_iniciado_em, updated_at"
+      "id, titulo, descricao, due_date, due_time, coluna, prioridade, privado, profile_id, atribuido_por, tags, tempo_estimado_min, tempo_gasto_seg, cronometro_iniciado_em, updated_at, lead_id, lead:entrevistas_leads(lead_nome)"
     )
     .in("profile_id", idsVisiveis)
     .order("due_date", { ascending: true, nullsFirst: false });
 
-  const tarefas = (tarefasRaw ?? []) as Tarefa[];
+  // RLS de entrevistas_leads é mais restrita que a de tasks — se a pessoa
+  // não tiver acesso ao lead vinculado (raro: tarefa foi transferida depois
+  // de criada), o embed simplesmente vem null, sem quebrar a query.
+  const tarefas: Tarefa[] = (tarefasRaw ?? []).map((t) => ({
+    ...t,
+    leadNome: (t.lead as unknown as { lead_nome: string } | null)?.lead_nome ?? null,
+  }));
   const idsTarefas = tarefas.map((t) => t.id);
 
   const [{ data: checklistRaw }, { data: comentariosRaw }, { data: dependenciasRaw }] = await Promise.all([

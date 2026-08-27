@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { buscarProducaoDados } from "./dados";
 import { buscarAssinado } from "./assinado";
 import { buscarEntrevistas } from "./entrevistas";
+import { buscarEntrevistasLeads } from "./entrevistas-leads";
 import { buscarOperacoes } from "./weekly";
 import { normalizarNome } from "./parse";
 import { csvUrl, SHEET_GIDS } from "./config";
@@ -121,7 +122,14 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   }
 
   // ---------- aba Entrevistas: funil (entrevistas, SDR + Closer) ----------
-  const entrevistas = await buscarEntrevistas();
+  // Uma leitura só, reaproveitada aqui e em buscarEntrevistasLeads() logo
+  // abaixo — mesmo cuidado de corrida real com a planilha viva já resolvido
+  // pra Assinado/weekly_operacoes (achado 2026-08-24).
+  const resEntrevistas = await fetch(csvUrl(SHEET_GIDS.entrevistas), { cache: "no-store" });
+  if (!resEntrevistas.ok) throw new Error(`Falha ao buscar aba Entrevistas: ${resEntrevistas.status}`);
+  const entrevistasText = await resEntrevistas.text();
+
+  const entrevistas = await buscarEntrevistas(entrevistasText);
   const funilRowsEntrevistas = entrevistas.linhas
     .map((l) => {
       const profileId = nomeParaId.get(l.nomeNormalizado);
@@ -184,6 +192,34 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   for (const batch of chunk(eventosEntrevistas, 1000)) {
     const { error } = await supabase.from("entrevistas_eventos").insert(batch);
     if (error) throw new Error("Erro gravando entrevistas_eventos: " + error.message);
+  }
+
+  // ---------- aba Entrevistas (de novo, com o lead de cada linha): Fase 2 ----------
+  // Upsert por chave_natural (não apaga+recria) pra preservar
+  // status_followup/observacao que o Closer preenche em /leads — mesmo
+  // cuidado que weekly_operacoes já tem com status_manual/observacao.
+  const entrevistasLeads = await buscarEntrevistasLeads(entrevistasText);
+  const leadRows = entrevistasLeads.map((l) => ({
+    chave_natural: l.chaveNatural,
+    data: l.data,
+    lead_nome: l.leadNome,
+    lead_telefone: l.leadTelefone,
+    id_msp: l.idMsp,
+    sdr_profile_id: l.sdrNormalizado ? nomeParaId.get(l.sdrNormalizado) ?? null : null,
+    closer_profile_id: l.closerNormalizado ? nomeParaId.get(l.closerNormalizado) ?? null : null,
+    canal: l.canal,
+    origem: l.origem,
+    entrevistado: l.entrevistado,
+    estado_civil: l.estadoCivil,
+    decisor: l.decisor,
+    dores: l.dores,
+    documentacao_ciente: l.documentacaoCiente,
+    valores_apresentados: l.valoresApresentados,
+    synced_at: new Date().toISOString(),
+  }));
+  for (const batch of chunk(leadRows, 1000)) {
+    const { error } = await supabase.from("entrevistas_leads").upsert(batch, { onConflict: "chave_natural" });
+    if (error) throw new Error("Erro gravando entrevistas_leads: " + error.message);
   }
 
   // ---------- aba Assinado: funil (assinaturas/pagos) + vendas ----------
