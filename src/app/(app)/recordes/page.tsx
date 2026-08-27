@@ -113,7 +113,7 @@ function Top5Lista({ titulo, ranking }: { titulo: string; ranking: RankingHistor
 
       <div className={`relative mx-6 mt-4 overflow-hidden rounded border border-gold/40 ${resto.length === 0 ? "mb-6" : ""}`}>
         {primeiro.avatarUrl ? (
-          <div className="relative h-36">
+          <div className="relative h-56">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={primeiro.avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-imperium-surface via-imperium-surface/50 to-transparent" />
@@ -149,10 +149,10 @@ function Top5Lista({ titulo, ranking }: { titulo: string; ranking: RankingHistor
 
 function LadoGuerraCivil({ nome, vitorias, credito, crest, borda }: { nome: string; vitorias: number; credito: number; crest: string | null; borda?: boolean }) {
   return (
-    <div className={`relative flex flex-col items-center justify-center gap-1 overflow-hidden p-8 ${borda ? "border-l border-gold/20" : ""}`}>
+    <div className={`relative flex min-h-[220px] flex-col items-center justify-center gap-1 overflow-hidden p-8 ${borda ? "border-l border-gold/20" : ""}`}>
       {crest && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={crest} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-15" />
+        <img src={crest} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-20" />
       )}
       <p className="relative font-display text-4xl text-gold-bright drop-shadow-[0_0_10px_rgba(232,200,116,0.2)]">{vitorias}</p>
       <p className="relative text-sm text-stone-300">meses de {nome}</p>
