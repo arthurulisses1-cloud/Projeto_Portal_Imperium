@@ -248,7 +248,7 @@ export default async function MuralPage() {
       </div>
 
       {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr") && (
-        <CentralNotificacoes escopo={escopoCentral} />
+        <CentralNotificacoes escopo={escopoCentral} userId={meId} />
       )}
 
       {meRole === "sdr" && metaIndividual > 0 && (

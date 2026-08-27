@@ -37,17 +37,19 @@ export async function buscarPendencias(
           if (!r || (!r.lancado && !r.falta)) countCompromisso++;
         }
       }
-
-      const { count: tarefasCount } = await supabase
-        .from("tasks")
-        .select("id", { count: "exact", head: true })
-        .eq("profile_id", userId)
-        .lte("due_date", hoje)
-        .neq("coluna", "concluido");
-      if (tarefasCount) pend["/tarefas"] = tarefasCount;
     }
 
     if (countCompromisso > 0) pend["/compromisso"] = countCompromisso;
+
+    // Tarefas atrasadas — vale pra SDR e Closer (antes só contava pro
+    // Closer, achado 2026-08-27 ao terminar o Kanban de Tarefas).
+    const { count: tarefasCount } = await supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("profile_id", userId)
+      .lte("due_date", hoje)
+      .neq("coluna", "concluido");
+    if (tarefasCount) pend["/tarefas"] = tarefasCount;
 
     // Sinaliza "Plano de Carreira" quando todos os critérios do próximo rank já
     // batem e ainda não existe um pedido de promoção em aberto — evita que a
@@ -91,6 +93,16 @@ export async function buscarPendencias(
         if (pendentes > 0) pend["/exercito"] = pendentes;
       }
     }
+
+    // Tarefas atrasadas do próprio líder (não do time — o quadro do time
+    // já mostra isso dentro de /tarefas).
+    const { count: tarefasCount } = await supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("profile_id", userId)
+      .lte("due_date", hoje)
+      .neq("coluna", "concluido");
+    if (tarefasCount) pend["/tarefas"] = tarefasCount;
   }
 
   if (role === "diretor") {

@@ -24,7 +24,7 @@ function ultimoDiaUtilAntes(data: Date): Date {
 // escopo = sem filtro extra = firma inteira).
 type Escopo = EscopoTime;
 
-export default async function CentralNotificacoes({ escopo = null }: { escopo?: Escopo }) {
+export default async function CentralNotificacoes({ escopo = null, userId }: { escopo?: Escopo; userId: string }) {
   const supabase = await createClient();
   const pessoal = escopo?.tipo === "individual";
 
@@ -55,6 +55,21 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   // sentido cobrar compromisso de quem tá ausente.
   const faltouHoje = new Set((compromissosHoje ?? []).filter((c) => c.falta).map((c) => c.profile_id));
   const naoLancaram = (pessoas ?? []).filter((p) => !lancouHoje.has(p.id) && !faltouHoje.has(p.id));
+
+  // Tarefas de hoje/atrasadas — só as do próprio usuário conectado (não do
+  // `escopo` de terceiros): CentralNotificacoes roda pro time inteiro em
+  // outras visões, mas tarefa é individual (RLS já esconde `privado` de
+  // quem não é dono, então nem daria pra listar "tarefas de fulano" aqui
+  // com segurança). `userId` vem de fora (ver export default abaixo).
+  const { data: tarefasRaw } = await supabase
+    .from("tasks")
+    .select("id, titulo, due_date, coluna")
+    .eq("profile_id", userId)
+    .neq("coluna", "concluido")
+    .lte("due_date", hoje)
+    .order("due_date", { ascending: true });
+  const tarefasAtrasadas = (tarefasRaw ?? []).filter((t) => t.due_date && t.due_date < hoje);
+  const tarefasDeHoje = (tarefasRaw ?? []).filter((t) => t.due_date === hoje);
 
   const { data: marcos } = await supabase.from("marcos").select("nome, threshold, icone").order("ordem");
   // Mesma base que buscarProgressoMarcos (src/lib/marcos.ts): mês corrente,
@@ -172,7 +187,16 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
 
   const temAlgumaMeta = Object.values(metaOntemPorEtapa).some((v) => v !== null);
 
-  if (naoLancaram.length === 0 && pertoDeMarco.length === 0 && aniversarios.length === 0 && !temAlgumaMeta) return null;
+  const temTarefas = tarefasDeHoje.length > 0 || tarefasAtrasadas.length > 0;
+
+  if (
+    naoLancaram.length === 0 &&
+    pertoDeMarco.length === 0 &&
+    aniversarios.length === 0 &&
+    !temAlgumaMeta &&
+    !temTarefas
+  )
+    return null;
 
   return (
     <details open className="card-imp group">
@@ -184,6 +208,31 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
         </span>
       </summary>
       <div className="space-y-5">
+        {temTarefas && (
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Suas tarefas</p>
+            <ul className="space-y-1.5">
+              {tarefasAtrasadas.map((t) => (
+                <li key={t.id} className="flex items-center justify-between text-sm">
+                  <span className="text-stone-200">{t.titulo}</span>
+                  <span className="text-wine-bright">
+                    Atrasada — {new Date(t.due_date! + "T00:00:00").toLocaleDateString("pt-BR")}
+                  </span>
+                </li>
+              ))}
+              {tarefasDeHoje.map((t) => (
+                <li key={t.id} className="flex items-center justify-between text-sm">
+                  <span className="text-stone-200">{t.titulo}</span>
+                  <span className="text-gold">Hoje</span>
+                </li>
+              ))}
+            </ul>
+            <a href="/tarefas" className="mt-2 inline-block text-[11px] text-stone-500 hover:text-gold-bright hover:underline">
+              Ver todas as tarefas →
+            </a>
+          </div>
+        )}
+
         {temAlgumaMeta && (
           <div>
             <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">

@@ -17,11 +17,13 @@ import {
   IconTarget,
   IconTablet,
   IconTrophy,
+  IconBallot,
 } from "./icons";
 
 const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
   "/": IconTemple,
   "/compromisso": IconScroll,
+  "/tarefas": IconBallot,
   "/producao": IconSwords,
   "/tribo": IconShield,
   "/exercito": IconShield,
