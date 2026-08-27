@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import KanbanBoard, { type Tarefa } from "./KanbanBoard";
+import TarefasApp, { type Tarefa, type ChecklistItem, type Comentario, type Dependencia } from "./TarefasApp";
 
 export default async function TarefasPage() {
   const supabase = await createClient();
@@ -47,21 +47,66 @@ export default async function TarefasPage() {
   const idsVisiveis = Array.from(new Set([user.id, ...liderados.map((l) => l.id)]));
   const { data: tarefasRaw } = await supabase
     .from("tasks")
-    .select("id, titulo, due_date, coluna, prioridade, privado, profile_id, atribuido_por")
+    .select(
+      "id, titulo, descricao, due_date, due_time, coluna, prioridade, privado, profile_id, atribuido_por, tags, tempo_estimado_min, tempo_gasto_seg, cronometro_iniciado_em, updated_at"
+    )
     .in("profile_id", idsVisiveis)
     .order("due_date", { ascending: true, nullsFirst: false });
 
   const tarefas = (tarefasRaw ?? []) as Tarefa[];
-  const nomePorId = new Map<string, string>([[user.id, "Você"], ...liderados.map((l) => [l.id, l.full_name] as const)]);
+  const idsTarefas = tarefas.map((t) => t.id);
+
+  const [{ data: checklistRaw }, { data: comentariosRaw }, { data: dependenciasRaw }] = await Promise.all([
+    idsTarefas.length > 0
+      ? supabase.from("task_checklist_items").select("id, task_id, titulo, feito, ordem").in("task_id", idsTarefas).order("ordem")
+      : Promise.resolve({ data: [] as ChecklistItem[] }),
+    idsTarefas.length > 0
+      ? supabase
+          .from("task_comentarios")
+          .select("id, task_id, autor_id, texto, created_at")
+          .in("task_id", idsTarefas)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] as Comentario[] }),
+    idsTarefas.length > 0
+      ? supabase.from("task_dependencias").select("task_id, depende_de_id").in("task_id", idsTarefas)
+      : Promise.resolve({ data: [] as Dependencia[] }),
+  ]);
+
+  const checklist = (checklistRaw ?? []) as ChecklistItem[];
+  const comentarios = (comentariosRaw ?? []) as Comentario[];
+  const dependencias = (dependenciasRaw ?? []) as Dependencia[];
+
+  // Autor de comentário pode não estar em `liderados` (ex.: Diretor comentou
+  // numa tarefa de um SDR que não lidera ninguém) — busca o que faltar.
+  const idsConhecidos = new Set([user.id, ...liderados.map((l) => l.id)]);
+  const idsAutoresFaltando = Array.from(new Set(comentarios.map((c) => c.autor_id))).filter((id) => !idsConhecidos.has(id));
+  const { data: autoresExtra } =
+    idsAutoresFaltando.length > 0
+      ? await supabase.from("profiles").select("id, full_name").in("id", idsAutoresFaltando)
+      : { data: [] as { id: string; full_name: string }[] };
+
+  const nomePorId = new Map<string, string>([
+    [user.id, "Você"],
+    ...liderados.map((l) => [l.id, l.full_name] as const),
+    ...(autoresExtra ?? []).map((p) => [p.id, p.full_name] as const),
+  ]);
 
   return (
-    <main className="mx-auto max-w-[1400px] space-y-6 px-6 py-8">
+    <main className="mx-auto max-w-[1600px] space-y-6 px-6 py-8">
       <div>
         <h1 className="font-display text-2xl text-gold-bright">Tarefas</h1>
-        <p className="kicker mt-1">Rotina, lembretes e demandas do time — arraste os cartões entre as colunas</p>
+        <p className="kicker mt-1">Rotina, lembretes e demandas do time</p>
       </div>
 
-      <KanbanBoard tarefasIniciais={tarefas} liderados={liderados} userId={user.id} nomePorId={nomePorId} />
+      <TarefasApp
+        tarefasIniciais={tarefas}
+        checklistInicial={checklist}
+        comentariosIniciais={comentarios}
+        dependenciasIniciais={dependencias}
+        liderados={liderados}
+        userId={user.id}
+        nomePorId={nomePorId}
+      />
     </main>
   );
 }
