@@ -38,62 +38,42 @@ const CATEGORIA_ESTILO = {
   individual: { icon: IconMedal, aura: "from-purpura/25" },
 } as const;
 
+// Metade do cartão vira uma foto/brasão grande (em vez de ícone/círculo
+// pequeno) — pedido explícito do Diretor: primeiro pro brasão de time,
+// depois no mesmo estilo pra foto de pessoa (2026-08-27).
+function CardComFoto({ titulo, valor, nome, quando, fotos }: { titulo: string; valor: string; nome: string; quando: string | null; fotos: string[] }) {
+  return (
+    <div className="card-imp relative flex overflow-hidden p-0">
+      <div className="relative flex w-2/5 shrink-0">
+        {fotos.map((url, i) => (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img key={i} src={url} alt="" className="h-full object-cover" style={{ width: `${100 / fotos.length}%` }} />
+        ))}
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-imperium-surface" />
+      </div>
+      <div className="flex-1 p-5">
+        <h3 className="kicker">{titulo}</h3>
+        <p className="mt-1 font-display text-2xl leading-tight text-gold-bright drop-shadow-[0_0_10px_rgba(232,200,116,0.2)]">{valor}</p>
+        <p className="mt-2 text-sm text-stone-200">{nome}</p>
+        {quando && <p className="mt-0.5 text-[11px] uppercase tracking-wide text-stone-600">{quando}</p>}
+      </div>
+    </div>
+  );
+}
+
 function CardRecorde({ r }: { r: RecordeAuto }) {
   const quando = formatarQuando(r.data);
   const { icon: Icon, aura } = CATEGORIA_ESTILO[r.categoria];
 
-  // Recorde de time com brasão conhecido: o brasão vira metade do cartão,
-  // bem grande, em vez do ícone pequeno — pedido explícito do Diretor pra
-  // dar mais "peso" visual a Exército/Tribo.
-  if (r.crestUrl) {
-    return (
-      <div className="card-imp relative flex overflow-hidden p-0">
-        <div className="relative w-2/5 shrink-0">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={r.crestUrl} alt={r.nome} className="h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-imperium-surface" />
-        </div>
-        <div className="flex-1 p-5">
-          <h3 className="kicker">{r.titulo}</h3>
-          <p className="mt-1 font-display text-2xl leading-tight text-gold-bright drop-shadow-[0_0_10px_rgba(232,200,116,0.2)]">
-            {formatarValor(r)}
-          </p>
-          <p className="mt-2 text-sm text-stone-200">{r.nome}</p>
-          {quando && <p className="mt-0.5 text-[11px] uppercase tracking-wide text-stone-600">{quando}</p>}
-        </div>
-      </div>
-    );
+  const fotos = r.crestUrl ? [r.crestUrl] : (r.avatarUrls ?? []).filter((u): u is string => !!u).slice(0, 2);
+  if (fotos.length > 0) {
+    return <CardComFoto titulo={r.titulo} valor={formatarValor(r)} nome={r.nome} quando={quando} fotos={fotos} />;
   }
-
-  const avatares = (r.avatarUrls ?? []).filter((_, i) => i < 3);
 
   return (
     <div className="card-imp group relative overflow-hidden p-6 transition hover:border-gold/50">
       <div className={`pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br ${aura} to-transparent blur-2xl transition group-hover:scale-125`} />
-      {avatares.length > 0 ? (
-        <div className="relative flex -space-x-3">
-          {avatares.map((url, i) =>
-            url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={i}
-                src={url}
-                alt=""
-                className="h-11 w-11 rounded-full border-2 border-imperium-surface object-cover shadow-[0_0_10px_rgba(232,200,116,0.3)]"
-              />
-            ) : (
-              <div
-                key={i}
-                className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-imperium-surface bg-imperium-raised text-stone-500"
-              >
-                <IconMedal className="h-5 w-5" />
-              </div>
-            )
-          )}
-        </div>
-      ) : (
-        <Icon className="relative h-7 w-7 text-gold-bright drop-shadow-[0_0_6px_rgba(232,200,116,0.35)]" />
-      )}
+      <Icon className="relative h-7 w-7 text-gold-bright drop-shadow-[0_0_6px_rgba(232,200,116,0.35)]" />
       <h3 className="kicker relative mt-3">{r.titulo}</h3>
       <p className="relative mt-1 font-display text-3xl leading-tight text-gold-bright drop-shadow-[0_0_10px_rgba(232,200,116,0.2)]">
         {formatarValor(r)}
@@ -125,28 +105,34 @@ function Top5Lista({ titulo, ranking }: { titulo: string; ranking: RankingHistor
   if (ranking.length === 0) return null;
   const [primeiro, ...resto] = ranking;
   return (
-    <div className="card-imp relative overflow-hidden p-6">
-      <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br from-gold/25 to-transparent blur-2xl" />
-      <div className="relative flex items-center gap-2">
+    <div className="card-imp relative overflow-hidden p-0">
+      <div className="relative flex items-center gap-2 p-6 pb-0">
         <IconMedal className="h-5 w-5 text-gold-bright" />
         <h3 className="font-display text-base tracking-wide text-gold-bright">{titulo}</h3>
       </div>
-      <div className="relative mt-4 rounded border border-gold/40 bg-gold/5 p-4 text-center">
+
+      <div className={`relative mx-6 mt-4 overflow-hidden rounded border border-gold/40 ${resto.length === 0 ? "mb-6" : ""}`}>
         {primeiro.avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={primeiro.avatarUrl}
-            alt=""
-            className="mx-auto h-14 w-14 rounded-full border-2 border-gold object-cover shadow-[0_0_15px_rgba(232,200,116,0.45)]"
-          />
+          <div className="relative h-36">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={primeiro.avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-imperium-surface via-imperium-surface/50 to-transparent" />
+            <div className="relative flex h-full flex-col items-center justify-end p-3 text-center">
+              <p className="font-display text-lg leading-tight text-gold-bright drop-shadow-[0_0_10px_rgba(0,0,0,0.6)]">{primeiro.nome}</p>
+              <p className="text-sm text-stone-100 drop-shadow-[0_0_10px_rgba(0,0,0,0.6)]">{fmtMoeda(primeiro.valor)}</p>
+            </div>
+          </div>
         ) : (
-          <IconCrown className="mx-auto h-6 w-6 text-gold-bright drop-shadow-[0_0_8px_rgba(232,200,116,0.4)]" />
+          <div className="bg-gold/5 p-4 text-center">
+            <IconCrown className="mx-auto h-6 w-6 text-gold-bright drop-shadow-[0_0_8px_rgba(232,200,116,0.4)]" />
+            <p className="mt-1 font-display text-xl text-gold-bright">{primeiro.nome}</p>
+            <p className="text-sm text-stone-300">{fmtMoeda(primeiro.valor)}</p>
+          </div>
         )}
-        <p className="mt-1 font-display text-xl text-gold-bright">{primeiro.nome}</p>
-        <p className="text-sm text-stone-300">{fmtMoeda(primeiro.valor)}</p>
       </div>
+
       {resto.length > 0 && (
-        <ol className="relative mt-3 space-y-1.5">
+        <ol className="relative space-y-1.5 p-6 pt-3">
           {resto.map((r) => (
             <li key={r.nome} className="flex items-center justify-between text-sm">
               <span className="text-stone-400">
@@ -193,36 +179,46 @@ function ScoreboardGuerraCivil({ contador }: { contador: ContadorGuerraCivil }) 
 }
 
 function CardCurado({ r, souDiretor }: { r: RecordeCurado; souDiretor: boolean }) {
-  return (
-    <div className="card-imp relative overflow-hidden p-6">
-      <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br from-gold/20 to-transparent blur-2xl" />
-      {r.avatarUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={r.avatarUrl}
-          alt=""
-          className="relative h-11 w-11 rounded-full border-2 border-gold/50 object-cover shadow-[0_0_10px_rgba(232,200,116,0.3)]"
-        />
-      ) : (
-        <IconScroll className="relative h-6 w-6 text-gold-bright" />
-      )}
-      <h3 className="relative mt-3 font-display text-base text-gold-bright">{r.titulo}</h3>
-      {r.valorTexto && <p className="relative mt-1 font-display text-2xl text-gold-bright">{r.valorTexto}</p>}
-      {r.nomePessoa && <p className="relative mt-1 text-sm text-stone-200">{r.nomePessoa}</p>}
-      {r.descricao && <p className="relative mt-2 text-xs text-stone-500">{r.descricao}</p>}
+  const corpo = (
+    <>
+      <h3 className="font-display text-base text-gold-bright">{r.titulo}</h3>
+      {r.valorTexto && <p className="mt-1 font-display text-2xl text-gold-bright">{r.valorTexto}</p>}
+      {r.nomePessoa && <p className="mt-1 text-sm text-stone-200">{r.nomePessoa}</p>}
+      {r.descricao && <p className="mt-2 text-xs text-stone-500">{r.descricao}</p>}
       {r.dataReferencia && (
-        <p className="relative mt-2 text-[11px] uppercase tracking-wide text-stone-600">
+        <p className="mt-2 text-[11px] uppercase tracking-wide text-stone-600">
           {new Date(r.dataReferencia + "T00:00:00").toLocaleDateString("pt-BR")}
         </p>
       )}
       {souDiretor && (
-        <form action={excluirRecordeCurado} className="relative mt-3">
+        <form action={excluirRecordeCurado} className="mt-3">
           <input type="hidden" name="id" value={r.id} />
           <button type="submit" className="text-[11px] text-wine hover:underline">
             Remover
           </button>
         </form>
       )}
+    </>
+  );
+
+  if (r.avatarUrl) {
+    return (
+      <div className="card-imp relative flex overflow-hidden p-0">
+        <div className="relative w-2/5 shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={r.avatarUrl} alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-imperium-surface" />
+        </div>
+        <div className="flex-1 p-5">{corpo}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card-imp relative overflow-hidden p-6">
+      <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br from-gold/20 to-transparent blur-2xl" />
+      <IconScroll className="relative h-6 w-6 text-gold-bright" />
+      <div className="relative mt-3">{corpo}</div>
     </div>
   );
 }

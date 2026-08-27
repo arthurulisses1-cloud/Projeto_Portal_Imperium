@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import Card from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { cumpriuCompromisso, type StreakRow } from "@/lib/streak";
-import { marcarFaltaTime } from "@/app/(app)/exercito/actions";
+import { marcarFaltaTime, desmarcarFaltaTime } from "@/app/(app)/exercito/actions";
 
 type Totais = {
   entrevistasComp: number;
@@ -215,7 +215,14 @@ export default async function CompromissosPage() {
                             </div>
                           )}
                           <p className="min-w-0 flex-1 truncate text-xs text-stone-200">{m.nome}</p>
-                          {!ausente && (
+                          {ausente ? (
+                            <form action={desmarcarFaltaTime}>
+                              <input type="hidden" name="profile_id" value={m.id} />
+                              <button type="submit" className="shrink-0 text-[9px] text-wine-bright hover:underline">
+                                Remover falta
+                              </button>
+                            </form>
+                          ) : (
                             <form action={marcarFaltaTime}>
                               <input type="hidden" name="profile_id" value={m.id} />
                               <button type="submit" className="shrink-0 text-[9px] text-stone-600 hover:text-wine-bright">
