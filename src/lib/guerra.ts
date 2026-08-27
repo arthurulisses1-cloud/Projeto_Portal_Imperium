@@ -2,20 +2,34 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type Confronto = { nome: string; valor: number };
 
+// Uma operação PAGA já resolvida pro grupo (Exército/Tribo) dela, com a
+// `data` junto — base tanto pra agregação do mês corrente (Guerra Civil/
+// Guerra de Tribos no Mural) quanto pra varredura histórica mês a mês (ver
+// buscarRecordesAuto em src/lib/recordes.ts).
+export type OperacaoPagaPorGrupo = { data: string; chave: string; nome: string; exercitoNome: string | null; valor: number };
+
+const CHAVE_FORA = "__fora__";
+
 // Usa weekly_operacoes (uma linha por venda real, com SDR+Closer juntos) em
 // vez de `vendas` — `vendas` credita SDR e Closer em linhas separadas, cada
 // uma com o valor cheio, então somar por time duplicaria o crédito sempre
 // que os dois forem do mesmo Exército/Tribo (o caso comum).
-async function pagosMesPorGrupo(
+//
+// Resolve cada operação paga pro grupo dela (sem agregar ainda) — extraído
+// pra função própria pra recordes.ts poder reaproveitar a MESMA regra de
+// fallback do Legado sem Tribo e a regra "mesma Tribo, senão Fora da Tribo"
+// ao invés de duplicá-la (achado 2026-08-27: evitar 2 implementações da
+// mesma regra divergindo com o tempo, como já aconteceu antes — ver memória
+// "Pegadinha: Legado do Exército não tem Tribo própria").
+async function resolverOperacoesPagasPorGrupo(
   supabase: SupabaseClient,
-  agrupar: "exercito" | "tribo"
-): Promise<Confronto[]> {
-  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
-  const { data: ops } = await supabase
-    .from("weekly_operacoes")
-    .select("sdr_profile_id, closer_profile_id, valor")
-    .eq("status", "PAGO")
-    .gte("data", inicioMes);
+  agrupar: "exercito" | "tribo",
+  filtro?: { desde?: string; ate?: string }
+): Promise<OperacaoPagaPorGrupo[]> {
+  let query = supabase.from("weekly_operacoes").select("sdr_profile_id, closer_profile_id, valor, data").eq("status", "PAGO");
+  if (filtro?.desde) query = query.gte("data", filtro.desde);
+  if (filtro?.ate) query = query.lte("data", filtro.ate);
+  const { data: ops } = await query;
   if (!ops || ops.length === 0) return [];
 
   const idsEnvolvidos = Array.from(
@@ -56,8 +70,7 @@ async function pagosMesPorGrupo(
     }
   }
 
-  const totais = new Map<string, { nome: string; exercitoNome: string | null; valor: number }>();
-  let foraDoGrupo = 0;
+  const resultado: OperacaoPagaPorGrupo[] = [];
   for (const o of ops) {
     if (agrupar === "tribo") {
       // Regra do Diretor (2026-08-25, mesma de Minha Produção): só conta pra
@@ -68,10 +81,9 @@ async function pagosMesPorGrupo(
       const sdrGrupo = o.sdr_profile_id ? grupoPorProfile.get(o.sdr_profile_id) : undefined;
       const closerGrupo = o.closer_profile_id ? grupoPorProfile.get(o.closer_profile_id) : undefined;
       if (sdrGrupo && closerGrupo && sdrGrupo.chave === closerGrupo.chave) {
-        const atual = totais.get(sdrGrupo.chave);
-        totais.set(sdrGrupo.chave, { nome: sdrGrupo.nome, exercitoNome: sdrGrupo.exercitoNome, valor: (atual?.valor ?? 0) + Number(o.valor) });
+        resultado.push({ data: o.data, chave: sdrGrupo.chave, nome: sdrGrupo.nome, exercitoNome: sdrGrupo.exercitoNome, valor: Number(o.valor) });
       } else {
-        foraDoGrupo += Number(o.valor);
+        resultado.push({ data: o.data, chave: CHAVE_FORA, nome: "Fora das Tribos", exercitoNome: null, valor: Number(o.valor) });
       }
       continue;
     }
@@ -85,11 +97,30 @@ async function pagosMesPorGrupo(
       // Legado do Exército fechou sozinho, sem SDR de nenhuma Tribo envolvido).
       // Não descarta o valor — sem isso a soma da Guerra Civil fica menor
       // que a grana real paga no mês.
-      foraDoGrupo += Number(o.valor);
+      resultado.push({ data: o.data, chave: CHAVE_FORA, nome: "Fora dos Exércitos", exercitoNome: null, valor: Number(o.valor) });
       continue;
     }
-    const atual = totais.get(grupo.chave);
-    totais.set(grupo.chave, { nome: grupo.nome, exercitoNome: grupo.exercitoNome, valor: (atual?.valor ?? 0) + Number(o.valor) });
+    resultado.push({ data: o.data, chave: grupo.chave, nome: grupo.nome, exercitoNome: grupo.exercitoNome, valor: Number(o.valor) });
+  }
+
+  return resultado;
+}
+
+// Agrega uma lista de operações já resolvidas (ver acima) num ranking de
+// grupos, igual ao Confronto do Mural — usado tanto pro mês corrente quanto,
+// em recordes.ts, por bucket de mês do histórico inteiro.
+function agregarPorGrupo(operacoes: OperacaoPagaPorGrupo[]): Confronto[] {
+  const totais = new Map<string, { nome: string; exercitoNome: string | null; valor: number }>();
+  let foraDoGrupo = 0;
+  let nomeFora = "Fora";
+  for (const o of operacoes) {
+    if (o.chave === CHAVE_FORA) {
+      foraDoGrupo += o.valor;
+      nomeFora = o.nome;
+      continue;
+    }
+    const atual = totais.get(o.chave);
+    totais.set(o.chave, { nome: o.nome, exercitoNome: o.exercitoNome, valor: (atual?.valor ?? 0) + o.valor });
   }
 
   // Só desambigua o nome exibido (acrescenta "(Exército)") quando duas
@@ -108,10 +139,16 @@ async function pagosMesPorGrupo(
   // Sempre por último — é uma categoria de acerto de contas, não um
   // concorrente de verdade, então nunca deve ganhar a coroa de 1º lugar.
   if (foraDoGrupo > 0) {
-    resultado.push({ nome: agrupar === "exercito" ? "Fora dos Exércitos" : "Fora das Tribos", valor: foraDoGrupo });
+    resultado.push({ nome: nomeFora, valor: foraDoGrupo });
   }
 
   return resultado;
+}
+
+async function pagosMesPorGrupo(supabase: SupabaseClient, agrupar: "exercito" | "tribo"): Promise<Confronto[]> {
+  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
+  const operacoes = await resolverOperacoesPagasPorGrupo(supabase, agrupar, { desde: inicioMes });
+  return agregarPorGrupo(operacoes);
 }
 
 export function buscarConfrontoExercitos(supabase: SupabaseClient) {
@@ -120,6 +157,14 @@ export function buscarConfrontoExercitos(supabase: SupabaseClient) {
 export function buscarConfrontoTribos(supabase: SupabaseClient) {
   return pagosMesPorGrupo(supabase, "tribo");
 }
+
+// Todo o histórico de operações pagas já resolvidas pro grupo — pra
+// recordes.ts bucketar por mês e achar o melhor mês de cada Exército/Tribo,
+// sem duplicar a lógica de resolução de grupo acima.
+export function buscarOperacoesPagasPorGrupoHistorico(supabase: SupabaseClient, agrupar: "exercito" | "tribo") {
+  return resolverOperacoesPagasPorGrupo(supabase, agrupar);
+}
+export { agregarPorGrupo };
 
 // Mapa nome da Tribo -> logo_url (só as que já subiram uma logo própria em /tribo).
 // Inclui também a chave desambiguada "Tribo (Exército)" — pagosMesPorGrupo usa
