@@ -113,7 +113,7 @@ export default function TarefasApp({
   const [comentarios, setComentarios] = useState(comentariosIniciais);
   const [dependencias, setDependencias] = useState(dependenciasIniciais);
 
-  const [view, setView] = useState<"quadro" | "meu-dia" | "por-pessoa">("quadro");
+  const [view, setView] = useState<"quadro" | "por-pessoa">("quadro");
   const [arrastando, setArrastando] = useState<string | null>(null);
   const [colunaAlvo, setColunaAlvo] = useState<string | null>(null);
   const [composerAberto, setComposerAberto] = useState<string | null>(null);
@@ -239,7 +239,6 @@ export default function TarefasApp({
           {(
             [
               ["quadro", "🗃️ Quadro"],
-              ["meu-dia", "⚔️ Meu Dia"],
               ["por-pessoa", "👥 Por Pessoa"],
             ] as const
           ).map(([valor, label]) => (
@@ -273,7 +272,8 @@ export default function TarefasApp({
       </div>
 
       {view === "quadro" && (
-        <div className="flex gap-4">
+        <div className="flex items-start gap-4">
+          <div className="flex min-w-0 flex-1 gap-4">
           {COLUNAS.filter((c) => !(ocultarConcluidas && c.valor === "concluido")).map((c) => {
             const itens = porColuna.get(c.valor) ?? [];
             const emDrop = colunaAlvo === c.valor;
@@ -378,11 +378,17 @@ export default function TarefasApp({
               </div>
             );
           })}
-        </div>
-      )}
+          </div>
 
-      {view === "meu-dia" && (
-        <MeuDia tarefas={tarefas} userId={userId} hoje={hoje} dependenciaPorTarefa={dependenciaPorTarefa} tarefaPorId={tarefaPorId} onAbrir={setTarefaAberta} />
+          <MeuDiaSidebar
+            tarefas={tarefas}
+            userId={userId}
+            hoje={hoje}
+            dependenciaPorTarefa={dependenciaPorTarefa}
+            tarefaPorId={tarefaPorId}
+            onAbrir={setTarefaAberta}
+          />
+        </div>
       )}
 
       {view === "por-pessoa" && <PorPessoa tarefas={tarefas} pessoas={[{ id: userId, full_name: "Você" }, ...liderados]} hoje={hoje} />}
@@ -534,7 +540,10 @@ function CartaoTarefa({
   );
 }
 
-function MeuDia({
+// Versão compacta do "Meu Dia" — fica ao lado do Quadro (pedido do
+// Diretor, 2026-08-27: "tem espaço", já que a lateral direita do app some
+// nessa rota) em vez de ser uma aba separada que precisa clicar pra ver.
+function MeuDiaSidebar({
   tarefas,
   userId,
   hoje,
@@ -568,20 +577,20 @@ function MeuDia({
   const progresso = totalDia + concluidasHoje.length > 0 ? Math.round((concluidasHoje.length / (totalDia + concluidasHoje.length)) * 100) : 0;
 
   const dataFmt = new Date(hoje + "T00:00:00");
-  const DIAS = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
-  const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  const DIAS_ABREV = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+  const MESES_ABREV = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
   function Lista({ titulo, itens, icone }: { titulo: string; itens: Tarefa[]; icone: string }) {
     if (itens.length === 0) return null;
     return (
-      <div className="card-imp p-4">
-        <h3 className="kicker mb-2">
+      <div>
+        <h3 className="mb-1.5 text-[11px] uppercase tracking-wide text-stone-500">
           {icone} {titulo} <span className="text-stone-600">({itens.length})</span>
         </h3>
-        <ul className="space-y-1.5">
+        <ul className="space-y-1">
           {itens.map((t) => (
             <li key={t.id}>
-              <button type="button" onClick={() => onAbrir(t.id)} className="w-full text-left text-sm text-stone-200 hover:text-gold-bright">
+              <button type="button" onClick={() => onAbrir(t.id)} className="w-full truncate text-left text-xs text-stone-200 hover:text-gold-bright">
                 {t.titulo}
               </button>
             </li>
@@ -592,18 +601,18 @@ function MeuDia({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="card-imp p-5 text-center">
-        <p className="font-display text-lg text-gold-bright">
-          {DIAS[dataFmt.getDay()]} — {dataFmt.getDate()} de {MESES[dataFmt.getMonth()]}
-        </p>
-        <p className="mt-1 text-xs text-stone-500">Progresso do dia: {progresso}%</p>
-        <div className="mx-auto mt-2 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-imperium-line">
+    <div className="sticky top-4 w-64 shrink-0 space-y-4 rounded-lg border border-imperium-line bg-imperium-surface/60 p-4">
+      <div className="text-center">
+        <h2 className="font-display text-sm text-gold-bright">
+          ⚔️ Meu Dia — {DIAS_ABREV[dataFmt.getDay()]} {dataFmt.getDate()}/{MESES_ABREV[dataFmt.getMonth()]}
+        </h2>
+        <p className="mt-1 text-[11px] text-stone-500">{progresso}% do dia concluído</p>
+        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-imperium-line">
           <div className="h-full rounded-full bg-gold-bright transition-all" style={{ width: `${progresso}%` }} />
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="space-y-3">
         <Lista titulo="Prioridade máxima" itens={prioridadeMaxima} icone="🔥" />
         <Lista titulo="Hoje" itens={deHoje} icone="🎯" />
         <Lista titulo="Aguardando" itens={aguardando} icone="⏳" />
@@ -611,7 +620,7 @@ function MeuDia({
       </div>
 
       {prioridadeMaxima.length === 0 && deHoje.length === 0 && aguardando.length === 0 && concluidasHoje.length === 0 && (
-        <p className="text-center text-sm text-stone-500">Nada pra hoje — bom sinal, ou hora de olhar o Backlog.</p>
+        <p className="text-center text-xs text-stone-500">Nada pra hoje — bom sinal.</p>
       )}
     </div>
   );
