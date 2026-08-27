@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { salvarStatusLead, salvarPerdaLead, criarLembreteDeLead } from "@/app/(app)/leads/actions";
 import { IconCheck } from "@/components/ui/icons";
+import { BALDE_LABELS, type Balde } from "@/lib/forecast";
 
 export type Lead = {
   id: string;
@@ -26,8 +27,23 @@ export type Lead = {
   motivo_perda_obs: string | null;
   temperatura: "frio" | "morno" | "quente" | null;
   valor_credito: number | null;
+  // Mesma classificação do Forecast (aguardando pagamento, pendência,
+  // jurídico, esfriou, reanálise, já pago...), calculada ao vivo em
+  // leads/page.tsx pra quem já chegou em Assinado/Pago — pedido do Diretor
+  // (2026-08-27). null pra quem ainda não chegou lá, ou não achou match.
+  classificacao: Balde | null;
 };
 export type MotivoPerda = { id: string; nome: string; ativo: boolean };
+
+const BALDE_CORES: Record<Balde, string> = {
+  pago: "bg-success-bright",
+  aguardando: "bg-success",
+  pendencia: "bg-warning",
+  juridico: "bg-purpura",
+  esfriou: "bg-stone-500",
+  reanalise: "bg-gold",
+  naoClassificado: "bg-stone-600",
+};
 
 // A partir de Fechamento (inclusive), o lead precisa estar qualificado —
 // pedido do Diretor (2026-08-27). Cobre as etapas seguintes também (CCB
@@ -85,6 +101,7 @@ export default function LeadsView({
   const [filtroExercitos, setFiltroExercitos] = useState<Set<string>>(new Set());
   const [filtroClosers, setFiltroClosers] = useState<Set<string>>(new Set());
   const [filtroTemperaturas, setFiltroTemperaturas] = useState<Set<string>>(new Set());
+  const [filtroClassificacoes, setFiltroClassificacoes] = useState<Set<string>>(new Set());
   const [busca, setBusca] = useState("");
   const [, startTransition] = useTransition();
 
@@ -107,13 +124,14 @@ export default function LeadsView({
       }
       if (filtroClosers.size > 0 && (!l.closer_profile_id || !filtroClosers.has(l.closer_profile_id))) return false;
       if (filtroTemperaturas.size > 0 && (!l.temperatura || !filtroTemperaturas.has(l.temperatura))) return false;
+      if (filtroClassificacoes.size > 0 && (!l.classificacao || !filtroClassificacoes.has(l.classificacao))) return false;
       if (buscaNormalizada) {
         const alvo = `${l.lead_nome} ${l.lead_telefone ?? ""}`.toLowerCase();
         if (!alvo.includes(buscaNormalizada)) return false;
       }
       return true;
     });
-  }, [leadsState, filtroExercitos, filtroClosers, filtroTemperaturas, buscaNormalizada, exercitoPorProfileId]);
+  }, [leadsState, filtroExercitos, filtroClosers, filtroTemperaturas, filtroClassificacoes, buscaNormalizada, exercitoPorProfileId]);
 
   const porColuna = useMemo(() => {
     const mapa = new Map<string, Lead[]>();
@@ -187,13 +205,24 @@ export default function LeadsView({
           selecionados={filtroTemperaturas}
           onChange={setFiltroTemperaturas}
         />
-        {(filtroExercitos.size > 0 || filtroClosers.size > 0 || filtroTemperaturas.size > 0 || busca) && (
+        <MultiSelectFiltro
+          label="Classificação"
+          opcoes={(Object.keys(BALDE_LABELS) as Balde[]).map((b) => ({ valor: b, label: BALDE_LABELS[b] }))}
+          selecionados={filtroClassificacoes}
+          onChange={setFiltroClassificacoes}
+        />
+        {(filtroExercitos.size > 0 ||
+          filtroClosers.size > 0 ||
+          filtroTemperaturas.size > 0 ||
+          filtroClassificacoes.size > 0 ||
+          busca) && (
           <button
             type="button"
             onClick={() => {
               setFiltroExercitos(new Set());
               setFiltroClosers(new Set());
               setFiltroTemperaturas(new Set());
+              setFiltroClassificacoes(new Set());
               setBusca("");
             }}
             className="text-xs text-stone-500 underline hover:text-stone-300"
@@ -266,14 +295,27 @@ export default function LeadsView({
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-stone-100">{l.lead_nome}</p>
-                        {l.temperatura && (
-                          <span
-                            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${
-                              TEMPERATURAS.find((t) => t.valor === l.temperatura)?.cor ?? ""
-                            }`}
-                          >
-                            {TEMPERATURAS.find((t) => t.valor === l.temperatura)?.label}
-                          </span>
+                        {/* Já deu certo (Assinado/Pago) — mostra a classificação do
+                            Forecast em vez do Forecast (temperatura), que deixou de
+                            fazer sentido (pedido do Diretor, 2026-08-27). */}
+                        {l.status_followup === "assinado" || l.status_followup === "pago" ? (
+                          l.classificacao && (
+                            <span
+                              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${BALDE_CORES[l.classificacao]}`}
+                            >
+                              {BALDE_LABELS[l.classificacao]}
+                            </span>
+                          )
+                        ) : (
+                          l.temperatura && (
+                            <span
+                              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${
+                                TEMPERATURAS.find((t) => t.valor === l.temperatura)?.cor ?? ""
+                              }`}
+                            >
+                              {TEMPERATURAS.find((t) => t.valor === l.temperatura)?.label}
+                            </span>
+                          )
                         )}
                       </div>
                       <p className="truncate text-[10px] text-stone-500">

@@ -3,6 +3,8 @@ import LeadsView, { type Lead, type MotivoPerda } from "@/components/leads/Leads
 import MotivosPerdaForm from "@/components/leads/MotivosPerdaForm";
 import { getViewerContext } from "@/lib/preview";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
+import { normalizarNome } from "@/lib/sync/parse";
+import { classificarBalde, type StatusManual } from "@/lib/forecast";
 
 export default async function LeadsPage() {
   const supabase = await createClient();
@@ -45,7 +47,7 @@ export default async function LeadsPage() {
   ]);
   logErroSupabase("LeadsPage: entrevistas_leads", error);
 
-  const leads = (leadsRaw ?? []) as Lead[];
+  const leads = (leadsRaw ?? []) as Omit<Lead, "classificacao">[];
   const motivosTodos = (motivosRaw ?? []) as MotivoPerda[];
   const motivosAtivos = motivosTodos.filter((m) => m.ativo);
 
@@ -73,6 +75,47 @@ export default async function LeadsPage() {
     })
   );
 
+  // Tag de classificação do Forecast nos leads Assinado/Pago (pedido do
+  // Diretor, 2026-08-27: "crie uma tag pra cada classificação... o que tá
+  // pago e assinado pode tirar o quente, porque já deu certo") — casa por
+  // SDR+Closer+nome do cliente normalizado, mesma chave que o sync usa em
+  // run.ts pra fechar o loop Assinado -> status_followup. Calculado aqui
+  // (não gravado em entrevistas_leads) porque status_manual muda depois do
+  // sync, direto no Forecast — ler ao vivo garante que a tag nunca fica
+  // desatualizada.
+  const idsAssinadosOuPagos = leads.filter((l) => l.status_followup === "assinado" || l.status_followup === "pago");
+  const classificacaoPorLead = new Map<string, ReturnType<typeof classificarBalde>>();
+  if (idsAssinadosOuPagos.length > 0) {
+    // Tabela pequena (algumas centenas de linhas, mesmo raciocínio já usado
+    // em run.ts) — ler tudo paginado é barato e evita ponto cego de filtro
+    // por id que não bateria certo com sdr_profile_id/closer_profile_id ao
+    // mesmo tempo.
+    const porChave = new Map<string, { status: string; statusManual: StatusManual | null }>();
+    let from = 0;
+    const pageSize = 1000;
+    for (;;) {
+      const { data: pagina } = await supabase
+        .from("weekly_operacoes")
+        .select("cliente, sdr_profile_id, closer_profile_id, status, status_manual, data")
+        .order("data", { ascending: true })
+        .range(from, from + pageSize - 1);
+      for (const o of pagina ?? []) {
+        if (!o.cliente) continue;
+        const chave = `${o.sdr_profile_id ?? ""}|${o.closer_profile_id ?? ""}|${normalizarNome(o.cliente)}`;
+        porChave.set(chave, { status: o.status, statusManual: o.status_manual as StatusManual | null });
+      }
+      if (!pagina || pagina.length < pageSize) break;
+      from += pageSize;
+    }
+    for (const l of idsAssinadosOuPagos) {
+      const chave = `${l.sdr_profile_id ?? ""}|${l.closer_profile_id ?? ""}|${normalizarNome(l.lead_nome)}`;
+      const match = porChave.get(chave);
+      if (match) classificacaoPorLead.set(l.id, classificarBalde(match));
+    }
+  }
+
+  const leadsComClassificacao: Lead[] = leads.map((l) => ({ ...l, classificacao: classificacaoPorLead.get(l.id) ?? null }));
+
   return (
     <main className="mx-auto max-w-[1600px] space-y-6 px-6 py-8">
       <div>
@@ -80,7 +123,7 @@ export default async function LeadsPage() {
         <p className="kicker mt-1">Entrevistas recebidas este mês — acompanhe, envie proposta, faça follow-up</p>
       </div>
 
-      <LeadsView leads={leads} nomePorId={nomePorId} motivosPerda={motivosAtivos} exercitoPorProfileId={exercitoPorProfileId} />
+      <LeadsView leads={leadsComClassificacao} nomePorId={nomePorId} motivosPerda={motivosAtivos} exercitoPorProfileId={exercitoPorProfileId} />
 
       {meRole === "diretor" && <MotivosPerdaForm motivos={motivosTodos} />}
     </main>

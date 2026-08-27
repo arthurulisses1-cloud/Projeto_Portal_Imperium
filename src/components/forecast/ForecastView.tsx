@@ -4,37 +4,19 @@ import { useMemo, useState } from "react";
 import Card from "@/components/ui/Card";
 import ForecastRow from "./ForecastRow";
 import ForecastRowQueda from "./ForecastRowQueda";
-import { STATUS_SHEET_LABELS, STATUS_SHEET_COR, type ForecastOp } from "@/lib/forecast";
+import { STATUS_SHEET_LABELS, STATUS_SHEET_COR, BALDE_LABELS, classificarBalde, type ForecastOp, type Balde } from "@/lib/forecast";
 import { Table, Th, Td } from "@/components/ui/Table";
 
 type Aba = "assinaturas" | "reanalise" | "pagos" | "quedas";
 
-// Cada card do resumo do topo corresponde a exatamente um desses baldes —
-// clicar no card filtra a tabela de baixo pra mostrar só esses leads, sem
-// duplicar a lógica de classificação (mesma função usada pra somar os
-// valores do resumo e pra filtrar a tabela).
-type Balde = "pago" | "aguardando" | "pendencia" | "juridico" | "esfriou" | "reanalise" | "naoClassificado";
-
-const BALDE_LABELS: Record<Balde, string> = {
-  pago: "Já pago",
-  aguardando: "Certo pra pagar",
-  pendencia: "Em resolução de pendência",
-  juridico: "Análise Jurídico",
-  esfriou: "Esfriou",
-  reanalise: "Em reanálise",
-  naoClassificado: "Ainda não classificado",
-};
-
-function classificar(o: ForecastOp): Balde | null {
-  if (o.status === "PAGO") return "pago";
-  if (o.status === "REANÁLISE") return "reanalise";
-  if (o.statusManual === "aguardando_pagamento") return "aguardando";
-  if (o.statusManual === "resolvendo_pendencia") return "pendencia";
-  if (o.statusManual === "analise_juridico") return "juridico";
-  if (o.statusManual === "esfriou") return "esfriou";
-  if (o.status === "ASSINADO") return "naoClassificado";
-  return null; // CAIU/DESISTIU — fora desses baldes, vivem só na aba Quedas
-}
+// classificar()/Balde/BALDE_LABELS vivem em src/lib/forecast.ts — extraído
+// de lá pra também alimentar a tag de classificação nos leads
+// Assinado/Pago em /leads (ver leads/page.tsx). Cada card do resumo do
+// topo corresponde a exatamente um desses baldes — clicar no card filtra a
+// tabela de baixo pra mostrar só esses leads, sem duplicar a lógica de
+// classificação (mesma função usada pra somar os valores do resumo e pra
+// filtrar a tabela).
+const classificar = classificarBalde;
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });

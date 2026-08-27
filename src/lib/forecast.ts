@@ -47,6 +47,35 @@ export const STATUS_SHEET_COR: Record<string, string> = {
   DESISTIU: "#78716c",
 };
 
+// Mesmos "baldes" de classificação do Forecast (antes só existiam dentro de
+// ForecastView.tsx) — extraído pra cá pra também alimentar a tag de
+// classificação nos leads Assinado/Pago em /leads (pedido do Diretor,
+// 2026-08-27): "coloque uma tag pra cada classificação e essa tag apareça
+// nos assinados". Cada card do resumo do Forecast corresponde a exatamente
+// um desses baldes.
+export type Balde = "pago" | "aguardando" | "pendencia" | "juridico" | "esfriou" | "reanalise" | "naoClassificado";
+
+export const BALDE_LABELS: Record<Balde, string> = {
+  pago: "Já pago",
+  aguardando: "Certo pra pagar",
+  pendencia: "Em resolução de pendência",
+  juridico: "Análise Jurídico",
+  esfriou: "Esfriou",
+  reanalise: "Em reanálise",
+  naoClassificado: "Ainda não classificado",
+};
+
+export function classificarBalde(o: { status: string; statusManual: StatusManual | null }): Balde | null {
+  if (o.status === "PAGO") return "pago";
+  if (o.status === "REANÁLISE") return "reanalise";
+  if (o.statusManual === "aguardando_pagamento") return "aguardando";
+  if (o.statusManual === "resolvendo_pendencia") return "pendencia";
+  if (o.statusManual === "analise_juridico") return "juridico";
+  if (o.statusManual === "esfriou") return "esfriou";
+  if (o.status === "ASSINADO") return "naoClassificado";
+  return null; // CAIU/DESISTIU — fora desses baldes, vivem só na aba Quedas
+}
+
 export type ForecastOp = {
   id: string;
   data: string;
