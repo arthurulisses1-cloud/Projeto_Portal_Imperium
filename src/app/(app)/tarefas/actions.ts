@@ -41,6 +41,10 @@ export async function criarTarefa(formData: FormData) {
   });
   if (error) throw new Error(error.message);
   revalidatePath("/tarefas");
+  // Também usada pelo cardzinho rápido do Mural (TarefasMuralQuickAdd) —
+  // sem isso o widget "Suas Tarefas em Aberto" só atualizava depois de
+  // navegar pra outra aba e voltar.
+  revalidatePath("/");
 }
 
 // Quick Add: "ligar pro João amanhã às 14h" — sem formulário, um campo só.
