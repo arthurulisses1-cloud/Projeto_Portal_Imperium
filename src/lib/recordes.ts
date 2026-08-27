@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
-import { buscarOperacoesPagasPorGrupoHistorico, agregarPorGrupo } from "@/lib/guerra";
+import { buscarOperacoesPagasPorGrupoHistorico, agregarPorGrupo, buscarCrestsTribos } from "@/lib/guerra";
+import { EXERCITO_CREST } from "@/lib/exercito-crests";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 
 export type RecordeAuto = {
@@ -10,6 +11,8 @@ export type RecordeAuto = {
   valor: number;
   formato: "moeda" | "num" | "dias";
   data?: string; // quando aconteceu, se souber (YYYY-MM-DD ou YYYY-MM)
+  avatarUrls?: (string | null)[]; // foto de quem venceu, se for pessoa(s)
+  crestUrl?: string | null; // brasão do Exército/Tribo, se for recorde de time
 };
 
 function melhorPorChave<T>(itens: T[], chaveDe: (item: T) => string, valorDe: (item: T) => number): Map<string, number> {
@@ -53,6 +56,7 @@ async function recordesEmpresa(supabase: SupabaseClient): Promise<RecordeAuto[]>
 
 async function recordesTime(supabase: SupabaseClient): Promise<RecordeAuto[]> {
   const recordes: RecordeAuto[] = [];
+  const crestsTribos = await buscarCrestsTribos(supabase);
 
   for (const [agrupar, titulo] of [
     ["exercito", "Melhor mês de um Exército"],
@@ -82,7 +86,8 @@ async function recordesTime(supabase: SupabaseClient): Promise<RecordeAuto[]> {
       }
     }
     if (melhor) {
-      recordes.push({ categoria: "time", titulo, nome: melhor.nome, valor: melhor.valor, formato: "moeda", data: melhor.mes });
+      const crestUrl = agrupar === "exercito" ? EXERCITO_CREST[melhor.nome] ?? null : crestsTribos[melhor.nome] ?? null;
+      recordes.push({ categoria: "time", titulo, nome: melhor.nome, valor: melhor.valor, formato: "moeda", data: melhor.mes, crestUrl });
     }
   }
 
@@ -93,7 +98,16 @@ async function recordesTime(supabase: SupabaseClient): Promise<RecordeAuto[]> {
 // faturamento pago) — os dois únicos Exércitos reais do sistema (ver
 // memória "Tribos reais"). Meses sem operação resolvível pra nenhum dos
 // dois (ex.: só "Fora dos Exércitos") não contam pra ninguém.
-export type ContadorGuerraCivil = { nomeA: string; nomeB: string; vitoriasA: number; vitoriasB: number };
+export type ContadorGuerraCivil = {
+  nomeA: string;
+  nomeB: string;
+  vitoriasA: number;
+  vitoriasB: number;
+  creditoA: number;
+  creditoB: number;
+  crestA: string | null;
+  crestB: string | null;
+};
 
 export async function buscarContadorGuerraCivil(supabase: SupabaseClient): Promise<ContadorGuerraCivil | null> {
   const operacoes = await buscarOperacoesPagasPorGrupoHistorico(supabase, "exercito");
@@ -117,11 +131,32 @@ export async function buscarContadorGuerraCivil(supabase: SupabaseClient): Promi
     else if (templarios > maximus) vitoriasTemplarios++;
   }
 
-  return { nomeA: "Maximus", nomeB: "Templários", vitoriasA: vitoriasMaximus, vitoriasB: vitoriasTemplarios };
+  // Crédito pago histórico (soma de tudo, sem quebrar por mês) — mesma
+  // agregação, só que sobre a lista inteira em vez de bucket por mês.
+  const rankingTotal = agregarPorGrupo(operacoes);
+  const creditoMaximus = rankingTotal.find((r) => r.nome === "Maximus")?.valor ?? 0;
+  const creditoTemplarios = rankingTotal.find((r) => r.nome === "Templários")?.valor ?? 0;
+
+  return {
+    nomeA: "Maximus",
+    nomeB: "Templários",
+    vitoriasA: vitoriasMaximus,
+    vitoriasB: vitoriasTemplarios,
+    creditoA: creditoMaximus,
+    creditoB: creditoTemplarios,
+    crestA: EXERCITO_CREST["Maximus"] ?? null,
+    crestB: EXERCITO_CREST["Templários"] ?? null,
+  };
 }
 
 async function recordesIndividuais(supabase: SupabaseClient): Promise<RecordeAuto[]> {
   const recordes: RecordeAuto[] = [];
+
+  // Pessoas com foto — carregado antes pra ficar disponível pra todos os
+  // recordes individuais abaixo (maior venda, melhor mês, assinaturas/dia).
+  const { data: todasPessoas } = await supabase.from("profiles").select("id, full_name, avatar_url");
+  const nomePorProfile = new Map((todasPessoas ?? []).map((p) => [p.id, p.full_name]));
+  const avatarPorProfile = new Map((todasPessoas ?? []).map((p) => [p.id, p.avatar_url as string | null]));
 
   // Maior venda única já fechada.
   const { data: maiorOp, error: maiorOpError } = await supabase
@@ -134,9 +169,7 @@ async function recordesIndividuais(supabase: SupabaseClient): Promise<RecordeAut
   logErroSupabase("recordes: maior venda única", maiorOpError);
   if (maiorOp) {
     const ids = [maiorOp.sdr_profile_id, maiorOp.closer_profile_id].filter((x): x is string => !!x);
-    const { data: pessoas } = ids.length > 0 ? await supabase.from("profiles").select("id, full_name").in("id", ids) : { data: [] };
-    const nomePorId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name]));
-    const nomes = ids.map((id) => nomePorId.get(id)).filter(Boolean);
+    const nomes = ids.map((id) => nomePorProfile.get(id)).filter(Boolean);
     recordes.push({
       categoria: "individual",
       titulo: "Maior venda já fechada",
@@ -144,6 +177,7 @@ async function recordesIndividuais(supabase: SupabaseClient): Promise<RecordeAut
       valor: Number(maiorOp.valor),
       formato: "moeda",
       data: maiorOp.data,
+      avatarUrls: ids.map((id) => avatarPorProfile.get(id) ?? null),
     });
   }
 
@@ -153,8 +187,6 @@ async function recordesIndividuais(supabase: SupabaseClient): Promise<RecordeAut
   const vendas = await buscarTudoPaginado<{ profile_id: string; valor: number; data: string; papel: string }>((from, to) =>
     supabase.from("vendas").select("profile_id, valor, data, papel").range(from, to)
   );
-  const { data: pessoasVenda } = await supabase.from("profiles").select("id, full_name").in("role", ["sdr", "closer", "lider"]);
-  const nomePorProfile = new Map((pessoasVenda ?? []).map((p) => [p.id, p.full_name]));
 
   for (const [papel, titulo] of [
     ["sdr", "Melhor mês individual como SDR"],
@@ -165,7 +197,15 @@ async function recordesIndividuais(supabase: SupabaseClient): Promise<RecordeAut
     const melhor = maiorEntrada(porPessoaMes);
     if (melhor) {
       const [profileId, mes] = melhor.chave.split("|");
-      recordes.push({ categoria: "individual", titulo, nome: nomePorProfile.get(profileId) ?? "—", valor: melhor.valor, formato: "moeda", data: mes });
+      recordes.push({
+        categoria: "individual",
+        titulo,
+        nome: nomePorProfile.get(profileId) ?? "—",
+        valor: melhor.valor,
+        formato: "moeda",
+        data: mes,
+        avatarUrls: [avatarPorProfile.get(profileId) ?? null],
+      });
     }
   }
 
@@ -186,6 +226,7 @@ async function recordesIndividuais(supabase: SupabaseClient): Promise<RecordeAut
       valor: melhorAssinaturasDia.valor,
       formato: "num",
       data,
+      avatarUrls: [avatarPorProfile.get(profileId) ?? null],
     });
   }
 
@@ -201,7 +242,7 @@ export async function buscarRecordesAuto(supabase: SupabaseClient): Promise<Reco
   return [...empresa, ...time, ...individuais];
 }
 
-export type RankingHistorico = { posicao: number; nome: string; valor: number };
+export type RankingHistorico = { posicao: number; nome: string; valor: number; avatarUrl: string | null };
 
 // Total pago (histórico inteiro) por pessoa num papel — "ambos" conta pro
 // lado SDR e pro lado Closer, mesma convenção do resto do arquivo/ranking.
@@ -215,11 +256,12 @@ async function top5PorPapel(supabase: SupabaseClient, papel: "sdr" | "closer"): 
 
   const ids = Array.from(totais.keys());
   if (ids.length === 0) return [];
-  const { data: pessoas } = await supabase.from("profiles").select("id, full_name").in("id", ids);
+  const { data: pessoas } = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", ids);
   const nomePorId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name]));
+  const avatarPorId = new Map((pessoas ?? []).map((p) => [p.id, p.avatar_url as string | null]));
 
   return Array.from(totais.entries())
-    .map(([id, valor]) => ({ nome: nomePorId.get(id) ?? "—", valor }))
+    .map(([id, valor]) => ({ nome: nomePorId.get(id) ?? "—", valor, avatarUrl: avatarPorId.get(id) ?? null }))
     .sort((a, b) => b.valor - a.valor)
     .slice(0, 5)
     .map((r, i) => ({ posicao: i + 1, ...r }));
@@ -239,23 +281,28 @@ export type RecordeCurado = {
   valorTexto: string | null;
   dataReferencia: string | null;
   nomePessoa: string | null;
+  avatarUrl: string | null;
   ordem: number;
 };
 
 export async function buscarRecordesCurados(supabase: SupabaseClient): Promise<RecordeCurado[]> {
   const { data, error } = await supabase
     .from("recordes_curados")
-    .select("id, titulo, descricao, valor_texto, data_referencia, ordem, pessoa:profiles(full_name)")
+    .select("id, titulo, descricao, valor_texto, data_referencia, ordem, pessoa:profiles(full_name, avatar_url)")
     .order("ordem", { ascending: true })
     .order("data_referencia", { ascending: false });
   logErroSupabase("recordes: buscarRecordesCurados", error);
-  return (data ?? []).map((r) => ({
-    id: r.id,
-    titulo: r.titulo,
-    descricao: r.descricao,
-    valorTexto: r.valor_texto,
-    dataReferencia: r.data_referencia,
-    nomePessoa: (r.pessoa as unknown as { full_name: string } | null)?.full_name ?? null,
-    ordem: r.ordem,
-  }));
+  return (data ?? []).map((r) => {
+    const pessoa = r.pessoa as unknown as { full_name: string; avatar_url: string | null } | null;
+    return {
+      id: r.id,
+      titulo: r.titulo,
+      descricao: r.descricao,
+      valorTexto: r.valor_texto,
+      dataReferencia: r.data_referencia,
+      nomePessoa: pessoa?.full_name ?? null,
+      avatarUrl: pessoa?.avatar_url ?? null,
+      ordem: r.ordem,
+    };
+  });
 }

@@ -41,10 +41,59 @@ const CATEGORIA_ESTILO = {
 function CardRecorde({ r }: { r: RecordeAuto }) {
   const quando = formatarQuando(r.data);
   const { icon: Icon, aura } = CATEGORIA_ESTILO[r.categoria];
+
+  // Recorde de time com brasão conhecido: o brasão vira metade do cartão,
+  // bem grande, em vez do ícone pequeno — pedido explícito do Diretor pra
+  // dar mais "peso" visual a Exército/Tribo.
+  if (r.crestUrl) {
+    return (
+      <div className="card-imp relative flex overflow-hidden p-0">
+        <div className="relative w-2/5 shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={r.crestUrl} alt={r.nome} className="h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-imperium-surface" />
+        </div>
+        <div className="flex-1 p-5">
+          <h3 className="kicker">{r.titulo}</h3>
+          <p className="mt-1 font-display text-2xl leading-tight text-gold-bright drop-shadow-[0_0_10px_rgba(232,200,116,0.2)]">
+            {formatarValor(r)}
+          </p>
+          <p className="mt-2 text-sm text-stone-200">{r.nome}</p>
+          {quando && <p className="mt-0.5 text-[11px] uppercase tracking-wide text-stone-600">{quando}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  const avatares = (r.avatarUrls ?? []).filter((_, i) => i < 3);
+
   return (
     <div className="card-imp group relative overflow-hidden p-6 transition hover:border-gold/50">
       <div className={`pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br ${aura} to-transparent blur-2xl transition group-hover:scale-125`} />
-      <Icon className="relative h-7 w-7 text-gold-bright drop-shadow-[0_0_6px_rgba(232,200,116,0.35)]" />
+      {avatares.length > 0 ? (
+        <div className="relative flex -space-x-3">
+          {avatares.map((url, i) =>
+            url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={i}
+                src={url}
+                alt=""
+                className="h-11 w-11 rounded-full border-2 border-imperium-surface object-cover shadow-[0_0_10px_rgba(232,200,116,0.3)]"
+              />
+            ) : (
+              <div
+                key={i}
+                className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-imperium-surface bg-imperium-raised text-stone-500"
+              >
+                <IconMedal className="h-5 w-5" />
+              </div>
+            )
+          )}
+        </div>
+      ) : (
+        <Icon className="relative h-7 w-7 text-gold-bright drop-shadow-[0_0_6px_rgba(232,200,116,0.35)]" />
+      )}
       <h3 className="kicker relative mt-3">{r.titulo}</h3>
       <p className="relative mt-1 font-display text-3xl leading-tight text-gold-bright drop-shadow-[0_0_10px_rgba(232,200,116,0.2)]">
         {formatarValor(r)}
@@ -83,7 +132,16 @@ function Top5Lista({ titulo, ranking }: { titulo: string; ranking: RankingHistor
         <h3 className="font-display text-base tracking-wide text-gold-bright">{titulo}</h3>
       </div>
       <div className="relative mt-4 rounded border border-gold/40 bg-gold/5 p-4 text-center">
-        <IconCrown className="mx-auto h-6 w-6 text-gold-bright drop-shadow-[0_0_8px_rgba(232,200,116,0.4)]" />
+        {primeiro.avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={primeiro.avatarUrl}
+            alt=""
+            className="mx-auto h-14 w-14 rounded-full border-2 border-gold object-cover shadow-[0_0_15px_rgba(232,200,116,0.45)]"
+          />
+        ) : (
+          <IconCrown className="mx-auto h-6 w-6 text-gold-bright drop-shadow-[0_0_8px_rgba(232,200,116,0.4)]" />
+        )}
         <p className="mt-1 font-display text-xl text-gold-bright">{primeiro.nome}</p>
         <p className="text-sm text-stone-300">{fmtMoeda(primeiro.valor)}</p>
       </div>
@@ -103,29 +161,33 @@ function Top5Lista({ titulo, ranking }: { titulo: string; ranking: RankingHistor
   );
 }
 
+function LadoGuerraCivil({ nome, vitorias, credito, crest, borda }: { nome: string; vitorias: number; credito: number; crest: string | null; borda?: boolean }) {
+  return (
+    <div className={`relative flex flex-col items-center justify-center gap-1 overflow-hidden p-8 ${borda ? "border-l border-gold/20" : ""}`}>
+      {crest && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={crest} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover opacity-15" />
+      )}
+      <p className="relative font-display text-4xl text-gold-bright drop-shadow-[0_0_10px_rgba(232,200,116,0.2)]">{vitorias}</p>
+      <p className="relative text-sm text-stone-300">meses de {nome}</p>
+      <p className="relative mt-1 text-xs text-stone-500">{fmtMoeda(credito)} pagos no total</p>
+    </div>
+  );
+}
+
 function ScoreboardGuerraCivil({ contador }: { contador: ContadorGuerraCivil }) {
   const total = contador.vitoriasA + contador.vitoriasB;
   return (
-    <div className="card-imp relative overflow-hidden p-6">
-      <div className="relative flex items-center justify-center gap-2">
+    <div className="card-imp relative overflow-hidden p-0 sm:col-span-2 lg:col-span-3">
+      <div className="relative flex items-center justify-center gap-2 border-b border-gold/20 p-4">
         <IconSwords className="h-5 w-5 text-gold-bright" />
         <h3 className="font-display text-base tracking-wide text-gold-bright">Guerra Civil Histórica</h3>
       </div>
-      <p className="relative mt-1 text-center text-[11px] uppercase tracking-wide text-stone-600">
-        Meses vencidos por maior crédito pago
-      </p>
-      <div className="relative mt-4 flex items-center justify-center gap-6">
-        <div className="text-center">
-          <p className="font-display text-3xl text-gold-bright">{contador.vitoriasA}</p>
-          <p className="text-sm text-stone-300">{contador.nomeA}</p>
-        </div>
-        <span className="font-display text-xl text-stone-600">×</span>
-        <div className="text-center">
-          <p className="font-display text-3xl text-gold-bright">{contador.vitoriasB}</p>
-          <p className="text-sm text-stone-300">{contador.nomeB}</p>
-        </div>
+      <div className="grid grid-cols-2">
+        <LadoGuerraCivil nome={contador.nomeA} vitorias={contador.vitoriasA} credito={contador.creditoA} crest={contador.crestA} />
+        <LadoGuerraCivil nome={contador.nomeB} vitorias={contador.vitoriasB} credito={contador.creditoB} crest={contador.crestB} borda />
       </div>
-      {total === 0 && <p className="relative mt-3 text-center text-xs text-stone-600">Sem meses computados ainda.</p>}
+      {total === 0 && <p className="relative p-3 text-center text-xs text-stone-600">Sem meses computados ainda.</p>}
     </div>
   );
 }
@@ -134,7 +196,16 @@ function CardCurado({ r, souDiretor }: { r: RecordeCurado; souDiretor: boolean }
   return (
     <div className="card-imp relative overflow-hidden p-6">
       <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-gradient-to-br from-gold/20 to-transparent blur-2xl" />
-      <IconScroll className="relative h-6 w-6 text-gold-bright" />
+      {r.avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={r.avatarUrl}
+          alt=""
+          className="relative h-11 w-11 rounded-full border-2 border-gold/50 object-cover shadow-[0_0_10px_rgba(232,200,116,0.3)]"
+        />
+      ) : (
+        <IconScroll className="relative h-6 w-6 text-gold-bright" />
+      )}
       <h3 className="relative mt-3 font-display text-base text-gold-bright">{r.titulo}</h3>
       {r.valorTexto && <p className="relative mt-1 font-display text-2xl text-gold-bright">{r.valorTexto}</p>}
       {r.nomePessoa && <p className="relative mt-1 text-sm text-stone-200">{r.nomePessoa}</p>}
