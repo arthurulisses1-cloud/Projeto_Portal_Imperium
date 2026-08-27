@@ -239,6 +239,7 @@ export default async function TriboPage({
                 }
                 compromissoCor={STATUS_COR[compromissoMap.get(sdr.id)?.status ?? "não lançado"]}
                 pagosMes={pagosMap.get(sdr.id) ?? 0}
+                falta={compromissoMap.get(sdr.id)?.falta ?? false}
               />
               <details className="rounded border border-imperium-line bg-imperium-bg/40 px-3 py-2 text-xs">
                 <summary className="cursor-pointer text-stone-400 hover:text-gold-bright">

@@ -2,6 +2,7 @@ import {
   registrarStrikeTime,
   registrarPdiTime,
   marcarFaltaTime,
+  desmarcarFaltaTime,
 } from "@/app/(app)/exercito/actions";
 
 type Props = {
@@ -11,6 +12,7 @@ type Props = {
   compromissoStatus: string;
   compromissoCor: string;
   pagosMes: number;
+  falta?: boolean;
 };
 
 export default function MembroCard({
@@ -20,6 +22,7 @@ export default function MembroCard({
   compromissoStatus,
   compromissoCor,
   pagosMes,
+  falta = false,
 }: Props) {
   return (
     <div className="rounded border border-imperium-line bg-imperium-bg/40 p-4">
@@ -80,12 +83,21 @@ export default function MembroCard({
           </form>
         </details>
 
-        <form action={marcarFaltaTime}>
-          <input type="hidden" name="profile_id" value={id} />
-          <button type="submit" className="text-stone-500 hover:text-stone-300">
-            Marcar ausência hoje
-          </button>
-        </form>
+        {falta ? (
+          <form action={desmarcarFaltaTime}>
+            <input type="hidden" name="profile_id" value={id} />
+            <button type="submit" className="text-wine-bright hover:underline">
+              Remover falta de hoje
+            </button>
+          </form>
+        ) : (
+          <form action={marcarFaltaTime}>
+            <input type="hidden" name="profile_id" value={id} />
+            <button type="submit" className="text-stone-500 hover:text-stone-300">
+              Marcar ausência hoje
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

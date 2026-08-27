@@ -73,3 +73,27 @@ export async function marcarFaltaTime(formData: FormData) {
   revalidatePath("/tribo");
   revalidatePath("/compromissos");
 }
+
+// Desfaz uma ausência marcada por engano — só mexe no `falta` de hoje (é o
+// único dia que marcarFaltaTime consegue marcar), sem reabrir o
+// lançamento do compromisso em si.
+export async function desmarcarFaltaTime(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const profileId = String(formData.get("profile_id"));
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  const { error } = await supabase
+    .from("compromissos")
+    .update({ falta: false })
+    .eq("profile_id", profileId)
+    .eq("data", hoje);
+  if (error) throw new Error(error.message);
+  revalidatePath("/exercito");
+  revalidatePath("/tribo");
+  revalidatePath("/compromissos");
+}

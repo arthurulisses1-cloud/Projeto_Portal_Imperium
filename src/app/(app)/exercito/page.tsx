@@ -264,6 +264,7 @@ export default async function ExercitoPage() {
                     STATUS_COR[compromissoMap.get(closer.id)?.status ?? "não lançado"]
                   }
                   pagosMes={pagosMap.get(closer.id) ?? 0}
+                  falta={compromissoMap.get(closer.id)?.falta ?? false}
                 />
               )}
               {sdrsDaTribo.map((sdr) => (
@@ -277,6 +278,7 @@ export default async function ExercitoPage() {
                   }
                   compromissoCor={STATUS_COR[compromissoMap.get(sdr.id)?.status ?? "não lançado"]}
                   pagosMes={pagosMap.get(sdr.id) ?? 0}
+                  falta={compromissoMap.get(sdr.id)?.falta ?? false}
                 />
               ))}
             </div>
