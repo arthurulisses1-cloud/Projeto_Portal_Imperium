@@ -2,7 +2,13 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { salvarStatusLead, salvarPerdaLead, criarLembreteDeLead } from "@/app/(app)/leads/actions";
+import {
+  salvarStatusLead,
+  salvarPerdaLead,
+  criarLembreteDeLead,
+  enviarParaReanalise,
+  resolverReanalise,
+} from "@/app/(app)/leads/actions";
 import { IconCheck } from "@/components/ui/icons";
 import { BALDE_LABELS, type Balde } from "@/lib/forecast";
 
@@ -36,6 +42,11 @@ export type Lead = {
   // leads/page.tsx pra quem já chegou em Assinado/Pago — pedido do Diretor
   // (2026-08-27). null pra quem ainda não chegou lá, ou não achou match.
   classificacao: Balde | null;
+  // Segundo funil (migration 0062, pedido do Diretor, 2026-08-28) — quando
+  // true, o lead some do funil principal e aparece no funil de Reanálise
+  // (mesma tela, um toggle). status_followup nunca muda por causa disso.
+  em_reanalise: boolean;
+  reanalise_data: string | null;
 };
 // etapa null = motivo universal, aparece em qualquer etapa (migration 0059).
 export type MotivoPerda = { id: string; nome: string; ativo: boolean; etapa: string | null };
@@ -66,6 +77,10 @@ const BALDE_CORES: Record<Balde, string> = {
 // Enviada, Assinado, Pago), senão dava pra arrastar direto pra lá sem qualificar.
 const ETAPAS_QUE_EXIGEM_QUALIFICACAO = new Set(["fechamento", "subido", "ccb_enviada", "assinado", "pago"]);
 
+// Reanálise (migration 0062) só faz sentido a partir de onde o
+// compliance/jurídico entra em cena — mesmo corte de ETAPAS_QUE_PODEM_IR_PARA_REANALISE em actions.ts.
+const ETAPAS_QUE_PODEM_IR_PARA_REANALISE = new Set(["subido", "ccb_enviada", "assinado"]);
+
 const TEMPERATURAS = [
   { valor: "frio", label: "Frio", cor: "bg-sky-500" },
   { valor: "morno", label: "Morno", cor: "bg-warning" },
@@ -95,6 +110,15 @@ function dbr(s: string) {
   return new Date(s + "T00:00:00").toLocaleDateString("pt-BR");
 }
 
+// Cor da tag de data de reanálise conforme a urgência — mesma lógica visual
+// de "Atrasada"/"Hoje" já usada no widget de tarefas do Mural.
+function corReanalise(dataStr: string) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  if (dataStr < hoje) return "bg-wine";
+  if (dataStr === hoje) return "bg-gold";
+  return "bg-stone-500";
+}
+
 export default function LeadsView({
   leads,
   nomePorId,
@@ -111,6 +135,11 @@ export default function LeadsView({
   const [colunaAlvo, setColunaAlvo] = useState<string | null>(null);
   const [leadAberto, setLeadAberto] = useState<string | null>(null);
   const [statusPretendido, setStatusPretendido] = useState<string | null>(null);
+  // Segundo funil (migration 0062, pedido do Diretor, 2026-08-28: "não
+  // crie outra aba, basta em Meus Leads termos a opção de ver esse segundo
+  // funil") — toggle simples em vez de rota nova, reaproveita o board
+  // inteiro (colunas, filtros, modal), só troca qual recorte de leads entra.
+  const [visao, setVisao] = useState<"principal" | "reanalise">("principal");
   // Multi-seleção (pedido do Diretor, 2026-08-27: "tire da forma de filtro
   // único, coloque de forma que eu possa selecionar vários") — vazio = sem
   // filtro (mostra tudo), cada Set guarda os valores marcados.
@@ -121,19 +150,29 @@ export default function LeadsView({
   const [busca, setBusca] = useState("");
   const [, startTransition] = useTransition();
 
+  // Recorte da visão atual — o board inteiro (colunas, filtros, contagens)
+  // roda em cima disso. status_followup nunca muda por causa da reanálise,
+  // então "voltar pro funil" é literalmente só trocar em_reanalise de volta.
+  const leadsDaVisao = useMemo(
+    () => leadsState.filter((l) => (visao === "reanalise" ? l.em_reanalise : !l.em_reanalise)),
+    [leadsState, visao]
+  );
+  const totalReanalise = useMemo(() => leadsState.filter((l) => l.em_reanalise).length, [leadsState]);
+  const totalPrincipal = leadsState.length - totalReanalise;
+
   const exercitos = useMemo(
-    () => Array.from(new Set(leadsState.map((l) => (l.closer_profile_id ? exercitoPorProfileId.get(l.closer_profile_id) : null)).filter((x): x is string => !!x))).sort(),
-    [leadsState, exercitoPorProfileId]
+    () => Array.from(new Set(leadsDaVisao.map((l) => (l.closer_profile_id ? exercitoPorProfileId.get(l.closer_profile_id) : null)).filter((x): x is string => !!x))).sort(),
+    [leadsDaVisao, exercitoPorProfileId]
   );
   const closers = useMemo(() => {
-    const ids = Array.from(new Set(leadsState.map((l) => l.closer_profile_id).filter((x): x is string => !!x)));
+    const ids = Array.from(new Set(leadsDaVisao.map((l) => l.closer_profile_id).filter((x): x is string => !!x)));
     return ids.map((id) => ({ id, nome: nomePorId.get(id) ?? "—" })).sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [leadsState, nomePorId]);
+  }, [leadsDaVisao, nomePorId]);
 
   const buscaNormalizada = busca.trim().toLowerCase();
 
   const leadsFiltrados = useMemo(() => {
-    return leadsState.filter((l) => {
+    return leadsDaVisao.filter((l) => {
       if (filtroExercitos.size > 0) {
         const ex = l.closer_profile_id ? exercitoPorProfileId.get(l.closer_profile_id) : null;
         if (!ex || !filtroExercitos.has(ex)) return false;
@@ -147,7 +186,7 @@ export default function LeadsView({
       }
       return true;
     });
-  }, [leadsState, filtroExercitos, filtroClosers, filtroTemperaturas, filtroClassificacoes, buscaNormalizada, exercitoPorProfileId]);
+  }, [leadsDaVisao, filtroExercitos, filtroClosers, filtroTemperaturas, filtroClassificacoes, buscaNormalizada, exercitoPorProfileId]);
 
   const porColuna = useMemo(() => {
     const mapa = new Map<string, Lead[]>();
@@ -191,6 +230,27 @@ export default function LeadsView({
 
   return (
     <div className="space-y-4">
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setVisao("principal")}
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+            visao === "principal" ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-400 hover:border-gold/40"
+          }`}
+        >
+          Funil Principal ({totalPrincipal})
+        </button>
+        <button
+          type="button"
+          onClick={() => setVisao("reanalise")}
+          className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+            visao === "reanalise" ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-400 hover:border-gold/40"
+          }`}
+        >
+          ⚖️ Funil de Reanálise ({totalReanalise})
+        </button>
+      </div>
+
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
@@ -311,10 +371,19 @@ export default function LeadsView({
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="truncate text-stone-100">{l.lead_nome}</p>
-                        {/* Já deu certo (Assinado/Pago) — mostra a classificação do
-                            Forecast em vez do Forecast (temperatura), que deixou de
-                            fazer sentido (pedido do Diretor, 2026-08-27). */}
-                        {l.status_followup === "assinado" || l.status_followup === "pago" ? (
+                        {/* No funil de Reanálise a tag vira a data que o
+                            Jurídico deu, no lugar de temperatura/classificação
+                            — é a informação que importa nessa visão. */}
+                        {visao === "reanalise" && l.reanalise_data ? (
+                          <span
+                            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${corReanalise(l.reanalise_data)}`}
+                          >
+                            {dbr(l.reanalise_data)}
+                          </span>
+                        ) : l.status_followup === "assinado" || l.status_followup === "pago" ? (
+                          // Já deu certo (Assinado/Pago) — mostra a classificação
+                          // do Forecast em vez do Forecast (temperatura), que
+                          // deixou de fazer sentido (pedido do Diretor, 2026-08-27).
                           l.classificacao && (
                             <span
                               className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${BALDE_CORES[l.classificacao]}`}
@@ -441,6 +510,13 @@ function LeadModal({
   const [isPending, startTransition] = useTransition();
   const [salvo, setSalvo] = useState(false);
   const [lembreteCriado, setLembreteCriado] = useState(false);
+  // Segundo funil de Reanálise (migration 0062) — enviar pede a data que o
+  // Jurídico deu; resolver pergunta se liberou (volta pro funil) ou segue
+  // com um novo prazo (mesmo padrão dos outros toggles inline do modal).
+  const [enviandoReanalise, setEnviandoReanalise] = useState(false);
+  const [reanaliseDataInput, setReanaliseDataInput] = useState("");
+  const [decisaoReanalise, setDecisaoReanalise] = useState<"resolvida" | "nova_data" | null>(null);
+  const [novaDataReanalise, setNovaDataReanalise] = useState("");
 
   const precisaQualificar = ETAPAS_QUE_EXIGEM_QUALIFICACAO.has(status);
   const qualificacaoIncompleta = precisaQualificar && !(temperatura && Number(valorCredito) > 0);
@@ -502,6 +578,47 @@ function LeadModal({
     });
   }
 
+  function enviarReanalise() {
+    if (!reanaliseDataInput) return;
+    const fd = new FormData();
+    fd.set("lead_id", lead.id);
+    fd.set("lead_nome", lead.lead_nome);
+    fd.set("reanalise_data", reanaliseDataInput);
+    startTransition(async () => {
+      await enviarParaReanalise(fd);
+      onAtualizarLocal({ ...lead, em_reanalise: true, reanalise_data: reanaliseDataInput });
+      onFechar();
+      router.refresh();
+    });
+  }
+
+  function resolverComoResolvida() {
+    const fd = new FormData();
+    fd.set("lead_id", lead.id);
+    fd.set("resolvida", "true");
+    startTransition(async () => {
+      await resolverReanalise(fd);
+      onAtualizarLocal({ ...lead, em_reanalise: false, reanalise_data: null });
+      onFechar();
+      router.refresh();
+    });
+  }
+
+  function seguirEmReanalise() {
+    if (!novaDataReanalise) return;
+    const fd = new FormData();
+    fd.set("lead_id", lead.id);
+    fd.set("lead_nome", lead.lead_nome);
+    fd.set("resolvida", "false");
+    fd.set("nova_data", novaDataReanalise);
+    startTransition(async () => {
+      await resolverReanalise(fd);
+      onAtualizarLocal({ ...lead, reanalise_data: novaDataReanalise });
+      onFechar();
+      router.refresh();
+    });
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-6"
@@ -536,6 +653,57 @@ function LeadModal({
           {lead.valores_apresentados && <p>Valores apresentados: {lead.valores_apresentados}</p>}
         </div>
 
+        {lead.em_reanalise ? (
+          // Em reanálise: essa é a ÚNICA ação disponível até resolver — não
+          // faz sentido editar etapa/qualificação com o lead parado
+          // esperando o Jurídico (pedido do Diretor, 2026-08-28).
+          <div className="space-y-2 border-t border-imperium-line pt-3">
+            <p className="text-sm text-stone-300">
+              ⚖️ Em reanálise, prazo do Jurídico: <span className="text-gold-bright">{lead.reanalise_data ? dbr(lead.reanalise_data) : "—"}</span>
+            </p>
+            {decisaoReanalise === "nova_data" ? (
+              <div className="space-y-2">
+                <label className="mb-1 block text-[10px] uppercase tracking-wide text-stone-500">Nova data que o Jurídico deu</label>
+                <input
+                  type="date"
+                  value={novaDataReanalise}
+                  onChange={(e) => setNovaDataReanalise(e.target.value)}
+                  className="input-imp w-full text-sm"
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={seguirEmReanalise}
+                    disabled={isPending || !novaDataReanalise}
+                    className="btn-outline px-3 py-1.5 text-xs"
+                  >
+                    {isPending ? "..." : "Confirmar nova data"}
+                  </button>
+                  <button type="button" onClick={() => setDecisaoReanalise(null)} className="text-[11px] text-stone-500 hover:text-stone-300">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={resolverComoResolvida} disabled={isPending} className="btn-outline px-3 py-1.5 text-xs">
+                  {isPending ? "..." : "✅ Resolvida — voltar pro funil"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDecisaoReanalise("nova_data");
+                    setNovaDataReanalise(lead.reanalise_data ?? "");
+                  }}
+                  disabled={isPending}
+                  className="rounded border border-imperium-line px-3 py-1.5 text-xs text-stone-300 hover:border-gold/40"
+                >
+                  🔁 Segue em reanálise, novo prazo
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
         <div className="space-y-2 border-t border-imperium-line pt-3">
           <select value={status} onChange={(e) => setStatus(e.target.value)} className="input-imp w-full text-sm">
             {COLUNAS.map((c) => (
@@ -653,6 +821,35 @@ function LeadModal({
             </>
           )}
 
+          {ETAPAS_QUE_PODEM_IR_PARA_REANALISE.has(lead.status_followup) &&
+            (enviandoReanalise ? (
+              <div className="space-y-2 rounded-md border border-gold/30 bg-gold/5 p-2.5">
+                <label className="mb-1 block text-[10px] uppercase tracking-wide text-gold-bright">Data que o Jurídico deu pra reanálise</label>
+                <input
+                  type="date"
+                  value={reanaliseDataInput}
+                  onChange={(e) => setReanaliseDataInput(e.target.value)}
+                  className="input-imp w-full text-sm"
+                />
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={enviarReanalise} disabled={isPending || !reanaliseDataInput} className="btn-outline px-3 py-1.5 text-xs">
+                    {isPending ? "..." : "Confirmar envio"}
+                  </button>
+                  <button type="button" onClick={() => setEnviandoReanalise(false)} className="text-[11px] text-stone-500 hover:text-stone-300">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEnviandoReanalise(true)}
+                className="w-full rounded border border-imperium-line px-3 py-1.5 text-xs text-stone-300 hover:border-gold/40"
+              >
+                ⚖️ Enviar para Reanálise
+              </button>
+            ))}
+
           <div className="flex items-center justify-between gap-2">
             <button type="button" onClick={criarLembrete} disabled={isPending} className="text-[11px] text-stone-500 hover:text-gold-bright">
               {lembreteCriado ? "✓ Lembrete criado" : "🔔 Criar lembrete"}
@@ -667,6 +864,7 @@ function LeadModal({
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

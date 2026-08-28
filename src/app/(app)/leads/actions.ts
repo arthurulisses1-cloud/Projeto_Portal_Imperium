@@ -44,6 +44,11 @@ const ETAPAS_DE_PERDA_VALIDAS = new Set([
   "assinado",
 ]);
 
+// Reanálise (migration 0062, pedido do Diretor, 2026-08-28) só faz sentido
+// a partir de onde o compliance/jurídico entra em cena — mesmo corte já
+// usado pra duplicar os motivos de perda de Subido em CCB Enviada/Assinado.
+const ETAPAS_QUE_PODEM_IR_PARA_REANALISE = new Set(["subido", "ccb_enviada", "assinado"]);
+
 export async function salvarStatusLead(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -229,4 +234,117 @@ export async function criarLembreteDeLead(formData: FormData) {
 
   revalidatePath("/leads");
   revalidatePath("/tarefas");
+}
+
+// ---------- Funil de Reanálise (migration 0062) ----------
+// Segundo funil dentro da mesma tela /leads (pedido do Diretor,
+// 2026-08-28: "não crie outra aba"). O lead NUNCA muda status_followup
+// aqui — só ganha em_reanalise=true e some do funil principal, reaparece
+// no funil de reanálise até alguém marcar como resolvida. É por isso que
+// "Resolvida" não precisa restaurar etapa nenhuma: o lead nunca saiu de
+// onde estava.
+
+export async function enviarParaReanalise(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const leadId = String(formData.get("lead_id") ?? "");
+  const leadNome = String(formData.get("lead_nome") ?? "").trim();
+  const reanaliseData = String(formData.get("reanalise_data") ?? "").trim();
+  if (!leadId) throw new Error("Lead inválido.");
+  if (!reanaliseData) throw new Error("Informe a data que o Jurídico deu pra reanálise.");
+
+  const { data: atual, error: atualError } = await supabase
+    .from("entrevistas_leads")
+    .select("status_followup, em_reanalise")
+    .eq("id", leadId)
+    .maybeSingle();
+  if (atualError) throw new Error(atualError.message);
+  if (!atual) throw new Error("Lead não encontrado.");
+  if (atual.em_reanalise) throw new Error("Esse lead já está em reanálise.");
+  if (!ETAPAS_QUE_PODEM_IR_PARA_REANALISE.has(atual.status_followup)) {
+    throw new Error("Só é possível enviar pra reanálise a partir de Subido, CCB Enviada ou Assinado.");
+  }
+
+  const { error } = await supabase
+    .from("entrevistas_leads")
+    .update({ em_reanalise: true, reanalise_data: reanaliseData })
+    .eq("id", leadId);
+  if (error) throw new Error(error.message);
+
+  // Lembrete automático (pedido do Diretor: "já é gerada uma tarefa pra
+  // lembrete futuro") — mesmo padrão de criarLembreteDeLead, mas com due_date
+  // = data que o Jurídico deu, não hoje. Título com prefixo fixo "Reanálise:"
+  // pra resolverParaReanalise() saber depois qual lembrete fechar.
+  const { error: taskError } = await supabase.from("tasks").insert({
+    profile_id: user.id,
+    titulo: `Reanálise: ${leadNome || "lead"}`,
+    due_date: reanaliseData,
+    coluna: "afazer",
+    prioridade: "normal",
+    lead_id: leadId,
+  });
+  if (taskError) throw new Error(taskError.message);
+
+  revalidatePath("/leads");
+  revalidatePath("/tarefas");
+  revalidatePath("/");
+}
+
+// Quando a tarefa de lembrete vence, o closer volta aqui e resolve: OU o
+// Jurídico liberou (volta pro funil principal, sem mexer em status_followup)
+// OU segue em reanálise com uma nova data (fecha o lembrete antigo, abre um
+// novo com o novo prazo).
+export async function resolverReanalise(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const leadId = String(formData.get("lead_id") ?? "");
+  const leadNome = String(formData.get("lead_nome") ?? "").trim();
+  const resolvida = String(formData.get("resolvida") ?? "") === "true";
+  const novaData = String(formData.get("nova_data") ?? "").trim();
+  if (!leadId) throw new Error("Lead inválido.");
+  if (!resolvida && !novaData) throw new Error("Informe a nova data que o Jurídico deu.");
+
+  // Fecha o lembrete de reanálise ainda aberto pra esse lead — resolvida ou
+  // não, o lembrete antigo já cumpriu o papel (avisar que o dia chegou).
+  // Filtra pelo prefixo do título pra não fechar OUTROS lembretes/tarefas
+  // que por acaso estejam ligados ao mesmo lead (ex: "Follow-up: ...").
+  await supabase
+    .from("tasks")
+    .update({ coluna: "concluido" })
+    .eq("lead_id", leadId)
+    .ilike("titulo", "Reanálise:%")
+    .neq("coluna", "concluido");
+
+  if (resolvida) {
+    const { error } = await supabase
+      .from("entrevistas_leads")
+      .update({ em_reanalise: false, reanalise_data: null })
+      .eq("id", leadId);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await supabase.from("entrevistas_leads").update({ reanalise_data: novaData }).eq("id", leadId);
+    if (error) throw new Error(error.message);
+
+    const { error: taskError } = await supabase.from("tasks").insert({
+      profile_id: user.id,
+      titulo: `Reanálise: ${leadNome || "lead"}`,
+      due_date: novaData,
+      coluna: "afazer",
+      prioridade: "normal",
+      lead_id: leadId,
+    });
+    if (taskError) throw new Error(taskError.message);
+  }
+
+  revalidatePath("/leads");
+  revalidatePath("/tarefas");
+  revalidatePath("/");
 }
