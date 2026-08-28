@@ -161,6 +161,47 @@ export async function alternarMotivoPerdaAtivo(formData: FormData) {
   revalidatePath("/leads");
 }
 
+// Editar nome/etapa de um motivo já cadastrado (pedido do Diretor,
+// 2026-08-28: "dê opção de remover, adicionar ou editar cada motivo").
+export async function editarMotivoPerda(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const id = String(formData.get("id") ?? "");
+  const nome = String(formData.get("nome") ?? "").trim();
+  const etapaRaw = String(formData.get("etapa") ?? "").trim();
+  if (!id) throw new Error("Motivo inválido.");
+  if (!nome) throw new Error("Descreva o motivo.");
+  const etapa = etapaRaw && ETAPAS_DE_PERDA_VALIDAS.has(etapaRaw) ? etapaRaw : null;
+
+  const { error } = await supabase.from("motivos_perda_lead").update({ nome, etapa }).eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/leads");
+}
+
+// Excluir de vez (diferente de "Desativar", que só esconde da escolha mas
+// preserva histórico) — barrado pelo próprio Postgres (FK) se algum lead já
+// usa esse motivo; nesse caso orienta a desativar em vez de excluir.
+export async function excluirMotivoPerda(formData: FormData) {
+  const supabase = await createClient();
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("Motivo inválido.");
+
+  const { error } = await supabase.from("motivos_perda_lead").delete().eq("id", id);
+  if (error) {
+    if (error.code === "23503") {
+      throw new Error("Esse motivo já foi usado em algum lead perdido — desative em vez de excluir, pra não perder o histórico.");
+    }
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/leads");
+}
+
 // "Linkar uma atividade a um lead" (pedido do Diretor, 2026-08-27) — cria
 // direto um lembrete no Kanban de Tarefas já vinculado a esse lead
 // (tasks.lead_id, migration 0053), sem precisar ir até /tarefas preencher
