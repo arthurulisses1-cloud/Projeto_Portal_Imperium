@@ -159,33 +159,56 @@ export default function CampanhasFeed({
           const max = Math.max(...c.participantes.map((p) => p.valor), c.metaValor ?? 0, 1);
           const comentarios = comentariosPorCampanha.get(c.id) ?? [];
 
-          // Duelo 1x1 (alvo="individual" com exatamente 2 participantes) —
-          // pedido do Diretor (2026-08-27): "ao invés de eu colocar fotos
-          // nos duelos, coloca a foto de quem tá duelando, um na esquerda e
-          // um na direita" — em vez da imagem genérica da campanha (que
-          // ainda existe pros outros tipos de campanha).
-          const duelo = c.alvo === "individual" && c.participantes.length === 2 ? c.participantes : null;
+          // Duelo entre pessoas (alvo="individual") — pedido do Diretor
+          // (2026-08-27): "ao invés de eu colocar fotos nos duelos, coloca
+          // a foto de quem tá duelando" — vale pra 2, 3 ou mais duelistas
+          // (extensão pedida 2026-08-28), em vez da imagem genérica da
+          // campanha (que ainda existe pros outros tipos de campanha).
+          const duelo = c.alvo === "individual" ? c.participantes : null;
 
           return (
             <div key={c.id} id={`campanha-${c.id}`} className="scroll-mt-20 overflow-hidden rounded-lg border border-gold/30">
               {duelo ? (
                 <div className="relative flex items-center bg-imperium-bg/60">
                   {duelo.map((p, i) => (
-                    <div key={p.refId} className={`flex flex-1 flex-col items-center gap-1.5 py-3 ${i === 0 ? "border-r border-gold/20" : ""}`}>
-                      {p.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.avatarUrl} alt={p.label} className="h-14 w-14 rounded-full border border-gold/40 object-cover" />
-                      ) : (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gold/40 bg-imperium-surface text-sm text-gold">
-                          {iniciais(p.label)}
-                        </div>
-                      )}
-                      <span className="max-w-[90%] truncate text-[11px] text-stone-300">{p.label}</span>
+                    <div
+                      key={p.refId}
+                      className={`relative flex flex-1 flex-col items-center justify-center gap-1.5 overflow-hidden py-3 ${
+                        i < duelo.length - 1 ? "border-r border-gold/20" : ""
+                      }`}
+                    >
+                      {/* Fundo metade Tribo / metade Exército de cada
+                          duelista (pedido do Diretor, 2026-08-28) — por
+                          baixo do avatar, discreto (opacidade baixa) pra
+                          não brigar com a foto e o nome por cima. */}
+                      <div className="absolute inset-0 flex">
+                        <div
+                          className="h-full w-1/2 bg-cover bg-center opacity-25"
+                          style={p.triboCrestUrl ? { backgroundImage: `url(${p.triboCrestUrl})` } : undefined}
+                        />
+                        <div
+                          className="h-full w-1/2 bg-cover bg-center opacity-25"
+                          style={p.exercitoCrestUrl ? { backgroundImage: `url(${p.exercitoCrestUrl})` } : undefined}
+                        />
+                      </div>
+                      <div className="relative z-10 flex flex-col items-center gap-1.5">
+                        {p.avatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.avatarUrl} alt={p.label} className="h-14 w-14 rounded-full border border-gold/40 object-cover" />
+                        ) : (
+                          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gold/40 bg-imperium-surface text-sm text-gold">
+                            {iniciais(p.label)}
+                          </div>
+                        )}
+                        <span className="max-w-[90%] truncate text-[11px] text-stone-300">{p.label}</span>
+                      </div>
                     </div>
                   ))}
-                  <div className="absolute left-1/2 top-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-gold/50 bg-imperium-surface">
-                    <IconSwords className="h-3 w-3 text-gold" />
-                  </div>
+                  {duelo.length === 2 && (
+                    <div className="absolute left-1/2 top-1/2 z-10 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-gold/50 bg-imperium-surface">
+                      <IconSwords className="h-3 w-3 text-gold" />
+                    </div>
+                  )}
                 </div>
               ) : (
                 c.imagemUrl && (

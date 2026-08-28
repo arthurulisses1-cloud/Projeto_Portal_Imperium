@@ -10,8 +10,14 @@ export type CampanhaParticipanteProgresso = {
   // Só preenchido pra alvo="individual" (refId = profile_id) — usado pra
   // mostrar a foto de quem tá duelando no card (pedido do Diretor,
   // 2026-08-27: "ao invés de eu colocar fotos nos duelos, coloca a foto de
-  // quem tá duelando"), em vez de uma imagem genérica de campanha.
+  // quem tá duelando"), em vez de uma imagem genérica de campanha. Vale
+  // pra duelo de 2, 3 ou mais pessoas (pedido do Diretor, 2026-08-28).
   avatarUrl?: string | null;
+  // Fundo do card do duelo, metade brasão da Tribo / metade brasão do
+  // Exército de cada duelista (mesmo pedido, 2026-08-28) — null quando a
+  // Tribo não tem logo cadastrada, ou a pessoa não tem Exército resolvido.
+  triboCrestUrl?: string | null;
+  exercitoCrestUrl?: string | null;
 };
 
 export type ImagemPosicao = "top" | "center" | "bottom";
@@ -116,25 +122,43 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
 
   const { data: pessoas } = await supabase
     .from("profiles")
-    .select("id, tribo_id, tribo:tribos!profiles_tribo_id_fkey(exercito_id)")
+    .select("id, tribo_id, tribo:tribos!profiles_tribo_id_fkey(exercito_id, logo_url)")
     .in("role", ["sdr", "closer", "lider"]);
   // Legado do Exército não tem tribo_id (lidera o time inteiro, não uma
   // Tribo) — sem esse fallback, uma operação fechada por ele "perde" o
   // time (mesma regra usada em forecast/page.tsx e guerra.ts).
-  const { data: exercitos } = await supabase.from("exercitos").select("id, legado_id");
+  const { data: exercitos } = await supabase.from("exercitos").select("id, nome, legado_id");
   const exercitoIdPorLegadoId = new Map((exercitos ?? []).map((e) => [e.legado_id, e.id]));
   const triboIdPorProfileId = new Map((pessoas ?? []).map((p) => [p.id, p.tribo_id]));
   const exercitoIdPorProfileId = new Map(
     (pessoas ?? []).map((p) => {
-      const tribo = p.tribo as unknown as { exercito_id: string } | null;
+      const tribo = p.tribo as unknown as { exercito_id: string; logo_url: string | null } | null;
       return [p.id, tribo?.exercito_id ?? exercitoIdPorLegadoId.get(p.id) ?? null];
     })
   );
   const todosIds = (pessoas ?? []).map((p) => p.id);
 
-  // Avatares dos duelos 1x1 (pedido do Diretor, 2026-08-27) — só busca pra
-  // participantes de campanha alvo="individual" (refId = profile_id ali;
-  // em grupo_rank o refId é um Cargo, não uma pessoa, não se aplica).
+  // Fundo dos cards de duelo (pedido do Diretor, 2026-08-28: "preencha o
+  // fundo com metade bandeira da tribo, metade bandeira do exército") — a
+  // Tribo tem logo própria (opcional, subida em /tribo); o Exército só tem
+  // 2 hoje, sem coluna no banco pra isso, então o brasão é um arquivo fixo
+  // (mesmo par já usado no confronto do Mural, ver src/app/(app)/page.tsx).
+  const EXERCITO_CRESTS: Record<string, string> = {
+    "Templários": "/crests/templarios.jpg",
+    Maximus: "/crests/maximus.jpg",
+  };
+  const exercitoNomePorId = new Map((exercitos ?? []).map((e) => [e.id, e.nome]));
+  const triboLogoPorProfileId = new Map(
+    (pessoas ?? []).map((p) => {
+      const tribo = p.tribo as unknown as { exercito_id: string; logo_url: string | null } | null;
+      return [p.id, tribo?.logo_url ?? null];
+    })
+  );
+
+  // Avatares dos duelos entre pessoas (pedido do Diretor: 2026-08-27 pra
+  // duelo de 2, estendido 2026-08-28 pra 3+) — só busca pra participantes
+  // de campanha alvo="individual" (refId = profile_id ali; em grupo_rank o
+  // refId é um Cargo, não uma pessoa, não se aplica).
   const idsParticipantesIndividuais = Array.from(
     new Set(
       campanhas
@@ -275,7 +299,12 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
     }
 
     if (alvo === "individual") {
-      participantes = participantes.map((p) => ({ ...p, avatarUrl: avatarPorProfileId.get(p.refId) ?? null }));
+      participantes = participantes.map((p) => ({
+        ...p,
+        avatarUrl: avatarPorProfileId.get(p.refId) ?? null,
+        triboCrestUrl: triboLogoPorProfileId.get(p.refId) ?? null,
+        exercitoCrestUrl: EXERCITO_CRESTS[exercitoNomePorId.get(exercitoIdPorProfileId.get(p.refId) ?? "") ?? ""] ?? null,
+      }));
     }
 
     return {
