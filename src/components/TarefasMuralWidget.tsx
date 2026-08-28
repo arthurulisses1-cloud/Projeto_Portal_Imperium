@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import TarefasMuralQuickAdd from "./TarefasMuralQuickAdd";
+import TarefasMuralItem from "./TarefasMuralItem";
 
 // Widget próprio do Mural pras suas tarefas de hoje/atrasadas — pedido do
 // Diretor (2026-08-27): fora da Central de Notificações de propósito (é
@@ -39,22 +40,17 @@ export default async function TarefasMuralWidget({ userId }: { userId: string })
       {tarefas.length > 0 ? (
         <ul className="mt-4 space-y-1.5">
           {atrasadas.map((t) => (
-            <li key={t.id} className="flex items-center justify-between text-sm">
-              <span className="text-stone-200">
-                {t.prioridade === "critica" && "🔥 "}
-                {t.titulo}
-              </span>
-              <span className="text-wine-bright">Atrasada — {new Date(t.due_date! + "T00:00:00").toLocaleDateString("pt-BR")}</span>
-            </li>
+            <TarefasMuralItem
+              key={t.id}
+              id={t.id}
+              titulo={t.titulo}
+              prioridade={t.prioridade}
+              situacao="atrasada"
+              prazoLabel={`Atrasada — ${new Date(t.due_date! + "T00:00:00").toLocaleDateString("pt-BR")}`}
+            />
           ))}
           {deHoje.map((t) => (
-            <li key={t.id} className="flex items-center justify-between text-sm">
-              <span className="text-stone-200">
-                {t.prioridade === "critica" && "🔥 "}
-                {t.titulo}
-              </span>
-              <span className="text-gold">Hoje</span>
-            </li>
+            <TarefasMuralItem key={t.id} id={t.id} titulo={t.titulo} prioridade={t.prioridade} situacao="hoje" prazoLabel="Hoje" />
           ))}
         </ul>
       ) : (

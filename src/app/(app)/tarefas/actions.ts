@@ -115,6 +115,10 @@ export async function moverTarefa(formData: FormData) {
   const { error } = await supabase.from("tasks").update({ coluna }).eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/tarefas");
+  // Também usada pelo check de "concluída" direto no widget do Mural
+  // (TarefasMuralItem) — sem isso a tarefa continuava aparecendo lá até a
+  // pessoa navegar pra outra aba e voltar.
+  revalidatePath("/");
 }
 
 // "Adiar" — empurra o prazo em 1 dia (Trello-style quick action). Se não
