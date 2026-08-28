@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { criarMotivoPerda, alternarMotivoPerdaAtivo, editarMotivoPerda, excluirMotivoPerda } from "@/app/(app)/leads/actions";
 import Card from "@/components/ui/Card";
@@ -19,10 +19,12 @@ const ETAPAS_DE_PERDA = [
   { valor: "assinado", label: "Assinado" },
 ] as const;
 
-function etapaLabel(etapa: string | null) {
-  if (!etapa) return "Qualquer etapa";
-  return ETAPAS_DE_PERDA.find((e) => e.valor === etapa)?.label ?? etapa;
-}
+// "todas" = grupos recolhidos (evita a lista inteira de uma vez — pedido do
+// Diretor, 2026-08-28: "visão tá muito bagunçada, tô vendo todos de uma
+// vez"); "universal" = etapa null; valor de ETAPAS_DE_PERDA = só aquele grupo.
+type FiltroEtapa = "todas" | "universal" | (typeof ETAPAS_DE_PERDA)[number]["valor"];
+
+const GRUPOS = [{ valor: "universal" as const, label: "Qualquer etapa" }, ...ETAPAS_DE_PERDA];
 
 export default function MotivosPerdaForm({ motivos }: { motivos: MotivoPerdaLinha[] }) {
   const router = useRouter();
@@ -31,6 +33,13 @@ export default function MotivosPerdaForm({ motivos }: { motivos: MotivoPerdaLinh
   const [nomeEdicao, setNomeEdicao] = useState("");
   const [etapaEdicao, setEtapaEdicao] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<FiltroEtapa>("todas");
+
+  const contagemPorGrupo = useMemo(() => {
+    const mapa = new Map<string, number>();
+    for (const m of motivos) mapa.set(m.etapa ?? "universal", (mapa.get(m.etapa ?? "universal") ?? 0) + 1);
+    return mapa;
+  }, [motivos]);
 
   function onAlternar(m: MotivoPerdaLinha) {
     const fd = new FormData();
@@ -78,6 +87,53 @@ export default function MotivosPerdaForm({ motivos }: { motivos: MotivoPerdaLinh
     });
   }
 
+  function Linha({ m }: { m: MotivoPerdaLinha }) {
+    if (editandoId === m.id) {
+      return (
+        <li className="flex flex-wrap items-end gap-2 rounded border border-gold/30 bg-gold/5 p-2">
+          <div className="flex-1">
+            <input value={nomeEdicao} onChange={(e) => setNomeEdicao(e.target.value)} className="input-imp w-full text-sm" />
+          </div>
+          <select value={etapaEdicao} onChange={(e) => setEtapaEdicao(e.target.value)} className="input-imp w-44 text-sm">
+            <option value="">Qualquer etapa</option>
+            {ETAPAS_DE_PERDA.map((e) => (
+              <option key={e.valor} value={e.valor}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={isPending || !nomeEdicao.trim()}
+            onClick={() => salvarEdicao(m.id)}
+            className="btn-gold px-2.5 py-1.5 text-xs"
+          >
+            Salvar
+          </button>
+          <button type="button" onClick={() => setEditandoId(null)} className="text-[11px] text-stone-500 hover:text-stone-300">
+            Cancelar
+          </button>
+        </li>
+      );
+    }
+    return (
+      <li className="flex items-center justify-between gap-2 text-sm">
+        <span className={`min-w-0 truncate ${m.ativo ? "text-stone-200" : "text-stone-600 line-through"}`}>{m.nome}</span>
+        <span className="flex shrink-0 items-center gap-2">
+          <button type="button" onClick={() => iniciarEdicao(m)} className="text-[11px] text-stone-500 hover:text-gold-bright">
+            Editar
+          </button>
+          <button type="button" disabled={isPending} onClick={() => onAlternar(m)} className="text-[11px] text-stone-500 hover:text-gold-bright">
+            {m.ativo ? "Desativar" : "Reativar"}
+          </button>
+          <button type="button" disabled={isPending} onClick={() => onExcluir(m.id)} className="text-[11px] text-stone-500 hover:text-wine-bright">
+            Excluir
+          </button>
+        </span>
+      </li>
+    );
+  }
+
   return (
     <details className="card-imp group">
       <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
@@ -85,80 +141,69 @@ export default function MotivosPerdaForm({ motivos }: { motivos: MotivoPerdaLinh
         <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
       </summary>
       <div className="mt-4 space-y-4">
-        {erro && (
-          <p className="rounded border border-wine/40 bg-wine/10 px-3 py-2 text-xs text-wine-bright">{erro}</p>
-        )}
+        {erro && <p className="rounded border border-wine/40 bg-wine/10 px-3 py-2 text-xs text-wine-bright">{erro}</p>}
 
         <Card title="Cadastrados">
           {motivos.length === 0 ? (
             <p className="text-sm text-stone-500">Nenhum motivo cadastrado ainda.</p>
           ) : (
-            <ul className="space-y-1.5">
-              {motivos.map((m) =>
-                editandoId === m.id ? (
-                  <li key={m.id} className="flex flex-wrap items-end gap-2 rounded border border-gold/30 bg-gold/5 p-2">
-                    <div className="flex-1">
-                      <input
-                        value={nomeEdicao}
-                        onChange={(e) => setNomeEdicao(e.target.value)}
-                        className="input-imp w-full text-sm"
-                      />
-                    </div>
-                    <select value={etapaEdicao} onChange={(e) => setEtapaEdicao(e.target.value)} className="input-imp w-44 text-sm">
-                      <option value="">Qualquer etapa</option>
-                      {ETAPAS_DE_PERDA.map((e) => (
-                        <option key={e.valor} value={e.valor}>
-                          {e.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={isPending || !nomeEdicao.trim()}
-                      onClick={() => salvarEdicao(m.id)}
-                      className="btn-gold px-2.5 py-1.5 text-xs"
-                    >
-                      Salvar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEditandoId(null)}
-                      className="text-[11px] text-stone-500 hover:text-stone-300"
-                    >
-                      Cancelar
-                    </button>
-                  </li>
-                ) : (
-                  <li key={m.id} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="min-w-0 truncate">
-                      <span className={m.ativo ? "text-stone-200" : "text-stone-600 line-through"}>{m.nome}</span>
-                      <span className="ml-2 rounded-full bg-imperium-bg px-1.5 py-0.5 text-[10px] text-stone-500">{etapaLabel(m.etapa)}</span>
-                    </span>
-                    <span className="flex shrink-0 items-center gap-2">
-                      <button type="button" onClick={() => iniciarEdicao(m)} className="text-[11px] text-stone-500 hover:text-gold-bright">
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isPending}
-                        onClick={() => onAlternar(m)}
-                        className="text-[11px] text-stone-500 hover:text-gold-bright"
-                      >
-                        {m.ativo ? "Desativar" : "Reativar"}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isPending}
-                        onClick={() => onExcluir(m.id)}
-                        className="text-[11px] text-stone-500 hover:text-wine-bright"
-                      >
-                        Excluir
-                      </button>
-                    </span>
-                  </li>
-                )
+            <>
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setFiltro("todas")}
+                  className={`rounded-full px-2.5 py-1 text-[11px] transition ${
+                    filtro === "todas" ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-400 hover:border-gold/40"
+                  }`}
+                >
+                  Todas ({motivos.length})
+                </button>
+                {GRUPOS.map((g) => (
+                  <button
+                    key={g.valor}
+                    type="button"
+                    onClick={() => setFiltro(g.valor)}
+                    className={`rounded-full px-2.5 py-1 text-[11px] transition ${
+                      filtro === g.valor ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-400 hover:border-gold/40"
+                    }`}
+                  >
+                    {g.label} ({contagemPorGrupo.get(g.valor) ?? 0})
+                  </button>
+                ))}
+              </div>
+
+              {filtro === "todas" ? (
+                // Agrupado e recolhido por padrão — resolve a bagunça de ver
+                // os 38 motivos de uma vez só; abre grupo por grupo.
+                <div className="space-y-1.5">
+                  {GRUPOS.map((g) => {
+                    const doGrupo = motivos.filter((m) => (m.etapa ?? "universal") === g.valor);
+                    if (doGrupo.length === 0) return null;
+                    return (
+                      <details key={g.valor} className="group/etapa rounded border border-imperium-line">
+                        <summary className="flex cursor-pointer list-none items-center justify-between px-2.5 py-1.5 text-xs text-stone-300 hover:text-gold-bright [&::-webkit-details-marker]:hidden">
+                          <span>
+                            {g.label} <span className="text-stone-600">({doGrupo.length})</span>
+                          </span>
+                          <span className="text-[9px] text-stone-500 transition group-open/etapa:rotate-180">▾</span>
+                        </summary>
+                        <ul className="space-y-1.5 border-t border-imperium-line p-2.5">
+                          {doGrupo.map((m) => (
+                            <Linha key={m.id} m={m} />
+                          ))}
+                        </ul>
+                      </details>
+                    );
+                  })}
+                </div>
+              ) : (
+                <ul className="space-y-1.5">
+                  {motivos.filter((m) => (m.etapa ?? "universal") === filtro).map((m) => (
+                    <Linha key={m.id} m={m} />
+                  ))}
+                </ul>
               )}
-            </ul>
+            </>
           )}
         </Card>
 
