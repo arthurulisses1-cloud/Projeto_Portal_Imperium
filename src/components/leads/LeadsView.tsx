@@ -25,6 +25,10 @@ export type Lead = {
   observacao: string | null;
   motivo_perda_id: string | null;
   motivo_perda_obs: string | null;
+  // De qual etapa o lead saiu quando foi marcado Perdido (migration 0059,
+  // pedido do Diretor, 2026-08-28) — define quais motivos aparecem pra
+  // escolher, e fica registrado pra sempre pra análise depois.
+  motivo_perda_etapa: string | null;
   temperatura: "frio" | "morno" | "quente" | null;
   valor_credito: number | null;
   // Mesma classificação do Forecast (aguardando pagamento, pendência,
@@ -33,7 +37,19 @@ export type Lead = {
   // (2026-08-27). null pra quem ainda não chegou lá, ou não achou match.
   classificacao: Balde | null;
 };
-export type MotivoPerda = { id: string; nome: string; ativo: boolean };
+// etapa null = motivo universal, aparece em qualquer etapa (migration 0059).
+export type MotivoPerda = { id: string; nome: string; ativo: boolean; etapa: string | null };
+
+// Etapas de onde um lead pode "cair" — tudo antes de Perdido/Pago, que já
+// são saídas em si. Mesma lista de ETAPAS_DE_PERDA_VALIDAS em actions.ts.
+const ETAPAS_DE_PERDA = [
+  { valor: "validacao_entrevista", label: "Validação de Entrevista" },
+  { valor: "entrevista_validada", label: "Entrevista Validada" },
+  { valor: "fechamento", label: "Fechamento" },
+  { valor: "subido", label: "Subido" },
+  { valor: "ccb_enviada", label: "CCB Enviada" },
+  { valor: "assinado", label: "Assinado" },
+] as const;
 
 const BALDE_CORES: Record<Balde, string> = {
   pago: "bg-success-bright",
@@ -412,6 +428,14 @@ function LeadModal({
   const [observacao, setObservacao] = useState(lead.observacao ?? "");
   const [motivoId, setMotivoId] = useState(lead.motivo_perda_id ?? "");
   const [motivoObs, setMotivoObs] = useState(lead.motivo_perda_obs ?? "");
+  // Etapa de onde o lead saiu quando foi perdido — por padrão, a etapa em
+  // que ele estava ANTES de abrir esse modal (lead.status_followup ainda
+  // não mudou pra "perdido" nesse ponto, é literalmente de onde ele caiu),
+  // editável se a pessoa quiser corrigir.
+  const [etapaPerdida, setEtapaPerdida] = useState(
+    lead.motivo_perda_etapa ?? (ETAPAS_DE_PERDA.some((e) => e.valor === lead.status_followup) ? lead.status_followup : "")
+  );
+  const motivosDaEtapa = motivosPerda.filter((m) => !m.etapa || m.etapa === etapaPerdida);
   const [temperatura, setTemperatura] = useState(lead.temperatura ?? "");
   const [valorCredito, setValorCredito] = useState(lead.valor_credito != null ? String(lead.valor_credito) : "");
   const [isPending, startTransition] = useTransition();
@@ -423,14 +447,21 @@ function LeadModal({
 
   function salvarStatus() {
     if (status === "perdido") {
-      if (!motivoId) return;
+      if (!etapaPerdida || !motivoId) return;
       const fd = new FormData();
       fd.set("lead_id", lead.id);
       fd.set("motivo_perda_id", motivoId);
       fd.set("motivo_perda_obs", motivoObs);
+      fd.set("motivo_perda_etapa", etapaPerdida);
       startTransition(async () => {
         await salvarPerdaLead(fd);
-        onAtualizarLocal({ ...lead, status_followup: "perdido", motivo_perda_id: motivoId, motivo_perda_obs: motivoObs || null });
+        onAtualizarLocal({
+          ...lead,
+          status_followup: "perdido",
+          motivo_perda_id: motivoId,
+          motivo_perda_obs: motivoObs || null,
+          motivo_perda_etapa: etapaPerdida,
+        });
         setSalvo(true);
         setTimeout(() => setSalvo(false), 1500);
         router.refresh();
@@ -516,16 +547,59 @@ function LeadModal({
 
           {status === "perdido" ? (
             <>
-              <select value={motivoId} onChange={(e) => setMotivoId(e.target.value)} className="input-imp w-full text-sm">
-                <option value="" disabled>
-                  Motivo da perda...
-                </option>
-                {motivosPerda.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.nome}
+              <div>
+                <label className="mb-1 block text-[10px] uppercase tracking-wide text-stone-500">De qual etapa foi perdido?</label>
+                <select
+                  value={etapaPerdida}
+                  onChange={(e) => {
+                    const novaEtapa = e.target.value;
+                    setEtapaPerdida(novaEtapa);
+                    // Motivo escolhido pode não pertencer mais à nova etapa
+                    // (ou era universal e continua valendo) — só limpa se de
+                    // fato não bater mais.
+                    const aindaValido = motivosPerda.some((m) => m.id === motivoId && (!m.etapa || m.etapa === novaEtapa));
+                    if (!aindaValido) setMotivoId("");
+                  }}
+                  className="input-imp w-full text-sm"
+                >
+                  <option value="" disabled>
+                    Escolha a etapa...
                   </option>
-                ))}
-              </select>
+                  {ETAPAS_DE_PERDA.map((e) => (
+                    <option key={e.valor} value={e.valor}>
+                      {e.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {etapaPerdida && (
+                <div>
+                  <label className="mb-1 block text-[10px] uppercase tracking-wide text-stone-500">Motivo da perda</label>
+                  {motivosDaEtapa.length === 0 ? (
+                    <p className="text-[11px] text-warning-bright">
+                      Nenhum motivo cadastrado pra essa etapa ainda — peça pro Diretor cadastrar em &quot;Motivos de Perda&quot;.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {motivosDaEtapa.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setMotivoId(m.id)}
+                          className={`rounded-full px-2.5 py-1 text-xs transition ${
+                            motivoId === m.id ? "bg-wine text-white" : "border border-imperium-line text-stone-400 hover:border-wine/50"
+                          }`}
+                        >
+                          {motivoId === m.id ? "✓ " : ""}
+                          {m.nome}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <textarea
                 value={motivoObs}
                 onChange={(e) => setMotivoObs(e.target.value)}
@@ -533,9 +607,6 @@ function LeadModal({
                 rows={2}
                 className="input-imp w-full text-sm"
               />
-              {motivosPerda.length === 0 && (
-                <p className="text-[11px] text-warning-bright">Nenhum motivo cadastrado ainda — peça pro Diretor cadastrar em &quot;Motivos de Perda&quot;.</p>
-              )}
             </>
           ) : (
             <>
@@ -589,7 +660,7 @@ function LeadModal({
             <button
               type="button"
               onClick={salvarStatus}
-              disabled={isPending || (status === "perdido" && !motivoId) || qualificacaoIncompleta}
+              disabled={isPending || (status === "perdido" && (!etapaPerdida || !motivoId)) || qualificacaoIncompleta}
               className="btn-outline px-3 py-1.5 text-xs"
             >
               {isPending ? "..." : salvo ? <IconCheck className="mx-auto h-3 w-3" /> : "Salvar"}

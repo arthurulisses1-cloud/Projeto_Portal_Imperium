@@ -39,11 +39,11 @@ export default async function LeadsPage() {
     supabase
       .from("entrevistas_leads")
       .select(
-        "id, data, lead_nome, lead_telefone, sdr_profile_id, closer_profile_id, canal, origem, entrevistado, estado_civil, decisor, dores, documentacao_ciente, valores_apresentados, status_followup, observacao, motivo_perda_id, motivo_perda_obs, temperatura, valor_credito"
+        "id, data, lead_nome, lead_telefone, sdr_profile_id, closer_profile_id, canal, origem, entrevistado, estado_civil, decisor, dores, documentacao_ciente, valores_apresentados, status_followup, observacao, motivo_perda_id, motivo_perda_obs, motivo_perda_etapa, temperatura, valor_credito"
       )
       .gte("data", inicioMes)
       .order("data", { ascending: false }),
-    supabase.from("motivos_perda_lead").select("id, nome, ativo").order("ordem"),
+    supabase.from("motivos_perda_lead").select("id, nome, ativo, etapa").order("ordem"),
   ]);
   logErroSupabase("LeadsPage: entrevistas_leads", error);
 

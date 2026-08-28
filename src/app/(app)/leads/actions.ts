@@ -32,6 +32,18 @@ const TEMPERATURAS_VALIDAS = new Set(["frio", "morno", "quente"]);
 // sem passar pelas etapas anteriores.
 const ETAPAS_QUE_EXIGEM_QUALIFICACAO = new Set(["fechamento", "subido", "ccb_enviada", "assinado", "pago"]);
 
+// Etapas de onde um lead pode "cair" — tudo antes de Perdido/Pago, que já
+// são saídas em si (migration 0059, pedido do Diretor, 2026-08-28: motivo
+// de perda específico por etapa).
+const ETAPAS_DE_PERDA_VALIDAS = new Set([
+  "validacao_entrevista",
+  "entrevista_validada",
+  "fechamento",
+  "subido",
+  "ccb_enviada",
+  "assinado",
+]);
+
 export async function salvarStatusLead(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -92,7 +104,9 @@ export async function salvarPerdaLead(formData: FormData) {
   const leadId = String(formData.get("lead_id") ?? "");
   const motivoId = String(formData.get("motivo_perda_id") ?? "").trim();
   const motivoObs = String(formData.get("motivo_perda_obs") ?? "").trim();
+  const etapaRaw = String(formData.get("motivo_perda_etapa") ?? "").trim();
   if (!leadId) throw new Error("Lead inválido.");
+  if (!etapaRaw || !ETAPAS_DE_PERDA_VALIDAS.has(etapaRaw)) throw new Error("Escolha de qual etapa o lead foi perdido.");
   if (!motivoId) throw new Error("Selecione um motivo de perda.");
 
   const { error } = await supabase
@@ -101,6 +115,7 @@ export async function salvarPerdaLead(formData: FormData) {
       status_followup: "perdido",
       motivo_perda_id: motivoId,
       motivo_perda_obs: motivoObs || null,
+      motivo_perda_etapa: etapaRaw,
       status_por: user.id,
       status_em: new Date().toISOString(),
     })
@@ -122,9 +137,13 @@ export async function criarMotivoPerda(formData: FormData) {
   if (!user) throw new Error("Não autenticado.");
 
   const nome = String(formData.get("nome") ?? "").trim();
+  const etapaRaw = String(formData.get("etapa") ?? "").trim();
   if (!nome) throw new Error("Descreva o motivo.");
+  // Vazio = motivo universal (aparece em qualquer etapa) — só valida quando
+  // uma etapa específica foi escolhida.
+  const etapa = etapaRaw && ETAPAS_DE_PERDA_VALIDAS.has(etapaRaw) ? etapaRaw : null;
 
-  const { error } = await supabase.from("motivos_perda_lead").insert({ nome, created_by: user.id });
+  const { error } = await supabase.from("motivos_perda_lead").insert({ nome, etapa, created_by: user.id });
   if (error) throw new Error(error.message);
 
   revalidatePath("/leads");
