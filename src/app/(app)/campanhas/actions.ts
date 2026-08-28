@@ -2,12 +2,29 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { FUNNEL_STAGES } from "@/lib/funil";
 
 async function exigirLiderOuDiretor(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", userId).single();
   if (profile?.role !== "lider" && profile?.role !== "diretor") {
     throw new Error("Só Líder ou Diretor podem gerenciar campanhas.");
   }
+}
+
+// Métrica "pontuacao" (migration 0063, pedido do Diretor, 2026-08-28:
+// "entrevistas valerá uma pontuação e assinaturas outra") — lê um peso por
+// etapa do formulário (peso_tentativas, peso_alos, ...) e monta o objeto
+// { etapa: peso } só com quem tem peso > 0. null quando a métrica não é
+// "pontuacao", pra limpar o campo se alguém trocar de volta editando.
+function lerPesos(formData: FormData, metrica: string): Record<string, number> | null {
+  if (metrica !== "pontuacao") return null;
+  const pesos: Record<string, number> = {};
+  for (const etapa of FUNNEL_STAGES) {
+    const valor = Number(String(formData.get(`peso_${etapa}`) ?? "").trim());
+    if (valor > 0) pesos[etapa] = valor;
+  }
+  if (Object.keys(pesos).length === 0) throw new Error("Pontuação precisa de pelo menos uma etapa com peso maior que 0.");
+  return pesos;
 }
 
 export async function criarCampanha(formData: FormData) {
@@ -32,6 +49,7 @@ export async function criarCampanha(formData: FormData) {
   const dataInicio = String(formData.get("data_inicio") ?? "");
   const dataFim = String(formData.get("data_fim") ?? "");
   if (!titulo || !dataInicio || !dataFim) throw new Error("Título e período são obrigatórios.");
+  const pesos = lerPesos(formData, metrica);
 
   let imagemUrl: string | null = null;
   const imagem = formData.get("imagem") as File | null;
@@ -58,6 +76,7 @@ export async function criarCampanha(formData: FormData) {
       meta_valor: metaValorRaw ? Number(metaValorRaw) : null,
       data_inicio: dataInicio,
       data_fim: dataFim,
+      pesos,
       created_by: user.id,
     })
     .select("id")
@@ -131,6 +150,7 @@ export async function atualizarCampanha(formData: FormData) {
   const dataInicio = String(formData.get("data_inicio") ?? "");
   const dataFim = String(formData.get("data_fim") ?? "");
   if (!id || !titulo || !dataInicio || !dataFim) throw new Error("Título e período são obrigatórios.");
+  const pesos = lerPesos(formData, metrica);
 
   const payload: Record<string, unknown> = {
     titulo,
@@ -143,6 +163,7 @@ export async function atualizarCampanha(formData: FormData) {
     meta_valor: metaValorRaw ? Number(metaValorRaw) : null,
     data_inicio: dataInicio,
     data_fim: dataFim,
+    pesos,
   };
 
   const imagem = formData.get("imagem") as File | null;

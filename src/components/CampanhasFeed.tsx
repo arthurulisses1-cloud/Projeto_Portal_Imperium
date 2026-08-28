@@ -140,11 +140,22 @@ export default function CampanhasFeed({
           <p className="text-sm text-stone-500 sm:col-span-2">Nenhuma campanha nesse filtro agora.</p>
         )}
         {campanhasFiltradas.map((c) => {
-          const metricaLabel = c.metrica === "credito" ? "R$" : FUNNEL_LABELS[c.metrica as FunilEtapa] ?? c.metrica;
+          const metricaLabel = c.metrica === "credito" ? "R$" : c.metrica === "pontuacao" ? "pts" : FUNNEL_LABELS[c.metrica as FunilEtapa] ?? c.metrica;
           const fmt = (v: number) =>
             c.metrica === "credito"
               ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
-              : `${v} ${metricaLabel}`;
+              : c.metrica === "pontuacao"
+                ? `${Number(v.toFixed(1))} ${metricaLabel}`
+                : `${v} ${metricaLabel}`;
+          // "Entrevistas valerá uma pontuação e assinaturas outra" (pedido
+          // do Diretor, 2026-08-28) — mostra a régua de pesos no card, pra
+          // quem tá duelando saber quanto vale cada etapa.
+          const pesosLabel =
+            c.metrica === "pontuacao" && c.pesos
+              ? Object.entries(c.pesos)
+                  .map(([etapa, peso]) => `${FUNNEL_LABELS[etapa as FunilEtapa] ?? etapa} = ${peso} pts`)
+                  .join(" · ")
+              : null;
           const max = Math.max(...c.participantes.map((p) => p.valor), c.metaValor ?? 0, 1);
           const comentarios = comentariosPorCampanha.get(c.id) ?? [];
 
@@ -203,6 +214,7 @@ export default function CampanhasFeed({
                   )}
                 </div>
                 {c.descricao && <p className="mt-1 text-xs text-stone-400">{c.descricao}</p>}
+                {pesosLabel && <p className="mt-1 text-[11px] text-gold">{pesosLabel}</p>}
                 {c.requisitosMinimos && (
                   <p className="mt-1.5 text-[11px] text-stone-500">
                     <span className="text-stone-600">Requisitos mínimos: </span>

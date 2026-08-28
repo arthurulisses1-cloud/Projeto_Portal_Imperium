@@ -17,6 +17,7 @@ export type CampanhaParaEditar = {
   metaValor: number | null;
   dataInicio: string;
   dataFim: string;
+  pesos: Record<string, number> | null;
 };
 
 // Edita só os dados "de conteúdo" da campanha (título, descrição, imagem,
@@ -70,6 +71,7 @@ export default function EditarCampanhaForm({ campanha }: { campanha: CampanhaPar
                   {FUNNEL_LABELS[e]}
                 </option>
               ))}
+              <option value="pontuacao">Pontuação (várias etapas, cada uma com peso)</option>
             </select>
           </div>
           <div>
@@ -77,6 +79,27 @@ export default function EditarCampanhaForm({ campanha }: { campanha: CampanhaPar
             <input type="number" name="meta_valor" step="0.01" defaultValue={campanha.metaValor ?? undefined} className="input-imp" />
           </div>
         </div>
+        {metrica === "pontuacao" && (
+          <div>
+            <label className="mb-1 block text-xs text-stone-400">Pontos por etapa</label>
+            <div className="grid grid-cols-2 gap-3 rounded border border-imperium-line p-2 sm:grid-cols-3">
+              {FUNNEL_STAGES.map((e) => (
+                <div key={e}>
+                  <label className="mb-0.5 block text-[10px] text-stone-500">{FUNNEL_LABELS[e]}</label>
+                  <input
+                    type="number"
+                    name={`peso_${e}`}
+                    min={0}
+                    step="0.5"
+                    defaultValue={campanha.pesos?.[e] ?? ""}
+                    placeholder="0"
+                    className="input-imp text-sm"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {metrica === "credito" && (campanha.alvo === "individual" || campanha.alvo === "grupo_rank") && (
           <div>
             <label className="mb-1 block text-xs text-stone-400">Contar produção como</label>

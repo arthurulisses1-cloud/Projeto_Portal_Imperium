@@ -114,9 +114,28 @@ export default function CampanhaForm({
                 {FUNNEL_LABELS[e]}
               </option>
             ))}
+            <option value="pontuacao">Pontuação (várias etapas, cada uma com peso)</option>
           </select>
         </div>
       </div>
+
+      {metrica === "pontuacao" && (
+        <div>
+          <label className="mb-1 block text-xs text-stone-400">Pontos por etapa</label>
+          <p className="mb-1.5 text-[11px] text-stone-600">
+            Ex: Entrevista vale 2 pontos, Assinatura vale 10 — quem fizer mais pontos no período ganha. Deixe em
+            branco (ou 0) as etapas que não contam pra esse duelo.
+          </p>
+          <div className="grid grid-cols-2 gap-3 rounded border border-imperium-line p-2 sm:grid-cols-3">
+            {FUNNEL_STAGES.map((e) => (
+              <div key={e}>
+                <label className="mb-0.5 block text-[10px] text-stone-500">{FUNNEL_LABELS[e]}</label>
+                <input type="number" name={`peso_${e}`} min={0} step="0.5" placeholder="0" className="input-imp text-sm" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {metrica === "credito" && (alvo === "individual" || alvo === "grupo_rank") && (
         <div>

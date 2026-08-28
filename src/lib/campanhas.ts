@@ -31,6 +31,10 @@ export type CampanhaComProgresso = {
   dataInicio: string;
   dataFim: string;
   participantes: CampanhaParticipanteProgresso[];
+  // Só preenchido quando metrica="pontuacao" (migration 0063, pedido do
+  // Diretor, 2026-08-28: "entrevistas valerá uma pontuação e assinaturas
+  // outra") — { etapa: peso }, chaves de FUNNEL_STAGES.
+  pesos: Record<string, number> | null;
 };
 
 // Todas as campanhas cujo período cobre hoje, com o progresso de cada
@@ -73,11 +77,12 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
     meta_valor: number | null;
     data_inicio: string;
     data_fim: string;
+    pesos: Record<string, number> | null;
   }[] | null;
   const comColunasNovas = await supabase
     .from("campanhas")
     .select(
-      "id, titulo, descricao, requisitos_minimos, recompensa, imagem_url, imagem_posicao, alvo, metrica, papel_credito, meta_valor, data_inicio, data_fim"
+      "id, titulo, descricao, requisitos_minimos, recompensa, imagem_url, imagem_posicao, alvo, metrica, papel_credito, meta_valor, data_inicio, data_fim, pesos"
     )
     .lte("data_inicio", hoje)
     .gte("data_fim", hoje)
@@ -95,6 +100,7 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
       recompensa: null,
       imagem_posicao: null,
       papel_credito: null,
+      pesos: null,
     }));
   } else {
     campanhas = comColunasNovas.data;
@@ -212,16 +218,34 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
 
     let participantes: CampanhaParticipanteProgresso[];
 
-    if (c.metrica !== "credito") {
+    // Reaproveitado tanto por métrica de funil única quanto por "pontuacao"
+    // (soma ponderada de várias) — mesma regra de "de quem é a produção"
+    // pras 4 formas de alvo.
+    const membrosFunil = (refId: string): string[] => {
+      if (alvo === "individual" || alvo === "grupo_rank") return [refId];
+      if (alvo === "tribo") return (pessoas ?? []).filter((p) => p.tribo_id === refId).map((p) => p.id);
+      if (alvo === "exercito") return (pessoas ?? []).filter((p) => exercitoIdPorProfileId.get(p.id) === refId).map((p) => p.id);
+      return membrosGeral();
+    };
+
+    if (c.metrica === "pontuacao") {
+      // "Entrevistas valerá uma pontuação e assinaturas outra, quem fizer
+      // mais pontos ganha" (pedido do Diretor, 2026-08-28) — soma cada
+      // etapa configurada em `pesos` já multiplicada pelo peso dela, num
+      // placar só.
+      const pesos = c.pesos ?? {};
+      const pontuacaoDoGrupo = (profileIds: string[]) =>
+        Object.entries(pesos).reduce((soma, [etapa, peso]) => soma + valorFunil(profileIds, etapa, c.data_inicio, c.data_fim) * Number(peso), 0);
+      participantes =
+        alvo === "geral"
+          ? [{ refId: "geral", label: c.titulo, valor: pontuacaoDoGrupo(membrosGeral()) }]
+          : participantesDaCampanha
+              .map((p) => ({ refId: p.ref_id, label: p.label, valor: pontuacaoDoGrupo(membrosFunil(p.ref_id)) }))
+              .sort((a, b) => b.valor - a.valor);
+    } else if (c.metrica !== "credito") {
       // Métricas de funil (tentativas, alôs, conexões...) continuam por
       // pessoa, sem o problema de dedupe — cada pessoa credita sua própria
       // atividade, SDR e Closer não competem pelo mesmo número.
-      const membrosFunil = (refId: string): string[] => {
-        if (alvo === "individual" || alvo === "grupo_rank") return [refId];
-        if (alvo === "tribo") return (pessoas ?? []).filter((p) => p.tribo_id === refId).map((p) => p.id);
-        if (alvo === "exercito") return (pessoas ?? []).filter((p) => exercitoIdPorProfileId.get(p.id) === refId).map((p) => p.id);
-        return membrosGeral();
-      };
       participantes =
         alvo === "geral"
           ? [{ refId: "geral", label: c.titulo, valor: valorFunil(membrosGeral(), c.metrica, c.data_inicio, c.data_fim) }]
@@ -269,6 +293,7 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
       dataInicio: c.data_inicio,
       dataFim: c.data_fim,
       participantes,
+      pesos: c.pesos ?? null,
     };
   });
 }

@@ -27,7 +27,7 @@ export default async function CampanhasPage() {
   const { data: todasCampanhas } = await supabase
     .from("campanhas")
     .select(
-      "id, titulo, descricao, requisitos_minimos, recompensa, metrica, papel_credito, alvo, meta_valor, data_inicio, data_fim, imagem_url, imagem_posicao"
+      "id, titulo, descricao, requisitos_minimos, recompensa, metrica, papel_credito, alvo, meta_valor, data_inicio, data_fim, imagem_url, imagem_posicao, pesos"
     )
     .order("data_inicio", { ascending: false });
 
@@ -97,6 +97,7 @@ export default async function CampanhasPage() {
                     metaValor: c.meta_valor,
                     dataInicio: c.data_inicio,
                     dataFim: c.data_fim,
+                    pesos: c.pesos,
                   }}
                 />
               </li>
