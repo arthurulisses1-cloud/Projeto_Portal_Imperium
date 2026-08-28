@@ -551,8 +551,17 @@ function CampanhasCard({
   pessoas: { id: string; nome: string }[];
 }) {
   return (
-    <Card title="Campanhas do mês">
-      <div className="grid gap-4 sm:grid-cols-2">
+    // Card inteiro virou colapsável (pedido do Diretor, 2026-08-27: "a
+    // parte de campanhas no mural tá bem grande... como otimizar o layout
+    // pra não ficar um feed enorme") — mesmo padrão já usado em "Publicar
+    // no Mural" logo abaixo. Aberto por padrão (é conteúdo que interessa),
+    // mas dá pra fechar quando não tiver nada novo pra conferir.
+    <details open className="card-imp group">
+      <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
+        <span>Campanhas do mês ({campanhas.length})</span>
+        <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
+      </summary>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {campanhas.map((c) => {
           const metricaLabel = c.metrica === "credito" ? "R$" : FUNNEL_LABELS[c.metrica as FunilEtapa] ?? c.metrica;
           const fmt = (v: number) =>
@@ -560,17 +569,46 @@ function CampanhasCard({
               ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
               : `${v} ${metricaLabel}`;
           const max = Math.max(...c.participantes.map((p) => p.valor), c.metaValor ?? 0, 1);
+          const comentarios = comentariosPorCampanha.get(c.id) ?? [];
+
+          // Duelo 1x1 (alvo="individual" com exatamente 2 participantes) —
+          // pedido do Diretor (2026-08-27): "ao invés de eu colocar fotos
+          // nos duelos, coloca a foto de quem tá duelando, um na esquerda e
+          // um na direita" — em vez da imagem genérica da campanha (que
+          // ainda existe pros outros tipos de campanha).
+          const duelo = c.alvo === "individual" && c.participantes.length === 2 ? c.participantes : null;
 
           return (
             <div key={c.id} id={`campanha-${c.id}`} className="scroll-mt-20 overflow-hidden rounded-lg border border-gold/30">
-              {c.imagemUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={c.imagemUrl}
-                  alt={c.titulo}
-                  className="aspect-[4/3] w-full object-cover"
-                  style={{ objectPosition: c.imagemPosicao === "top" ? "center top" : c.imagemPosicao === "bottom" ? "center bottom" : "center" }}
-                />
+              {duelo ? (
+                <div className="relative flex items-center bg-imperium-bg/60">
+                  {duelo.map((p, i) => (
+                    <div key={p.refId} className={`flex flex-1 flex-col items-center gap-1.5 py-3 ${i === 0 ? "border-r border-gold/20" : ""}`}>
+                      {p.avatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.avatarUrl} alt={p.label} className="h-14 w-14 rounded-full border border-gold/40 object-cover" />
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-gold/40 bg-imperium-surface text-sm text-gold">
+                          {iniciais(p.label)}
+                        </div>
+                      )}
+                      <span className="max-w-[90%] truncate text-[11px] text-stone-300">{p.label}</span>
+                    </div>
+                  ))}
+                  <div className="absolute left-1/2 top-1/2 flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-gold/50 bg-imperium-surface">
+                    <IconSwords className="h-3 w-3 text-gold" />
+                  </div>
+                </div>
+              ) : (
+                c.imagemUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={c.imagemUrl}
+                    alt={c.titulo}
+                    className="aspect-[3/1] w-full object-cover"
+                    style={{ objectPosition: c.imagemPosicao === "top" ? "center top" : c.imagemPosicao === "bottom" ? "center bottom" : "center" }}
+                  />
+                )
               )}
               <div className="p-3">
                 <div className="flex items-start justify-between gap-2">
@@ -623,20 +661,40 @@ function CampanhasCard({
                   </details>
                 )}
 
-                <ComentariosReacoes
-                  alvoTipo="campanha"
-                  alvoId={c.id}
-                  meId={meId}
-                  isDiretor={isDiretor}
-                  comentarios={comentariosPorCampanha.get(c.id) ?? []}
-                  reacoes={reacoesPorCampanha.get(c.id) ?? { porEmoji: [], minhaReacao: null }}
-                  pessoas={pessoas}
-                />
+                {/* Comentários/reações colapsados por padrão — junto com o
+                    resto (imagem menor, card inteiro colapsável), é o que
+                    mais engordava o feed (thread sem limite, sempre aberta). */}
+                <details className="group/coment mt-3">
+                  <summary className="cursor-pointer list-none text-[10px] uppercase tracking-wide text-stone-500 hover:text-gold [&::-webkit-details-marker]:hidden">
+                    💬 Comentários e reações{comentarios.length > 0 ? ` (${comentarios.length})` : ""}{" "}
+                    <span className="transition group-open/coment:rotate-180">▾</span>
+                  </summary>
+                  <div className="mt-2">
+                    <ComentariosReacoes
+                      alvoTipo="campanha"
+                      alvoId={c.id}
+                      meId={meId}
+                      isDiretor={isDiretor}
+                      comentarios={comentarios}
+                      reacoes={reacoesPorCampanha.get(c.id) ?? { porEmoji: [], minhaReacao: null }}
+                      pessoas={pessoas}
+                    />
+                  </div>
+                </details>
               </div>
             </div>
           );
         })}
       </div>
-    </Card>
+    </details>
   );
+}
+
+function iniciais(nome: string) {
+  return nome
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("");
 }

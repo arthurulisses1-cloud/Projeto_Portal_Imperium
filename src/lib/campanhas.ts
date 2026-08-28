@@ -7,6 +7,11 @@ export type CampanhaParticipanteProgresso = {
   refId: string;
   label: string;
   valor: number;
+  // Só preenchido pra alvo="individual" (refId = profile_id) — usado pra
+  // mostrar a foto de quem tá duelando no card (pedido do Diretor,
+  // 2026-08-27: "ao invés de eu colocar fotos nos duelos, coloca a foto de
+  // quem tá duelando"), em vez de uma imagem genérica de campanha.
+  avatarUrl?: string | null;
 };
 
 export type ImagemPosicao = "top" | "center" | "bottom";
@@ -121,6 +126,22 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
   );
   const todosIds = (pessoas ?? []).map((p) => p.id);
 
+  // Avatares dos duelos 1x1 (pedido do Diretor, 2026-08-27) — só busca pra
+  // participantes de campanha alvo="individual" (refId = profile_id ali;
+  // em grupo_rank o refId é um Cargo, não uma pessoa, não se aplica).
+  const idsParticipantesIndividuais = Array.from(
+    new Set(
+      campanhas
+        .filter((c) => c.alvo === "individual")
+        .flatMap((c) => (participantesRows ?? []).filter((p) => p.campanha_id === c.id).map((p) => p.ref_id))
+    )
+  );
+  const { data: avataresRaw } =
+    idsParticipantesIndividuais.length > 0
+      ? await supabase.from("profiles").select("id, avatar_url").in("id", idsParticipantesIndividuais)
+      : { data: [] as { id: string; avatar_url: string | null }[] };
+  const avatarPorProfileId = new Map((avataresRaw ?? []).map((a) => [a.id, a.avatar_url]));
+
   const menorData = campanhas.reduce((min, c) => (c.data_inicio < min ? c.data_inicio : min), campanhas[0].data_inicio);
   const maiorData = campanhas.reduce((max, c) => (c.data_fim > max ? c.data_fim : max), campanhas[0].data_fim);
 
@@ -227,6 +248,10 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
       participantes = participantesDaCampanha
         .map((p) => ({ refId: p.ref_id, label: p.label, valor: creditoDaPessoa(c.data_inicio, c.data_fim, p.ref_id, papelCredito) }))
         .sort((a, b) => b.valor - a.valor);
+    }
+
+    if (alvo === "individual") {
+      participantes = participantes.map((p) => ({ ...p, avatarUrl: avatarPorProfileId.get(p.refId) ?? null }));
     }
 
     return {

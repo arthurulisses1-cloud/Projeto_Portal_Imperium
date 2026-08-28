@@ -74,9 +74,15 @@ export default function CampanhaForm({
         <label className="mb-1 block text-xs text-stone-400">Imagem (opcional)</label>
         <input type="file" name="imagem" accept="image/*" className="text-sm text-stone-300" />
         <p className="mt-1 text-[11px] text-stone-600">
-          O card mostra a foto na proporção 4:3 (o tamanho padrão de foto do WhatsApp, ex.: 1600×1200px) — foto
-          já nessa proporção não corta quase nada. Se vier mais quadrada ou vertical, use
+          O card mostra a foto numa faixa larga (proporção 3:1) — se vier mais quadrada ou vertical, use
           &ldquo;Enquadramento&rdquo; abaixo pra escolher qual parte fica visível.
+          {alvo === "individual" && (
+            <>
+              {" "}
+              Em duelo entre exatamente 2 pessoas essa imagem nem aparece — o card usa a foto de perfil de cada
+              uma automaticamente, uma de cada lado.
+            </>
+          )}
         </p>
       </div>
       <div>
