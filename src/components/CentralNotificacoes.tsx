@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { IconLaurel } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
-import { calcularThreshold } from "@/lib/marcos";
+import { calcularThreshold, buscarProducaoMesParaMarcos } from "@/lib/marcos";
 import { buscarMetaComTaxas, calcularFunilMeta, buscarRealizadoDia, type EscopoTime } from "@/lib/metas";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 
@@ -58,15 +58,12 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
 
   const { data: marcos } = await supabase.from("marcos").select("nome, threshold, icone").order("ordem");
   // Mesma base que buscarProgressoMarcos (src/lib/marcos.ts): mês corrente,
-  // não acumulado do ano — os thresholds são metas de UM mês.
+  // não acumulado do ano — os thresholds são metas de UM mês. Passa pela
+  // mesma função que aplica a regra pontual "Compra vale metade" (pedido do
+  // Diretor, 2026-08-29 — só na competência marcada em MARCO_COMPETENCIAS_
+  // COMPRA_METADE, ver src/lib/marcos.ts).
   const inicioMesMarcos = hoje.slice(0, 7) + "-01";
-  const { data: vendasMesMarcos } = ids.length
-    ? await supabase.from("vendas").select("profile_id, valor").in("profile_id", ids).gte("data", inicioMesMarcos)
-    : { data: [] };
-  const producaoMesPorPessoa = new Map<string, number>();
-  for (const v of vendasMesMarcos ?? []) {
-    producaoMesPorPessoa.set(v.profile_id, (producaoMesPorPessoa.get(v.profile_id) ?? 0) + Number(v.valor));
-  }
+  const producaoMesPorPessoa = await buscarProducaoMesParaMarcos(supabase, ids, inicioMesMarcos);
   // "Perto" de verdade = já fez pelo menos 70% do menor marco ainda não
   // batido no mês — sem esse corte, a lista sempre mostrava as 5 pessoas
   // MENOS LONGE (mesmo estando a 50-80% de distância), o que não é "perto"
@@ -85,6 +82,22 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
     .filter((x) => x.falta <= x.threshold * 0.3)
     .sort((a, b) => a.falta - b.falta)
     .slice(0, 5);
+
+  // Quem bateu marco (pedido do Diretor, 2026-08-29) — pega o marco MAIS
+  // CARO que a produção do mês já alcança, pra celebrar a maior conquista
+  // em vez de listar cada marco menor também batido no caminho.
+  const bateuMarco = (pessoas ?? [])
+    .map((p) => {
+      const producao = producaoMesPorPessoa.get(p.id) ?? 0;
+      const maiorBatido = (marcos ?? [])
+        .map((m) => ({ ...m, threshold: calcularThreshold(m.nome, m.threshold, p.role) }))
+        .filter((m) => producao >= m.threshold)
+        .sort((a, b) => b.threshold - a.threshold)[0];
+      if (!maiorBatido) return null;
+      return { id: p.id, nome: p.full_name, marco: maiorBatido.nome, icone: maiorBatido.icone, producao };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .sort((a, b) => b.producao - a.producao);
 
   const agora = new Date();
   const aniversarios = (pessoas ?? [])
@@ -172,7 +185,7 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
 
   const temAlgumaMeta = Object.values(metaOntemPorEtapa).some((v) => v !== null);
 
-  if (naoLancaram.length === 0 && pertoDeMarco.length === 0 && aniversarios.length === 0 && !temAlgumaMeta) return null;
+  if (naoLancaram.length === 0 && bateuMarco.length === 0 && pertoDeMarco.length === 0 && aniversarios.length === 0 && !temAlgumaMeta) return null;
 
   return (
     <details open className="card-imp group">
@@ -242,6 +255,22 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
                 ))}
               </ul>
             )}
+          </div>
+        )}
+
+        {bateuMarco.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Bateu Marco esse mês 🎉</p>
+            <ul className="space-y-1.5">
+              {bateuMarco.map((m) => (
+                <li key={m.id} className="flex items-center justify-between text-sm">
+                  <span className="text-stone-200">
+                    {m.icone} {m.nome} → {m.marco}
+                  </span>
+                  <span className="text-success-bright">{moeda(m.producao)}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

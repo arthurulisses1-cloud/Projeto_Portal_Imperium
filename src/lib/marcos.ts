@@ -29,6 +29,52 @@ export function calcularThreshold(nome: string, thresholdBase: number, role: str
   return override ?? thresholdBase * multiplicador;
 }
 
+// Regra pontual pedida pelo Diretor (2026-08-29): "esse mês em específico,
+// vendas que não foram de crédito mas sim 'compra' contam metade do valor
+// no sistema de marcos... APENAS nesse quesito... somente ESSE mês, nos
+// próximos vai ser normal". Isso NÃO mexe em DRE/Comissão/Forecast — só
+// nesse cálculo de produção-pra-marco. Chave é a competência "YYYY-MM";
+// pra voltar ao normal em setembro basta não adicionar a competência nova
+// aqui (não precisa remover nada, a lista só cresce com os meses de exceção).
+const MARCO_COMPETENCIAS_COMPRA_METADE = new Set(["2026-08"]);
+
+// Soma a produção (vendas) de uma ou mais pessoas no período, aplicando a
+// regra de "Compra vale metade" quando a competência do mês corrente está
+// na lista de exceção acima. Uma linha de `vendas` sem weekly_operacao_id
+// (ou cujo produto não veio) conta valor cheio — não penaliza por falta de
+// dado, só quando dá pra confirmar que é Compra de verdade.
+export async function buscarProducaoMesParaMarcos(
+  supabase: SupabaseClient,
+  profileIds: string[],
+  inicioMes: string
+): Promise<Map<string, number>> {
+  const producaoPorPessoa = new Map<string, number>();
+  if (profileIds.length === 0) return producaoPorPessoa;
+
+  const competencia = inicioMes.slice(0, 7);
+  const aplicaRegraCompra = MARCO_COMPETENCIAS_COMPRA_METADE.has(competencia);
+
+  if (aplicaRegraCompra) {
+    const { data: vendasMes } = await supabase
+      .from("vendas")
+      .select("profile_id, valor, weekly_operacao:weekly_operacoes(produto)")
+      .in("profile_id", profileIds)
+      .gte("data", inicioMes);
+    for (const v of vendasMes ?? []) {
+      const produto = (v.weekly_operacao as unknown as { produto: string | null } | null)?.produto;
+      const fator = produto === "compra" ? 0.5 : 1;
+      producaoPorPessoa.set(v.profile_id, (producaoPorPessoa.get(v.profile_id) ?? 0) + Number(v.valor) * fator);
+    }
+    return producaoPorPessoa;
+  }
+
+  const { data: vendasMes } = await supabase.from("vendas").select("profile_id, valor").in("profile_id", profileIds).gte("data", inicioMes);
+  for (const v of vendasMes ?? []) {
+    producaoPorPessoa.set(v.profile_id, (producaoPorPessoa.get(v.profile_id) ?? 0) + Number(v.valor));
+  }
+  return producaoPorPessoa;
+}
+
 export type MarcoProgresso = {
   id: string;
   nome: string;
@@ -59,13 +105,13 @@ export async function buscarProgressoMarcos(
   const inicioMes = hoje.slice(0, 7) + "-01";
   const competenciaAtual = inicioMes;
 
-  const [{ data: marcosRows }, { data: vendasMes }, { data: resgates }] = await Promise.all([
+  const [{ data: marcosRows }, producaoPorPessoa, { data: resgates }] = await Promise.all([
     supabase.from("marcos").select("id, nome, threshold, icone, imagem_url").order("ordem"),
-    supabase.from("vendas").select("valor").eq("profile_id", profileId).gte("data", inicioMes),
+    buscarProducaoMesParaMarcos(supabase, [profileId], inicioMes),
     supabase.from("marcos_resgates").select("marco_id, competencia, criado_em").eq("profile_id", profileId),
   ]);
 
-  const producaoMes = (vendasMes ?? []).reduce((s, v) => s + Number(v.valor), 0);
+  const producaoMes = producaoPorPessoa.get(profileId) ?? 0;
 
   const resgatePorMarco = new Map((resgates ?? []).map((r) => [r.marco_id, r]));
   // Já usou o resgate do mês corrente em algum outro marco?
