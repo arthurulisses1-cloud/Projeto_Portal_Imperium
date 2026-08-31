@@ -56,7 +56,7 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   const faltouHoje = new Set((compromissosHoje ?? []).filter((c) => c.falta).map((c) => c.profile_id));
   const naoLancaram = (pessoas ?? []).filter((p) => !lancouHoje.has(p.id) && !faltouHoje.has(p.id));
 
-  const { data: marcos } = await supabase.from("marcos").select("nome, threshold, icone").order("ordem");
+  const { data: marcos } = await supabase.from("marcos").select("id, nome, threshold, icone").order("ordem");
   // Mesma base que buscarProgressoMarcos (src/lib/marcos.ts): mês corrente,
   // não acumulado do ano — os thresholds são metas de UM mês. Passa pela
   // mesma função que aplica a regra pontual "Compra vale metade" (pedido do
@@ -64,6 +64,24 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   // COMPRA_METADE, ver src/lib/marcos.ts).
   const inicioMesMarcos = hoje.slice(0, 7) + "-01";
   const producaoMesPorPessoa = await buscarProducaoMesParaMarcos(supabase, ids, inicioMesMarcos);
+
+  // Marco já resgatado (QUALQUER mês, pra sempre) não entra mais na conta —
+  // achado 2026-08-29: o Marcus Ryquelme já ganhou o fone uma vez e ainda
+  // aparecia como "perto de bater" o mesmo fone, que não dá pra ganhar de
+  // novo. Resgate é por marco+pessoa, vitalício (ver marcos.ts).
+  const { data: resgatesTodos } = ids.length
+    ? await supabase.from("marcos_resgates").select("profile_id, marco_id").in("profile_id", ids)
+    : { data: [] };
+  const marcosResgatadosPorPessoa = new Map<string, Set<string>>();
+  for (const r of resgatesTodos ?? []) {
+    if (!marcosResgatadosPorPessoa.has(r.profile_id)) marcosResgatadosPorPessoa.set(r.profile_id, new Set());
+    marcosResgatadosPorPessoa.get(r.profile_id)!.add(r.marco_id);
+  }
+  function marcosDisponiveisPara(profileId: string) {
+    const jaResgatados = marcosResgatadosPorPessoa.get(profileId);
+    return (marcos ?? []).filter((m) => !jaResgatados?.has(m.id));
+  }
+
   // "Perto" de verdade = já fez pelo menos 70% do menor marco ainda não
   // batido no mês — sem esse corte, a lista sempre mostrava as 5 pessoas
   // MENOS LONGE (mesmo estando a 50-80% de distância), o que não é "perto"
@@ -71,7 +89,7 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   const pertoDeMarco = (pessoas ?? [])
     .map((p) => {
       const producao = producaoMesPorPessoa.get(p.id) ?? 0;
-      const proximo = (marcos ?? [])
+      const proximo = marcosDisponiveisPara(p.id)
         .map((m) => ({ ...m, threshold: calcularThreshold(m.nome, m.threshold, p.role) }))
         .filter((m) => producao < m.threshold)
         .sort((a, b) => a.threshold - b.threshold)[0];
@@ -84,12 +102,13 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
     .slice(0, 5);
 
   // Quem bateu marco (pedido do Diretor, 2026-08-29) — pega o marco MAIS
-  // CARO que a produção do mês já alcança, pra celebrar a maior conquista
-  // em vez de listar cada marco menor também batido no caminho.
+  // CARO, entre os ainda NÃO resgatados por essa pessoa, que a produção do
+  // mês já alcança — celebra a maior conquista disponível, não repete um
+  // marco que ela já ganhou em outro mês.
   const bateuMarco = (pessoas ?? [])
     .map((p) => {
       const producao = producaoMesPorPessoa.get(p.id) ?? 0;
-      const maiorBatido = (marcos ?? [])
+      const maiorBatido = marcosDisponiveisPara(p.id)
         .map((m) => ({ ...m, threshold: calcularThreshold(m.nome, m.threshold, p.role) }))
         .filter((m) => producao >= m.threshold)
         .sort((a, b) => b.threshold - a.threshold)[0];

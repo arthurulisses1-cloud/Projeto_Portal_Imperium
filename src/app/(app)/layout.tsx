@@ -40,6 +40,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
   { type: "link", href: "/recordes", label: "Recordes", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
+  { type: "link", href: "/marcos", label: "Corrida dos Marcos", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
   { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor", "investidor"] },
   { type: "link", href: "/parceiros", label: "Parceiros", roles: ["closer", "lider"] },
   { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor", "investidor"] },
