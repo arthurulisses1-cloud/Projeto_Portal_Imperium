@@ -4,6 +4,7 @@ import { RANK_LABELS } from "@/lib/labels";
 import Card from "@/components/ui/Card";
 import { getViewerContext } from "@/lib/preview";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
+import { hojeBR } from "@/lib/data-br";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -52,7 +53,7 @@ export default async function EstrelasPage() {
     porSemana.set(semana, bucket);
   }
 
-  const semanaAtualInicio = inicioSemanaISO(new Date().toISOString().slice(0, 10));
+  const semanaAtualInicio = inicioSemanaISO(hojeBR());
 
   // Sempre lista as últimas 12 semanas, mesmo as sem nenhum pago (pra ficar
   // óbvio quando alguém ficou 2-3 semanas sem gerar nada).

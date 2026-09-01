@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { hojeBR } from "@/lib/data-br";
 
 export async function criarTribo(formData: FormData) {
   const supabase = await createClient();
@@ -158,7 +159,7 @@ export async function registrarPerda(formData: FormData) {
 
   const motivo = String(formData.get("motivo") ?? "").trim();
   const observacao = String(formData.get("observacao") ?? "").trim();
-  const data = String(formData.get("data") ?? "") || new Date().toISOString().slice(0, 10);
+  const data = String(formData.get("data") ?? "") || hojeBR();
   if (!motivo) throw new Error("Selecione o motivo.");
 
   const { error } = await supabase.from("perdas").insert({

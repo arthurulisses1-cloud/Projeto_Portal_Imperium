@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
+import { hojeBR } from "@/lib/data-br";
 
 export type Transicao = { de: FunilEtapa; para: FunilEtapa; label: string };
 
@@ -63,12 +64,12 @@ export async function buscarMetaIndividual(supabase: SupabaseClient, userId: str
     .eq("id", userId)
     .single();
 
-  const agora = new Date();
+  const [anoAgora, mesAgora] = hojeBR().split("-").map(Number);
   const { data: metaMes } = await supabase
     .from("metas_mensais")
     .select("id, meta_credito_total, meta_ticket_medio")
-    .eq("ano", agora.getFullYear())
-    .eq("mes", agora.getMonth() + 1)
+    .eq("ano", anoAgora)
+    .eq("mes", mesAgora)
     .maybeSingle();
 
   const { data: conversoes } = metaMes
@@ -126,12 +127,12 @@ export async function mapaMetaCreditoPorTribo(
 // Mural (meta do TIME, não só a fatia pessoal — comparar a produção coletiva
 // com a meta de UMA pessoa deixaria a barra sempre "muito acima da meta").
 export async function buscarMetaTribo(supabase: SupabaseClient, triboId: string) {
-  const agora = new Date();
+  const [anoAgora, mesAgora] = hojeBR().split("-").map(Number);
   const { data: metaMes } = await supabase
     .from("metas_mensais")
     .select("id, meta_credito_total, meta_ticket_medio")
-    .eq("ano", agora.getFullYear())
-    .eq("mes", agora.getMonth() + 1)
+    .eq("ano", anoAgora)
+    .eq("mes", mesAgora)
     .maybeSingle();
 
   const { data: conversoes } = metaMes
@@ -177,12 +178,12 @@ export async function buscarMetaComTaxas(
     return { metaCredito: r.metaCreditoIndividual, metaTicketMedio: r.metaTicketMedio, taxas: r.taxas };
   }
 
-  const agora = new Date();
+  const [anoAgora, mesAgora] = hojeBR().split("-").map(Number);
   const { data: metaMes } = await supabase
     .from("metas_mensais")
     .select("id, meta_credito_total, meta_ticket_medio")
-    .eq("ano", agora.getFullYear())
-    .eq("mes", agora.getMonth() + 1)
+    .eq("ano", anoAgora)
+    .eq("mes", mesAgora)
     .maybeSingle();
   const { data: conversoes } = metaMes
     ? await supabase.from("metas_conversao").select("etapa_de, etapa_para, taxa_esperada").eq("meta_mensal_id", metaMes.id)
@@ -203,13 +204,13 @@ export async function buscarMetaComTaxas(
 // mês" do líder no Mural, mesmo card que SDR/Closer já tinham com a própria
 // meta pessoal.
 export async function buscarMetaExercito(supabase: SupabaseClient, exercitoId: string): Promise<number> {
-  const agora = new Date();
+  const [anoAgora, mesAgora] = hojeBR().split("-").map(Number);
   const [{ data: metaMes }, { data: tribosDoExercito }] = await Promise.all([
     supabase
       .from("metas_mensais")
       .select("meta_credito_total")
-      .eq("ano", agora.getFullYear())
-      .eq("mes", agora.getMonth() + 1)
+      .eq("ano", anoAgora)
+      .eq("mes", mesAgora)
       .maybeSingle(),
     supabase.from("tribos").select("id").eq("exercito_id", exercitoId),
   ]);
@@ -362,12 +363,12 @@ export async function buscarRealizadoDia(
 // pelo Diretor em metas_mensais, sem nenhuma divisão (a mesma base que as
 // funções de Exército/Tribo dividem entre si).
 export async function buscarMetaFirma(supabase: SupabaseClient): Promise<number> {
-  const agora = new Date();
+  const [anoAgora, mesAgora] = hojeBR().split("-").map(Number);
   const { data: metaMes } = await supabase
     .from("metas_mensais")
     .select("meta_credito_total")
-    .eq("ano", agora.getFullYear())
-    .eq("mes", agora.getMonth() + 1)
+    .eq("ano", anoAgora)
+    .eq("mes", mesAgora)
     .maybeSingle();
   return metaMes?.meta_credito_total ?? 0;
 }

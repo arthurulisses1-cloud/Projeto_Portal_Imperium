@@ -27,7 +27,12 @@ export default function CampanhaForm({
     const fimEl = document.getElementById("campanha-data-fim") as HTMLInputElement | null;
     if (!inicioEl || !fimEl) return;
     const hoje = new Date();
-    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    // Nunca usar toISOString() aqui — ele converte pra UTC e desalinha do dia
+    // local entre 21h e meia-noite. `hoje`/`primeiro`/`ultimo` abaixo já são
+    // construídos com getters locais (getDate/getMonth/getFullYear), então o
+    // formato tem que ler os mesmos getters locais, não converter de novo.
+    const fmt = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     if (tipo === "hoje") {
       inicioEl.value = fmt(hoje);
       fimEl.value = fmt(hoje);

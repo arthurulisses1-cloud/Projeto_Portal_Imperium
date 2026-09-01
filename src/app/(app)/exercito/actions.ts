@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { hojeBR } from "@/lib/data-br";
 
 export async function registrarStrikeTime(formData: FormData) {
   const supabase = await createClient();
@@ -57,7 +58,7 @@ export async function marcarFaltaTime(formData: FormData) {
   if (!user) throw new Error("Não autenticado.");
 
   const profileId = String(formData.get("profile_id"));
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   const { error } = await supabase.from("compromissos").upsert(
     {
@@ -85,7 +86,7 @@ export async function desmarcarFaltaTime(formData: FormData) {
   if (!user) throw new Error("Não autenticado.");
 
   const profileId = String(formData.get("profile_id"));
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   const { error } = await supabase
     .from("compromissos")

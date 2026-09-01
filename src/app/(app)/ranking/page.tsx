@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 import { IconMedal } from "@/components/ui/icons";
+import { inicioMesBR } from "@/lib/data-br";
 
 type Linha = { nome: string; tribo: string; valor: number };
 
@@ -92,7 +93,7 @@ export default async function RankingPage() {
 
   const todosIds = (pessoas ?? []).map((p) => p.id);
 
-  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
+  const inicioMes = inicioMesBR();
 
   // Paginado — essa query (todo mundo x todas as etapas no mês) já passa de
   // 700 linhas e cresce todo dia; sem isso o Supabase corta em 1000 sem erro.

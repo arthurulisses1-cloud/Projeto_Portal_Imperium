@@ -1,5 +1,6 @@
 import { FUNNEL_STAGES, type FunilEtapa } from "@/lib/funil";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { hojeBR, inicioMesBR } from "@/lib/data-br";
 
 export type Membro = { id: string; full_name: string; cargo?: string };
 
@@ -8,7 +9,7 @@ export async function buscarComprometimentoHoje(
   profileIds: string[]
 ) {
   if (profileIds.length === 0) return new Map<string, { status: string; falta: boolean }>();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
   const { data } = await supabase
     .from("compromissos")
     .select("profile_id, status, falta, lancado")
@@ -31,7 +32,7 @@ export async function buscarComprometimentoHoje(
 // "R$ 3" quando eram 3 vendas, não R$ 3 de fato).
 export async function buscarPagosMes(supabase: SupabaseClient, profileIds: string[]) {
   if (profileIds.length === 0) return new Map<string, number>();
-  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
+  const inicioMes = inicioMesBR();
   const { data } = await supabase
     .from("vendas")
     .select("profile_id, valor")
@@ -51,7 +52,7 @@ export async function buscarFunilColetivo(supabase: SupabaseClient, profileIds: 
   ) as Record<FunilEtapa, { realizado: number; meta: number }>;
   if (profileIds.length === 0) return totais;
 
-  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
+  const inicioMes = inicioMesBR();
   const { data } = await supabase
     .from("producao_funil")
     .select("etapa, realizado, meta")

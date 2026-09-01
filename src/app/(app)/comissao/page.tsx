@@ -12,6 +12,7 @@ import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
 import { IconLock } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
+import { inicioMesBR } from "@/lib/data-br";
 
 const MESES = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez",
@@ -49,8 +50,7 @@ export default async function ComissaoPage() {
   const papelPrincipal = PAPEL_PRINCIPAL[rank] ?? "sdr";
   const rankLabel = RANK_LABELS[rank] ?? rank;
 
-  const agora = new Date();
-  const inicioMes = agora.toISOString().slice(0, 7) + "-01";
+  const inicioMes = inicioMesBR();
 
   const { remuneracao, tiers, extrato, producaoPrincipal, producaoTotal } = await buscarRemuneracaoMes(
     supabase,

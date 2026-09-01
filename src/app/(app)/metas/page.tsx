@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { TRANSICOES, MESES_LABEL } from "@/lib/metas";
 import { salvarMeta } from "./actions";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
+import { hojeBR } from "@/lib/data-br";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -12,9 +13,9 @@ export default async function MetasPage({
 }: {
   searchParams: { ano?: string; mes?: string };
 }) {
-  const hoje = new Date();
-  const ano = Number(searchParams.ano) || hoje.getFullYear();
-  const mes = Number(searchParams.mes) || hoje.getMonth() + 1;
+  const [anoHoje, mesHoje] = hojeBR().split("-").map(Number);
+  const ano = Number(searchParams.ano) || anoHoje;
+  const mes = Number(searchParams.mes) || mesHoje;
 
   const supabase = await createClient();
 

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { hojeBR } from "@/lib/data-br";
 
 export type CampanhaAlvo = "geral" | "individual" | "tribo" | "exercito" | "grupo_rank";
 export type PapelCredito = "sdr" | "closer" | "total";
@@ -62,7 +63,7 @@ export type CampanhaComProgresso = {
 // mesmo Tribo/Exército. weekly_operacoes tem uma linha por OPERAÇÃO —
 // dedupe natural.
 export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<CampanhaComProgresso[]> {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   // requisitos_minimos/recompensa vêm da migration 0034, imagem_posicao da
   // 0046, papel_credito da 0047 — se alguma ainda não rodou nesse banco, o

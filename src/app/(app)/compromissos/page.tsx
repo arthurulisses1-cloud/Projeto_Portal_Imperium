@@ -4,6 +4,7 @@ import Card from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { cumpriuCompromisso, type StreakRow } from "@/lib/streak";
 import { marcarFaltaTime, desmarcarFaltaTime } from "@/app/(app)/exercito/actions";
+import { hojeBR } from "@/lib/data-br";
 
 type Totais = {
   entrevistasComp: number;
@@ -67,7 +68,7 @@ export default async function CompromissosPage() {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (profile?.role !== "diretor") redirect("/");
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   const [{ data: pessoas }, { data: tribosRaw }, { data: exercitosRaw }] = await Promise.all([
     supabase

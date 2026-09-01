@@ -111,7 +111,10 @@ export default function WeeklyDashboard({
     window.localStorage.setItem("weekly-matri-theme", matriTheme);
   }, [matriTheme]);
 
-  const mesAtual = new Date().getMonth() + 1;
+  // Vem do servidor (calculado com o calendário do Brasil, ver hojeBR em
+  // src/lib/data-br.ts) em vez de `new Date().getMonth()` do navegador — o
+  // navegador de quem usa o Portal pode estar em qualquer fuso.
+  const mesAtual = dataset.mesReferenciaMeta;
   const presets = useMemo(() => buildPresets(anoAtual, mesAtual, dataset.lastData), [anoAtual, mesAtual, dataset.lastData]);
 
   const from = periodKey === "custom" ? customFrom || presets.mes.from : presets[periodKey]?.from ?? presets.mes.from;
@@ -245,7 +248,7 @@ export default function WeeklyDashboard({
           {tab === "p3" && <PanelForecast C={CConsolidado} />}
           {tab === "p4" && <PanelIndividual C={CConsolidado} person={person} onClickPerson={clickPerson} />}
           {tab === "p5" && (
-            <PanelCanais C={CConsolidado} dataset={dataset} S={SConsolidado} origem={origem} onClickOrigem={clickOrigem} />
+            <PanelCanais C={CConsolidado} dataset={dataset} S={SConsolidado} origem={origem} onClickOrigem={clickOrigem} anoAtual={anoAtual} />
           )}
 
           <footer className="mt-6 flex flex-wrap justify-between gap-3 border-t pt-3 text-[9.5px]" style={{ borderColor: "var(--line)", color: "var(--mute)" }}>
@@ -918,13 +921,14 @@ function PanelIndividual({
 /* ---------------- Panel: Canais & Histórico ---------------- */
 
 function PanelCanais({
-  C, dataset, S, origem, onClickOrigem,
+  C, dataset, S, origem, onClickOrigem, anoAtual,
 }: {
   C: ReturnType<typeof compute>;
   dataset: WeeklyDataset;
   S: WeeklyState;
   origem: string | null;
   onClickOrigem: (o: string) => void;
+  anoAtual: number;
 }) {
   const ent = Object.entries(C.byOrigem).sort((a, b) => b[1].cred - a[1].cred);
   const totOrigem = ent.reduce((s, [, v]) => s + v.cred, 0);
@@ -961,7 +965,7 @@ function PanelCanais({
           </div>
         </div>
         <div className="wd-card">
-          <h3>Histórico {new Date().getFullYear()} <em>— crédito assinado; tracejado = meta do mês</em></h3>
+          <h3>Histórico {anoAtual} <em>— crédito assinado; tracejado = meta do mês</em></h3>
           <div className="wd-hist">
             {months.length ? months.map(([m, v]) => {
               const mt = metaM(m), ok = mt > 0 && v.cred >= mt;
@@ -980,7 +984,7 @@ function PanelCanais({
         </div>
       </div>
       <div className="wd-card" style={{ marginTop: 13 }}>
-        <h3>Histórico {new Date().getFullYear()} <em>— crédito pago; tracejado = meta do mês</em></h3>
+        <h3>Histórico {anoAtual} <em>— crédito pago; tracejado = meta do mês</em></h3>
         <div className="wd-hist">
           {months.length ? months.map(([m, v]) => {
             const mt = metaM(m), ok = mt > 0 && v.pago >= mt;

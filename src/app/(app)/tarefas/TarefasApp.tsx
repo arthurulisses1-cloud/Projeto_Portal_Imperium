@@ -21,6 +21,7 @@ import {
   iniciarCronometro,
   pararCronometro,
 } from "./actions";
+import { hojeBR, paraDataUTC } from "@/lib/data-br";
 
 export type Tarefa = {
   id: string;
@@ -125,8 +126,12 @@ export default function TarefasApp({
   const [textoRapido, setTextoRapido] = useState("");
   const [, startTransition] = useTransition();
 
-  const hoje = new Date().toISOString().slice(0, 10);
-  const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const hoje = hojeBR();
+  // Derivado de `hoje` (calendário do Brasil), nunca de Date.now() + 1 dia
+  // direto — perto da meia-noite BRT isso podia dar o mesmo dia de "hoje".
+  const amanhaDate = paraDataUTC(hoje);
+  amanhaDate.setUTCDate(amanhaDate.getUTCDate() + 1);
+  const amanha = amanhaDate.toISOString().slice(0, 10);
 
   const tarefasFiltradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();

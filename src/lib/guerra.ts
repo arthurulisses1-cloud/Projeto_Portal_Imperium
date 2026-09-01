@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { inicioMesBR } from "@/lib/data-br";
 
 export type Confronto = { nome: string; valor: number };
 
@@ -146,7 +147,7 @@ function agregarPorGrupo(operacoes: OperacaoPagaPorGrupo[]): Confronto[] {
 }
 
 async function pagosMesPorGrupo(supabase: SupabaseClient, agrupar: "exercito" | "tribo"): Promise<Confronto[]> {
-  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
+  const inicioMes = inicioMesBR();
   const operacoes = await resolverOperacoesPagasPorGrupo(supabase, agrupar, { desde: inicioMes });
   return agregarPorGrupo(operacoes);
 }
@@ -190,7 +191,7 @@ export async function buscarTopCredito(supabase: SupabaseClient, limite = 5): Pr
   const ids = Array.from(nomePorId.keys());
   if (ids.length === 0) return [];
 
-  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
+  const inicioMes = inicioMesBR();
   const { data: vendas } = await supabase
     .from("vendas")
     .select("profile_id, valor")

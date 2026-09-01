@@ -1,3 +1,5 @@
+import { hojeBR, paraDataUTC } from "@/lib/data-br";
+
 export const FUNNEL_STAGES = [
   "tentativas",
   "alos",
@@ -19,16 +21,15 @@ export const FUNNEL_LABELS: Record<FunilEtapa, string> = {
 };
 
 export function periodoParaDatas(periodo: "hoje" | "semana" | "mes") {
-  const hoje = new Date();
-  const fim = hoje.toISOString().slice(0, 10);
+  const fim = hojeBR();
   let inicio: string;
 
   if (periodo === "hoje") {
     inicio = fim;
   } else if (periodo === "semana") {
-    const diaSemana = hoje.getDay(); // 0 = domingo
-    const seg = new Date(hoje);
-    seg.setDate(hoje.getDate() - ((diaSemana + 6) % 7)); // volta pra segunda-feira
+    const seg = paraDataUTC(fim);
+    const diaSemana = seg.getUTCDay(); // 0 = domingo
+    seg.setUTCDate(seg.getUTCDate() - ((diaSemana + 6) % 7)); // volta pra segunda-feira
     inicio = seg.toISOString().slice(0, 10);
   } else {
     inicio = fim.slice(0, 7) + "-01";

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { avaliarProntidaoPromocao, type Rank } from "./carreira";
+import { hojeBR } from "@/lib/data-br";
 
 // Contagem de pendências por aba, pra sinalizar no menu lateral que tem
 // algo a fazer (ex: compromisso do dia ainda não lançado). Sempre baseado
@@ -11,7 +12,7 @@ export async function buscarPendencias(
   triboId: string | null
 ): Promise<Record<string, number>> {
   const pend: Record<string, number> = {};
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   if (role === "sdr" || role === "closer") {
     const { data: hojeRow } = await supabase

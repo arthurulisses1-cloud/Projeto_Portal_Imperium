@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getViewerContext } from "@/lib/preview";
 import { calcularThreshold, buscarProducaoMesParaMarcos } from "@/lib/marcos";
 import Card from "@/components/ui/Card";
+import { inicioMesBR } from "@/lib/data-br";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -19,8 +20,7 @@ export default async function MarcosPage() {
   const viewer = await getViewerContext(supabase);
   if (!viewer) return null;
 
-  const hoje = new Date();
-  const inicioMes = hoje.toISOString().slice(0, 7) + "-01";
+  const inicioMes = inicioMesBR();
 
   const [{ data: pessoasRaw }, { data: marcosRaw }, { data: resgatesRaw }, { data: exercitosRaw }] = await Promise.all([
     supabase

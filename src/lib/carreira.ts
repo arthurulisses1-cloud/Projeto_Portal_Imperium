@@ -1,3 +1,5 @@
+import { hojeBR, paraDataUTC } from "@/lib/data-br";
+
 export const RANK_ORDER = ["legionario", "centuriao", "tribuno", "pretor", "legado"] as const;
 export type Rank = (typeof RANK_ORDER)[number];
 
@@ -263,10 +265,10 @@ export async function buscarContextoAvaliacaoCriterios(
   triboId: string | null,
   criterios: Pick<CriterioPromocao, "texto">[]
 ): Promise<ContextoAvaliacaoCriterios> {
-  const hoje = new Date();
+  const hoje = paraDataUTC(hojeBR());
   const trintaDiasAtras = new Date();
   trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
-  const inicioJanela = new Date(hoje.getFullYear(), hoje.getMonth() - 4, 1);
+  const inicioJanela = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() - 4, 1));
 
   const janelasTop1 = new Set<number>();
   for (const c of criterios) {
@@ -300,7 +302,7 @@ export async function buscarContextoAvaliacaoCriterios(
     producaoPorMes.set(mes, (producaoPorMes.get(mes) ?? 0) + Number(v.valor));
     if (v.papel === "ambos") vendaSozinho = true;
   }
-  const mesAtualStr = hoje.toISOString().slice(0, 7);
+  const mesAtualStr = hojeBR().slice(0, 7);
   const mesesFechados = Array.from(producaoPorMes.entries())
     .filter(([mes]) => mes !== mesAtualStr)
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))

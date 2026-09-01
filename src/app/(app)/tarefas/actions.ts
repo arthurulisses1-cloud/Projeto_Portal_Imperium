@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { parseTarefaRapida } from "@/lib/tarefas-nlp";
+import { hojeBR } from "@/lib/data-br";
 
 // Toda checagem de "quem pode fazer o quê" mora na RLS (migrations 0051 e
 // 0052) — líder/closer só conseguem mexer em tarefa/checklist/comentário/
@@ -129,9 +130,12 @@ export async function adiarTarefa(formData: FormData) {
   const dueDateAtual = String(formData.get("due_date") ?? "");
   if (!id) throw new Error("Tarefa inválida.");
 
-  const base = dueDateAtual ? new Date(dueDateAtual + "T00:00:00") : new Date();
+  // T12:00:00 (meio-dia local, sem Z) em vez de T00:00:00 + toISOString():
+  // essa combinação convertia pra UTC e podia empurrar a data errada — mesmo
+  // bug sistêmico da virada de dia/mês (ver src/lib/data-br.ts).
+  const base = dueDateAtual ? new Date(dueDateAtual + "T12:00:00") : new Date(hojeBR() + "T12:00:00");
   base.setDate(base.getDate() + 1);
-  const novaData = base.toISOString().slice(0, 10);
+  const novaData = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}-${String(base.getDate()).padStart(2, "0")}`;
 
   const { error } = await supabase.from("tasks").update({ due_date: novaData }).eq("id", id);
   if (error) throw new Error(error.message);

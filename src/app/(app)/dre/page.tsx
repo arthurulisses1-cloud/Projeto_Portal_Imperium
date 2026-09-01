@@ -21,6 +21,7 @@ import {
 import Card from "@/components/ui/Card";
 import SimuladorDre from "@/components/dre/SimuladorDre";
 import EstruturaDreView from "@/components/dre/EstruturaDreView";
+import { hojeBR } from "@/lib/data-br";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -42,9 +43,9 @@ export default async function DrePage({ searchParams }: { searchParams: { ano?: 
   const isDiretor = profile?.role === "diretor";
   if (!isDiretor && profile?.role !== "investidor") redirect("/");
 
-  const hoje = new Date();
-  const ano = Number(searchParams.ano) || hoje.getFullYear();
-  const mes = Number(searchParams.mes) || hoje.getMonth() + 1;
+  const [anoHoje, mesHoje] = hojeBR().split("-").map(Number);
+  const ano = Number(searchParams.ano) || anoHoje;
+  const mes = Number(searchParams.mes) || mesHoje;
 
   const [folhaPago, resumoPago, folhaForecast, resumoForecast, config, despesas, receitasExtras, producaoParceiroAtual] =
     await Promise.all([

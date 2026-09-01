@@ -5,6 +5,7 @@ import { getViewerContext } from "@/lib/preview";
 import { FORA_DA_TRIBO, type WeeklyDataset, type WeeklyOp, type PersonInfo, type EntrevistaEvento } from "@/lib/weekly-compute";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 import { mapaMetaCreditoPorTribo } from "@/lib/metas";
+import { hojeBR } from "@/lib/data-br";
 
 export default async function MinhaProducaoLiderPage() {
   const supabase = await createClient();
@@ -87,12 +88,13 @@ export default async function MinhaProducaoLiderPage() {
     return envolveMeuExercito ? FORA_DA_TRIBO : null;
   }
 
-  const hoje = new Date();
+  const hojeStr = hojeBR();
+  const [anoAtual, mesAtual] = hojeStr.split("-").map(Number);
   const { data: metaMesAtual } = await supabase
     .from("metas_mensais")
     .select("id, meta_credito_total")
-    .eq("ano", hoje.getFullYear())
-    .eq("mes", hoje.getMonth() + 1)
+    .eq("ano", anoAtual)
+    .eq("mes", mesAtual)
     .maybeSingle();
   const { count: numExercitos } = await supabase.from("exercitos").select("id", { count: "exact", head: true });
 
@@ -133,7 +135,7 @@ export default async function MinhaProducaoLiderPage() {
 
   // Paginado — mesmo bug do Weekly de Receita: sem isso o Supabase corta em
   // 1000 linhas por padrão e some gente aparece com funil zerado.
-  const inicioAno = `${hoje.getFullYear()}-01-01`;
+  const inicioAno = `${anoAtual}-01-01`;
   const funilRows =
     idsPessoas.length > 0
       ? await buscarTudoPaginado<{ profile_id: string; data: string; etapa: string; realizado: number }>(
@@ -243,12 +245,12 @@ export default async function MinhaProducaoLiderPage() {
     return [{ data: ev.data, time, sdrId: ev.sdr_profile_id, closerId: ev.closer_profile_id, quantidade: ev.quantidade }];
   });
 
-  const lastData = ops.length > 0 ? ops[ops.length - 1].data : hoje.toISOString().slice(0, 10);
+  const lastData = ops.length > 0 ? ops[ops.length - 1].data : hojeStr;
 
   const { data: metasAno } = await supabase
     .from("metas_mensais")
     .select("mes, meta_credito_total")
-    .eq("ano", hoje.getFullYear());
+    .eq("ano", anoAtual);
   const metaImp: Record<number, number> = {};
   const metaTeam: Record<string, Record<number, number>> = {};
   const nomesTribos = [...(tribos ?? []).map((t) => t.nome), FORA_DA_TRIBO];
@@ -273,8 +275,8 @@ export default async function MinhaProducaoLiderPage() {
     metaTeam,
     metaImp,
     lastData,
-    anoReferenciaMeta: hoje.getFullYear(),
-    mesReferenciaMeta: hoje.getMonth() + 1,
+    anoReferenciaMeta: anoAtual,
+    mesReferenciaMeta: mesAtual,
     entrevistaEventos,
     metaConversao,
   };
@@ -282,7 +284,7 @@ export default async function MinhaProducaoLiderPage() {
   return (
     <WeeklyDashboard
       dataset={dataset}
-      anoAtual={hoje.getFullYear()}
+      anoAtual={anoAtual}
       eyebrow={`Minha Produção · ${meuExercito.nome}${viewer.isPreview ? ` · pré-visualizando como ${viewer.effectiveNome}` : ""}`}
       titulo="Painel do Exército"
       rotuloEquipe="Tribo"

@@ -4,6 +4,8 @@
 // sem quebrar (nunca lança erro, na pior hipótese devolve o texto inteiro
 // como título e sem prazo).
 
+import { hojeBR } from "@/lib/data-br";
+
 const DIAS_SEMANA = ["domingo", "segunda", "terça", "terca", "quarta", "quinta", "sexta", "sábado", "sabado"];
 const DIA_SEMANA_INDEX: Record<string, number> = {
   domingo: 0,
@@ -17,8 +19,11 @@ const DIA_SEMANA_INDEX: Record<string, number> = {
   sabado: 6,
 };
 
+// Nunca usar toISOString() aqui — converte pra UTC e desalinha do dia local
+// perto da virada. `agora` (e tudo derivado dele com setDate/getDay abaixo)
+// usa getters locais, então formatar tem que ler os mesmos getters locais.
 function formatarData(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export type TarefaRapidaParseada = {
@@ -27,7 +32,15 @@ export type TarefaRapidaParseada = {
   dueTime: string | null;
 };
 
-export function parseTarefaRapida(textoOriginal: string, agora: Date = new Date()): TarefaRapidaParseada {
+// Default ancorado ao meio-dia do dia calendário do Brasil (ver hojeBR, src/
+// lib/data-br.ts) — nunca `new Date()` puro: o servidor roda em UTC, e um
+// "hoje"/"amanhã" calculado ali ficaria um dia adiantado das ~21h à meia-noite
+// no Brasil. O meio-dia evita a mesma armadilha na hora de ler de volta com
+// getters locais (getDate/getDay), não importa o fuso do runtime.
+export function parseTarefaRapida(
+  textoOriginal: string,
+  agora: Date = new Date(hojeBR() + "T12:00:00")
+): TarefaRapidaParseada {
   let texto = textoOriginal.trim();
   let dueDate: string | null = null;
   let dueTime: string | null = null;

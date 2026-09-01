@@ -4,6 +4,7 @@ import WeeklyDashboard from "@/components/weekly/WeeklyDashboard";
 import type { WeeklyDataset, WeeklyOp, PersonInfo, EntrevistaEvento } from "@/lib/weekly-compute";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 import { mapaMetaCreditoPorTribo } from "@/lib/metas";
+import { hojeBR } from "@/lib/data-br";
 
 export default async function WeeklyPage() {
   const supabase = await createClient();
@@ -47,12 +48,13 @@ export default async function WeeklyPage() {
   }
 
   // meta individual: meta do mês corrente dividida por Exército -> Tribo -> membros
-  const hoje = new Date();
+  const hojeStr = hojeBR();
+  const [anoAtual, mesAtual] = hojeStr.split("-").map(Number);
   const { data: metaMesAtual } = await supabase
     .from("metas_mensais")
     .select("id, meta_credito_total")
-    .eq("ano", hoje.getFullYear())
-    .eq("mes", hoje.getMonth() + 1)
+    .eq("ano", anoAtual)
+    .eq("mes", mesAtual)
     .maybeSingle();
 
   const { data: conversoesMes } = metaMesAtual
@@ -97,7 +99,7 @@ export default async function WeeklyPage() {
   // sem erro nenhum. Sem paginação, a maioria das pessoas aparecia com
   // tentativas/entrevistas zeradas simplesmente porque a linha delas nunca
   // chegava a voltar da query.
-  const inicioAno = `${hoje.getFullYear()}-01-01`;
+  const inicioAno = `${anoAtual}-01-01`;
   const funilRows =
     idsPessoas.length > 0
       ? await buscarTudoPaginado<{ profile_id: string; data: string; etapa: string; realizado: number }>(
@@ -218,13 +220,13 @@ export default async function WeeklyPage() {
     };
   });
 
-  const lastData = ops.length > 0 ? ops[ops.length - 1].data : hoje.toISOString().slice(0, 10);
+  const lastData = ops.length > 0 ? ops[ops.length - 1].data : hojeStr;
 
   // metas por mês (Império e por Exército — divisão igual entre exércitos)
   const { data: metasAno } = await supabase
     .from("metas_mensais")
     .select("mes, meta_credito_total")
-    .eq("ano", hoje.getFullYear());
+    .eq("ano", anoAtual);
   const metaImp: Record<number, number> = {};
   const metaTeam: Record<string, Record<number, number>> = {};
   for (const tm of teams) metaTeam[tm] = {};
@@ -241,11 +243,11 @@ export default async function WeeklyPage() {
     metaTeam,
     metaImp,
     lastData,
-    anoReferenciaMeta: hoje.getFullYear(),
-    mesReferenciaMeta: hoje.getMonth() + 1,
+    anoReferenciaMeta: anoAtual,
+    mesReferenciaMeta: mesAtual,
     entrevistaEventos,
     metaConversao,
   };
 
-  return <WeeklyDashboard dataset={dataset} anoAtual={hoje.getFullYear()} />;
+  return <WeeklyDashboard dataset={dataset} anoAtual={anoAtual} />;
 }

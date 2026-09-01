@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { calcularThreshold, buscarProducaoMesParaMarcos } from "@/lib/marcos";
 import { buscarMetaComTaxas, calcularFunilMeta, buscarRealizadoDia, type EscopoTime } from "@/lib/metas";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
+import { hojeBR, paraDataUTC } from "@/lib/data-br";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -11,10 +12,13 @@ function moeda(v: number) {
 
 // Pula fim de semana — só se trabalha seg-sex, então "ontem" numa segunda
 // (ou domingo/sábado, se alguém abrir fora de hora) é a última sexta.
+// `data` precisa ser um Date ancorado em UTC (ver paraDataUTC, src/lib/
+// data-br.ts) — usa métodos UTC pra ficar determinístico em qualquer
+// runtime, servidor ou navegador.
 function ultimoDiaUtilAntes(data: Date): Date {
   const d = new Date(data);
-  d.setDate(d.getDate() - 1);
-  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+  d.setUTCDate(d.getUTCDate() - 1);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
   return d;
 }
 
@@ -45,7 +49,7 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
     .map((p) => ({ id: p.id, full_name: p.full_name, role: p.role, data_admissao: p.data_admissao }));
   const ids = pessoas.map((p) => p.id);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   const { data: compromissosHoje } = ids.length
     ? await supabase.from("compromissos").select("profile_id, lancado, falta").eq("data", hoje).in("profile_id", ids)
@@ -118,17 +122,17 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
     .filter((x): x is NonNullable<typeof x> => x !== null)
     .sort((a, b) => b.producao - a.producao);
 
-  const agora = new Date();
+  const agora = paraDataUTC(hoje);
   const aniversarios = (pessoas ?? [])
     .filter((p) => p.data_admissao)
     .map((p) => {
-      const admissao = new Date(p.data_admissao + "T00:00:00");
-      const proximoAniversario = new Date(agora.getFullYear(), admissao.getMonth(), admissao.getDate());
-      if (proximoAniversario < new Date(agora.getFullYear(), agora.getMonth(), agora.getDate())) {
-        proximoAniversario.setFullYear(agora.getFullYear() + 1);
+      const admissao = paraDataUTC(p.data_admissao);
+      const proximoAniversario = new Date(Date.UTC(agora.getUTCFullYear(), admissao.getUTCMonth(), admissao.getUTCDate()));
+      if (proximoAniversario < new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate()))) {
+        proximoAniversario.setUTCFullYear(agora.getUTCFullYear() + 1);
       }
       const dias = Math.round((proximoAniversario.getTime() - agora.getTime()) / 86400000);
-      const anos = proximoAniversario.getFullYear() - admissao.getFullYear();
+      const anos = proximoAniversario.getUTCFullYear() - admissao.getUTCFullYear();
       return { id: p.id, nome: p.full_name, dias, anos };
     })
     .filter((a) => a.dias >= 0 && a.dias <= 7)
@@ -147,7 +151,7 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   // mesma limitação de ser keyed pela data de assinatura).
   const ontemStr = ultimoDiaUtilAntes(agora).toISOString().slice(0, 10);
   const hojeStr = hoje;
-  const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
+  const diasNoMes = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() + 1, 0)).getUTCDate();
 
   const [
     { data: funilOntem },

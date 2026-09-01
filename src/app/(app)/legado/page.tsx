@@ -8,6 +8,7 @@ import { salvarAdmissao, salvarNascimento, alternarAtivo, confirmarResgateMarco 
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 import { IconAlert, IconGift } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
+import { hojeBR, paraDataUTC } from "@/lib/data-br";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -38,15 +39,15 @@ export default async function LegadoPage({
   const { data: pessoas } = await query;
 
   const ids = (pessoas ?? []).map((p) => p.id);
-  const hoje = new Date();
-  const inicioMes = hoje.toISOString().slice(0, 7) + "-01";
-  const inicioTrimestre = new Date(hoje.getFullYear(), hoje.getMonth() - 2, 1).toISOString().slice(0, 10);
+  const hoje = paraDataUTC(hojeBR());
+  const inicioMes = hojeBR().slice(0, 7) + "-01";
+  const inicioTrimestre = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() - 2, 1)).toISOString().slice(0, 10);
 
   const { data: metaMes } = await supabase
     .from("metas_mensais")
     .select("id, meta_ticket_medio")
-    .eq("ano", hoje.getFullYear())
-    .eq("mes", hoje.getMonth() + 1)
+    .eq("ano", hoje.getUTCFullYear())
+    .eq("mes", hoje.getUTCMonth() + 1)
     .maybeSingle();
   const { data: conversoes } = metaMes
     ? await supabase.from("metas_conversao").select("etapa_de, etapa_para, taxa_esperada").eq("meta_mensal_id", metaMes.id)
@@ -126,7 +127,7 @@ export default async function LegadoPage({
   }
 
   // Risco de queda: mês atual vs média dos 2 meses anteriores
-  const mesAtualStr = hoje.toISOString().slice(0, 7);
+  const mesAtualStr = hojeBR().slice(0, 7);
   const pagoMesAnteriorPorPessoa = new Map<string, number>();
   for (const row of vendasTrimestre ?? []) {
     if (!contaComoPapel(row.papel)) continue;
@@ -137,8 +138,8 @@ export default async function LegadoPage({
     const mediaAnterior = (pagoMesAnteriorPorPessoa.get(profileId) ?? 0) / 2;
     if (mediaAnterior < 1000) return false;
     const atual = pagoPorPessoa.get(profileId)?.total ?? 0;
-    const diaDoMes = hoje.getDate();
-    const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+    const diaDoMes = hoje.getUTCDate();
+    const diasNoMes = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() + 1, 0)).getUTCDate();
     const projetado = (atual / Math.max(1, diaDoMes)) * diasNoMes;
     return projetado < mediaAnterior * 0.6;
   }

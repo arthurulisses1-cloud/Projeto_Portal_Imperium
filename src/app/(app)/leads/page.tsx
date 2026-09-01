@@ -5,6 +5,7 @@ import { getViewerContext } from "@/lib/preview";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { normalizarNome } from "@/lib/sync/parse";
 import { classificarBalde, type StatusManual } from "@/lib/forecast";
+import { inicioMesBR } from "@/lib/data-br";
 
 export default async function LeadsPage() {
   const supabase = await createClient();
@@ -29,7 +30,7 @@ export default async function LeadsPage() {
   // do Diretor, 2026-08-27). O sync já limpa mês anterior a cada rodada
   // (run.ts), esse filtro aqui é defesa extra pro intervalo entre um mês
   // virar e o próximo sync rodar.
-  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
+  const inicioMes = inicioMesBR();
 
   // RLS de entrevistas_leads já filtra pro recorte certo (dono, líder do
   // Exército, closer da Tribo, Diretor) — um select liso já vem certo,

@@ -5,6 +5,7 @@ import { buscarMetaIndividual } from "@/lib/metas";
 import { calcularGargalo } from "@/lib/gargalo";
 import { RANK_LABELS, ROLE_LABELS } from "@/lib/labels";
 import type { Escopo } from "./scope";
+import { inicioMesBR } from "@/lib/data-br";
 
 // REGRA DURA (pedido explícito do Diretor, 2026-08-22): NUNCA importe nada
 // de src/lib/dre.ts aqui, nem crie uma tool que leia dre_configuracoes /
@@ -110,8 +111,7 @@ export async function executarFerramenta(
   nome: MinervaToolName,
   input: Record<string, unknown>
 ): Promise<unknown> {
-  const hoje = new Date();
-  const inicioMes = hoje.toISOString().slice(0, 7) + "-01";
+  const inicioMes = inicioMesBR();
 
   if (nome === "listar_pessoas") {
     const pessoas = await pessoasNoEscopo(supabase, escopo);

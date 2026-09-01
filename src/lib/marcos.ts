@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { hojeBR } from "@/lib/data-br";
 
 // Marcos são cadastrados com 1 threshold só, pensado pra produção de SDR —
 // Closer e Líder naturalmente produzem/lideram produção muito maior, então
@@ -101,7 +102,7 @@ export async function buscarProgressoMarcos(
   profileId: string,
   role: string = "sdr"
 ): Promise<{ marcos: MarcoProgresso[]; producaoMes: number }> {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
   const inicioMes = hoje.slice(0, 7) + "-01";
   const competenciaAtual = inicioMes;
 

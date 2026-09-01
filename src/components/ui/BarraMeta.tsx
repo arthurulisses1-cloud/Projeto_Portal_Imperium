@@ -1,3 +1,5 @@
+import { hojeBR, paraDataUTC } from "@/lib/data-br";
+
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
@@ -14,9 +16,9 @@ export default function BarraMeta({ realizado, meta }: { realizado: number; meta
     );
   }
 
-  const hoje = new Date();
-  const diaDoMes = hoje.getDate();
-  const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  const hoje = paraDataUTC(hojeBR());
+  const diaDoMes = hoje.getUTCDate();
+  const diasNoMes = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() + 1, 0)).getUTCDate();
   const esperadoHoje = meta * (diaDoMes / diasNoMes);
 
   const pctRealizado = Math.min(100, (realizado / meta) * 100);

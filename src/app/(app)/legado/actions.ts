@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { inicioMesBR } from "@/lib/data-br";
 
 export async function salvarObservacao(formData: FormData) {
   const supabase = await createClient();
@@ -78,7 +79,7 @@ export async function confirmarResgateMarco(formData: FormData) {
 
   const profileId = String(formData.get("profile_id"));
   const marcoId = String(formData.get("marco_id"));
-  const competencia = new Date().toISOString().slice(0, 7) + "-01";
+  const competencia = inicioMesBR();
 
   // RLS (marcos_resgates_insert_diretor) já exige Diretor; a constraint
   // unique(profile_id, marco_id) barra resgatar o mesmo marco 2x, e

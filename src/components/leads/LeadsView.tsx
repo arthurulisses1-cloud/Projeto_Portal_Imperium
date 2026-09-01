@@ -11,6 +11,7 @@ import {
 } from "@/app/(app)/leads/actions";
 import { IconCheck } from "@/components/ui/icons";
 import { BALDE_LABELS, type Balde } from "@/lib/forecast";
+import { hojeBR } from "@/lib/data-br";
 
 export type Lead = {
   id: string;
@@ -113,7 +114,7 @@ function dbr(s: string) {
 // Cor da tag de data de reanálise conforme a urgência — mesma lógica visual
 // de "Atrasada"/"Hoje" já usada no widget de tarefas do Mural.
 function corReanalise(dataStr: string) {
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
   if (dataStr < hoje) return "bg-wine";
   if (dataStr === hoje) return "bg-gold";
   return "bg-stone-500";

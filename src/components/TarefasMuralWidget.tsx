@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import TarefasMuralQuickAdd from "./TarefasMuralQuickAdd";
 import TarefasMuralItem from "./TarefasMuralItem";
+import { hojeBR } from "@/lib/data-br";
 
 // Widget próprio do Mural pras suas tarefas de hoje/atrasadas — pedido do
 // Diretor (2026-08-27): fora da Central de Notificações de propósito (é
@@ -12,7 +13,7 @@ import TarefasMuralItem from "./TarefasMuralItem";
 // aberto: não desaparece mais quando a lista está vazia.
 export default async function TarefasMuralWidget({ userId }: { userId: string }) {
   const supabase = await createClient();
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   const { data: tarefasRaw } = await supabase
     .from("tasks")

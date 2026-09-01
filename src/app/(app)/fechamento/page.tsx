@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buscarNotaMes, buscarPendenciasAprovacao, buscarFechamento } from "@/lib/dre";
 import { aprovarComissaoParceiro, fecharMes, reabrirMes } from "./actions";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
+import { hojeBR } from "@/lib/data-br";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -23,9 +24,9 @@ export default async function FechamentoPage({ searchParams }: { searchParams: {
   const isDiretor = profile?.role === "diretor";
   if (!isDiretor && profile?.role !== "investidor") redirect("/");
 
-  const hoje = new Date();
-  const ano = Number(searchParams.ano) || hoje.getFullYear();
-  const mes = Number(searchParams.mes) || hoje.getMonth() + 1;
+  const [anoHoje, mesHoje] = hojeBR().split("-").map(Number);
+  const ano = Number(searchParams.ano) || anoHoje;
+  const mes = Number(searchParams.mes) || mesHoje;
 
   const [nota, pendencias, fechamento] = await Promise.all([
     buscarNotaMes(supabase, ano, mes),

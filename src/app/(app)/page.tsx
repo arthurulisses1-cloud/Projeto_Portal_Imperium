@@ -17,6 +17,7 @@ import { buscarCampanhasAtivas } from "@/lib/campanhas";
 import { getViewerContext } from "@/lib/preview";
 import { buscarComentarios, buscarReacoes } from "@/lib/social";
 import ComentariosReacoes from "@/components/ui/ComentariosReacoes";
+import { hojeBR, fimMesBR } from "@/lib/data-br";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -52,7 +53,7 @@ export default async function MuralPage() {
   // se falhar, só a bolinha continua acesa, nada quebra na página.
   await supabase.from("profiles").update({ mural_visto_em: new Date().toISOString() }).eq("id", meId);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
   const { data: compromissoHoje } = await supabase
     .from("compromissos")
     .select("*")
@@ -73,8 +74,9 @@ export default async function MuralPage() {
     .select("texto, fonte")
     .eq("ativo", true);
 
+  const anoAtualStr = Number(hojeBR().slice(0, 4));
   const dayOfYear = Math.floor(
-    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
+    (Date.now() - new Date(Date.UTC(anoAtualStr, 0, 0)).getTime()) / 86400000
   );
   const quote =
     quotes && quotes.length > 0 ? quotes[dayOfYear % quotes.length] : null;
@@ -158,8 +160,7 @@ export default async function MuralPage() {
   // crédito (exclui Análise Jurídico/Esfriou, que ainda não têm destino
   // definido). Diretor vê a firma, Closer a própria Tribo, SDR a própria
   // produção — Líder fica de fora por enquanto (não foi pedido).
-  const agora = new Date();
-  const fimMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const fimMes = fimMesBR();
   let painelFinanceiro: PainelFinanceiro | null = null;
   if (meRole === "diretor" || meRole === "investidor") {
     const { data: opsMes } = await supabase

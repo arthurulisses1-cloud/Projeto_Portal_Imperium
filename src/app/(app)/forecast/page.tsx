@@ -4,6 +4,7 @@ import { podeEditarOperacao, type ForecastOp } from "@/lib/forecast";
 import { getViewerContext } from "@/lib/preview";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { SDR_FORECAST_LIBERADO } from "@/lib/acessos-especiais";
+import { inicioMesBR, fimMesBR } from "@/lib/data-br";
 
 export default async function ForecastPage() {
   const supabase = await createClient();
@@ -40,9 +41,8 @@ export default async function ForecastPage() {
     exercitoLideradoNome = ex?.nome ?? null;
   }
 
-  const hoje = new Date();
-  const inicioMes = hoje.toISOString().slice(0, 7) + "-01";
-  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().slice(0, 10);
+  const inicioMes = inicioMesBR();
+  const fimMes = fimMesBR();
 
   // As colunas motivo_queda/motivo_queda_obs vêm da migration 0028 — se ela
   // ainda não rodou nesse banco, o select com essas colunas falha (Postgres

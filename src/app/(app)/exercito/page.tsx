@@ -13,6 +13,7 @@ import { getViewerContext } from "@/lib/preview";
 import { calcularFunilMeta, mapaMetaCreditoPorTribo } from "@/lib/metas";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
+import { hojeBR, paraDataUTC } from "@/lib/data-br";
 import { IconAlert } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
 
@@ -77,12 +78,12 @@ export default async function ExercitoPage() {
   ]);
 
   // ---------- Meta esperada por Tribo (pra pace/risco) ----------
-  const agora = new Date();
+  const agora = paraDataUTC(hojeBR());
   const { data: metaMes } = await supabase
     .from("metas_mensais")
     .select("id, meta_credito_total, meta_ticket_medio")
-    .eq("ano", agora.getFullYear())
-    .eq("mes", agora.getMonth() + 1)
+    .eq("ano", agora.getUTCFullYear())
+    .eq("mes", agora.getUTCMonth() + 1)
     .maybeSingle();
   // Divisão igual por Tribo (Inbound conta como meio de uma Tribo lógica —
   // ver mapaMetaCreditoPorTribo) — cada Tribo pode ter uma meta diferente
@@ -98,8 +99,8 @@ export default async function ExercitoPage() {
   const taxasExercito = new Map((conversoes ?? []).map((c) => [`${c.etapa_de}_${c.etapa_para}`, c.taxa_esperada]));
   const metaFunilExercito = calcularFunilMeta(metaCreditoExercito, metaMes?.meta_ticket_medio ?? 0, taxasExercito);
 
-  const diaDoMes = agora.getDate();
-  const diasNoMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).getDate();
+  const diaDoMes = agora.getUTCDate();
+  const diasNoMes = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth() + 1, 0)).getUTCDate();
   const paceEsperado = diasNoMes > 0 ? diaDoMes / diasNoMes : 1;
 
   // Pago por Tribo (individual, pra comparação lado a lado)
@@ -137,7 +138,7 @@ export default async function ExercitoPage() {
         .order("created_at", { ascending: false })
     : { data: [] };
 
-  const hoje = agora.toISOString().slice(0, 10);
+  const hoje = hojeBR();
   type PdiRow = NonNullable<typeof pdiRows>[number];
   const ultimoPdiPorMembro = new Map<string, PdiRow>();
   for (const row of pdiRows ?? []) {

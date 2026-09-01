@@ -6,6 +6,7 @@ import { buscarEntrevistasLeads } from "./entrevistas-leads";
 import { buscarOperacoes } from "./weekly";
 import { normalizarNome } from "./parse";
 import { csvUrl, SHEET_GIDS } from "./config";
+import { hojeBR, inicioMesBR } from "@/lib/data-br";
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -205,7 +206,7 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // já tiver de mês anterior a cada sync (a janela "mês corrente" anda
   // conforme o calendário — sem essa limpeza, lead de julho ficaria
   // preso pra sempre assim que agosto virasse).
-  const inicioMesLeads = new Date().toISOString().slice(0, 7) + "-01";
+  const inicioMesLeads = inicioMesBR();
   const entrevistasLeads = (await buscarEntrevistasLeads(entrevistasText)).filter((l) => l.data >= inicioMesLeads);
 
   const { error: limpezaLeadsError } = await supabase.from("entrevistas_leads").delete().lt("data", inicioMesLeads);
@@ -376,7 +377,7 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
       from += pageSize;
     }
   }
-  const hojeStr = new Date().toISOString().slice(0, 10);
+  const hojeStr = hojeBR();
 
   const weeklyRows = operacoes.linhas.map((l) => {
     const anterior = statusAnteriorPorChave.get(l.chaveNatural);
@@ -502,7 +503,7 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // ganho, e quase estourou o tempo do Server Action de "Sincronizar agora"
   // (achado 2026-08-24: sync manual voltava com erro genérico do Next
   // escondendo a causa — corte de escopo aqui é a correção).
-  const dataMinimaReal = new Date();
+  const dataMinimaReal = new Date(hojeBR() + "T00:00:00Z");
   dataMinimaReal.setDate(dataMinimaReal.getDate() - 5);
   const dataMinimaRealStr = dataMinimaReal.toISOString().slice(0, 10);
 

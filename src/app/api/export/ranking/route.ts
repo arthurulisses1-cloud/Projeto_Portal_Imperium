@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { inicioMesBR } from "@/lib/data-br";
 
 function csvEscape(v: string | number) {
   const s = String(v);
@@ -19,7 +20,7 @@ export async function GET() {
     .in("role", ["sdr", "closer"]);
 
   const ids = (pessoas ?? []).map((p) => p.id);
-  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
+  const inicioMes = inicioMesBR();
 
   const [{ data: funilRows }, { data: vendasRows }] = await Promise.all([
     ids.length

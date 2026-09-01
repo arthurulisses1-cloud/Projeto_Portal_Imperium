@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { hojeBR } from "@/lib/data-br";
 
 // RLS de entrevistas_leads (migration 0053) já restringe update ao mesmo
 // recorte de sempre (dono SDR/Closer, líder do Exército, closer da Tribo,
@@ -225,7 +226,7 @@ export async function criarLembreteDeLead(formData: FormData) {
   const { error } = await supabase.from("tasks").insert({
     profile_id: user.id,
     titulo: `Follow-up: ${leadNome || "lead"}`,
-    due_date: new Date().toISOString().slice(0, 10),
+    due_date: hojeBR(),
     coluna: "afazer",
     prioridade: "normal",
     lead_id: leadId,

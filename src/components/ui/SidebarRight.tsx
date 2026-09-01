@@ -12,6 +12,7 @@ import { buscarRemuneracaoMes } from "@/lib/remuneracao";
 import { buscarProgressoMarcos } from "@/lib/marcos";
 import { paraRomano } from "@/lib/numerals";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
+import { hojeBR, inicioMesBR } from "@/lib/data-br";
 import { IconLock, IconGift } from "./icons";
 import RankBadge from "./RankBadge";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
@@ -43,7 +44,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   // cálculo de /estrelas, pra dar o "check rápido" sem precisar entrar na aba.
   let semanaEstrelas: { qtd: number } | null = null;
   if ((profile.role === "sdr" || profile.role === "closer") && pace.cheia > 0) {
-    const inicioSemanaAtual = inicioSemanaISO(new Date().toISOString().slice(0, 10));
+    const inicioSemanaAtual = inicioSemanaISO(hojeBR());
     const { data: vendasSemana } = await supabase
       .from("vendas")
       .select("id")
@@ -59,8 +60,9 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   const carreiraResumo = await avaliarProntidaoPromocao(supabase, userId, profile.role, rank, profile.stars_total, profile.tribo_id);
 
   const { data: quotes } = await supabase.from("sage_quotes").select("texto, fonte").eq("ativo", true);
+  const anoAtualStr = Number(hojeBR().slice(0, 4));
   const dayOfYear = Math.floor(
-    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000
+    (Date.now() - new Date(Date.UTC(anoAtualStr, 0, 0)).getTime()) / 86400000
   );
   const quote = quotes && quotes.length > 0 ? quotes[(dayOfYear + 1) % quotes.length] : null;
 
@@ -68,7 +70,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   // executivo) — a pedido, sai da visão dele (2026-08-22).
   const { marcos } = profile.role !== "diretor" ? await buscarProgressoMarcos(supabase, userId, profile.role) : { marcos: [] };
 
-  const inicioMes = new Date().toISOString().slice(0, 7) + "-01";
+  const inicioMes = inicioMesBR();
   const { tiers: tiersOrdenados, remuneracao, producaoPrincipal, papelPrincipal } = await buscarRemuneracaoMes(
     supabase,
     userId,

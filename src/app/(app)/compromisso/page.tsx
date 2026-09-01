@@ -6,6 +6,7 @@ import { buscarMetaIndividual, calcularFunilMeta } from "@/lib/metas";
 import { calcularStreak, cumpriuCompromisso, type StreakRow } from "@/lib/streak";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { getViewerContext } from "@/lib/preview";
+import { hojeBR, paraDataUTC } from "@/lib/data-br";
 import { IconFlame, IconCheck, IconAlert } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
 
@@ -18,15 +19,17 @@ function statusLabel(row: CompromissoRow, isHoje: boolean) {
   return { texto: "Não cumprido", cor: "text-wine-bright" };
 }
 
-// Conta dias úteis (seg-sex) entre hoje (inclusive) e o fim do mês.
+// Conta dias úteis (seg-sex) entre hoje (inclusive) e o fim do mês. `hoje`
+// precisa ser um Date ancorado em UTC (ver paraDataUTC, src/lib/data-br.ts)
+// — usa métodos UTC pra ficar determinístico em qualquer runtime.
 function diasUteisRestantes(hoje: Date): number {
-  const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  const fimMes = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() + 1, 0));
   let dias = 0;
   const cursor = new Date(hoje);
   while (cursor <= fimMes) {
-    const diaSemana = cursor.getDay();
+    const diaSemana = cursor.getUTCDay();
     if (diaSemana !== 0 && diaSemana !== 6) dias++;
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return dias;
 }
@@ -44,7 +47,7 @@ export default async function CompromissoPage() {
     .single();
   logErroSupabase(`CompromissoPage: profiles (id=${meId})`, profileError);
 
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   const { data: hojeRow } = await supabase
     .from("compromissos")
@@ -100,7 +103,7 @@ export default async function CompromissoPage() {
       if (r.etapa in jaFeito) jaFeito[r.etapa as keyof typeof jaFeito] += r.realizado;
     }
 
-    const restantes = diasUteisRestantes(new Date());
+    const restantes = diasUteisRestantes(paraDataUTC(hojeBR()));
     if (restantes > 0 && metaCreditoIndividual > 0) {
       sugestao = {
         entrevistas: Math.max(0, Math.ceil(((metaFunil.entrevistas ?? 0) - jaFeito.entrevistas) / restantes)),

@@ -9,6 +9,7 @@ import Card from "@/components/ui/Card";
 import BarraProgresso from "@/components/ui/BarraProgresso";
 import { getViewerContext } from "@/lib/preview";
 import { IconAlert, IconCheck, IconBook } from "@/components/ui/icons";
+import { hojeBR } from "@/lib/data-br";
 
 type Periodo = "hoje" | "semana" | "mes" | "personalizado";
 type Visao = "total" | "individual" | "tribo";
@@ -153,8 +154,8 @@ export default async function ProducaoPage({
   const metaFunilIndividual = calcularFunilMeta(metaCreditoIndividual, metaTicketMedio, taxas);
 
   // meta de crédito prorateada pro período selecionado (mês inteiro = 100%)
-  const hoje = new Date();
-  const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+  const [anoHoje, mesHoje] = hojeBR().split("-").map(Number);
+  const diasNoMes = new Date(Date.UTC(anoHoje, mesHoje, 0)).getUTCDate();
   const diasPersonalizado =
     periodo === "personalizado"
       ? Math.max(1, Math.round((new Date(fim + "T00:00:00").getTime() - new Date(inicio + "T00:00:00").getTime()) / 86400000) + 1)

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { hojeBR } from "@/lib/data-br";
 
 export async function registrarCompromisso(formData: FormData) {
   const supabase = await createClient();
@@ -13,7 +14,7 @@ export async function registrarCompromisso(formData: FormData) {
   const entrevistas = Number(formData.get("entrevistas_comp") ?? 0);
   const assinaturas = Number(formData.get("assinaturas_comp") ?? 0);
   const pagos = Number(formData.get("pagos_comp") ?? 0);
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   const { error } = await supabase.from("compromissos").insert({
     profile_id: user.id,
@@ -43,7 +44,7 @@ export async function atualizarCompromisso(formData: FormData) {
   const entrevistas = Number(formData.get("entrevistas_comp") ?? 0);
   const assinaturas = Number(formData.get("assinaturas_comp") ?? 0);
   const pagos = Number(formData.get("pagos_comp") ?? 0);
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeBR();
 
   const { error } = await supabase
     .from("compromissos")

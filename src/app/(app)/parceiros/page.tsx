@@ -3,6 +3,7 @@ import { podeEditarOperacao } from "@/lib/forecast";
 import { getViewerContext } from "@/lib/preview";
 import { Table, Th } from "@/components/ui/Table";
 import ParceiroRow, { type ParceiroOp } from "@/components/parceiros/ParceiroRow";
+import { hojeBR } from "@/lib/data-br";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -28,9 +29,9 @@ export default async function ParceirosPage({ searchParams }: { searchParams: { 
     exercitoLideradoId = ex?.id ?? null;
   }
 
-  const hoje = new Date();
-  const ano = Number(searchParams.ano) || hoje.getFullYear();
-  const mes = Number(searchParams.mes) || hoje.getMonth() + 1;
+  const [anoHoje, mesHoje] = hojeBR().split("-").map(Number);
+  const ano = Number(searchParams.ano) || anoHoje;
+  const mes = Number(searchParams.mes) || mesHoje;
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const fimMes = new Date(ano, mes, 0).toISOString().slice(0, 10);
   const mesAnterior = mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 };
