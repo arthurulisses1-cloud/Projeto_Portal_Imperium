@@ -82,7 +82,12 @@ export async function fecharMes(formData: FormData) {
         nome: l.nome,
         fixo: l.fixo,
         bonus: l.bonus,
-        variavel: l.variavelSdr + l.variavelCloser + l.variavelGestao,
+        // l.campanhas = bônus/receita manual lançado na DRE pra essa
+        // pessoa (dre_despesas_extras com profile_id) — entra somado aqui
+        // pra pagar junto com a comissão dia 15, e também guardado à parte
+        // (coluna campanhas) só pra UI conseguir mostrar o "+ bônus".
+        variavel: l.variavelSdr + l.variavelCloser + l.variavelGestao + l.campanhas,
+        campanhas: l.campanhas,
       }))
     );
     if (error) throw new Error(error.message);

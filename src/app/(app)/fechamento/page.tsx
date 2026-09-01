@@ -208,7 +208,14 @@ export default async function FechamentoPage({ searchParams }: { searchParams: {
                   .filter((p) => p.variavel > 0)
                   .map((p) => (
                     <li key={p.profileId} className="flex justify-between text-xs">
-                      <span className="text-stone-300">{p.nome}</span>
+                      <span className="text-stone-300">
+                        {p.nome}
+                        {p.campanhas > 0 && (
+                          <span className="ml-1 text-gold" title="Inclui bônus/receita manual lançado na DRE">
+                            (+{moeda(p.campanhas)} bônus)
+                          </span>
+                        )}
+                      </span>
                       <span className="text-gold-bright">{moeda(p.variavel)}</span>
                     </li>
                   ))}

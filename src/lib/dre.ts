@@ -583,7 +583,7 @@ export type FechamentoStatus = {
   existe: boolean;
   status: "aberto" | "fechado";
   fechadoEm: string | null;
-  pessoas: { profileId: string; nome: string; fixo: number; bonus: number; variavel: number }[];
+  pessoas: { profileId: string; nome: string; fixo: number; bonus: number; variavel: number; campanhas: number }[];
   parceiros: { nomeParceiro: string; chavePix: string; valorTotal: number; valorRepassado: number; valorRetido: number }[];
 };
 
@@ -599,7 +599,7 @@ export async function buscarFechamento(supabase: SupabaseClient, ano: number, me
   const fechado = fechamento.status === "fechado";
   const [{ data: pessoas }, { data: parceiros }] = await Promise.all([
     fechado
-      ? supabase.from("fechamento_pessoas").select("profile_id, nome, fixo, bonus, variavel").eq("fechamento_id", fechamento.id).order("nome")
+      ? supabase.from("fechamento_pessoas").select("profile_id, nome, fixo, bonus, variavel, campanhas").eq("fechamento_id", fechamento.id).order("nome")
       : Promise.resolve({ data: [] }),
     fechado
       ? supabase
@@ -619,6 +619,7 @@ export async function buscarFechamento(supabase: SupabaseClient, ano: number, me
       fixo: Number(p.fixo),
       bonus: Number(p.bonus),
       variavel: Number(p.variavel),
+      campanhas: Number(p.campanhas ?? 0),
     })),
     parceiros: (parceiros ?? []).map((p) => ({
       nomeParceiro: p.nome_parceiro,

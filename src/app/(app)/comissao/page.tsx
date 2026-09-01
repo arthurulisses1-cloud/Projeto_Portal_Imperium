@@ -99,7 +99,7 @@ export default async function ComissaoPage({
   // foi selecionado (?ano=&mes= vazios, olhando "hoje") mantém o
   // comportamento antigo: mostra o último mês fechado, seja qual for — é o
   // "o que vem por aí" de quem não está procurando um mês específico.
-  let recebimento: { ano: number; mes: number; fixo: number; bonus: number; variavel: number } | null = null;
+  let recebimento: { ano: number; mes: number; fixo: number; bonus: number; variavel: number; campanhas: number } | null = null;
   let mesSelecionadoNaoFechado = false;
   if (mesEhAtual) {
     const { data: fechamentosRecentes } = await supabase
@@ -112,7 +112,7 @@ export default async function ComissaoPage({
     for (const f of fechamentosRecentes ?? []) {
       const { data: minhaLinha } = await supabase
         .from("fechamento_pessoas")
-        .select("fixo, bonus, variavel")
+        .select("fixo, bonus, variavel, campanhas")
         .eq("fechamento_id", f.id)
         .eq("profile_id", meId)
         .maybeSingle();
@@ -123,6 +123,7 @@ export default async function ComissaoPage({
           fixo: Number(minhaLinha.fixo),
           bonus: Number(minhaLinha.bonus),
           variavel: Number(minhaLinha.variavel),
+          campanhas: Number(minhaLinha.campanhas ?? 0),
         };
         break;
       }
@@ -138,7 +139,7 @@ export default async function ComissaoPage({
     if (fechamentoSelecionado) {
       const { data: minhaLinha } = await supabase
         .from("fechamento_pessoas")
-        .select("fixo, bonus, variavel")
+        .select("fixo, bonus, variavel, campanhas")
         .eq("fechamento_id", fechamentoSelecionado.id)
         .eq("profile_id", meId)
         .maybeSingle();
@@ -149,6 +150,7 @@ export default async function ComissaoPage({
           fixo: Number(minhaLinha.fixo),
           bonus: Number(minhaLinha.bonus),
           variavel: Number(minhaLinha.variavel),
+          campanhas: Number(minhaLinha.campanhas ?? 0),
         };
       }
     } else {
@@ -227,6 +229,11 @@ export default async function ComissaoPage({
                 Dia 15/{MESES[mesPagamento.mes - 1]} · Comissão
               </p>
               <p className="text-lg text-gold-bright">{moeda(recebimento.variavel)}</p>
+              {recebimento.campanhas > 0 && (
+                <p className="mt-1 text-[11px] text-gold">
+                  Inclui {moeda(recebimento.campanhas)} de bônus lançado pelo Diretor
+                </p>
+              )}
             </div>
           </div>
         </section>
