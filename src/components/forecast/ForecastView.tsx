@@ -26,10 +26,18 @@ export default function ForecastView({
   ops,
   escopoLabel,
   tribos,
+  mesLabel,
+  hrefMesAnterior,
+  hrefMesAtual,
+  hrefMesSeguinte,
 }: {
   ops: ForecastOp[];
   escopoLabel: string;
   tribos: { chave: string; label: string }[];
+  mesLabel: string;
+  hrefMesAnterior: string;
+  hrefMesAtual: string | null;
+  hrefMesSeguinte: string;
 }) {
   const [triboFiltro, setTriboFiltro] = useState<string | null>(null);
   const [aba, setAba] = useState<Aba>("assinaturas");
@@ -103,7 +111,20 @@ export default function ForecastView({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl text-gold-bright">Forecast</h1>
-          <p className="kicker mt-1">{escopoLabel} · mês corrente</p>
+          <p className="kicker mt-1">{escopoLabel} · {mesLabel}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href={hrefMesAnterior} className="btn-outline px-2.5 py-1.5 text-xs">
+            ← Mês
+          </a>
+          {hrefMesAtual && (
+            <a href={hrefMesAtual} className="btn-outline px-2.5 py-1.5 text-xs">
+              Mês atual
+            </a>
+          )}
+          <a href={hrefMesSeguinte} className="btn-outline px-2.5 py-1.5 text-xs">
+            Mês →
+          </a>
         </div>
         {tribos.length > 0 && (
           <div className="flex flex-wrap gap-2">

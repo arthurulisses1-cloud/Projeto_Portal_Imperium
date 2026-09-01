@@ -4,9 +4,15 @@ import { podeEditarOperacao, type ForecastOp } from "@/lib/forecast";
 import { getViewerContext } from "@/lib/preview";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { SDR_FORECAST_LIBERADO } from "@/lib/acessos-especiais";
-import { inicioMesBR, fimMesBR } from "@/lib/data-br";
+import { hojeBR } from "@/lib/data-br";
 
-export default async function ForecastPage() {
+const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+export default async function ForecastPage({
+  searchParams,
+}: {
+  searchParams: { ano?: string; mes?: string };
+}) {
   const supabase = await createClient();
   const viewer = await getViewerContext(supabase);
   if (!viewer) return null;
@@ -41,8 +47,17 @@ export default async function ForecastPage() {
     exercitoLideradoNome = ex?.nome ?? null;
   }
 
-  const inicioMes = inicioMesBR();
-  const fimMes = fimMesBR();
+  // Mesmo padrão ?ano=&mes= de /comissao, /dre etc — pedido do Diretor,
+  // 2026-09-01: fechando a folha de Agosto já em Setembro, precisava
+  // conseguir ver o Forecast de Agosto de novo.
+  const [anoHoje, mesHoje] = hojeBR().split("-").map(Number);
+  const ano = Number(searchParams.ano) || anoHoje;
+  const mes = Number(searchParams.mes) || mesHoje;
+  const mesEhAtual = ano === anoHoje && mes === mesHoje;
+  const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
+  const fimMes = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
+  const mesAnterior = mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 };
+  const mesSeguinte = mes === 12 ? { ano: ano + 1, mes: 1 } : { ano, mes: mes + 1 };
 
   // As colunas motivo_queda/motivo_queda_obs vêm da migration 0028 — se ela
   // ainda não rodou nesse banco, o select com essas colunas falha (Postgres
@@ -201,6 +216,10 @@ export default async function ForecastPage() {
       ops={ops}
       escopoLabel={viewer.isPreview ? `${escopoBase} (pré-visualizando como ${viewer.effectiveNome})` : escopoBase}
       tribos={meRole === "closer" || sdrComForecastLiberado ? [] : tribosFiltro}
+      mesLabel={mesEhAtual ? "mês corrente" : `${MESES[mes - 1]}/${ano}`}
+      hrefMesAnterior={`/forecast?ano=${mesAnterior.ano}&mes=${mesAnterior.mes}`}
+      hrefMesAtual={mesEhAtual ? null : "/forecast"}
+      hrefMesSeguinte={`/forecast?ano=${mesSeguinte.ano}&mes=${mesSeguinte.mes}`}
     />
   );
 }

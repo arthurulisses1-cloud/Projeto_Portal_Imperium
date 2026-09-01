@@ -88,35 +88,71 @@ export default async function ComissaoPage({
 
   const { marcos } = await buscarProgressoMarcos(supabase, meId, role);
 
-  // "O que você recebe": último mês FECHADO (não o mês corrente, que ainda
-  // está em andamento) em que essa pessoa aparece em fechamento_pessoas —
-  // é o snapshot travado pelo Diretor no dia 1, não o número live, pra não
-  // mudar debaixo do funcionário entre o dia 1 e o pagamento.
-  const { data: fechamentosRecentes } = await supabase
-    .from("fechamentos_mensais")
-    .select("id, ano, mes")
-    .eq("status", "fechado")
-    .order("ano", { ascending: false })
-    .order("mes", { ascending: false })
-    .limit(3);
-
+  // "O que você recebe": snapshot travado pelo Diretor no dia 1 (fechamento_
+  // pessoas), não o número live, pra não mudar debaixo do funcionário entre
+  // o dia 1 e o pagamento. Precisa ser o snapshot do MÊS QUE ESTÁ SENDO
+  // VISTO, não "o último mês fechado, seja lá qual for" — antes disso
+  // misturava o card "Ago/2026" (produção live de Agosto, o mês
+  // selecionado) com o pagamento de outro mês (ex: Julho, se Agosto ainda
+  // não tinha sido fechado), o que parecia bug pro time (achado pelo
+  // Diretor, 2026-09-01, fechando a folha de Agosto). Só quando NENHUM mês
+  // foi selecionado (?ano=&mes= vazios, olhando "hoje") mantém o
+  // comportamento antigo: mostra o último mês fechado, seja qual for — é o
+  // "o que vem por aí" de quem não está procurando um mês específico.
   let recebimento: { ano: number; mes: number; fixo: number; bonus: number; variavel: number } | null = null;
-  for (const f of fechamentosRecentes ?? []) {
-    const { data: minhaLinha } = await supabase
-      .from("fechamento_pessoas")
-      .select("fixo, bonus, variavel")
-      .eq("fechamento_id", f.id)
-      .eq("profile_id", meId)
+  let mesSelecionadoNaoFechado = false;
+  if (mesEhAtual) {
+    const { data: fechamentosRecentes } = await supabase
+      .from("fechamentos_mensais")
+      .select("id, ano, mes")
+      .eq("status", "fechado")
+      .order("ano", { ascending: false })
+      .order("mes", { ascending: false })
+      .limit(3);
+    for (const f of fechamentosRecentes ?? []) {
+      const { data: minhaLinha } = await supabase
+        .from("fechamento_pessoas")
+        .select("fixo, bonus, variavel")
+        .eq("fechamento_id", f.id)
+        .eq("profile_id", meId)
+        .maybeSingle();
+      if (minhaLinha) {
+        recebimento = {
+          ano: f.ano,
+          mes: f.mes,
+          fixo: Number(minhaLinha.fixo),
+          bonus: Number(minhaLinha.bonus),
+          variavel: Number(minhaLinha.variavel),
+        };
+        break;
+      }
+    }
+  } else {
+    const { data: fechamentoSelecionado } = await supabase
+      .from("fechamentos_mensais")
+      .select("id")
+      .eq("ano", ano)
+      .eq("mes", mes)
+      .eq("status", "fechado")
       .maybeSingle();
-    if (minhaLinha) {
-      recebimento = {
-        ano: f.ano,
-        mes: f.mes,
-        fixo: Number(minhaLinha.fixo),
-        bonus: Number(minhaLinha.bonus),
-        variavel: Number(minhaLinha.variavel),
-      };
-      break;
+    if (fechamentoSelecionado) {
+      const { data: minhaLinha } = await supabase
+        .from("fechamento_pessoas")
+        .select("fixo, bonus, variavel")
+        .eq("fechamento_id", fechamentoSelecionado.id)
+        .eq("profile_id", meId)
+        .maybeSingle();
+      if (minhaLinha) {
+        recebimento = {
+          ano,
+          mes,
+          fixo: Number(minhaLinha.fixo),
+          bonus: Number(minhaLinha.bonus),
+          variavel: Number(minhaLinha.variavel),
+        };
+      }
+    } else {
+      mesSelecionadoNaoFechado = true;
     }
   }
   const mesPagamento = recebimento ? (recebimento.mes === 12 ? { ano: recebimento.ano + 1, mes: 1 } : { ano: recebimento.ano, mes: recebimento.mes + 1 }) : null;
@@ -162,6 +198,16 @@ export default async function ComissaoPage({
           </a>
         </div>
       </div>
+
+      {mesSelecionadoNaoFechado && (
+        <section className="card-imp">
+          <h2 className="kicker mb-3">O que você recebe</h2>
+          <p className="text-sm text-stone-500">
+            {MESES[mes - 1]}/{ano} ainda não foi fechado pelo Diretor — assim que fechar, o valor exato de
+            pagamento aparece aqui.
+          </p>
+        </section>
+      )}
 
       {recebimento && mesPagamento && (
         <section className="card-imp">
