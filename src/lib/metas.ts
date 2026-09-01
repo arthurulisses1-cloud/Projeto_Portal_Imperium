@@ -2,6 +2,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 import { hojeBR } from "@/lib/data-br";
 
+// Mês opcional pra "ver resultado de um mês passado" (ex: Mural com
+// ?ano=&mes=) — quem não passa continua vendo o mês corrente, como sempre.
+export type AnoMes = { ano: number; mes: number };
+function resolverAnoMes(anoMes?: AnoMes): AnoMes {
+  if (anoMes) return anoMes;
+  const [ano, mes] = hojeBR().split("-").map(Number);
+  return { ano, mes };
+}
+
 export type Transicao = { de: FunilEtapa; para: FunilEtapa; label: string };
 
 export const TRANSICOES: Transicao[] = FUNNEL_STAGES.slice(0, -1).map((etapa, i) => {
@@ -57,14 +66,14 @@ export function calcularFunilMeta(
 // do Exército, não como metade de UMA Tribo lógica dividida com a outra
 // metade do Inbound). Agora reaproveita a mesma fonte, garantindo que
 // "Tribo" e "Individual" nunca mais divirjam.
-export async function buscarMetaIndividual(supabase: SupabaseClient, userId: string) {
+export async function buscarMetaIndividual(supabase: SupabaseClient, userId: string, anoMes?: AnoMes) {
   const { data: profile } = await supabase
     .from("profiles")
     .select("tribo_id")
     .eq("id", userId)
     .single();
 
-  const [anoAgora, mesAgora] = hojeBR().split("-").map(Number);
+  const { ano: anoAgora, mes: mesAgora } = resolverAnoMes(anoMes);
   const { data: metaMes } = await supabase
     .from("metas_mensais")
     .select("id, meta_credito_total, meta_ticket_medio")
@@ -126,8 +135,8 @@ export async function mapaMetaCreditoPorTribo(
 // coletiva do mês" em /tribo e /exercito, e pro "Meta do mês" do Closer no
 // Mural (meta do TIME, não só a fatia pessoal — comparar a produção coletiva
 // com a meta de UMA pessoa deixaria a barra sempre "muito acima da meta").
-export async function buscarMetaTribo(supabase: SupabaseClient, triboId: string) {
-  const [anoAgora, mesAgora] = hojeBR().split("-").map(Number);
+export async function buscarMetaTribo(supabase: SupabaseClient, triboId: string, anoMes?: AnoMes) {
+  const { ano: anoAgora, mes: mesAgora } = resolverAnoMes(anoMes);
   const { data: metaMes } = await supabase
     .from("metas_mensais")
     .select("id, meta_credito_total, meta_ticket_medio")
@@ -203,8 +212,8 @@ export async function buscarMetaComTaxas(
 // (mesma divisão igual-por-Tribo-lógica de buscarMetaTribo) — pro "Meta do
 // mês" do líder no Mural, mesmo card que SDR/Closer já tinham com a própria
 // meta pessoal.
-export async function buscarMetaExercito(supabase: SupabaseClient, exercitoId: string): Promise<number> {
-  const [anoAgora, mesAgora] = hojeBR().split("-").map(Number);
+export async function buscarMetaExercito(supabase: SupabaseClient, exercitoId: string, anoMes?: AnoMes): Promise<number> {
+  const { ano: anoAgora, mes: mesAgora } = resolverAnoMes(anoMes);
   const [{ data: metaMes }, { data: tribosDoExercito }] = await Promise.all([
     supabase
       .from("metas_mensais")
@@ -227,13 +236,18 @@ export async function buscarMetaExercito(supabase: SupabaseClient, exercitoId: s
 export async function buscarProducaoPagaExercito(
   supabase: SupabaseClient,
   exercitoId: string,
-  inicioMes: string
+  inicioMes: string,
+  // Exclusivo — sem isso, olhar um mês passado trazia junto tudo que já
+  // rolou depois dele também (a query só tinha `.gte`).
+  fimMesExclusivo?: string
 ): Promise<number> {
-  const { data: opsPagas } = await supabase
+  let query = supabase
     .from("weekly_operacoes")
     .select("valor, sdr_profile_id, closer_profile_id")
     .eq("status", "PAGO")
     .gte("data", inicioMes);
+  if (fimMesExclusivo) query = query.lt("data", fimMesExclusivo);
+  const { data: opsPagas } = await query;
 
   const idsEnvolvidos = Array.from(
     new Set((opsPagas ?? []).flatMap((o) => [o.sdr_profile_id, o.closer_profile_id]).filter((x): x is string => !!x))
@@ -362,8 +376,8 @@ export async function buscarRealizadoDia(
 // Meta de crédito da FIRMA inteira do mês — é só o valor bruto cadastrado
 // pelo Diretor em metas_mensais, sem nenhuma divisão (a mesma base que as
 // funções de Exército/Tribo dividem entre si).
-export async function buscarMetaFirma(supabase: SupabaseClient): Promise<number> {
-  const [anoAgora, mesAgora] = hojeBR().split("-").map(Number);
+export async function buscarMetaFirma(supabase: SupabaseClient, anoMes?: AnoMes): Promise<number> {
+  const { ano: anoAgora, mes: mesAgora } = resolverAnoMes(anoMes);
   const { data: metaMes } = await supabase
     .from("metas_mensais")
     .select("meta_credito_total")
@@ -375,12 +389,14 @@ export async function buscarMetaFirma(supabase: SupabaseClient): Promise<number>
 
 // Produção PAGA do mês da FIRMA inteira — soma direta, sem filtrar por
 // Exército/Tribo (é o "Meta do mês" que o Diretor vê no Mural).
-export async function buscarProducaoPagaFirma(supabase: SupabaseClient, inicioMes: string): Promise<number> {
-  const { data: opsPagas } = await supabase
-    .from("weekly_operacoes")
-    .select("valor")
-    .eq("status", "PAGO")
-    .gte("data", inicioMes);
+export async function buscarProducaoPagaFirma(
+  supabase: SupabaseClient,
+  inicioMes: string,
+  fimMesExclusivo?: string
+): Promise<number> {
+  let query = supabase.from("weekly_operacoes").select("valor").eq("status", "PAGO").gte("data", inicioMes);
+  if (fimMesExclusivo) query = query.lt("data", fimMesExclusivo);
+  const { data: opsPagas } = await query;
   return (opsPagas ?? []).reduce((s, o) => s + Number(o.valor), 0);
 }
 
@@ -464,12 +480,19 @@ export async function buscarPainelFinanceiroTribo(
 // dono da operação = Tribo do Closer, fallback pra Tribo do SDR. Líder não
 // tem tribo_id — uma operação fechada por ele (sem Closer de Tribo nenhuma
 // envolvido) não conta pra Tribo nenhuma, só pro Exército.
-export async function buscarProducaoPagaTribo(supabase: SupabaseClient, triboId: string, inicioMes: string): Promise<number> {
-  const { data: opsPagas } = await supabase
+export async function buscarProducaoPagaTribo(
+  supabase: SupabaseClient,
+  triboId: string,
+  inicioMes: string,
+  fimMesExclusivo?: string
+): Promise<number> {
+  let query = supabase
     .from("weekly_operacoes")
     .select("valor, sdr_profile_id, closer_profile_id")
     .eq("status", "PAGO")
     .gte("data", inicioMes);
+  if (fimMesExclusivo) query = query.lt("data", fimMesExclusivo);
+  const { data: opsPagas } = await query;
 
   const idsEnvolvidos = Array.from(
     new Set((opsPagas ?? []).flatMap((o) => [o.sdr_profile_id, o.closer_profile_id]).filter((x): x is string => !!x))

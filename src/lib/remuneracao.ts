@@ -59,7 +59,12 @@ export async function buscarRemuneracaoMes(
   profileId: string,
   role: string,
   rank: Rank | "diretor",
-  inicioMes: string
+  inicioMes: string,
+  // Exclusivo — sem isso, olhar um mês passado (ex: Agosto depois que
+  // Setembro já começou) trazia TAMBÉM tudo que já rolou em Setembro, porque
+  // as queries abaixo só tinham `.gte`. Opcional: quem não passa continua
+  // vendo "desde o início do mês até agora" (comportamento de sempre).
+  fimMesExclusivo?: string
 ): Promise<RemuneracaoMes> {
   const papelPrincipal = PAPEL_PRINCIPAL[rank] ?? "sdr";
 
@@ -73,11 +78,13 @@ export async function buscarRemuneracaoMes(
   if (tiers.length === 0) return VAZIO(tiers, papelPrincipal);
 
   if (role === "lider" || role === "diretor") {
-    const { data: opsPagas, error: opsError } = await supabase
+    let queryOpsPagas = supabase
       .from("weekly_operacoes")
       .select("id, data, valor, origem, cliente, sdr_profile_id, closer_profile_id")
       .eq("status", "PAGO")
       .gte("data", inicioMes);
+    if (fimMesExclusivo) queryOpsPagas = queryOpsPagas.lt("data", fimMesExclusivo);
+    const { data: opsPagas, error: opsError } = await queryOpsPagas;
     logErroSupabase(`buscarRemuneracaoMes: weekly_operacoes PAGO (profileId=${profileId})`, opsError);
 
     let opsDoEscopo = opsPagas ?? [];
@@ -179,12 +186,14 @@ export async function buscarRemuneracaoMes(
     return { tiers, remuneracao, extrato, papelPrincipal, producaoPrincipal: producaoTotal, producaoTotal };
   }
 
-  const { data: vendasRaw, error: vendasError } = await supabase
+  let queryVendas = supabase
     .from("vendas")
     .select("id, data, valor, origem, multiplicador, cliente, papel, weekly_operacao_id")
     .eq("profile_id", profileId)
     .gte("data", inicioMes)
     .order("data", { ascending: false });
+  if (fimMesExclusivo) queryVendas = queryVendas.lt("data", fimMesExclusivo);
+  const { data: vendasRaw, error: vendasError } = await queryVendas;
   logErroSupabase(`buscarRemuneracaoMes: vendas (profileId=${profileId})`, vendasError);
   const vendasMes = vendasRaw ?? [];
 
@@ -202,7 +211,15 @@ export async function buscarRemuneracaoMes(
       ? supabase.from("weekly_operacoes").select("id, data, valor, cliente, sdr_profile_id, closer_profile_id").in("id", idsDireto)
       : Promise.resolve({ data: [] }),
     chavesParaCasar.length > 0
-      ? supabase.from("weekly_operacoes").select("id, data, valor, cliente, sdr_profile_id, closer_profile_id").eq("status", "PAGO").gte("data", inicioMes)
+      ? (() => {
+          let q = supabase
+            .from("weekly_operacoes")
+            .select("id, data, valor, cliente, sdr_profile_id, closer_profile_id")
+            .eq("status", "PAGO")
+            .gte("data", inicioMes);
+          if (fimMesExclusivo) q = q.lt("data", fimMesExclusivo);
+          return q;
+        })()
       : Promise.resolve({ data: [] }),
   ]);
   const opPorId = new Map((opsDireto ?? []).map((o) => [o.id, o]));

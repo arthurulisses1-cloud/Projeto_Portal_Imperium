@@ -12,7 +12,7 @@ import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
 import { IconLock } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
-import { inicioMesBR } from "@/lib/data-br";
+import { hojeBR } from "@/lib/data-br";
 
 const MESES = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez",
@@ -32,7 +32,11 @@ function moeda(v: number) {
 
 const STATUS_LABELS: Record<string, string> = { aberto: "Aberta", resolvido: "Resolvida" };
 
-export default async function ComissaoPage() {
+export default async function ComissaoPage({
+  searchParams,
+}: {
+  searchParams: { ano?: string; mes?: string };
+}) {
   const supabase = await createClient();
   const viewer = await getViewerContext(supabase);
   if (!viewer) return null;
@@ -50,14 +54,26 @@ export default async function ComissaoPage() {
   const papelPrincipal = PAPEL_PRINCIPAL[rank] ?? "sdr";
   const rankLabel = RANK_LABELS[rank] ?? rank;
 
-  const inicioMes = inicioMesBR();
+  // Mês visto pode ser diferente do mês corrente (ex: fechando a folha de
+  // Agosto já em Setembro, o time precisa conseguir ver/contestar a
+  // comissão de Agosto) — mesmo padrão de seletor ?ano=&mes= usado em
+  // /dre, /fechamento, /metas e /parceiros, com fallback pro mês atual.
+  const [anoHoje, mesHoje] = hojeBR().split("-").map(Number);
+  const ano = Number(searchParams.ano) || anoHoje;
+  const mes = Number(searchParams.mes) || mesHoje;
+  const mesEhAtual = ano === anoHoje && mes === mesHoje;
+  const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
+  const fimMesExclusivo = mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, "0")}-01`;
+  const mesAnterior = mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 };
+  const mesSeguinte = mes === 12 ? { ano: ano + 1, mes: 1 } : { ano, mes: mes + 1 };
 
   const { remuneracao, tiers, extrato, producaoPrincipal, producaoTotal } = await buscarRemuneracaoMes(
     supabase,
     meId,
     role,
     rank,
-    inicioMes
+    inicioMes,
+    fimMesExclusivo
   );
 
   const proximo = remuneracao ? proximoTier(tiers, producaoPrincipal, papelPrincipal) : null;
@@ -119,9 +135,32 @@ export default async function ComissaoPage() {
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
-      <div>
-        <h1 className="font-display text-2xl text-gold-bright">Comissão do Mês</h1>
-        <p className="text-xs text-stone-400">Visão privada — só você e o Diretor veem isso</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl text-gold-bright">
+            Comissão de {MESES[mes - 1]}/{ano}
+          </h1>
+          <p className="text-xs text-stone-400">Visão privada — só você e o Diretor veem isso</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a
+            href={`/comissao?ano=${mesAnterior.ano}&mes=${mesAnterior.mes}`}
+            className="btn-outline px-2.5 py-1.5 text-xs"
+          >
+            ← {MESES[mesAnterior.mes - 1]}
+          </a>
+          {!mesEhAtual && (
+            <a href="/comissao" className="btn-outline px-2.5 py-1.5 text-xs">
+              Mês atual
+            </a>
+          )}
+          <a
+            href={`/comissao?ano=${mesSeguinte.ano}&mes=${mesSeguinte.mes}`}
+            className="btn-outline px-2.5 py-1.5 text-xs"
+          >
+            {MESES[mesSeguinte.mes - 1]} →
+          </a>
+        </div>
       </div>
 
       {recebimento && mesPagamento && (
@@ -149,7 +188,7 @@ export default async function ComissaoPage() {
 
       <section className="card-imp">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="kicker">Mês atual</h2>
+          <h2 className="kicker">{mesEhAtual ? "Mês atual" : `${MESES[mes - 1]}/${ano}`}</h2>
           {remuneracao && (
             <Badge tone="gold">
               {rankLabel} · Tier {remuneracao.tierIdx + 1} de {tiers.length}
@@ -365,7 +404,7 @@ export default async function ComissaoPage() {
 
       <section className="card-imp">
         <h2 className="kicker mb-4">
-          Extrato do mês {role === "lider" || role === "diretor" ? "(operações do time)" : ""}
+          Extrato de {MESES[mes - 1]}/{ano} {role === "lider" || role === "diretor" ? "(operações do time)" : ""}
         </h2>
         {extrato.length > 0 ? (
           <Table minWidth="min-w-[820px]">

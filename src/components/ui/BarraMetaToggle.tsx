@@ -12,10 +12,12 @@ export default function BarraMetaToggle({
   individual,
   tribo,
   triboNome,
+  mesFechado = false,
 }: {
   individual: { realizado: number; meta: number };
   tribo: { realizado: number; meta: number };
   triboNome: string;
+  mesFechado?: boolean;
 }) {
   const [modo, setModo] = useState<"tribo" | "individual">("tribo");
   const atual = modo === "individual" ? individual : tribo;
@@ -40,7 +42,7 @@ export default function BarraMetaToggle({
           Individual
         </button>
       </div>
-      <BarraMeta realizado={atual.realizado} meta={atual.meta} />
+      <BarraMeta realizado={atual.realizado} meta={atual.meta} mesFechado={mesFechado} />
       {modo === "tribo" && (
         <p className="mt-2 text-[11px] text-stone-600">Meta do time inteiro (você + seus SDRs).</p>
       )}

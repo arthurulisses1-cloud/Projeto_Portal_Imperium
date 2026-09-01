@@ -17,13 +17,19 @@ import { buscarCampanhasAtivas } from "@/lib/campanhas";
 import { getViewerContext } from "@/lib/preview";
 import { buscarComentarios, buscarReacoes } from "@/lib/social";
 import ComentariosReacoes from "@/components/ui/ComentariosReacoes";
-import { hojeBR, fimMesBR } from "@/lib/data-br";
+import { hojeBR } from "@/lib/data-br";
+
+const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
 
-export default async function MuralPage() {
+export default async function MuralPage({
+  searchParams,
+}: {
+  searchParams: { ano?: string; mes?: string };
+}) {
   const supabase = await createClient();
 
   // Preview-aware: se o Diretor tá pré-visualizando como outra pessoa, o Mural
@@ -61,12 +67,27 @@ export default async function MuralPage() {
     .eq("data", hoje)
     .maybeSingle();
 
-  const inicioMes = hoje.slice(0, 7) + "-01";
+  // "Resultados do mês" pode ser um mês passado (pedido do Diretor,
+  // 2026-09-01: ver Agosto de novo mesmo já em Setembro) — mesmo padrão de
+  // seletor ?ano=&mes= de /comissao, /dre etc. "Compromisso de hoje" acima
+  // fica de fora de propósito (é sempre HOJE, não faz sentido olhar um
+  // compromisso de um mês passado).
+  const [anoHoje, mesHoje] = hoje.split("-").map(Number);
+  const ano = Number(searchParams.ano) || anoHoje;
+  const mes = Number(searchParams.mes) || mesHoje;
+  const mesEhAtual = ano === anoHoje && mes === mesHoje;
+  const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
+  const fimMesExclusivo = mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, "0")}-01`;
+  const fimMes = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
+  const mesAnterior = mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 };
+  const mesSeguinte = mes === 12 ? { ano: ano + 1, mes: 1 } : { ano, mes: mes + 1 };
+
   const { data: vendasMes } = await supabase
     .from("vendas")
     .select("valor")
     .eq("profile_id", meId)
-    .gte("data", inicioMes);
+    .gte("data", inicioMes)
+    .lt("data", fimMesExclusivo);
   const pagosMes = (vendasMes ?? []).reduce((s, v) => s + Number(v.valor), 0);
 
   const { data: quotes } = await supabase
@@ -88,7 +109,7 @@ export default async function MuralPage() {
     buscarCrestsTribos(supabase),
   ]);
 
-  const { metaCreditoIndividual: metaIndividual } = await buscarMetaIndividual(supabase, meId);
+  const { metaCreditoIndividual: metaIndividual } = await buscarMetaIndividual(supabase, meId, { ano, mes });
 
   const campanhasAtivas = await buscarCampanhasAtivas(supabase);
 
@@ -125,8 +146,8 @@ export default async function MuralPage() {
   let pagoExercitoMes = 0;
   if (meRole === "lider" && escopoCentral?.tipo === "exercito") {
     [metaExercito, pagoExercitoMes] = await Promise.all([
-      buscarMetaExercito(supabase, escopoCentral.exercitoId),
-      buscarProducaoPagaExercito(supabase, escopoCentral.exercitoId, inicioMes),
+      buscarMetaExercito(supabase, escopoCentral.exercitoId, { ano, mes }),
+      buscarProducaoPagaExercito(supabase, escopoCentral.exercitoId, inicioMes, fimMesExclusivo),
     ]);
   }
 
@@ -137,8 +158,8 @@ export default async function MuralPage() {
   let pagoTriboMes = 0;
   if (meRole === "closer" && escopoCentral?.tipo === "tribo") {
     [metaTribo, pagoTriboMes] = await Promise.all([
-      buscarMetaTribo(supabase, escopoCentral.triboId).then((r) => r.metaCreditoTribo),
-      buscarProducaoPagaTribo(supabase, escopoCentral.triboId, inicioMes),
+      buscarMetaTribo(supabase, escopoCentral.triboId, { ano, mes }).then((r) => r.metaCreditoTribo),
+      buscarProducaoPagaTribo(supabase, escopoCentral.triboId, inicioMes, fimMesExclusivo),
     ]);
   }
 
@@ -148,8 +169,8 @@ export default async function MuralPage() {
   let pagoFirmaMes = 0;
   if (meRole === "diretor" || meRole === "investidor") {
     [metaFirma, pagoFirmaMes] = await Promise.all([
-      buscarMetaFirma(supabase),
-      buscarProducaoPagaFirma(supabase, inicioMes),
+      buscarMetaFirma(supabase, { ano, mes }),
+      buscarProducaoPagaFirma(supabase, inicioMes, fimMesExclusivo),
     ]);
   }
 
@@ -160,7 +181,6 @@ export default async function MuralPage() {
   // crédito (exclui Análise Jurídico/Esfriou, que ainda não têm destino
   // definido). Diretor vê a firma, Closer a própria Tribo, SDR a própria
   // produção — Líder fica de fora por enquanto (não foi pedido).
-  const fimMes = fimMesBR();
   let painelFinanceiro: PainelFinanceiro | null = null;
   if (meRole === "diretor" || meRole === "investidor") {
     const { data: opsMes } = await supabase
@@ -229,28 +249,58 @@ export default async function MuralPage() {
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
-      <div className="flex items-center gap-4">
-        {profile?.avatar_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={profile.avatar_url}
-            alt={profile.full_name}
-            className="h-20 w-20 shrink-0 rounded-full border-2 border-gold/50 object-cover"
-          />
-        ) : (
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-2 border-gold/50 bg-imperium-bg font-display text-2xl text-gold">
-            {(profile?.full_name ?? "?")
-              .split(" ")
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((p: string) => p[0])
-              .join("")
-              .toUpperCase()}
-          </div>
-        )}
-        <p className="font-display text-2xl text-gold-bright">
-          Salve, {profile?.full_name?.split(" ")[0] ?? "executivo"}.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          {profile?.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={profile.avatar_url}
+              alt={profile.full_name}
+              className="h-20 w-20 shrink-0 rounded-full border-2 border-gold/50 object-cover"
+            />
+          ) : (
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-2 border-gold/50 bg-imperium-bg font-display text-2xl text-gold">
+              {(profile?.full_name ?? "?")
+                .split(" ")
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((p: string) => p[0])
+                .join("")
+                .toUpperCase()}
+            </div>
+          )}
+          <p className="font-display text-2xl text-gold-bright">
+            Salve, {profile?.full_name?.split(" ")[0] ?? "executivo"}.
+          </p>
+        </div>
+
+        {/* Resultados do mês (metas, painel financeiro) podem ser vistos de um
+            mês passado — "Compromisso de hoje" e o resto do Mural (avisos,
+            Guerra Civil...) continuam sempre no presente. */}
+        <div className="flex items-center gap-2">
+          <a
+            href={`/?ano=${mesAnterior.ano}&mes=${mesAnterior.mes}`}
+            className="btn-outline px-2.5 py-1.5 text-xs"
+            title="Ver resultados de um mês anterior"
+          >
+            ← {MESES[mesAnterior.mes - 1].slice(0, 3)}
+          </a>
+          <span className="font-display text-sm text-stone-200">
+            {MESES[mes - 1]}/{ano}
+          </span>
+          {!mesEhAtual && (
+            <a href="/" className="btn-outline px-2.5 py-1.5 text-xs">
+              Mês atual
+            </a>
+          )}
+          <a
+            href={`/?ano=${mesSeguinte.ano}&mes=${mesSeguinte.mes}`}
+            className="btn-outline px-2.5 py-1.5 text-xs"
+            title="Ver resultados do mês seguinte"
+          >
+            {MESES[mesSeguinte.mes - 1].slice(0, 3)} →
+          </a>
+        </div>
       </div>
 
       {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr") && (
@@ -262,30 +312,33 @@ export default async function MuralPage() {
       )}
 
       {meRole === "sdr" && metaIndividual > 0 && (
-        <Card title="Meta do mês">
-          <BarraMeta realizado={pagosMes} meta={metaIndividual} />
+        <Card title={mesEhAtual ? "Meta do mês" : `Meta de ${MESES[mes - 1]}/${ano}`}>
+          <BarraMeta realizado={pagosMes} meta={metaIndividual} mesFechado={!mesEhAtual} />
         </Card>
       )}
 
       {meRole === "closer" && (metaTribo > 0 || metaIndividual > 0) && (
-        <Card title="Meta do mês">
+        <Card title={mesEhAtual ? "Meta do mês" : `Meta de ${MESES[mes - 1]}/${ano}`}>
           <BarraMetaToggle
             individual={{ realizado: pagosMes, meta: metaIndividual }}
             tribo={{ realizado: pagoTriboMes, meta: metaTribo }}
             triboNome={triboAtual?.nome ?? "sua Tribo"}
+            mesFechado={!mesEhAtual}
           />
         </Card>
       )}
 
       {meRole === "lider" && metaExercito > 0 && (
-        <Card title={`Meta do mês · ${escopoCentral?.tipo === "exercito" ? "Exército" : "time"}`}>
-          <BarraMeta realizado={pagoExercitoMes} meta={metaExercito} />
+        <Card
+          title={`Meta ${mesEhAtual ? "do mês" : `de ${MESES[mes - 1]}/${ano}`} · ${escopoCentral?.tipo === "exercito" ? "Exército" : "time"}`}
+        >
+          <BarraMeta realizado={pagoExercitoMes} meta={metaExercito} mesFechado={!mesEhAtual} />
         </Card>
       )}
 
       {(meRole === "diretor" || meRole === "investidor") && metaFirma > 0 && (
-        <Card title="Meta do mês · Firma">
-          <BarraMeta realizado={pagoFirmaMes} meta={metaFirma} />
+        <Card title={`Meta ${mesEhAtual ? "do mês" : `de ${MESES[mes - 1]}/${ano}`} · Firma`}>
+          <BarraMeta realizado={pagoFirmaMes} meta={metaFirma} mesFechado={!mesEhAtual} />
         </Card>
       )}
 
