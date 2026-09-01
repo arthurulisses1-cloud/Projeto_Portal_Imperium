@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { inicioMesBR } from "@/lib/data-br";
 
 export type Confronto = { nome: string; valor: number };
 
@@ -146,17 +145,27 @@ function agregarPorGrupo(operacoes: OperacaoPagaPorGrupo[]): Confronto[] {
   return resultado;
 }
 
-async function pagosMesPorGrupo(supabase: SupabaseClient, agrupar: "exercito" | "tribo"): Promise<Confronto[]> {
-  const inicioMes = inicioMesBR();
-  const operacoes = await resolverOperacoesPagasPorGrupo(supabase, agrupar, { desde: inicioMes });
+// inicioMes/fimMes (ambos inclusive) — o mês visto no Mural, que pode ser um
+// mês passado (pedido do Diretor, 2026-09-01: "onde vejo como finalizaram as
+// competições de Tribo/Exército/pessoa do mês passado" — o Mural já tinha
+// seletor de mês pras metas, mas a Guerra Civil/Ranking ficavam sempre
+// travadas no mês corrente, por decisão de escopo anterior que não se
+// sustentou: olhar Agosto de novo mostrava tudo zerado).
+async function pagosMesPorGrupo(
+  supabase: SupabaseClient,
+  agrupar: "exercito" | "tribo",
+  inicioMes: string,
+  fimMes: string
+): Promise<Confronto[]> {
+  const operacoes = await resolverOperacoesPagasPorGrupo(supabase, agrupar, { desde: inicioMes, ate: fimMes });
   return agregarPorGrupo(operacoes);
 }
 
-export function buscarConfrontoExercitos(supabase: SupabaseClient) {
-  return pagosMesPorGrupo(supabase, "exercito");
+export function buscarConfrontoExercitos(supabase: SupabaseClient, inicioMes: string, fimMes: string) {
+  return pagosMesPorGrupo(supabase, "exercito", inicioMes, fimMes);
 }
-export function buscarConfrontoTribos(supabase: SupabaseClient) {
-  return pagosMesPorGrupo(supabase, "tribo");
+export function buscarConfrontoTribos(supabase: SupabaseClient, inicioMes: string, fimMes: string) {
+  return pagosMesPorGrupo(supabase, "tribo", inicioMes, fimMes);
 }
 
 // Todo o histórico de operações pagas já resolvidas pro grupo — pra
@@ -182,7 +191,12 @@ export async function buscarCrestsTribos(supabase: SupabaseClient): Promise<Reco
   return mapa;
 }
 
-export async function buscarTopCredito(supabase: SupabaseClient, limite = 5): Promise<Confronto[]> {
+export async function buscarTopCredito(
+  supabase: SupabaseClient,
+  inicioMes: string,
+  fimMes: string,
+  limite = 5
+): Promise<Confronto[]> {
   const { data: pessoas } = await supabase
     .from("profiles")
     .select("id, full_name")
@@ -191,12 +205,12 @@ export async function buscarTopCredito(supabase: SupabaseClient, limite = 5): Pr
   const ids = Array.from(nomePorId.keys());
   if (ids.length === 0) return [];
 
-  const inicioMes = inicioMesBR();
   const { data: vendas } = await supabase
     .from("vendas")
     .select("profile_id, valor")
     .in("profile_id", ids)
-    .gte("data", inicioMes);
+    .gte("data", inicioMes)
+    .lte("data", fimMes);
 
   const totais = new Map<string, number>();
   for (const v of vendas ?? []) {

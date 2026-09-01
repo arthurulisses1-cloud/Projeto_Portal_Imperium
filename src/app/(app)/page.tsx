@@ -103,9 +103,9 @@ export default async function MuralPage({
     quotes && quotes.length > 0 ? quotes[dayOfYear % quotes.length] : null;
 
   const [confrontoExercitos, confrontoTribos, topCredito, crestsTribos] = await Promise.all([
-    buscarConfrontoExercitos(supabase),
-    buscarConfrontoTribos(supabase),
-    buscarTopCredito(supabase, 5),
+    buscarConfrontoExercitos(supabase, inicioMes, fimMes),
+    buscarConfrontoTribos(supabase, inicioMes, fimMes),
+    buscarTopCredito(supabase, inicioMes, fimMes, 5),
     buscarCrestsTribos(supabase),
   ]);
 
@@ -274,9 +274,14 @@ export default async function MuralPage({
           </p>
         </div>
 
-        {/* Resultados do mês (metas, painel financeiro) podem ser vistos de um
-            mês passado — "Compromisso de hoje" e o resto do Mural (avisos,
-            Guerra Civil...) continuam sempre no presente. */}
+        {/* Resultados do mês (metas, painel financeiro, Guerra Civil/Guerra
+            de Tribos/Ranking) podem ser vistos de um mês passado — só
+            "Compromisso de hoje" acima fica de fora de propósito (é sempre
+            HOJE, não faz sentido olhar um compromisso de um mês passado).
+            Guerra Civil etc. já respeitavam esse seletor até 2026-08-31,
+            quando ficaram travados no mês corrente por engano — corrigido
+            2026-09-01 (Diretor: "quando volto pro mural de agosto os dados
+            dessas competições aparecem zerados"). */}
         <div className="flex items-center gap-2">
           <a
             href={`/?ano=${mesAnterior.ano}&mes=${mesAnterior.mes}`}
@@ -423,6 +428,15 @@ export default async function MuralPage({
         </div>
       )}
 
+      {/* Mostra de qual mês são esses resultados só quando não é o mês
+          corrente — evita poluir a visão do dia a dia (a maioria das
+          visitas é olhando o mês atual). */}
+      {!mesEhAtual && (
+        <p className="-mb-3 text-[11px] text-stone-500">
+          Guerra Civil, Guerra de Tribos e Ranking abaixo são de{" "}
+          <span className="text-gold">{MESES[mes - 1]}/{ano}</span>
+        </p>
+      )}
       <div className="grid gap-6 sm:grid-cols-3">
         <Card title="Guerra Civil" icon={<IconSwords className="h-4 w-4 text-wine-bright" />}>
           <ConfrontoWidget
