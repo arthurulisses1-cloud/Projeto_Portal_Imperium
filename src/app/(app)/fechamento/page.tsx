@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { buscarNotaMes, buscarPendenciasAprovacao, buscarFechamento } from "@/lib/dre";
-import { aprovarComissaoParceiro, fecharMes, reabrirMes } from "./actions";
+import { buscarNotaMes, buscarPendenciasAprovacao, buscarFechamento, buscarConfigDre } from "@/lib/dre";
+import { aprovarComissaoParceiro, fecharMes, reabrirMes, atualizarPctReceitaOperacao } from "./actions";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
 import { hojeBR } from "@/lib/data-br";
 
@@ -28,11 +28,13 @@ export default async function FechamentoPage({ searchParams }: { searchParams: {
   const ano = Number(searchParams.ano) || anoHoje;
   const mes = Number(searchParams.mes) || mesHoje;
 
-  const [nota, pendencias, fechamento] = await Promise.all([
+  const [nota, pendencias, fechamento, config] = await Promise.all([
     buscarNotaMes(supabase, ano, mes),
     buscarPendenciasAprovacao(supabase, ano, mes),
     buscarFechamento(supabase, ano, mes),
+    buscarConfigDre(supabase),
   ]);
+  const pctReceitaPadraoStr = (config.pctReceitaCredito * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
   const mesAnterior = mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 };
   const mesSeguinte = mes === 12 ? { ano: ano + 1, mes: 1 } : { ano, mes: mes + 1 };
@@ -146,7 +148,7 @@ export default async function FechamentoPage({ searchParams }: { searchParams: {
           </p>
           {nota.length > 0 ? (
             <>
-              <Table minWidth="min-w-[640px]">
+              <Table minWidth="min-w-[820px]">
                 <thead>
                   <tr>
                     <Th className="pr-2">Data</Th>
@@ -154,7 +156,8 @@ export default async function FechamentoPage({ searchParams }: { searchParams: {
                     <Th className="pr-2">ID cliente</Th>
                     <Th align="right" className="pr-2">Crédito</Th>
                     <Th className="pr-2">Parceiro</Th>
-                    <Th align="right">Extra %</Th>
+                    <Th align="right" className="pr-2">Extra %</Th>
+                    <Th align="right">% Receita</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -167,8 +170,36 @@ export default async function FechamentoPage({ searchParams }: { searchParams: {
                       <Td className="pr-2 text-stone-600">{l.clienteId ?? "—"}</Td>
                       <Td align="right" className="pr-2 whitespace-nowrap text-stone-100">{moeda(l.valor)}</Td>
                       <Td className="pr-2 text-stone-400">{l.parceiro?.nomeParceiro ?? "—"}</Td>
-                      <Td align="right" className="whitespace-nowrap text-gold">
+                      <Td align="right" className="pr-2 whitespace-nowrap text-gold">
                         {l.parceiro ? moeda(l.parceiro.extra) : "—"}
+                      </Td>
+                      <Td align="right" className="whitespace-nowrap">
+                        {isDiretor ? (
+                          <form
+                            action={atualizarPctReceitaOperacao}
+                            className="flex items-center justify-end gap-1"
+                            title="Deixe em branco pra usar o % padrão da DRE"
+                          >
+                            <input type="hidden" name="id" value={l.weeklyOperacaoId} />
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              name="pct"
+                              placeholder={pctReceitaPadraoStr}
+                              defaultValue={l.pctReceitaOverride !== null ? l.pctReceitaOverride * 100 : undefined}
+                              className="input-imp w-16 px-1.5 py-0.5 text-right text-[11px]"
+                            />
+                            <span className="text-[11px] text-stone-500">%</span>
+                            <button type="submit" className="text-[10px] text-gold hover:underline">
+                              Salvar
+                            </button>
+                          </form>
+                        ) : (
+                          <span className={l.pctReceitaOverride !== null ? "text-gold" : "text-stone-600"}>
+                            {l.pctReceitaOverride !== null ? `${(l.pctReceitaOverride * 100).toLocaleString("pt-BR")}%` : `${pctReceitaPadraoStr}%`}
+                          </span>
+                        )}
                       </Td>
                     </Tr>
                   ))}

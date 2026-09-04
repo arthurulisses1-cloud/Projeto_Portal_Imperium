@@ -130,6 +130,15 @@ function EstruturaDre({ resumo, folha, config }: { resumo: ResumoDre; folha: Fol
           pessoas={folha.linhas.map((l) => ({ nome: l.nome, valor: l.campanhas }))}
         />
       )}
+      {resumo.comissaoParceiro > 0 && (
+        <div className="flex justify-between text-stone-400">
+          <span>Comissão Parceiro</span>
+          <span className="text-wine-bright">
+            {moeda(resumo.comissaoParceiro)}
+            <AV valor={resumo.comissaoParceiro} base={base} />
+          </span>
+        </div>
+      )}
       <div className="flex justify-between border-t border-imperium-line pt-1 font-medium">
         <span className="text-stone-200">= Total Custos Variáveis</span>
         <span className="text-wine-bright">

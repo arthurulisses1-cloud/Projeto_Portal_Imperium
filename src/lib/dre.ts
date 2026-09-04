@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarRemuneracaoMes } from "@/lib/remuneracao";
-import { buscarProducaoPagaFirma } from "@/lib/metas";
 import { calcularRemuneracao, type Tier } from "@/lib/comissao";
 import { RANK_LABELS } from "@/lib/labels";
 import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
@@ -57,6 +56,42 @@ export async function buscarDespesasExtras(supabase: SupabaseClient, ano: number
 export async function buscarProducaoParceiro(supabase: SupabaseClient, ano: number, mes: number): Promise<number> {
   const { data } = await supabase.from("dre_producao_parceiro").select("valor").eq("ano", ano).eq("mes", mes).maybeSingle();
   return Number(data?.valor ?? 0);
+}
+
+// Comissão de PARCEIRO DE VENDA (a % extra paga a quem trouxe/fechou a
+// operação — cadastrada em cada weekly_operacao via /forecast, aparece na
+// "Nota do mês" de /fechamento) — custo real, pago dia 15 junto com o
+// resto (ver fecharMes em fechamento/actions.ts), mas nunca tinha entrado
+// na DRE. Achado pelo Diretor, 2026-09-02: "não estou vendo na dre as
+// comissões de parceiros". Não confundir com `producaoParceiro`/
+// `receitaParceiro` acima — aquilo é RECEITA (produção que veio de um
+// parceiro de canal), isto aqui é CUSTO (comissão paga a um parceiro por
+// uma venda específica). Só conta pendente_aprovacao == false (mesmo
+// filtro do fechamento: só "ok"/"aprovado" já é custo confirmado).
+export async function buscarComissaoParceiroMes(supabase: SupabaseClient, ano: number, mes: number): Promise<number> {
+  const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
+  const fimMes = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
+
+  const { data: opsDoMes } = await supabase
+    .from("weekly_operacoes")
+    .select("id, valor")
+    .eq("status", "PAGO")
+    .gte("data", inicioMes)
+    .lte("data", fimMes);
+  const idsDoMes = (opsDoMes ?? []).map((o) => o.id);
+  if (idsDoMes.length === 0) return 0;
+  const valorPorOp = new Map((opsDoMes ?? []).map((o) => [o.id, Number(o.valor)]));
+
+  const { data: comissoes } = await supabase
+    .from("comissoes_parceiro")
+    .select("weekly_operacao_id, percentual")
+    .in("status", ["ok", "aprovado"])
+    .in("weekly_operacao_id", idsDoMes);
+
+  return (comissoes ?? []).reduce(
+    (s, c) => s + (Number(c.percentual) / 100) * (valorPorOp.get(c.weekly_operacao_id) ?? 0),
+    0
+  );
 }
 
 export type ReceitaExtra = { id: string; descricao: string; valor: number };
@@ -378,6 +413,7 @@ export type ResumoDre = {
   comissaoGestao: number;
   bonusTier: number;
   extrasVariaveis: number;
+  comissaoParceiro: number; // % extra pago a parceiro de venda por operação (não confundir com receitaParceiro acima)
   custosVariaveisTotal: number;
   margemContribuicao: number;
   margemContribuicaoPct: number; // sobre a Receita Líquida
@@ -403,16 +439,17 @@ export type ResumoDre = {
 function montarResumoDre(
   config: ConfigDre,
   creditoTotalMes: number,
+  receitaPropria: number,
   producaoParceiro: number,
   folha: Folha,
   despesas: DespesaExtra[],
-  receitasExtras: ReceitaExtra[]
+  receitasExtras: ReceitaExtra[],
+  comissaoParceiro: number
 ): ResumoDre {
   const despesasFixasExtras = despesas.filter((d) => !d.profileId).reduce((s, d) => s + d.valor, 0);
   const extrasVariaveis = despesas.filter((d) => d.profileId).reduce((s, d) => s + d.valor, 0);
   const outrasReceitas = receitasExtras.reduce((s, r) => s + r.valor, 0);
 
-  const receitaPropria = creditoTotalMes * config.pctReceitaCredito;
   const receitaParceiro = producaoParceiro * config.pctReceitaParceiro;
   const receitaBruta = receitaPropria + receitaParceiro + outrasReceitas;
   const imposto = receitaBruta * config.pctImposto;
@@ -420,7 +457,7 @@ function montarResumoDre(
 
   const { totais } = folha;
   const custosVariaveisTotal =
-    totais.variavelSdr + totais.variavelCloser + totais.variavelGestao + totais.bonus + extrasVariaveis;
+    totais.variavelSdr + totais.variavelCloser + totais.variavelGestao + totais.bonus + extrasVariaveis + comissaoParceiro;
   const margemContribuicao = receitaLiquida - custosVariaveisTotal;
 
   const despesasFixasTotal = totais.fixo + config.custoAluguel + config.custoTrafego + despesasFixasExtras;
@@ -440,6 +477,7 @@ function montarResumoDre(
     comissaoGestao: totais.variavelGestao,
     bonusTier: totais.bonus,
     extrasVariaveis,
+    comissaoParceiro,
     custosVariaveisTotal,
     margemContribuicao,
     margemContribuicaoPct: receitaLiquida > 0 ? (margemContribuicao / receitaLiquida) * 100 : 0,
@@ -453,19 +491,54 @@ function montarResumoDre(
   };
 }
 
+// Crédito total do mês + Receita Própria já ponderada pela % de cada
+// operação — a imensa maioria usa o % padrão da DRE (pct_receita_credito),
+// mas uma operação com pct_receita_override preenchido usa a % combinada
+// pra ela em vez do padrão (pedido do Diretor, 2026-09-02: "algumas vendas
+// do mês passado vão ter uma comissão diferente dos 6%, mas não são
+// todas" — cadastra em /fechamento, na tabela "Nota do mês").
+async function buscarCreditoEReceitaPropriaMes(
+  supabase: SupabaseClient,
+  inicioMes: string,
+  fimMesExclusivo: string,
+  pctPadrao: number
+): Promise<{ creditoTotalMes: number; receitaPropria: number }> {
+  const { data } = await supabase
+    .from("weekly_operacoes")
+    .select("valor, pct_receita_override")
+    .eq("status", "PAGO")
+    .gte("data", inicioMes)
+    .lt("data", fimMesExclusivo);
+
+  let creditoTotalMes = 0;
+  let receitaPropria = 0;
+  for (const o of data ?? []) {
+    const valor = Number(o.valor);
+    creditoTotalMes += valor;
+    const pct = o.pct_receita_override !== null && o.pct_receita_override !== undefined ? Number(o.pct_receita_override) : pctPadrao;
+    receitaPropria += valor * pct;
+  }
+  return { creditoTotalMes, receitaPropria };
+}
+
+function fimMesExclusivoDe(ano: number, mes: number): string {
+  return mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, "0")}-01`;
+}
+
 export async function buscarResumoDre(supabase: SupabaseClient, ano: number, mes: number): Promise<ResumoDre> {
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const config = await buscarConfigDre(supabase);
 
-  const [creditoTotalMes, producaoParceiro, folha, despesas, receitasExtras] = await Promise.all([
-    buscarProducaoPagaFirma(supabase, inicioMes),
+  const [{ creditoTotalMes, receitaPropria }, producaoParceiro, folha, despesas, receitasExtras, comissaoParceiro] = await Promise.all([
+    buscarCreditoEReceitaPropriaMes(supabase, inicioMes, fimMesExclusivoDe(ano, mes), config.pctReceitaCredito),
     buscarProducaoParceiro(supabase, ano, mes),
     buscarFolha(supabase, ano, mes),
     buscarDespesasExtras(supabase, ano, mes),
     buscarReceitasExtras(supabase, ano, mes),
+    buscarComissaoParceiroMes(supabase, ano, mes),
   ]);
 
-  return montarResumoDre(config, creditoTotalMes, producaoParceiro, folha, despesas, receitasExtras);
+  return montarResumoDre(config, creditoTotalMes, receitaPropria, producaoParceiro, folha, despesas, receitasExtras, comissaoParceiro);
 }
 
 // Mesma coisa que buscarResumoDre, mas com o crédito PAGO + AGUARDANDO
@@ -482,6 +555,10 @@ export type LinhaNota = {
   cliente: string | null;
   clienteId: string | null;
   valor: number;
+  // null = usa o % padrão da DRE (dre_configuracoes.pct_receita_credito);
+  // preenchido = essa venda específica tem uma % de receita combinada
+  // diferente do padrão. Fração (0.08 = 8%), mesma convenção do padrão.
+  pctReceitaOverride: number | null;
   parceiro: { nomeParceiro: string; percentual: number; extra: number; status: string } | null;
 };
 
@@ -495,7 +572,7 @@ export async function buscarNotaMes(supabase: SupabaseClient, ano: number, mes: 
 
   const { data: ops } = await supabase
     .from("weekly_operacoes")
-    .select("id, data, cliente, cliente_id, valor")
+    .select("id, data, cliente, cliente_id, valor, pct_receita_override")
     .eq("status", "PAGO")
     .gte("data", inicioMes)
     .lte("data", fimMes)
@@ -519,6 +596,7 @@ export async function buscarNotaMes(supabase: SupabaseClient, ano: number, mes: 
       cliente: o.cliente,
       clienteId: o.cliente_id,
       valor: Number(o.valor),
+      pctReceitaOverride: o.pct_receita_override !== null ? Number(o.pct_receita_override) : null,
       parceiro: c
         ? {
             nomeParceiro: c.nome_parceiro,
@@ -637,15 +715,40 @@ export async function buscarResumoDreForecast(supabase: SupabaseClient, ano: num
   const config = await buscarConfigDre(supabase);
 
   const [{ data: opsRaw }, producaoParceiro, folha, despesas, receitasExtras] = await Promise.all([
-    supabase.from("weekly_operacoes").select("valor, status, status_manual").gte("data", inicioMes).lte("data", fimMes),
+    supabase
+      .from("weekly_operacoes")
+      .select("id, valor, status, status_manual, pct_receita_override")
+      .gte("data", inicioMes)
+      .lte("data", fimMes),
     buscarProducaoParceiro(supabase, ano, mes),
     buscarFolhaForecast(supabase, ano, mes),
     buscarDespesasExtras(supabase, ano, mes),
     buscarReceitasExtras(supabase, ano, mes),
   ]);
-  const creditoTotalMes = (opsRaw ?? [])
-    .filter((o) => o.status === "PAGO" || o.status_manual === "aguardando_pagamento")
-    .reduce((s, o) => s + Number(o.valor), 0);
+  const opsForecast = (opsRaw ?? []).filter((o) => o.status === "PAGO" || o.status_manual === "aguardando_pagamento");
+  const creditoTotalMes = opsForecast.reduce((s, o) => s + Number(o.valor), 0);
+  const receitaPropria = opsForecast.reduce((s, o) => {
+    const valor = Number(o.valor);
+    const pct = o.pct_receita_override !== null && o.pct_receita_override !== undefined ? Number(o.pct_receita_override) : config.pctReceitaCredito;
+    return s + valor * pct;
+  }, 0);
 
-  return montarResumoDre(config, creditoTotalMes, producaoParceiro, folha, despesas, receitasExtras);
+  let comissaoParceiro = 0;
+  if (opsForecast.length > 0) {
+    const valorPorOp = new Map(opsForecast.map((o) => [o.id, Number(o.valor)]));
+    const { data: comissoes } = await supabase
+      .from("comissoes_parceiro")
+      .select("weekly_operacao_id, percentual")
+      .in("status", ["ok", "aprovado"])
+      .in(
+        "weekly_operacao_id",
+        opsForecast.map((o) => o.id)
+      );
+    comissaoParceiro = (comissoes ?? []).reduce(
+      (s, c) => s + (Number(c.percentual) / 100) * (valorPorOp.get(c.weekly_operacao_id) ?? 0),
+      0
+    );
+  }
+
+  return montarResumoDre(config, creditoTotalMes, receitaPropria, producaoParceiro, folha, despesas, receitasExtras, comissaoParceiro);
 }

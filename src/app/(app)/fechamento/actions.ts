@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { buscarFolha } from "@/lib/dre";
 
@@ -13,6 +14,34 @@ async function exigirDiretor() {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (profile?.role !== "diretor") throw new Error("Só o Diretor acessa o Fechamento.");
   return { supabase, userId: user.id };
+}
+
+// Sobrescreve a % de Receita Própria de UMA operação específica (o padrão
+// de dre_configuracoes continua valendo pra todo o resto) — pedido do
+// Diretor, 2026-09-02: "algumas vendas do mês passado vão ter uma comissão
+// diferente dos 6%, mas não são todas". Campo vazio limpa o override e
+// volta a usar o % padrão.
+export async function atualizarPctReceitaOperacao(formData: FormData) {
+  await exigirDiretor();
+  const id = String(formData.get("id"));
+  const pctStr = String(formData.get("pct") ?? "").trim();
+
+  // Input do usuário é em pontos percentuais (ex: "8" pra 8%) — guarda como
+  // fração (0.08), mesma convenção de dre_configuracoes.pct_receita_credito.
+  const pctFracao = pctStr === "" ? null : Number(pctStr.replace(",", ".")) / 100;
+  if (pctFracao !== null && (Number.isNaN(pctFracao) || pctFracao < 0)) {
+    throw new Error("% inválida.");
+  }
+
+  // weekly_operacoes não tem policy de UPDATE pra ninguém (só SELECT) —
+  // mesmo padrão de forecast/actions.ts: exigirDiretor() já confirmou o
+  // papel, a escrita real passa por client admin (service_role).
+  const admin = createAdminClient();
+  const { error } = await admin.from("weekly_operacoes").update({ pct_receita_override: pctFracao }).eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/fechamento");
+  revalidatePath("/dre");
 }
 
 export async function aprovarComissaoParceiro(formData: FormData) {
