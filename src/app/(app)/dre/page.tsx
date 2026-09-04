@@ -93,7 +93,8 @@ export default async function DrePage({ searchParams }: { searchParams: { ano?: 
         <Card title="Receita">
           <p className="font-display text-2xl text-gold-bright">{moeda(resumo.receitaBruta)}</p>
           <p className="mt-1 text-[11px] text-stone-600">
-            {moeda(resumo.receitaPropria)} crédito + {moeda(resumo.receitaParceiro)} parceiro
+            {moeda(resumo.receitaPropria)} crédito + {moeda(resumo.receitaParceiro)} produção de parceiro
+            {resumo.receitaExtraParceiro > 0 && <> + {moeda(resumo.receitaExtraParceiro)} extra de parceiro</>}
             {resumo.outrasReceitas > 0 && <> + {moeda(resumo.outrasReceitas)} outras</>}
           </p>
         </Card>

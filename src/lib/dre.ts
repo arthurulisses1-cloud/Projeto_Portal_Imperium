@@ -68,7 +68,20 @@ export async function buscarProducaoParceiro(supabase: SupabaseClient, ano: numb
 // parceiro de canal), isto aqui é CUSTO (comissão paga a um parceiro por
 // uma venda específica). Só conta pendente_aprovacao == false (mesmo
 // filtro do fechamento: só "ok"/"aprovado" já é custo confirmado).
-export async function buscarComissaoParceiroMes(supabase: SupabaseClient, ano: number, mes: number): Promise<number> {
+// A % de parceiro cadastrada em cada venda (mesma % que aparece como
+// "Extra %" na Nota do mês) é cobrada em cima da operação como receita
+// EXTRA — além dos 6% normais de receitaPropria — e desse total, só 91%
+// (o mesmo "valor_repassado" que fecharMes grava em fechamento_parceiros)
+// sai de fato do caixa pro parceiro; os 9% restantes ("valor_retido")
+// ficam de margem pra firma. Confirmado com o Diretor, 2026-09-02: a
+// receita cheia entra em receitaExtraParceiro, e só os 91% entram como
+// custo (comissaoParceiro) — os 9% de diferença aparecem naturalmente na
+// Margem de Contribuição, sem precisar de uma linha própria pra eles.
+export async function buscarComissaoParceiroMes(
+  supabase: SupabaseClient,
+  ano: number,
+  mes: number
+): Promise<{ receitaExtraParceiro: number; comissaoParceiro: number }> {
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const fimMes = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
 
@@ -79,7 +92,7 @@ export async function buscarComissaoParceiroMes(supabase: SupabaseClient, ano: n
     .gte("data", inicioMes)
     .lte("data", fimMes);
   const idsDoMes = (opsDoMes ?? []).map((o) => o.id);
-  if (idsDoMes.length === 0) return 0;
+  if (idsDoMes.length === 0) return { receitaExtraParceiro: 0, comissaoParceiro: 0 };
   const valorPorOp = new Map((opsDoMes ?? []).map((o) => [o.id, Number(o.valor)]));
 
   const { data: comissoes } = await supabase
@@ -88,10 +101,11 @@ export async function buscarComissaoParceiroMes(supabase: SupabaseClient, ano: n
     .in("status", ["ok", "aprovado"])
     .in("weekly_operacao_id", idsDoMes);
 
-  return (comissoes ?? []).reduce(
+  const receitaExtraParceiro = (comissoes ?? []).reduce(
     (s, c) => s + (Number(c.percentual) / 100) * (valorPorOp.get(c.weekly_operacao_id) ?? 0),
     0
   );
+  return { receitaExtraParceiro, comissaoParceiro: receitaExtraParceiro * 0.91 };
 }
 
 export type ReceitaExtra = { id: string; descricao: string; valor: number };
@@ -397,6 +411,11 @@ export type ResumoDre = {
   producaoParceiro: number;
   receitaPropria: number;
   receitaParceiro: number;
+  // % de parceiro de venda cobrado por cima da venda (mesma % de comissaoParceiro
+  // abaixo, 100% dela) — NÃO é a mesma coisa que receitaParceiro/producaoParceiro
+  // acima (aquilo é produção que veio de um canal de parceiro, cadastrado à
+  // mão; isto é a comissão extra de uma operação específica).
+  receitaExtraParceiro: number;
   outrasReceitas: number;
   receitaBruta: number;
   imposto: number;
@@ -413,7 +432,7 @@ export type ResumoDre = {
   comissaoGestao: number;
   bonusTier: number;
   extrasVariaveis: number;
-  comissaoParceiro: number; // % extra pago a parceiro de venda por operação (não confundir com receitaParceiro acima)
+  comissaoParceiro: number; // 91% de receitaExtraParceiro acima — o que de fato sai do caixa pro parceiro (ver fecharMes/valor_repassado)
   custosVariaveisTotal: number;
   margemContribuicao: number;
   margemContribuicaoPct: number; // sobre a Receita Líquida
@@ -444,14 +463,15 @@ function montarResumoDre(
   folha: Folha,
   despesas: DespesaExtra[],
   receitasExtras: ReceitaExtra[],
-  comissaoParceiro: number
+  comissaoParceiroInfo: { receitaExtraParceiro: number; comissaoParceiro: number }
 ): ResumoDre {
   const despesasFixasExtras = despesas.filter((d) => !d.profileId).reduce((s, d) => s + d.valor, 0);
   const extrasVariaveis = despesas.filter((d) => d.profileId).reduce((s, d) => s + d.valor, 0);
   const outrasReceitas = receitasExtras.reduce((s, r) => s + r.valor, 0);
+  const { receitaExtraParceiro, comissaoParceiro } = comissaoParceiroInfo;
 
   const receitaParceiro = producaoParceiro * config.pctReceitaParceiro;
-  const receitaBruta = receitaPropria + receitaParceiro + outrasReceitas;
+  const receitaBruta = receitaPropria + receitaParceiro + receitaExtraParceiro + outrasReceitas;
   const imposto = receitaBruta * config.pctImposto;
   const receitaLiquida = receitaBruta - imposto;
 
@@ -468,6 +488,7 @@ function montarResumoDre(
     producaoParceiro,
     receitaPropria,
     receitaParceiro,
+    receitaExtraParceiro,
     outrasReceitas,
     receitaBruta,
     imposto,
@@ -778,7 +799,7 @@ export async function buscarResumoDreForecast(supabase: SupabaseClient, ano: num
     return s + valor * pct;
   }, 0);
 
-  let comissaoParceiro = 0;
+  let receitaExtraParceiro = 0;
   if (opsForecast.length > 0) {
     const valorPorOp = new Map(opsForecast.map((o) => [o.id, Number(o.valor)]));
     const { data: comissoes } = await supabase
@@ -789,11 +810,13 @@ export async function buscarResumoDreForecast(supabase: SupabaseClient, ano: num
         "weekly_operacao_id",
         opsForecast.map((o) => o.id)
       );
-    comissaoParceiro = (comissoes ?? []).reduce(
+    receitaExtraParceiro = (comissoes ?? []).reduce(
       (s, c) => s + (Number(c.percentual) / 100) * (valorPorOp.get(c.weekly_operacao_id) ?? 0),
       0
     );
   }
+  // Mesmos 91%/9% de buscarComissaoParceiroMes — ver comentário lá.
+  const comissaoParceiroInfo = { receitaExtraParceiro, comissaoParceiro: receitaExtraParceiro * 0.91 };
 
-  return montarResumoDre(config, creditoTotalMes, receitaPropria, producaoParceiro, folha, despesas, receitasExtras, comissaoParceiro);
+  return montarResumoDre(config, creditoTotalMes, receitaPropria, producaoParceiro, folha, despesas, receitasExtras, comissaoParceiroInfo);
 }
