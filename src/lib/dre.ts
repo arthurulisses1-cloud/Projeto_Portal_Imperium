@@ -559,6 +559,7 @@ export type LinhaNota = {
   cliente: string | null;
   clienteId: string | null;
   valor: number;
+  produto: string | null; // "credito" | "compra" | "recredito" (cru, como vem da planilha)
   // null = usa o % padrão da DRE (dre_configuracoes.pct_receita_credito);
   // preenchido = essa venda específica tem uma % de receita combinada
   // diferente do padrão. Fração (0.08 = 8%), mesma convenção do padrão.
@@ -582,18 +583,26 @@ export async function buscarNotaMes(supabase: SupabaseClient, ano: number, mes: 
   // der erro, refaz sem ela.
   const opsRes = await supabase
     .from("weekly_operacoes")
-    .select("id, data, cliente, cliente_id, valor, pct_receita_override")
+    .select("id, data, cliente, cliente_id, valor, produto, pct_receita_override")
     .eq("status", "PAGO")
     .gte("data", inicioMes)
     .lte("data", fimMes)
     .order("data");
   let ops = opsRes.data as
-    | { id: string; data: string; cliente: string | null; cliente_id: string | null; valor: number; pct_receita_override: number | null }[]
+    | {
+        id: string;
+        data: string;
+        cliente: string | null;
+        cliente_id: string | null;
+        valor: number;
+        produto: string | null;
+        pct_receita_override: number | null;
+      }[]
     | null;
   if (opsRes.error) {
     const fallback = await supabase
       .from("weekly_operacoes")
-      .select("id, data, cliente, cliente_id, valor")
+      .select("id, data, cliente, cliente_id, valor, produto")
       .eq("status", "PAGO")
       .gte("data", inicioMes)
       .lte("data", fimMes)
@@ -619,6 +628,7 @@ export async function buscarNotaMes(supabase: SupabaseClient, ano: number, mes: 
       cliente: o.cliente,
       clienteId: o.cliente_id,
       valor: Number(o.valor),
+      produto: o.produto,
       pctReceitaOverride: o.pct_receita_override !== null ? Number(o.pct_receita_override) : null,
       parceiro: c
         ? {

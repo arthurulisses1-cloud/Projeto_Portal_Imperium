@@ -2,8 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { buscarNotaMes, buscarPendenciasAprovacao, buscarFechamento, buscarConfigDre } from "@/lib/dre";
 import { aprovarComissaoParceiro, fecharMes, reabrirMes, atualizarPctReceitaOperacao } from "./actions";
-import { Table, Th, Td, Tr } from "@/components/ui/Table";
 import { hojeBR } from "@/lib/data-br";
+import NotaMesTable from "./nota-mes-table";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -146,73 +146,12 @@ export default async function FechamentoPage({ searchParams }: { searchParams: {
           <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">
             Nota do mês (crédito pago no mês — pra mandar ao banco)
           </p>
-          {nota.length > 0 ? (
-            <>
-              <Table minWidth="min-w-[820px]">
-                <thead>
-                  <tr>
-                    <Th className="pr-2">Data</Th>
-                    <Th className="pr-2">Cliente</Th>
-                    <Th className="pr-2">ID cliente</Th>
-                    <Th align="right" className="pr-2">Crédito</Th>
-                    <Th className="pr-2">Parceiro</Th>
-                    <Th align="right" className="pr-2">Extra %</Th>
-                    <Th align="right">% Receita</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {nota.map((l) => (
-                    <Tr key={l.weeklyOperacaoId}>
-                      <Td className="pr-2 whitespace-nowrap text-stone-300">
-                        {new Date(l.data + "T00:00:00").toLocaleDateString("pt-BR")}
-                      </Td>
-                      <Td className="pr-2 text-stone-300">{l.cliente ?? "—"}</Td>
-                      <Td className="pr-2 text-stone-600">{l.clienteId ?? "—"}</Td>
-                      <Td align="right" className="pr-2 whitespace-nowrap text-stone-100">{moeda(l.valor)}</Td>
-                      <Td className="pr-2 text-stone-400">{l.parceiro?.nomeParceiro ?? "—"}</Td>
-                      <Td align="right" className="pr-2 whitespace-nowrap text-gold">
-                        {l.parceiro ? moeda(l.parceiro.extra) : "—"}
-                      </Td>
-                      <Td align="right" className="whitespace-nowrap">
-                        {isDiretor ? (
-                          <form
-                            action={atualizarPctReceitaOperacao}
-                            className="flex items-center justify-end gap-1"
-                            title="Deixe em branco pra usar o % padrão da DRE"
-                          >
-                            <input type="hidden" name="id" value={l.weeklyOperacaoId} />
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              name="pct"
-                              placeholder={pctReceitaPadraoStr}
-                              defaultValue={l.pctReceitaOverride !== null ? l.pctReceitaOverride * 100 : undefined}
-                              className="input-imp w-16 px-1.5 py-0.5 text-right text-[11px]"
-                            />
-                            <span className="text-[11px] text-stone-500">%</span>
-                            <button type="submit" className="text-[10px] text-gold hover:underline">
-                              Salvar
-                            </button>
-                          </form>
-                        ) : (
-                          <span className={l.pctReceitaOverride !== null ? "text-gold" : "text-stone-600"}>
-                            {l.pctReceitaOverride !== null ? `${(l.pctReceitaOverride * 100).toLocaleString("pt-BR")}%` : `${pctReceitaPadraoStr}%`}
-                          </span>
-                        )}
-                      </Td>
-                    </Tr>
-                  ))}
-                </tbody>
-              </Table>
-              <p className="mt-2 text-[11px] text-stone-600">
-                Total crédito: {moeda(nota.reduce((s, l) => s + l.valor, 0))} · Total extra de parceiro:{" "}
-                {moeda(nota.reduce((s, l) => s + (l.parceiro?.extra ?? 0), 0))}
-              </p>
-            </>
-          ) : (
-            <p className="text-xs text-stone-600">Nenhuma operação paga esse mês ainda.</p>
-          )}
+          <NotaMesTable
+            nota={nota}
+            isDiretor={isDiretor}
+            pctReceitaPadraoStr={pctReceitaPadraoStr}
+            atualizarPctReceitaOperacao={atualizarPctReceitaOperacao}
+          />
         </div>
 
         {fechamento.status === "fechado" ? (
