@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RANK_LABELS, ROLE_LABELS } from "@/lib/labels";
@@ -18,6 +19,17 @@ const RANKS = [...RANK_ORDER, "diretor"] as const;
 
 export default async function GestaoPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  // A página não tinha NENHUMA checagem de papel — só o menu escondia o link
+  // pra quem não é Diretor, mas navegar direto pra /gestao mostrava o e-mail
+  // real de todo mundo (listUsers via client admin) pra qualquer conta
+  // logada. Achado numa auditoria de segurança, 2026-09-02.
+  const { data: meuPerfil } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  if (meuPerfil?.role !== "diretor") redirect("/");
 
   const { data: pessoas } = await supabase
     .from("profiles")

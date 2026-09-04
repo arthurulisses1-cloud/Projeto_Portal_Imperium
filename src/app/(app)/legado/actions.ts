@@ -49,6 +49,14 @@ export async function alternarAtivo(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Não autenticado.");
 
+  // A parte de baixo desta função bane/desbane a conta de autenticação direto
+  // via API admin (service_role, ignora RLS de propósito) — sem checar o
+  // papel de quem chama, QUALQUER pessoa logada podia banir QUALQUER outra
+  // conta (inclusive a do Diretor) passando um profile_id alheio. Achado
+  // numa auditoria de segurança, 2026-09-02.
+  const { data: perfilQuemChama } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  if (perfilQuemChama?.role !== "diretor") throw new Error("Só o Diretor pode ativar/desativar contas.");
+
   const profileId = String(formData.get("profile_id"));
   const novoAtivo = String(formData.get("ativo")) === "true";
 
