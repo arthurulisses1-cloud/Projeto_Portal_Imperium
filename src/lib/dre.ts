@@ -503,12 +503,16 @@ async function buscarCreditoEReceitaPropriaMes(
   fimMesExclusivo: string,
   pctPadrao: number
 ): Promise<{ creditoTotalMes: number; receitaPropria: number }> {
-  const { data } = await supabase
-    .from("weekly_operacoes")
-    .select("valor, pct_receita_override")
-    .eq("status", "PAGO")
-    .gte("data", inicioMes)
-    .lt("data", fimMesExclusivo);
+  // Mesmo fallback de buscarNotaMes — pct_receita_override (migration 0067)
+  // pode ainda não ter rodado nesse banco; sem isso o crédito do mês
+  // inteiro zerava na DRE (select com coluna inexistente = erro = `data`
+  // vazio) em vez de só ignorar o override.
+  const res = await supabase.from("weekly_operacoes").select("valor, pct_receita_override").eq("status", "PAGO").gte("data", inicioMes).lt("data", fimMesExclusivo);
+  let data: { valor: number; pct_receita_override: number | null }[] | null = res.data;
+  if (res.error) {
+    const fallback = await supabase.from("weekly_operacoes").select("valor").eq("status", "PAGO").gte("data", inicioMes).lt("data", fimMesExclusivo);
+    data = (fallback.data ?? []).map((o) => ({ ...o, pct_receita_override: null }));
+  }
 
   let creditoTotalMes = 0;
   let receitaPropria = 0;
@@ -570,13 +574,32 @@ export async function buscarNotaMes(supabase: SupabaseClient, ano: number, mes: 
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const fimMes = new Date(ano, mes, 0).toISOString().slice(0, 10);
 
-  const { data: ops } = await supabase
+  // pct_receita_override é da migration 0067 — se ainda não rodou nesse
+  // banco, o select com essa coluna falha (Postgres rejeita coluna
+  // inexistente) e `ops` vira null; sem esse fallback a Nota do mês
+  // inteira sumia ("Nenhuma operação paga esse mês ainda"), escondendo
+  // operações que realmente existem. Tenta com a coluna nova primeiro; se
+  // der erro, refaz sem ela.
+  const opsRes = await supabase
     .from("weekly_operacoes")
     .select("id, data, cliente, cliente_id, valor, pct_receita_override")
     .eq("status", "PAGO")
     .gte("data", inicioMes)
     .lte("data", fimMes)
     .order("data");
+  let ops = opsRes.data as
+    | { id: string; data: string; cliente: string | null; cliente_id: string | null; valor: number; pct_receita_override: number | null }[]
+    | null;
+  if (opsRes.error) {
+    const fallback = await supabase
+      .from("weekly_operacoes")
+      .select("id, data, cliente, cliente_id, valor")
+      .eq("status", "PAGO")
+      .gte("data", inicioMes)
+      .lte("data", fimMes)
+      .order("data");
+    ops = (fallback.data ?? []).map((o) => ({ ...o, pct_receita_override: null }));
+  }
   if (!ops || ops.length === 0) return [];
 
   const { data: comissoes } = await supabase
@@ -714,7 +737,7 @@ export async function buscarResumoDreForecast(supabase: SupabaseClient, ano: num
   const fimMes = new Date(ano, mes, 0).toISOString().slice(0, 10);
   const config = await buscarConfigDre(supabase);
 
-  const [{ data: opsRaw }, producaoParceiro, folha, despesas, receitasExtras] = await Promise.all([
+  const [opsRes, producaoParceiro, folha, despesas, receitasExtras] = await Promise.all([
     supabase
       .from("weekly_operacoes")
       .select("id, valor, status, status_manual, pct_receita_override")
@@ -725,6 +748,18 @@ export async function buscarResumoDreForecast(supabase: SupabaseClient, ano: num
     buscarDespesasExtras(supabase, ano, mes),
     buscarReceitasExtras(supabase, ano, mes),
   ]);
+  // Mesmo fallback de buscarNotaMes/buscarCreditoEReceitaPropriaMes —
+  // pct_receita_override (migration 0067) pode ainda não ter rodado nesse
+  // banco.
+  let opsRaw = opsRes.data;
+  if (opsRes.error) {
+    const fallback = await supabase
+      .from("weekly_operacoes")
+      .select("id, valor, status, status_manual")
+      .gte("data", inicioMes)
+      .lte("data", fimMes);
+    opsRaw = (fallback.data ?? []).map((o) => ({ ...o, pct_receita_override: null }));
+  }
   const opsForecast = (opsRaw ?? []).filter((o) => o.status === "PAGO" || o.status_manual === "aguardando_pagamento");
   const creditoTotalMes = opsForecast.reduce((s, o) => s + Number(o.valor), 0);
   const receitaPropria = opsForecast.reduce((s, o) => {
