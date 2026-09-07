@@ -45,6 +45,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/parceiros", label: "Parceiros", roles: ["closer", "lider"] },
   { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor", "investidor"] },
   { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
+  { type: "link", href: "/academy", label: "Vorp Academy", roles: ["sdr", "closer", "lider", "diretor"] },
   {
     type: "group",
     label: "Financeiro",
