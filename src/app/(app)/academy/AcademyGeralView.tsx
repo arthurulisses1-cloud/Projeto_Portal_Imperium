@@ -192,28 +192,34 @@ function AulaCard({
 
       {aberta && (
         <div className="space-y-2 border-t border-imperium-line bg-imperium-bg/20 p-3">
+          {/* Fora do form de edição de propósito — <form> dentro de <form> é
+              HTML inválido e o navegador descarta o form aninhado, fazendo o
+              clique cair no form errado (achado 2026-09-08: mover/excluir
+              não funcionavam por causa disso). */}
+          <div className="flex items-center gap-2 text-[10px] text-stone-500">
+            <form action={moverAula} className="inline">
+              <input type="hidden" name="id" value={aula.id} />
+              <input type="hidden" name="direcao" value="cima" />
+              <button type="submit" title="Mover pra cima" className="hover:text-gold">▲</button>
+            </form>
+            <form action={moverAula} className="inline">
+              <input type="hidden" name="id" value={aula.id} />
+              <input type="hidden" name="direcao" value="baixo" />
+              <button type="submit" title="Mover pra baixo" className="hover:text-gold">▼</button>
+            </form>
+            <span className="ml-auto" />
+            <form action={excluirAula} className="inline">
+              <input type="hidden" name="id" value={aula.id} />
+              <button type="submit" className="text-wine-bright hover:underline">Excluir</button>
+            </form>
+          </div>
+
           <form action={atualizarAula} className="space-y-2">
             <input type="hidden" name="id" value={aula.id} />
-            <div className="flex items-center gap-2 text-[10px] text-stone-500">
-              <form action={moverAula} className="inline">
-                <input type="hidden" name="id" value={aula.id} />
-                <input type="hidden" name="direcao" value="cima" />
-                <button type="submit" title="Mover pra cima" className="hover:text-gold">▲</button>
-              </form>
-              <form action={moverAula} className="inline">
-                <input type="hidden" name="id" value={aula.id} />
-                <input type="hidden" name="direcao" value="baixo" />
-                <button type="submit" title="Mover pra baixo" className="hover:text-gold">▼</button>
-              </form>
-              <label className="ml-auto flex items-center gap-1">
-                <input type="checkbox" name="marco" value="true" defaultChecked={aula.marco} className="accent-gold" />
-                Marco
-              </label>
-              <form action={excluirAula} className="inline">
-                <input type="hidden" name="id" value={aula.id} />
-                <button type="submit" className="text-wine-bright hover:underline">Excluir</button>
-              </form>
-            </div>
+            <label className="flex items-center gap-1 text-[10px] text-stone-500">
+              <input type="checkbox" name="marco" value="true" defaultChecked={aula.marco} className="accent-gold" />
+              Marco
+            </label>
             <div className="grid gap-2 sm:grid-cols-[2fr_2fr_1fr_1.3fr]">
               <input name="tema" defaultValue={aula.tema} className="input-imp px-2 py-1 text-xs" />
               <input name="descricao" defaultValue={aula.descricao ?? ""} placeholder="Referência" className="input-imp px-2 py-1 text-xs" />
