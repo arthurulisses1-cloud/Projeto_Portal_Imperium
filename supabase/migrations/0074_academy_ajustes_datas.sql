@@ -32,8 +32,21 @@ where origem_academy_aula_id in (
 );
 
 update academy_aulas
-set ordem = ordem - 1,
-    data = (data - interval '7 days')::date
+set data = (data - interval '7 days')::date
+where trilha_id = (select id from academy_trilhas where nome = 'Tribuno');
+
+-- Renumerar ordem 2..12 -> 1..11 num UPDATE só esbarra na constraint
+-- unique(trilha_id, ordem) — o Postgres checa a cada linha, não só no
+-- fim do comando, então em algum momento duas linhas colidem no meio do
+-- caminho. Passa por um intervalo negativo (disjunto de qualquer ordem
+-- positiva já existente) e só depois converte pro valor final — mesmo
+-- truque do TEMP=-1 que moverAula já usa, só que em lote.
+update academy_aulas
+set ordem = -ordem
+where trilha_id = (select id from academy_trilhas where nome = 'Tribuno');
+
+update academy_aulas
+set ordem = -ordem - 1
 where trilha_id = (select id from academy_trilhas where nome = 'Tribuno');
 
 alter table academy_aulas enable trigger trg_prevent_academy_aula_overreach;
