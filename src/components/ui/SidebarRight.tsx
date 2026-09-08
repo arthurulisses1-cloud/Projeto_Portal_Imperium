@@ -46,16 +46,33 @@ export default async function SidebarRight({ userId }: { userId: string }) {
 
   // Mini-indicador da semana atual de Estrelas (SDR/Closer só) — mesmo
   // cálculo de /estrelas, pra dar o "check rápido" sem precisar entrar na aba.
+  // Achado 2026-09-07: só conta PAGO (via weekly_operacoes.status, pela
+  // data de pago_em) e pesa pelo multiplicador de ticket — ver /estrelas
+  // pro comentário completo da regra.
   let semanaEstrelas: { qtd: number } | null = null;
   if ((profile.role === "sdr" || profile.role === "closer") && pace.cheia > 0) {
     const inicioSemanaAtual = inicioSemanaISO(hojeBR());
-    const { data: vendasSemana } = await supabase
+    const { data: vendasSemanaBrutas } = await supabase
       .from("vendas")
-      .select("id")
+      .select("data, multiplicador, weekly_operacao_id")
       .eq("profile_id", userId)
       .in("papel", profile.role === "sdr" ? ["sdr", "ambos"] : ["closer", "ambos"])
       .gte("data", inicioSemanaAtual);
-    semanaEstrelas = { qtd: (vendasSemana ?? []).length };
+    const opIdsSemana = Array.from(
+      new Set((vendasSemanaBrutas ?? []).map((v) => v.weekly_operacao_id).filter((id): id is string => !!id))
+    );
+    const { data: opsSemana } = opIdsSemana.length
+      ? await supabase.from("weekly_operacoes").select("id, status, pago_em").in("id", opIdsSemana)
+      : { data: [] };
+    const opPorIdSemana = new Map((opsSemana ?? []).map((o) => [o.id, o]));
+    const qtd = (vendasSemanaBrutas ?? []).reduce((soma, v) => {
+      const op = v.weekly_operacao_id ? opPorIdSemana.get(v.weekly_operacao_id) : null;
+      if (op && op.status !== "PAGO") return soma;
+      const dataRef = op?.pago_em ?? v.data;
+      if (dataRef < inicioSemanaAtual) return soma; // pago fora dessa semana
+      return soma + (v.multiplicador ?? 1);
+    }, 0);
+    semanaEstrelas = { qtd };
   }
 
   // Resumo do Plano de Carreira (SDR/Closer só — líder não tem "próximo

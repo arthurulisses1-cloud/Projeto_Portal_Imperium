@@ -38,21 +38,45 @@ export default async function EstrelasPage() {
   // Pago vira estrela pelo PAPEL que a pessoa teve na venda (SDR conta o que
   // fechou como SDR ou "ambos"; Closer o que fechou como Closer ou "ambos") —
   // mesma regra usada no resto do sistema pra separar produção por papel.
+  //
+  // Achado 2026-09-07 (cruzado com Matri_Planodecarreira.pdf): a contagem
+  // tem que ser só de vendas PAGAS (weekly_operacoes.status = 'PAGO'),
+  // pela data real do pagamento (pago_em) — não qualquer venda assinada
+  // pela data de assinatura. E cada venda pesa pelo multiplicador de
+  // ticket (vendas.multiplicador = floor(valor/100000)+1, já calculado no
+  // sync): uma venda de R$100k-199k conta como 2 "vendas" no sistema.
   const dozeSemanasAtras = new Date();
   dozeSemanasAtras.setDate(dozeSemanasAtras.getDate() - 84);
-  const { data: vendas } = await supabase
+  const { data: vendasBrutas } = await supabase
     .from("vendas")
-    .select("data, valor, papel")
+    .select("data, valor, multiplicador, papel, weekly_operacao_id")
     .eq("profile_id", meId)
     .in("papel", meRole === "sdr" ? ["sdr", "ambos"] : ["closer", "ambos"])
     .gte("data", dozeSemanasAtras.toISOString().slice(0, 10))
     .order("data", { ascending: false });
 
+  const opIds = Array.from(new Set((vendasBrutas ?? []).map((v) => v.weekly_operacao_id).filter((id): id is string => !!id)));
+  const { data: opsRel } = opIds.length
+    ? await supabase.from("weekly_operacoes").select("id, status, pago_em").in("id", opIds)
+    : { data: [] };
+  const opPorId = new Map((opsRel ?? []).map((o) => [o.id, o]));
+
+  // Só as pagas: vinculada a uma operação que não seja PAGO fica de fora;
+  // sem vínculo (venda antiga, pré-integração) usa a própria data como
+  // aproximação, pra não sumir do histórico.
+  const vendas = (vendasBrutas ?? [])
+    .map((v) => {
+      const op = v.weekly_operacao_id ? opPorId.get(v.weekly_operacao_id) : null;
+      if (op && op.status !== "PAGO") return null;
+      return { ...v, dataRef: op?.pago_em ?? v.data };
+    })
+    .filter((v): v is NonNullable<typeof v> => v !== null);
+
   const porSemana = new Map<string, { qtd: number; valor: number }>();
-  for (const v of vendas ?? []) {
-    const semana = inicioSemanaISO(v.data);
+  for (const v of vendas) {
+    const semana = inicioSemanaISO(v.dataRef);
     const bucket = porSemana.get(semana) ?? { qtd: 0, valor: 0 };
-    bucket.qtd += 1;
+    bucket.qtd += v.multiplicador ?? 1;
     bucket.valor += Number(v.valor);
     porSemana.set(semana, bucket);
   }
@@ -88,7 +112,7 @@ export default async function EstrelasPage() {
         <p className="kicker mt-1">
           {RANK_LABELS[rank] ?? rank}
           {pace.cheia > 0
-            ? ` · ${pace.meia} pagos na semana = ½★ · ${pace.cheia} pagos = ★`
+            ? ` · ${pace.meia} pagos na semana = ½★ · ${pace.cheia} pagos = ★ (cada R$100K numa venda soma +1)`
             : " · seu cargo ainda não participa do sistema de estrelas"}
         </p>
       </div>
