@@ -286,3 +286,132 @@ body {
   color: rgb(var(--c-line-strong) / 0.30);
   text-shadow: 0 0 24px rgb(var(--c-purpura) / 0.12);
 }
+
+/* ============ Imperium Academy — calendário mensal ============ */
+.academy-cal {
+  border: 1px solid rgb(var(--c-line));
+  border-radius: 0.5rem;
+  background: rgb(var(--c-surface));
+  padding: 1rem;
+  overflow-x: auto;
+}
+.academy-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.academy-cal-head h3 {
+  font-family: var(--font-cinzel);
+  font-size: 1.1rem;
+  color: rgb(var(--c-gold-bright));
+  min-width: 11rem;
+  text-align: center;
+}
+.academy-cal-nav {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--c-line-strong));
+  color: rgb(var(--c-gold));
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.academy-cal-nav:hover {
+  border-color: rgb(var(--c-gold));
+  background: rgb(var(--c-gold) / 0.1);
+}
+.academy-cal-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+  font-size: 0.72rem;
+  color: rgb(var(--stone-400));
+}
+.academy-cal-legenda-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.academy-cal-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  display: inline-block;
+}
+.academy-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(6.5rem, 1fr));
+  gap: 3px;
+}
+.academy-cal-dow {
+  margin-bottom: 3px;
+}
+.academy-cal-dow-cell {
+  text-align: center;
+  font-family: var(--font-cinzel);
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--stone-500));
+  padding: 0.25rem 0;
+}
+.academy-cal-cell {
+  min-height: 5.5rem;
+  border-radius: 0.35rem;
+  background: rgb(var(--c-raised) / 0.5);
+  border: 1px solid rgb(var(--c-line) / 0.6);
+  padding: 0.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.academy-cal-cell.fora {
+  opacity: 0.35;
+}
+.academy-cal-cell.hoje {
+  border-color: rgb(var(--c-gold));
+  box-shadow: inset 0 0 0 1px rgb(var(--c-gold) / 0.4);
+}
+.academy-cal-daynum {
+  font-size: 0.68rem;
+  color: rgb(var(--stone-500));
+  font-variant-numeric: tabular-nums;
+}
+.academy-cal-evs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.academy-cal-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid;
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.64rem;
+  line-height: 1.25;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+}
+.academy-cal-chip.clicavel {
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.academy-cal-chip.clicavel:hover {
+  filter: brightness(1.25);
+}
+.academy-cal-chip.realizada {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+.academy-cal-chip-txt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
