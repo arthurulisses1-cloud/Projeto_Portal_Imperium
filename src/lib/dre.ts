@@ -159,6 +159,14 @@ export type Folha = {
 // (revisão mensal), não uma tela que renderiza toda hora.
 export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: number): Promise<Folha> {
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
+  // Achado 2026-09-08: faltava o limite superior — olhar a Folha de um mês
+  // já fechado (Agosto, agora que Setembro começou) vinha somando também
+  // tudo que já rolou em Setembro (tanto aqui quanto dentro de
+  // buscarRemuneracaoMes), fazendo a DRE divergir do que foi congelado no
+  // Fechamento daquele mês. Mesmo `fimMesExclusivoDe` que
+  // buscarCreditoEReceitaPropriaMes já usa (função hoisted, definida mais
+  // abaixo nesse arquivo).
+  const fimMesExclusivo = fimMesExclusivoDe(ano, mes);
 
   const { data: pessoas } = await supabase
     .from("profiles")
@@ -170,7 +178,11 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
     .neq("role", "investidor")
     .order("full_name");
 
-  const { data: vendasMes } = await supabase.from("vendas").select("profile_id, valor, papel").gte("data", inicioMes);
+  const { data: vendasMes } = await supabase
+    .from("vendas")
+    .select("profile_id, valor, papel")
+    .gte("data", inicioMes)
+    .lt("data", fimMesExclusivo);
   const despesas = await buscarDespesasExtras(supabase, ano, mes);
   const campanhaPorPessoa = new Map<string, number>();
   for (const d of despesas) {
@@ -187,7 +199,14 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
         .filter((v) => v.profile_id === p.id && (v.papel === "closer" || v.papel === "ambos"))
         .reduce((s, v) => s + Number(v.valor), 0);
 
-      const { tiers, remuneracao } = await buscarRemuneracaoMes(supabase, p.id, p.role, p.rank as Rank | "diretor", inicioMes);
+      const { tiers, remuneracao } = await buscarRemuneracaoMes(
+        supabase,
+        p.id,
+        p.role,
+        p.rank as Rank | "diretor",
+        inicioMes,
+        fimMesExclusivo
+      );
 
       const tribo = p.tribo as unknown as { nome: string; exercito: { nome: string } | null } | null;
       const exercitoLiderado = p.exercito_liderado as unknown as { nome: string }[] | null;
