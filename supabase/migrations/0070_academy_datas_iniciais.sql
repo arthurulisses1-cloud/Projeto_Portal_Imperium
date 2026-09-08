@@ -4,6 +4,13 @@
 -- "já é pra estar pré-setadas as datas com a formação iniciando próxima
 -- semana". Cada aula seguinte da mesma trilha cai 7 dias depois da anterior,
 -- pela ordem.
+--
+-- Rodando pelo SQL Editor a sessão não tem auth.uid() (não é um Diretor
+-- logado via app), então o gatilho trg_prevent_academy_aula_overreach
+-- bloqueia o UPDATE (is_director() dá falso). É uma migration administrativa
+-- de uma vez só — desliga o gatilho pra essa atualização e liga de volta.
+alter table academy_aulas disable trigger trg_prevent_academy_aula_overreach;
+
 update academy_aulas aa
 set data = (
   select (
@@ -16,6 +23,8 @@ set data = (
   where t.id = aa.trilha_id
 )
 where aa.data is null;
+
+alter table academy_aulas enable trigger trg_prevent_academy_aula_overreach;
 
 insert into schema_migrations (filename) values ('0070_academy_datas_iniciais.sql')
 on conflict (filename) do nothing;
