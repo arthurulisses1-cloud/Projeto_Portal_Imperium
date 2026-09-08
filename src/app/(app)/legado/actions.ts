@@ -59,8 +59,14 @@ export async function alternarAtivo(formData: FormData) {
 
   const profileId = String(formData.get("profile_id"));
   const novoAtivo = String(formData.get("ativo")) === "true";
+  // Reativar limpa a data de saída; desativar exige o último dia de
+  // trabalho (usado pela Folha da DRE pra parar de cobrar o fixo dos meses
+  // seguintes e pagar o fixo proporcional só no mês em que a pessoa saiu —
+  // ver buscarFolha em src/lib/dre.ts).
+  const dataSaida = novoAtivo ? null : String(formData.get("data_saida") ?? "").trim() || null;
+  if (!novoAtivo && !dataSaida) throw new Error("Informe o último dia de trabalho.");
 
-  const { error } = await supabase.from("profiles").update({ ativo: novoAtivo }).eq("id", profileId);
+  const { error } = await supabase.from("profiles").update({ ativo: novoAtivo, data_saida: dataSaida }).eq("id", profileId);
   if (error) throw new Error(error.message);
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;

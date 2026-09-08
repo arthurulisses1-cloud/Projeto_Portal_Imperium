@@ -360,9 +360,23 @@ export default async function LegadoPage({
                 </form>
               </div>
 
-              <form action={alternarAtivo} className="mt-3">
+              <form action={alternarAtivo} className="mt-3 space-y-2">
                 <input type="hidden" name="profile_id" value={p.id} />
                 <input type="hidden" name="ativo" value={inativo ? "true" : "false"} />
+                {!inativo && (
+                  <div>
+                    <label className="mb-1 block text-[10px] uppercase tracking-wide text-stone-500">
+                      Último dia de trabalho
+                    </label>
+                    <input
+                      type="date"
+                      name="data_saida"
+                      defaultValue={hojeBR()}
+                      required
+                      className="input-imp px-2 py-1 text-xs"
+                    />
+                  </div>
+                )}
                 <button
                   type="submit"
                   className={`w-full rounded border px-3 py-1.5 text-xs ${

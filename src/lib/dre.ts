@@ -168,15 +168,22 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
   // abaixo nesse arquivo).
   const fimMesExclusivo = fimMesExclusivoDe(ano, mes);
 
-  const { data: pessoas } = await supabase
+  const { data: pessoasRaw } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, role, rank, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(nome)"
+      "id, full_name, role, rank, data_admissao, data_saida, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(nome)"
     )
     // Investidor é gestão pura (sem produção/comissão/salário-base real) —
     // nunca entra na Folha, pedido explícito do Diretor.
     .neq("role", "investidor")
     .order("full_name");
+
+  // Quem já tinha saído ANTES desse mês começar não entra de jeito nenhum
+  // (nem fixo, nem nada) — pedido do Diretor, 2026-09-08: sem isso, gente
+  // desligada continuava custando o fixo mínimo pra sempre em todo mês
+  // seguinte, porque calcularRemuneracao sempre devolve pelo menos o tier 0
+  // mesmo com produção zero.
+  const pessoas = (pessoasRaw ?? []).filter((p) => !p.data_saida || p.data_saida >= inicioMes);
 
   const { data: vendasMes } = await supabase
     .from("vendas")
@@ -191,7 +198,7 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
   }
 
   const linhas = await Promise.all(
-    (pessoas ?? []).map(async (p) => {
+    pessoas.map(async (p) => {
       const vendidoSdr = (vendasMes ?? [])
         .filter((v) => v.profile_id === p.id && (v.papel === "sdr" || v.papel === "ambos"))
         .reduce((s, v) => s + Number(v.valor), 0);
@@ -212,8 +219,24 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
       const exercitoLiderado = p.exercito_liderado as unknown as { nome: string }[] | null;
       const time = tribo?.exercito?.nome ?? exercitoLiderado?.[0]?.nome ?? null;
 
-      const fixoBase = tiers.length > 0 ? tiers[0].fixo : 0;
-      const fixoAtual = remuneracao?.fixo ?? 0;
+      let fixoBase = tiers.length > 0 ? tiers[0].fixo : 0;
+      let fixoAtual = remuneracao?.fixo ?? 0;
+
+      // Saiu DENTRO desse mês (não antes — esses já foram filtrados acima):
+      // fixo proporcional aos dias trabalhados, não o mês cheio. Admissão
+      // no mesmo mês (raro) também entra na conta — ninguém recebe por dia
+      // que nem tinha entrado ainda.
+      if (p.data_saida && p.data_saida < fimMesExclusivo) {
+        const diasNoMes = new Date(ano, mes, 0).getDate();
+        const inicioTrabalho = p.data_admissao && p.data_admissao > inicioMes ? p.data_admissao : inicioMes;
+        const diaInicio = Number(inicioTrabalho.slice(8, 10));
+        const diaFim = Number(p.data_saida.slice(8, 10));
+        const diasTrabalhados = Math.max(0, Math.min(diaFim, diasNoMes) - diaInicio + 1);
+        const proporcao = diasNoMes > 0 ? diasTrabalhados / diasNoMes : 0;
+        fixoBase = Math.round(fixoBase * proporcao);
+        fixoAtual = Math.round(fixoAtual * proporcao);
+      }
+
       const bonus = Math.max(0, fixoAtual - fixoBase);
       const variavelSdr = remuneracao?.sdr.variavel ?? 0;
       const variavelCloser = remuneracao?.closer.variavel ?? 0;
@@ -277,11 +300,11 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const fimMes = new Date(ano, mes, 0).toISOString().slice(0, 10);
 
-  const [{ data: pessoas }, { data: opsRaw }, { data: tiersRaw }, despesas] = await Promise.all([
+  const [{ data: pessoasRaw }, { data: opsRaw }, { data: tiersRaw }, despesas] = await Promise.all([
     supabase
       .from("profiles")
       .select(
-        "id, full_name, role, rank, tribo:tribos!profiles_tribo_id_fkey(nome, exercito_id, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(id, nome)"
+        "id, full_name, role, rank, data_admissao, data_saida, tribo:tribos!profiles_tribo_id_fkey(nome, exercito_id, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(id, nome)"
       )
       .neq("role", "investidor")
       .order("full_name"),
@@ -295,6 +318,8 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
   ]);
 
   const opsBase = (opsRaw ?? []).filter((o) => o.status === "PAGO" || o.status_manual === "aguardando_pagamento");
+  // Mesmo corte de buscarFolha: quem saiu antes desse mês começar nem entra.
+  const pessoas = (pessoasRaw ?? []).filter((p) => !p.data_saida || p.data_saida >= inicioMes);
 
   const tiersPorRank = new Map<string, Tier[]>();
   for (const t of tiersRaw ?? []) {
@@ -305,7 +330,7 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
   Array.from(tiersPorRank.values()).forEach((arr) => arr.sort((a, b) => a.producao_min - b.producao_min));
 
   const exercitoIdPorProfileId = new Map<string, string | null>();
-  for (const p of pessoas ?? []) {
+  for (const p of pessoas) {
     const tribo = p.tribo as unknown as { exercito_id: string } | null;
     const exercitoLiderado = p.exercito_liderado as unknown as { id: string }[] | null;
     exercitoIdPorProfileId.set(p.id, tribo?.exercito_id ?? exercitoLiderado?.[0]?.id ?? null);
@@ -317,7 +342,7 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
     campanhaPorPessoa.set(d.profileId, (campanhaPorPessoa.get(d.profileId) ?? 0) + d.valor);
   }
 
-  const linhas: LinhaFolha[] = (pessoas ?? []).map((p) => {
+  const linhas: LinhaFolha[] = pessoas.map((p) => {
     const rank = p.rank as Rank | "diretor";
     const tiers = tiersPorRank.get(p.rank) ?? [];
     const papelPrincipal = PAPEL_PRINCIPAL[rank] ?? "sdr";
@@ -378,8 +403,22 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
     const exercitoLiderado = p.exercito_liderado as unknown as { nome: string }[] | null;
     const time = tribo?.exercito?.nome ?? exercitoLiderado?.[0]?.nome ?? null;
 
-    const fixoBase = tiers.length > 0 ? tiers[0].fixo : 0;
-    const fixoAtual = remuneracao?.fixo ?? 0;
+    let fixoBase = tiers.length > 0 ? tiers[0].fixo : 0;
+    let fixoAtual = remuneracao?.fixo ?? 0;
+
+    // Mesma proporcionalidade de buscarFolha — saiu dentro desse mês (quem
+    // saiu antes já foi filtrado lá em cima).
+    if (p.data_saida && p.data_saida <= fimMes) {
+      const diasNoMes = new Date(ano, mes, 0).getDate();
+      const inicioTrabalho = p.data_admissao && p.data_admissao > inicioMes ? p.data_admissao : inicioMes;
+      const diaInicio = Number(inicioTrabalho.slice(8, 10));
+      const diaFim = Number(p.data_saida.slice(8, 10));
+      const diasTrabalhados = Math.max(0, Math.min(diaFim, diasNoMes) - diaInicio + 1);
+      const proporcao = diasNoMes > 0 ? diasTrabalhados / diasNoMes : 0;
+      fixoBase = Math.round(fixoBase * proporcao);
+      fixoAtual = Math.round(fixoAtual * proporcao);
+    }
+
     const bonus = Math.max(0, fixoAtual - fixoBase);
     const variavelSdr = remuneracao?.sdr.variavel ?? 0;
     const variavelCloser = remuneracao?.closer.variavel ?? 0;
