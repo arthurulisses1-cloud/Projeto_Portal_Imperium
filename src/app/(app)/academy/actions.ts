@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 async function exigirDiretor() {
   const supabase = await createClient();
@@ -16,6 +17,75 @@ async function exigirDiretor() {
 
 function revalidar() {
   revalidatePath("/academy");
+  revalidatePath("/academy/instrutor");
+  revalidatePath("/academy/trilha");
+  revalidatePath("/tarefas");
+  revalidatePath("/");
+}
+
+// Recria as tarefas-lembrete ligadas a uma aula (instrutor + audiência da
+// trilha) sempre que data/instrutor/tema mudam — apaga tudo que já existia
+// pra essa aula e gera de novo do zero (mais simples que diff, volume
+// pequeno). Sem data marcada, não gera nada.
+async function sincronizarTasksDaAula(supabase: SupabaseClient, aulaId: string) {
+  await supabase.from("tasks").delete().eq("origem_academy_aula_id", aulaId);
+
+  const { data: aula } = await supabase
+    .from("academy_aulas")
+    .select("id, tema, data, instrutor_id, trilha:academy_trilhas(nome, rank, tipo, hora_inicio)")
+    .eq("id", aulaId)
+    .maybeSingle();
+  if (!aula || !aula.data) return;
+
+  const trilha = aula.trilha as unknown as { nome: string; rank: string | null; tipo: string; hora_inicio: string } | null;
+  if (!trilha) return;
+
+  type NovaTask = {
+    profile_id: string;
+    titulo: string;
+    due_date: string;
+    due_time: string;
+    coluna: "afazer";
+    prioridade: "alta" | "normal";
+    tags: string[];
+    origem_academy_aula_id: string;
+  };
+  const linhas: NovaTask[] = [];
+
+  if (aula.instrutor_id) {
+    linhas.push({
+      profile_id: aula.instrutor_id,
+      titulo: `Ministrar: ${aula.tema} (${trilha.nome})`,
+      due_date: aula.data,
+      due_time: trilha.hora_inicio,
+      coluna: "afazer",
+      prioridade: "alta",
+      tags: ["academy"],
+      origem_academy_aula_id: aula.id,
+    });
+  }
+
+  let alunosQuery = supabase.from("profiles").select("id").eq("ativo", true);
+  alunosQuery = trilha.tipo === "arena" ? alunosQuery.in("role", ["sdr", "closer"]) : alunosQuery.eq("rank", trilha.rank);
+  const { data: alunos } = await alunosQuery;
+  for (const a of alunos ?? []) {
+    if (a.id === aula.instrutor_id) continue; // já ganhou a tarefa de instrutor acima
+    linhas.push({
+      profile_id: a.id,
+      titulo: `Aula da Imperium Academy: ${aula.tema} (${trilha.nome})`,
+      due_date: aula.data,
+      due_time: trilha.hora_inicio,
+      coluna: "afazer",
+      prioridade: "normal",
+      tags: ["academy"],
+      origem_academy_aula_id: aula.id,
+    });
+  }
+
+  if (linhas.length > 0) {
+    const { error } = await supabase.from("tasks").insert(linhas);
+    if (error) throw new Error(error.message);
+  }
 }
 
 export async function atualizarTrilha(formData: FormData) {
@@ -50,13 +120,20 @@ export async function criarAula(formData: FormData) {
     .maybeSingle();
   const novaOrdem = (ultima?.ordem ?? 0) + 1;
 
-  const { error } = await supabase.from("academy_aulas").insert({
-    trilha_id: trilhaId,
-    ordem: novaOrdem,
-    tema,
-    descricao: descricao || null,
-  });
+  const { data: nova, error } = await supabase
+    .from("academy_aulas")
+    .insert({
+      trilha_id: trilhaId,
+      ordem: novaOrdem,
+      tema,
+      descricao: descricao || null,
+    })
+    .select("id")
+    .single();
   if (error) throw new Error(error.message);
+  // Aula nova nasce sem data — nada a sincronizar ainda, mas já deixa o
+  // padrão coerente pra quando o Diretor definir a data em seguida.
+  if (nova) await sincronizarTasksDaAula(supabase, nova.id);
   revalidar();
 }
 
@@ -81,6 +158,7 @@ export async function atualizarAula(formData: FormData) {
     })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  await sincronizarTasksDaAula(supabase, id);
   revalidar();
 }
 
@@ -150,6 +228,7 @@ export async function definirDatasEmLote(formData: FormData) {
       .from("academy_aulas")
       .update({ data: d.toISOString().slice(0, 10) })
       .eq("id", aula.id);
+    await sincronizarTasksDaAula(supabase, aula.id);
   }
   revalidar();
 }
