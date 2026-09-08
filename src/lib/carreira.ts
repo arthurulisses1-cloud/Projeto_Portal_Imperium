@@ -51,6 +51,27 @@ export const STAR_PACE: Record<Rank, { estrelas: number; cheia: number; meia: nu
   legado: { estrelas: 12, cheia: 10, meia: 6 },
 };
 
+// Bloco RESULTADO do PDF (Matri_Planodecarreira.pdf) — perda de estrela por
+// MÊS (não por semana), pela faixa de R$ PAGO total do mês, keyed pelo rank
+// ATUAL da pessoa (não pelo próximo — essa penalidade é sobre a produção de
+// quem já está naquele rank, diferente do STAR_PACE que é "rumo a X").
+// Tiers em ordem da mais severa pra menos severa; a primeira que bater vale.
+// Achado 2026-09-07, auditoria de agosto/2026.
+export const PERDA_MENSAL: Record<Rank, { max: number; delta: number }[]> = {
+  legionario: [{ max: 0, delta: -3 }, { max: 100000, delta: -1 }],
+  centuriao: [{ max: 0, delta: -3 }, { max: 100000, delta: -2 }, { max: 150000, delta: -1 }],
+  tribuno: [{ max: 0, delta: -3 }, { max: 200000, delta: -2 }],
+  pretor: [{ max: 0, delta: -3 }, { max: 200000, delta: -2 }, { max: 300000, delta: -1 }],
+  legado: [],
+};
+
+export function perdaDoMes(rank: Rank, totalPagoNoMes: number): number {
+  for (const tier of PERDA_MENSAL[rank] ?? []) {
+    if (totalPagoNoMes <= tier.max) return tier.delta;
+  }
+  return 0;
+}
+
 // Papel que define qual tier da tabela de comissão do cargo vale no mês —
 // os outros papéis (ex: Tribuno fazendo prospecção como SDR) são remunerados
 // pela % correspondente do MESMO tier, não por uma tabela de outro cargo.
