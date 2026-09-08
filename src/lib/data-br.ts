@@ -41,3 +41,12 @@ export function paraDataUTC(dataStr: string): Date {
   const [y, m, d] = dataStr.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d));
 }
+
+// true pra sábado/domingo de uma data "YYYY-MM-DD" — usa paraDataUTC (nunca
+// getDay() puro, que depende do fuso do runtime). Compromisso do dia é
+// seg-sex; sábado e domingo não geram pendência nem quebram streak (pedido
+// do Diretor, 2026-09-07).
+export function ehFimDeSemana(dataStr: string): boolean {
+  const diaSemana = paraDataUTC(dataStr).getUTCDay();
+  return diaSemana === 0 || diaSemana === 6;
+}

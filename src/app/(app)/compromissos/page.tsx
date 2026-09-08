@@ -4,7 +4,7 @@ import Card from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { cumpriuCompromisso, type StreakRow } from "@/lib/streak";
 import { marcarFaltaTime, desmarcarFaltaTime } from "@/app/(app)/exercito/actions";
-import { hojeBR } from "@/lib/data-br";
+import { hojeBR, ehFimDeSemana } from "@/lib/data-br";
 
 type Totais = {
   entrevistasComp: number;
@@ -69,6 +69,7 @@ export default async function CompromissosPage() {
   if (profile?.role !== "diretor") redirect("/");
 
   const hoje = hojeBR();
+  const finalDeSemana = ehFimDeSemana(hoje);
 
   const [{ data: pessoas }, { data: tribosRaw }, { data: exercitosRaw }] = await Promise.all([
     supabase
@@ -152,10 +153,16 @@ export default async function CompromissosPage() {
         </p>
       </div>
 
+      {finalDeSemana && (
+        <p className="rounded border border-imperium-line bg-imperium-bg/40 px-4 py-2 text-xs text-stone-500">
+          Hoje é fim de semana — compromisso diário não é obrigatório em sábado/domingo.
+        </p>
+      )}
+
       <Card
         title="Compromisso do dia · Império inteiro"
         right={
-          <Badge tone={totalFirma.lancaram === totalFirma.total ? "success" : "warning"} variant="solid">
+          <Badge tone={finalDeSemana || totalFirma.lancaram === totalFirma.total ? "success" : "warning"} variant="solid">
             {totalFirma.lancaram}/{totalFirma.total} lançaram
           </Badge>
         }
@@ -168,7 +175,7 @@ export default async function CompromissosPage() {
           <summary className="mb-4 flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
             <div className="flex items-center gap-3">
               <h2 className="font-display text-lg text-gold-bright">{exercito.nome}</h2>
-              <Badge tone={exercito.totais.lancaram === exercito.totais.total ? "success" : "warning"} variant="tag">
+              <Badge tone={finalDeSemana || exercito.totais.lancaram === exercito.totais.total ? "success" : "warning"} variant="tag">
                 {exercito.totais.lancaram}/{exercito.totais.total} lançaram
               </Badge>
             </div>
@@ -184,7 +191,7 @@ export default async function CompromissosPage() {
               <div key={tribo.id} className="rounded-lg border border-imperium-line bg-imperium-bg/40 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <h3 className="font-display text-base text-stone-100">{tribo.nome}</h3>
-                  <Badge tone={tribo.totais.lancaram === tribo.totais.total ? "success" : "warning"} variant="tag">
+                  <Badge tone={finalDeSemana || tribo.totais.lancaram === tribo.totais.total ? "success" : "warning"} variant="tag">
                     {tribo.totais.lancaram}/{tribo.totais.total}
                   </Badge>
                 </div>
@@ -196,7 +203,7 @@ export default async function CompromissosPage() {
                   {tribo.membros.map((m) => {
                     const cumpriu = m.row && !m.row.falta && m.row.lancado && cumpriuCompromisso(m.row);
                     const ausente = m.row?.falta;
-                    const naoLancou = !m.row || !m.row.lancado;
+                    const naoLancou = !finalDeSemana && (!m.row || !m.row.lancado);
                     const corBorda = ausente
                       ? "border-imperium-line-strong"
                       : naoLancou
@@ -234,6 +241,8 @@ export default async function CompromissosPage() {
                         </div>
                         {ausente ? (
                           <p className="text-[11px] text-stone-500">Ausente</p>
+                        ) : !m.row && finalDeSemana ? (
+                          <p className="text-[11px] text-stone-600">Fim de semana</p>
                         ) : naoLancou ? (
                           <p className="text-[11px] text-warning">Não lançou</p>
                         ) : (

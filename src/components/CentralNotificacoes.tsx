@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { calcularThreshold, buscarProducaoMesParaMarcos } from "@/lib/marcos";
 import { buscarMetaComTaxas, calcularFunilMeta, buscarRealizadoDia, type EscopoTime } from "@/lib/metas";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
-import { hojeBR, paraDataUTC } from "@/lib/data-br";
+import { hojeBR, paraDataUTC, ehFimDeSemana } from "@/lib/data-br";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -58,7 +58,11 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   // Quem já foi marcado como falta hoje não "esqueceu" de lançar — não faz
   // sentido cobrar compromisso de quem tá ausente.
   const faltouHoje = new Set((compromissosHoje ?? []).filter((c) => c.falta).map((c) => c.profile_id));
-  const naoLancaram = (pessoas ?? []).filter((p) => !lancouHoje.has(p.id) && !faltouHoje.has(p.id));
+  // Sábado e domingo não têm compromisso diário — não cobra (pedido do
+  // Diretor, 2026-09-07).
+  const naoLancaram = ehFimDeSemana(hoje)
+    ? []
+    : (pessoas ?? []).filter((p) => !lancouHoje.has(p.id) && !faltouHoje.has(p.id));
 
   const { data: marcos } = await supabase.from("marcos").select("id, nome, threshold, icone").order("ordem");
   // Mesma base que buscarProgressoMarcos (src/lib/marcos.ts): mês corrente,

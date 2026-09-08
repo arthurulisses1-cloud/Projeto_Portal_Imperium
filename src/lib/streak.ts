@@ -1,3 +1,5 @@
+import { ehFimDeSemana } from "@/lib/data-br";
+
 export type StreakRow = {
   data: string;
   entrevistas_comp: number;
@@ -20,10 +22,12 @@ export function cumpriuCompromisso(row: StreakRow) {
 
 // Conta dias seguidos (a partir de ontem, andando pra trás) em que o
 // compromisso foi lançado e cumprido. Para no primeiro dia sem registro,
-// ausente ou não cumprido.
+// ausente ou não cumprido. Sábado e domingo não exigem compromisso — pula
+// esses dias sem quebrar a sequência (pedido do Diretor, 2026-09-07).
 export function calcularStreak(historicoDesc: StreakRow[]): number {
   let streak = 0;
   for (const row of historicoDesc) {
+    if (ehFimDeSemana(row.data)) continue;
     if (!row.lancado || row.falta || !cumpriuCompromisso(row)) break;
     streak++;
   }

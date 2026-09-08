@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { avaliarProntidaoPromocao, type Rank } from "./carreira";
-import { hojeBR } from "@/lib/data-br";
+import { hojeBR, ehFimDeSemana } from "@/lib/data-br";
 
 // Contagem de pendências por aba, pra sinalizar no menu lateral que tem
 // algo a fazer (ex: compromisso do dia ainda não lançado). Sempre baseado
@@ -15,32 +15,36 @@ export async function buscarPendencias(
   const hoje = hojeBR();
 
   if (role === "sdr" || role === "closer") {
-    const { data: hojeRow } = await supabase
-      .from("compromissos")
-      .select("lancado")
-      .eq("profile_id", userId)
-      .eq("data", hoje)
-      .maybeSingle();
-    let countCompromisso = hojeRow?.lancado ? 0 : 1;
+    // Sábado e domingo não têm compromisso diário — não sinaliza pendência
+    // (pedido do Diretor, 2026-09-07).
+    if (!ehFimDeSemana(hoje)) {
+      const { data: hojeRow } = await supabase
+        .from("compromissos")
+        .select("lancado")
+        .eq("profile_id", userId)
+        .eq("data", hoje)
+        .maybeSingle();
+      let countCompromisso = hojeRow?.lancado ? 0 : 1;
 
-    if (role === "closer" && triboId) {
-      const { data: sdrs } = await supabase.from("profiles").select("id").eq("tribo_id", triboId).eq("role", "sdr");
-      const idsSdrs = (sdrs ?? []).map((s) => s.id);
-      if (idsSdrs.length > 0) {
-        const { data: rows } = await supabase
-          .from("compromissos")
-          .select("profile_id, lancado, falta")
-          .in("profile_id", idsSdrs)
-          .eq("data", hoje);
-        const porId = new Map((rows ?? []).map((r) => [r.profile_id, r]));
-        for (const id of idsSdrs) {
-          const r = porId.get(id);
-          if (!r || (!r.lancado && !r.falta)) countCompromisso++;
+      if (role === "closer" && triboId) {
+        const { data: sdrs } = await supabase.from("profiles").select("id").eq("tribo_id", triboId).eq("role", "sdr");
+        const idsSdrs = (sdrs ?? []).map((s) => s.id);
+        if (idsSdrs.length > 0) {
+          const { data: rows } = await supabase
+            .from("compromissos")
+            .select("profile_id, lancado, falta")
+            .in("profile_id", idsSdrs)
+            .eq("data", hoje);
+          const porId = new Map((rows ?? []).map((r) => [r.profile_id, r]));
+          for (const id of idsSdrs) {
+            const r = porId.get(id);
+            if (!r || (!r.lancado && !r.falta)) countCompromisso++;
+          }
         }
       }
-    }
 
-    if (countCompromisso > 0) pend["/compromisso"] = countCompromisso;
+      if (countCompromisso > 0) pend["/compromisso"] = countCompromisso;
+    }
 
     // Tarefas atrasadas — vale pra SDR e Closer (antes só contava pro
     // Closer, achado 2026-08-27 ao terminar o Kanban de Tarefas).
