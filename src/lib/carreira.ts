@@ -34,6 +34,15 @@ export const RANK_SUBTITLE: Record<Rank | "diretor", string> = {
   diretor: "Diretoria",
 };
 
+// Ritmo de estrelas documentado no PDF do Plano de Carreira — cada entrada é
+// "RUMO A X" (o ritmo de quem está perseguindo o rank X, ou seja, do rank
+// ANTERIOR a X): STAR_PACE.centuriao é o que um Legionário precisa fazer pra
+// virar Centurião, etc. Legionário não tem "rumo a Legionário" (é o piso).
+// Sempre consultar via NEXT_RANK[rankAtual] — nunca pelo rank atual da
+// pessoa direto (ver estrelas/page.tsx e SidebarRight.tsx, achado
+// 2026-09-07: as duas telas usavam STAR_PACE[rankAtual], o que aplicava a
+// régua um degrau ACIMA da documentada no PDF pra quem já tá no rank —
+// corrigido pra usar o próximo rank, igual /carreira já fazia certo).
 export const STAR_PACE: Record<Rank, { estrelas: number; cheia: number; meia: number }> = {
   legionario: { estrelas: 0, cheia: 0, meia: 0 },
   centuriao: { estrelas: 6, cheia: 3, meia: 2 },

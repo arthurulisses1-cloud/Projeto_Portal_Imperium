@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { STAR_PACE, inicioSemanaISO, resultadoSemanaEstrela, type Rank } from "@/lib/carreira";
+import { STAR_PACE, NEXT_RANK, inicioSemanaISO, resultadoSemanaEstrela, type Rank } from "@/lib/carreira";
 import { RANK_LABELS } from "@/lib/labels";
 import Card from "@/components/ui/Card";
 import { getViewerContext } from "@/lib/preview";
@@ -29,7 +29,11 @@ export default async function EstrelasPage() {
   const { data: profile } = await supabase.from("profiles").select("full_name, rank, stars_total").eq("id", meId).single();
   if (!profile) return null;
   const rank = profile.rank as Rank;
-  const pace = STAR_PACE[rank] ?? STAR_PACE.legionario;
+  // STAR_PACE é "rumo a X" — pega pelo PRÓXIMO rank (o que essa pessoa está
+  // perseguindo agora), nunca pelo rank atual dela (achado 2026-09-07: dava
+  // a régua de quem já é um rank acima). Legado é o topo, sem ritmo.
+  const proximoRank = NEXT_RANK[rank];
+  const pace = proximoRank ? STAR_PACE[proximoRank] : { estrelas: 0, cheia: 0, meia: 0 };
 
   // Pago vira estrela pelo PAPEL que a pessoa teve na venda (SDR conta o que
   // fechou como SDR ou "ambos"; Closer o que fechou como Closer ou "ambos") —

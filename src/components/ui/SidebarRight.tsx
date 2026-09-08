@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { RANK_LABELS } from "@/lib/labels";
 import {
   STAR_PACE,
+  NEXT_RANK,
   avaliarProntidaoPromocao,
   inicioSemanaISO,
   resultadoSemanaEstrela,
@@ -37,7 +38,10 @@ export default async function SidebarRight({ userId }: { userId: string }) {
 
   if (!profile) return null;
   const rank = profile.rank as Rank;
-  const pace = STAR_PACE[rank] ?? STAR_PACE.legionario;
+  // Mesma régua de /estrelas: STAR_PACE é "rumo a X", pega pelo PRÓXIMO
+  // rank, não pelo atual (achado 2026-09-07).
+  const proximoRankPace = NEXT_RANK[rank];
+  const pace = proximoRankPace ? STAR_PACE[proximoRankPace] : { estrelas: 0, cheia: 0, meia: 0 };
   const totalEstrelas = pace.estrelas || 6;
 
   // Mini-indicador da semana atual de Estrelas (SDR/Closer só) — mesmo
