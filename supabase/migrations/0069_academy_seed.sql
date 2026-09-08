@@ -4,17 +4,21 @@
 -- descrição). Datas e instrutor ficam em branco — o Diretor preenche na
 -- aba "Academy Geral".
 
+-- on conflict (nome) do nothing: se a tentativa anterior (que quebrou no
+-- erro de coluna ambígua) já tiver deixado essas linhas gravadas, roda de
+-- novo sem duplicar.
 insert into academy_trilhas (nome, rank, tipo, dia_semana, hora_inicio, hora_fim, ordem) values
   ('Legionário', 'legionario', 'trilha', 2, '13:00', '14:00', 1),
   ('Centurião', 'centuriao', 'trilha', 3, '13:00', '14:00', 2),
   ('Tribuno', 'tribuno', 'trilha', 4, '12:30', '14:00', 3),
   ('Pretor', 'pretor', 'trilha', 1, '13:00', '14:00', 4),
   ('Legado · PDL', 'legado', 'trilha', 5, '11:00', '12:00', 5),
-  ('Arena de Roleplays', null, 'arena', 5, '13:00', '14:00', 6);
+  ('Arena de Roleplays', null, 'arena', 5, '13:00', '14:00', 6)
+on conflict (nome) do nothing;
 
 -- ---------- Legionário — 12 semanas, método IPQF (Documento Mestre real) ----------
 insert into academy_aulas (trilha_id, ordem, tema, descricao, marco)
-select id, ordem, tema, descricao, marco from academy_trilhas, (values
+select academy_trilhas.id, t.ordem, t.tema, t.descricao, t.marco from academy_trilhas, (values
   (1, 'Mentalidade do Legionário e o que é "Entrevista"', 'Mindset · Doc. Mestre · Fanatical Prospecting', false),
   (2, 'Produto Matri: crédito com precatório em garantia', 'Documento Matri (1-2) · A Bíblia de Vendas', false),
   (3, 'Os dois ICPs: Requerente vs Advogado', 'Doc. Matri (2) · Carnegie', false),
@@ -32,7 +36,7 @@ where academy_trilhas.nome = 'Legionário';
 
 -- ---------- Centurião — 8 semanas, proposta ----------
 insert into academy_aulas (trilha_id, ordem, tema, descricao, marco)
-select id, ordem, tema, descricao, marco from academy_trilhas, (values
+select academy_trilhas.id, t.ordem, t.tema, t.descricao, t.marco from academy_trilhas, (values
   (1, 'Mentoria de par', 'Como formar um Legionário sem virar chefe · proposta', false),
   (2, 'Prospecção avançada', 'Cadência própria, além do script de bolso · proposta', false),
   (3, 'Diagnóstico inicial', '1ª camada de SPIN antes do Tribuno assumir · proposta', false),
@@ -46,7 +50,7 @@ where academy_trilhas.nome = 'Centurião';
 
 -- ---------- Tribuno — 12 semanas, 3 fases (Documento Mestre real) ----------
 insert into academy_aulas (trilha_id, ordem, tema, descricao, marco)
-select id, ordem, tema, descricao, marco from academy_trilhas, (values
+select academy_trilhas.id, t.ordem, t.tema, t.descricao, t.marco from academy_trilhas, (values
   (1, 'Kickoff — o Pacto dos Tribunos', 'Manifesto · régua pública · padrinhos · diagnóstico baseline', true),
   (2, 'Anatomia do Nosso Lead', '4 perfis recorrentes · shadow de 2 calls', false),
   (3, 'Diagnóstico antes de Fechar', 'SPIN e Gap Selling aplicados', false),
@@ -64,7 +68,7 @@ where academy_trilhas.nome = 'Tribuno';
 
 -- ---------- Pretor — 8 semanas, proposta (Tribo → Exército) ----------
 insert into academy_aulas (trilha_id, ordem, tema, descricao, marco)
-select id, ordem, tema, descricao, marco from academy_trilhas, (values
+select academy_trilhas.id, t.ordem, t.tema, t.descricao, t.marco from academy_trilhas, (values
   (1, 'Herda a Tribo do Tribuno', 'O que muda de fechar pra comandar · proposta', false),
   (2, 'Fechamento de alta complexidade', 'Advogado experiente, negociação dura · proposta', false),
   (3, 'Início dos 5 Papéis', 'Líder e Coach aplicados à própria Tribo · proposta', false),
@@ -78,7 +82,7 @@ where academy_trilhas.nome = 'Pretor';
 
 -- ---------- Legado · PDL — 8 encontros, 5 papéis (Documento Mestre real) ----------
 insert into academy_aulas (trilha_id, ordem, tema, descricao, marco)
-select id, ordem, tema, descricao, marco from academy_trilhas, (values
+select academy_trilhas.id, t.ordem, t.tema, t.descricao, t.marco from academy_trilhas, (values
   (1, 'Líder — Direção e Energia', 'Hunter, Falconi · autoridade × poder', false),
   (2, 'Gestor — Processo e Dados', 'Drucker, Aaron Ross · as 5 métricas do funil', false),
   (3, 'Coach — Treino e Performance', 'Kim Scott, Carnegie · Empatia Assertiva', false),
@@ -92,7 +96,7 @@ where academy_trilhas.nome = 'Legado · PDL';
 
 -- ---------- Arena de Roleplays — 12 semanas, formato roda a cada 3 ----------
 insert into academy_aulas (trilha_id, ordem, tema, descricao, marco)
-select id, ordem, tema, descricao, false from academy_trilhas, (values
+select academy_trilhas.id, t.ordem, t.tema, t.descricao, false from academy_trilhas, (values
   (1, 'Dia de SDR', 'Legionários + Centuriões · IPQF completo'),
   (2, 'Dia de Closer', 'Tribunos · Banco de Simulações'),
   (3, 'Jornada completa', 'Todo mundo — passagem de bastão SDR→Closer'),
