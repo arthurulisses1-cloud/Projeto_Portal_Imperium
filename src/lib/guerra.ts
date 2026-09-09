@@ -78,9 +78,20 @@ async function resolverOperacoesPagasPorGrupo(
       // a mesma pessoa nos dois papéis) — senão vai pro "Fora das Tribos",
       // mesmo que os dois lados sejam de Tribos válidas, só que diferentes
       // (ex.: Closer da Tribo A fechou com SDR da Tribo B).
+      //
+      // Inbound é EXCEÇÃO (decisão do Diretor, 2026-09-09): o SDR sozinho
+      // decide — o Closer do Inbound é sempre o próprio Legado do Exército
+      // (Rafael Saboya no Inbound Maximus, Davi Ximenes no Inbound
+      // Templários), que não tem Tribo por ser Legado, e sem essa exceção
+      // TODA venda do Inbound caía em "Fora das Tribos". Um Closer
+      // "emprestado" de outra Tribo fechando pelo Inbound também não tira o
+      // crédito dele. Mesma regra em buscarProducaoPagaTribo/
+      // resolverTriboDaOperacao (src/lib/metas.ts) e visao-diaria.ts.
       const sdrGrupo = o.sdr_profile_id ? grupoPorProfile.get(o.sdr_profile_id) : undefined;
       const closerGrupo = o.closer_profile_id ? grupoPorProfile.get(o.closer_profile_id) : undefined;
-      if (sdrGrupo && closerGrupo && sdrGrupo.chave === closerGrupo.chave) {
+      if (sdrGrupo?.nome.startsWith("Inbound")) {
+        resultado.push({ data: o.data, chave: sdrGrupo.chave, nome: sdrGrupo.nome, exercitoNome: sdrGrupo.exercitoNome, valor: Number(o.valor) });
+      } else if (sdrGrupo && closerGrupo && sdrGrupo.chave === closerGrupo.chave) {
         resultado.push({ data: o.data, chave: sdrGrupo.chave, nome: sdrGrupo.nome, exercitoNome: sdrGrupo.exercitoNome, valor: Number(o.valor) });
       } else {
         resultado.push({ data: o.data, chave: CHAVE_FORA, nome: "Fora das Tribos", exercitoNome: null, valor: Number(o.valor) });

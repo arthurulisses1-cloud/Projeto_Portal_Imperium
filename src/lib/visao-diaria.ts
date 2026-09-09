@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { FUNNEL_STAGES, type FunilEtapa } from "@/lib/funil";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
+import { resolverTriboDaOperacao } from "@/lib/metas";
 
 export type FunilContagem = Record<FunilEtapa, number>;
 
@@ -113,6 +114,8 @@ export async function buscarVisaoDiaria(
   const funilTimePorExercito = new Map<string, FunilContagem>();
   const funilFirma = funilVazio();
 
+  // Tentativas/Alôs/Conexões/Entrevistas: crédito de UMA pessoa só (quem
+  // logou), sem ambiguidade de par — a Tribo dela mesma que soma direto.
   function creditarTime(pessoaId: string | null, etapa: FunilEtapa, qtd: number) {
     if (!pessoaId || qtd === 0) return;
     const info = pessoaPorId.get(pessoaId);
@@ -130,6 +133,32 @@ export async function buscarVisaoDiaria(
     }
   }
 
+  // Assinaturas/Pagos vêm de uma operação com DOIS lados (SDR + Closer) —
+  // Exército/Firma usam o dono = Closer com fallback pro SDR (mesma regra
+  // da Guerra Civil). Tribo usa resolverTriboDaOperacao (src/lib/metas.ts):
+  // SDR e Closer da MESMA Tribo, exceto Inbound — lá o SDR sozinho decide
+  // (decisão do Diretor, 2026-09-09; ver comentário na função).
+  function creditarOperacao(sdrId: string | null, closerId: string | null, etapa: FunilEtapa, qtd: number) {
+    const donoExercitoFirma = closerId ?? sdrId ?? null;
+    if (donoExercitoFirma) {
+      const info = pessoaPorId.get(donoExercitoFirma);
+      funilFirma[etapa] += qtd;
+      if (info?.exercitoId) {
+        const bucket = funilTimePorExercito.get(info.exercitoId) ?? funilVazio();
+        bucket[etapa] += qtd;
+        funilTimePorExercito.set(info.exercitoId, bucket);
+      }
+    }
+    const sdrInfo = sdrId ? pessoaPorId.get(sdrId) : null;
+    const closerInfo = closerId ? pessoaPorId.get(closerId) : null;
+    const triboDona = resolverTriboDaOperacao(sdrInfo?.triboId, sdrInfo?.triboNome, closerInfo?.triboId ?? null);
+    if (triboDona) {
+      const bucket = funilTimePorTribo.get(triboDona) ?? funilVazio();
+      bucket[etapa] += qtd;
+      funilTimePorTribo.set(triboDona, bucket);
+    }
+  }
+
   for (const r of funilRows) {
     if (r.etapa === "entrevistas") continue; // tratado à parte, com dedupe
     creditarTime(r.profile_id, r.etapa as FunilEtapa, r.realizado);
@@ -138,8 +167,8 @@ export async function buscarVisaoDiaria(
     if (r.etapa !== "entrevistas" || r.papel === "closer") continue;
     creditarTime(r.profile_id, "entrevistas", r.realizado);
   }
-  for (const o of opsAssinado) creditarTime(o.closer_profile_id ?? o.sdr_profile_id ?? null, "assinaturas", 1);
-  for (const o of opsPago) creditarTime(o.closer_profile_id ?? o.sdr_profile_id ?? null, "pagos", 1);
+  for (const o of opsAssinado) creditarOperacao(o.sdr_profile_id, o.closer_profile_id, "assinaturas", 1);
+  for (const o of opsPago) creditarOperacao(o.sdr_profile_id, o.closer_profile_id, "pagos", 1);
 
   // ---------- monta a árvore Exército → Tribo → Pessoa ----------
   const pessoasPorTribo = new Map<string, PessoaVisao[]>();

@@ -476,10 +476,24 @@ export async function buscarPainelFinanceiroTribo(
   return calcularPainelFinanceiro(opsDaTribo);
 }
 
-// Mesma regra que buscarProducaoPagaExercito, mas no nível da Tribo: time
-// dono da operação = Tribo do Closer, fallback pra Tribo do SDR. Líder não
-// tem tribo_id — uma operação fechada por ele (sem Closer de Tribo nenhuma
-// envolvido) não conta pra Tribo nenhuma, só pro Exército.
+// Resolve a Tribo "dona" de uma operação (SDR + Closer) — null se não conta
+// pra nenhuma. Tribos normais exigem SDR e Closer da MESMA Tribo (mesma
+// regra que a Guerra de Tribos do Mural, guerra.ts, decisão do Diretor
+// 2026-08-25). Inbound é EXCEÇÃO (decisão do Diretor, 2026-09-09): o SDR
+// sozinho decide — o Closer do Inbound é sempre o próprio Legado do
+// Exército (ex: Rafael Saboya no Inbound Maximus, Davi Ximenes no Inbound
+// Templários), que não tem tribo_id por ser Legado; e um Closer "emprestado"
+// de outra Tribo também pode fechar pelo Inbound sem tirar o crédito dele.
+export function resolverTriboDaOperacao(
+  sdrTriboId: string | null | undefined,
+  sdrTriboNome: string | null | undefined,
+  closerTriboId: string | null | undefined
+): string | null {
+  if (sdrTriboId && sdrTriboNome?.startsWith("Inbound")) return sdrTriboId;
+  if (sdrTriboId && sdrTriboId === closerTriboId) return sdrTriboId;
+  return null;
+}
+
 export async function buscarProducaoPagaTribo(
   supabase: SupabaseClient,
   triboId: string,
@@ -499,15 +513,18 @@ export async function buscarProducaoPagaTribo(
   );
   if (idsEnvolvidos.length === 0) return 0;
 
-  const { data: pessoas } = await supabase.from("profiles").select("id, tribo_id").in("id", idsEnvolvidos);
+  const { data: pessoas } = await supabase.from("profiles").select("id, tribo_id, tribo:tribos!profiles_tribo_id_fkey(nome)").in("id", idsEnvolvidos);
   const triboPorProfileId = new Map((pessoas ?? []).map((p) => [p.id, p.tribo_id]));
+  const nomeTriboPorProfileId = new Map(
+    (pessoas ?? []).map((p) => [p.id, (p.tribo as unknown as { nome: string } | null)?.nome ?? null])
+  );
 
   return (opsPagas ?? [])
     .filter((o) => {
-      const timeDaOperacao =
-        (o.closer_profile_id && triboPorProfileId.get(o.closer_profile_id)) ||
-        (o.sdr_profile_id && triboPorProfileId.get(o.sdr_profile_id));
-      return timeDaOperacao === triboId;
+      const sdrTriboId = o.sdr_profile_id ? triboPorProfileId.get(o.sdr_profile_id) : null;
+      const sdrTriboNome = o.sdr_profile_id ? nomeTriboPorProfileId.get(o.sdr_profile_id) : null;
+      const closerTriboId = o.closer_profile_id ? triboPorProfileId.get(o.closer_profile_id) : null;
+      return resolverTriboDaOperacao(sdrTriboId, sdrTriboNome, closerTriboId) === triboId;
     })
     .reduce((s, o) => s + Number(o.valor), 0);
 }
