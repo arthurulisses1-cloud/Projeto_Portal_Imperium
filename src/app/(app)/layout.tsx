@@ -18,9 +18,13 @@ import { logErroSupabase } from "@/lib/log-erro-supabase";
 
 export const dynamic = "force-dynamic";
 
-type NavConfigEntry = (NavEntry | { type: "group"; label: string; items: { href: string; label: string }[] }) & {
-  roles: string[];
-};
+// `roles` por item de grupo é opcional — quando omitido, o item herda a
+// visibilidade do grupo inteiro (comportamento de sempre). Usado pra caber
+// papéis diferentes dentro do MESMO grupo (ex: "Pessoas" mistura item de
+// todo mundo com item só do Diretor), sem duplicar o grupo uma vez por papel.
+type NavConfigEntry =
+  | { type: "link"; href: string; label: string; roles: string[] }
+  | { type: "group"; label: string; roles: string[]; items: { href: string; label: string; roles?: string[] }[] };
 
 // Central de Notificações agora vive dentro do Mural (não é mais aba própria);
 // Visão Geral da Firma saiu (a Weekly de Receita cobre o mesmo terreno);
@@ -36,12 +40,16 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
   { type: "link", href: "/minha-producao", label: "Minha Produção", roles: ["lider"] },
   { type: "link", href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
-  { type: "link", href: "/estrelas", label: "Estrelas", roles: ["sdr", "closer"] },
-  { type: "link", href: "/estrelas/time", label: "Estrelas do Time", roles: ["lider", "diretor"] },
   { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider"] },
-  { type: "link", href: "/ranking", label: "Ranking", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
-  { type: "link", href: "/recordes", label: "Recordes", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
-  { type: "link", href: "/marcos", label: "Corrida dos Marcos", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
+  {
+    type: "group",
+    label: "Resultados",
+    roles: ["sdr", "closer", "lider", "diretor", "investidor"],
+    items: [
+      { href: "/ranking", label: "Ranking" },
+      { href: "/recordes", label: "Recordes" },
+    ],
+  },
   { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor", "investidor"] },
   { type: "link", href: "/parceiros", label: "Parceiros", roles: ["closer", "lider"] },
   { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor", "investidor"] },
@@ -71,10 +79,13 @@ const NAV_ITEMS: NavConfigEntry[] = [
   {
     type: "group",
     label: "Pessoas",
-    roles: ["diretor"],
+    roles: ["sdr", "closer", "lider", "diretor", "investidor"],
     items: [
-      { href: "/legado", label: "Meu Legado" },
-      { href: "/gestao", label: "Gestão de Pessoas" },
+      { href: "/estrelas", label: "Estrelas", roles: ["sdr", "closer"] },
+      { href: "/estrelas/time", label: "Estrelas do Time", roles: ["lider", "diretor"] },
+      { href: "/marcos", label: "Corrida dos Marcos", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
+      { href: "/legado", label: "Meu Legado", roles: ["diretor"] },
+      { href: "/gestao", label: "Gestão de Pessoas", roles: ["diretor"] },
     ],
   },
   { type: "link", href: "/metas", label: "Metas Mensais", roles: ["diretor"] },
@@ -129,13 +140,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const papelVisualizado = previewPessoa?.role ?? profile?.role;
 
-  const itensVisiveis: NavEntry[] = NAV_ITEMS.filter(
-    (item) => !profile || item.roles.includes(papelVisualizado ?? profile.role)
-  ).map((entry) => {
-    const { roles, ...rest } = entry;
-    void roles;
-    return rest;
-  });
+  const papelAtual = papelVisualizado ?? profile?.role;
+  const itensVisiveis: NavEntry[] = NAV_ITEMS.filter((item) => !profile || item.roles.includes(papelAtual ?? profile.role)).map(
+    (entry) => {
+      const { roles, ...rest } = entry;
+      void roles;
+      // Item de grupo com `roles` próprio (ex: "Pessoas" mistura item de
+      // todo mundo com item só do Diretor) filtra de novo aqui dentro —
+      // sem `roles`, o item herda a visibilidade do grupo (comportamento
+      // de sempre, ver Academy/Financeiro/Validações acima).
+      if (rest.type === "group") {
+        return {
+          ...rest,
+          items: rest.items
+            .filter((i) => !i.roles || !profile || i.roles.includes(papelAtual ?? profile.role))
+            .map(({ href, label }) => ({ href, label })),
+        };
+      }
+      return rest;
+    }
+  );
 
   // Exceção pontual (ver src/lib/acessos-especiais.ts): Forecast liberado
   // pra 2 SDRs específicos, sem virar um papel novo — não usa

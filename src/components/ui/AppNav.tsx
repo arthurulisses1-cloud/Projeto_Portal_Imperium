@@ -47,6 +47,7 @@ const ICONS: Record<string, (p: { className?: string }) => React.ReactElement> =
   "/contestacoes": IconScales,
   "/fechamento": IconCoin,
   Pessoas: IconColumn,
+  Resultados: IconLaurel,
   "Validações": IconScales,
   Financeiro: IconCoin,
 };
