@@ -11,6 +11,7 @@ export default function BarraMeta({
   realizado,
   meta,
   mesFechado = false,
+  periodo = "mes",
 }: {
   realizado: number;
   meta: number;
@@ -18,6 +19,10 @@ export default function BarraMeta({
   // hoje" não faz sentido pra um mês que já acabou, então mostra só
   // resultado final x meta, sem marca de ritmo nem frase de "atrás/à frente".
   mesFechado?: boolean;
+  // "semana": `meta` já deve vir pró-rateada pra semana (7 dias) — o ritmo
+  // esperado passa a usar dia-da-semana/7 em vez de dia-do-mês/dias-no-mês.
+  // Usado pela Visão Diária (ver src/lib/visao-diaria.ts).
+  periodo?: "mes" | "semana";
 }) {
   if (meta <= 0) {
     return (
@@ -53,9 +58,13 @@ export default function BarraMeta({
   }
 
   const hoje = paraDataUTC(hojeBR());
-  const diaDoMes = hoje.getUTCDate();
-  const diasNoMes = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() + 1, 0)).getUTCDate();
-  const esperadoHoje = meta * (diaDoMes / diasNoMes);
+  const diaDoPeriodo =
+    periodo === "semana"
+      ? ((hoje.getUTCDay() + 6) % 7) + 1 // 1=segunda .. 7=domingo
+      : hoje.getUTCDate();
+  const diasNoPeriodo =
+    periodo === "semana" ? 7 : new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth() + 1, 0)).getUTCDate();
+  const esperadoHoje = meta * (diaDoPeriodo / diasNoPeriodo);
 
   const pctEsperado = Math.min(100, (esperadoHoje / meta) * 100);
 
@@ -63,11 +72,12 @@ export default function BarraMeta({
   const diffPct = (diff / meta) * 100;
   const adiantado = diff >= 0;
 
+  const daMetaPeriodo = periodo === "semana" ? "da semana" : "do mês";
   const analise = adiantado
-    ? `Você está à frente do ritmo esperado em ${moeda(diff)} (${diffPct.toFixed(0)}% da meta). Nesse passo, bate a meta do mês.`
+    ? `Você está à frente do ritmo esperado em ${moeda(diff)} (${diffPct.toFixed(0)}% da meta). Nesse passo, bate a meta ${daMetaPeriodo}.`
     : `Você está ${moeda(Math.abs(diff))} (${Math.abs(diffPct).toFixed(0)}% da meta) atrás do ritmo esperado pra hoje — faltam ${moeda(
         Math.max(0, meta - realizado)
-      )} pra bater a meta do mês.`;
+      )} pra bater a meta ${daMetaPeriodo}.`;
 
   return (
     <div>

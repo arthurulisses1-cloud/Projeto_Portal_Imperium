@@ -50,3 +50,15 @@ export function ehFimDeSemana(dataStr: string): boolean {
   const diaSemana = paraDataUTC(dataStr).getUTCDay();
   return diaSemana === 0 || diaSemana === 6;
 }
+
+// Pula fim de semana — só se trabalha seg-sex, então "ontem" numa segunda
+// (ou domingo/sábado, se alguém abrir fora de hora) é a última sexta.
+// `data` precisa ser um Date ancorado em UTC (ver paraDataUTC acima) — usa
+// métodos UTC pra ficar determinístico em qualquer runtime, servidor ou
+// navegador. Compartilhado entre CentralNotificacoes e Visão Diária.
+export function ultimoDiaUtilAntes(data: Date): Date {
+  const d = new Date(data);
+  d.setUTCDate(d.getUTCDate() - 1);
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
+  return d;
+}

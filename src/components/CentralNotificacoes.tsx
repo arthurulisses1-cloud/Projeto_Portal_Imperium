@@ -4,22 +4,10 @@ import { Badge } from "@/components/ui/Badge";
 import { calcularThreshold, buscarProducaoMesParaMarcos } from "@/lib/marcos";
 import { buscarMetaComTaxas, calcularFunilMeta, buscarRealizadoDia, type EscopoTime } from "@/lib/metas";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
-import { hojeBR, paraDataUTC, ehFimDeSemana } from "@/lib/data-br";
+import { hojeBR, paraDataUTC, ehFimDeSemana, ultimoDiaUtilAntes } from "@/lib/data-br";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
-}
-
-// Pula fim de semana — só se trabalha seg-sex, então "ontem" numa segunda
-// (ou domingo/sábado, se alguém abrir fora de hora) é a última sexta.
-// `data` precisa ser um Date ancorado em UTC (ver paraDataUTC, src/lib/
-// data-br.ts) — usa métodos UTC pra ficar determinístico em qualquer
-// runtime, servidor ou navegador.
-function ultimoDiaUtilAntes(data: Date): Date {
-  const d = new Date(data);
-  d.setUTCDate(d.getUTCDate() - 1);
-  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() - 1);
-  return d;
 }
 
 // Antes era a aba "/central" — agora embutido direto no Mural, escopado por
