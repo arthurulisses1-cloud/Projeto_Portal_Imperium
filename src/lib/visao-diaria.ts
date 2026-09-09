@@ -55,11 +55,16 @@ export async function buscarVisaoDiaria(
   const [funilRows, opsAssinado, opsPago] = await Promise.all([
     idsTodos.length > 0
       ? buscarTudoPaginado<{ profile_id: string; etapa: string; realizado: number; papel: string }>((from, to) =>
+          // Assinaturas e Pagos vêm só de weekly_operacoes (abaixo) — mesmo
+          // motivo do resto do app (ver CentralNotificacoes.tsx):
+          // producao_funil.etapa='assinaturas'/'pagos' é OUTRA sincronização
+          // da MESMA operação, e contar as duas fontes juntas duplicava
+          // (achado 2026-09-09: "ontem teve 2 assinaturas" quando era 1 só).
           supabase
             .from("producao_funil")
             .select("profile_id, etapa, realizado, papel")
             .in("profile_id", idsTodos)
-            .neq("etapa", "pagos")
+            .in("etapa", ["tentativas", "alos", "conexoes", "entrevistas"])
             .gte("data", inicio)
             .lt("data", fimExclusivo)
             .range(from, to)
