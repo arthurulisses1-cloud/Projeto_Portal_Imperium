@@ -116,8 +116,11 @@ function PipelineFunil({
             <p className="mt-1 text-[10px] uppercase tracking-wide text-stone-500">{FUNNEL_LABELS[etapa]}</p>
             <p className="font-display text-xl text-gold-bright">{valor}</p>
             {periodo === "hoje" ? (
-              <p className={`text-[11px] ${delta > 0 ? "text-success-bright" : delta < 0 ? "text-wine-bright" : "text-stone-600"}`}>
-                {delta > 0 ? "▲" : delta < 0 ? "▼" : "—"} {Math.abs(delta)} vs ontem
+              <p className="flex items-center justify-center gap-1 text-[11px] text-stone-500">
+                Ontem: <span className="text-stone-300">{valorOntem}</span>
+                <span className={delta > 0 ? "text-success-bright" : delta < 0 ? "text-wine-bright" : "text-stone-600"}>
+                  {delta > 0 ? "▲" : delta < 0 ? "▼" : "—"}
+                </span>
               </p>
             ) : pct !== null ? (
               <>
@@ -352,14 +355,17 @@ export default async function VisaoDiariaPage({ searchParams }: { searchParams: 
             />
 
             {/* ---------- por Tribo ---------- */}
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {/* Sempre em coluna única (não grid de 2) — expandido, o card
+                precisa da largura toda pra caber o pipeline de 6 etapas e
+                a lista "por pessoa" sem espremer (achado 2026-09-09). */}
+            <div className="mt-4 space-y-3">
               {exercito.tribos.map((tribo) => {
                 const metaMesT = metaCreditoPorTribo.get(tribo.id) ?? 0;
                 const realMesT = realizadoMesPorTribo.get(tribo.id) ?? 0;
                 const realSemanaT = realizadoSemanaPorTribo.get(tribo.id) ?? 0;
                 const crestUrl = crestsTribos[`${tribo.nome} (${exercito.nome})`] ?? crestsTribos[tribo.nome];
                 return (
-                  <details key={tribo.id} className="rounded-lg border border-imperium-line bg-imperium-bg/30 p-3 sm:col-span-1">
+                  <details key={tribo.id} className="rounded-lg border border-imperium-line bg-imperium-bg/30 p-3">
                     <summary className="flex cursor-pointer list-none items-center gap-2.5 [&::-webkit-details-marker]:hidden">
                       <Crest url={crestUrl} nome={tribo.nome} corFallback="#8F2834" />
                       <div className="min-w-0 flex-1">
