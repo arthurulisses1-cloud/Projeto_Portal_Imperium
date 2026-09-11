@@ -112,17 +112,34 @@ export default async function ProducaoPage({
     totaisMes[etapa].meta += linha.meta;
   }
 
-  let queryVendas = supabase
-    .from("vendas")
-    .select("valor")
-    .in("profile_id", idsProducao)
-    .gte("data", inicio)
-    .lte("data", fim);
-  if (papelFiltro) queryVendas = queryVendas.eq("papel", papelFiltro);
-  const { data: vendasPeriodo } = await queryVendas;
-
-  const valorPago = (vendasPeriodo ?? []).reduce((s, v) => s + Number(v.valor), 0);
-  const ticketMedio = vendasPeriodo && vendasPeriodo.length > 0 ? valorPago / vendasPeriodo.length : null;
+  let valorPago = 0;
+  let ticketMedio: number | null = null;
+  if (visao === "tribo") {
+    // Achado 2026-09-11: somar `vendas.valor` de todo mundo da Tribo sem
+    // filtro dobrava o crédito sempre que SDR e Closer da mesma venda eram
+    // os dois da Tribo (o caso comum) — cada operação vira 2 linhas em
+    // `vendas`, uma por papel, cada uma com o valor CHEIO. Aqui a produção
+    // "via Tribo" é por PESSOA (qualquer um da Tribo, em qualquer papel,
+    // mesmo fechando fora — ver aviso "fechosForaDaTribo" abaixo), não a
+    // regra estrita "os dois do mesmo time" da Guerra de Tribos — então
+    // conta por OPERAÇÃO (weekly_operacoes, 1 linha só) em vez de por
+    // pessoa, sem trocar quem entra na soma.
+    const { data: opsPeriodo } = await supabase
+      .from("weekly_operacoes")
+      .select("valor")
+      .eq("status", "PAGO")
+      .gte("data", inicio)
+      .lte("data", fim)
+      .or(`sdr_profile_id.in.(${idsProducao.join(",")}),closer_profile_id.in.(${idsProducao.join(",")})`);
+    valorPago = (opsPeriodo ?? []).reduce((s, o) => s + Number(o.valor), 0);
+    ticketMedio = opsPeriodo && opsPeriodo.length > 0 ? valorPago / opsPeriodo.length : null;
+  } else {
+    let queryVendas = supabase.from("vendas").select("valor").in("profile_id", idsProducao).gte("data", inicio).lte("data", fim);
+    if (papelFiltro) queryVendas = queryVendas.eq("papel", papelFiltro);
+    const { data: vendasPeriodo } = await queryVendas;
+    valorPago = (vendasPeriodo ?? []).reduce((s, v) => s + Number(v.valor), 0);
+    ticketMedio = vendasPeriodo && vendasPeriodo.length > 0 ? valorPago / vendasPeriodo.length : null;
+  }
 
   // Sinaliza quando o closer fechou pra alguém fora da própria Tribo — esse
   // crédito já está contado no total da Tribo (ele é membro dela), isso é só

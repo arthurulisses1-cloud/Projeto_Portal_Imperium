@@ -203,12 +203,25 @@ export async function executarFerramenta(
     const ids = pessoas.map((p) => p.id);
     if (ids.length === 0) return { totalPessoas: 0 };
 
-    const [{ data: vendas }, { data: funil }] = await Promise.all([
+    const [{ data: vendas }, { data: funil }, { data: opsPagas }] = await Promise.all([
       supabase.from("vendas").select("profile_id, valor").in("profile_id", ids).gte("data", inicioMes),
       supabase.from("producao_funil").select("profile_id, etapa, realizado").in("profile_id", ids).gte("data", inicioMes),
+      // Total do time em R$ vem de weekly_operacoes (1 linha por operação),
+      // não de `vendas` — achado 2026-09-11: `vendas` credita SDR e Closer em
+      // linhas SEPARADAS, cada uma com o valor CHEIO da venda, então somar
+      // por time dobrava o crédito sempre que os dois eram do mesmo time (o
+      // caso comum). `comVenda`/`pessoasZeradasNoMes` abaixo continuam
+      // usando `vendas` — ali é só "essa pessoa teve alguma linha", sem
+      // somar valor, então não tem esse risco.
+      supabase
+        .from("weekly_operacoes")
+        .select("id, valor, sdr_profile_id, closer_profile_id")
+        .eq("status", "PAGO")
+        .gte("data", inicioMes)
+        .or(`sdr_profile_id.in.(${ids.join(",")}),closer_profile_id.in.(${ids.join(",")})`),
     ]);
 
-    const totalPago = (vendas ?? []).reduce((s, v) => s + Number(v.valor), 0);
+    const totalPago = (opsPagas ?? []).reduce((s, o) => s + Number(o.valor), 0);
     const comVenda = new Set((vendas ?? []).map((v) => v.profile_id));
     const funilTotal = Object.fromEntries(FUNNEL_STAGES.map((e) => [e, 0])) as Record<FunilEtapa, number>;
     for (const f of funil ?? []) funilTotal[f.etapa as FunilEtapa] += f.realizado;
