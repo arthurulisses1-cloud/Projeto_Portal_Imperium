@@ -171,7 +171,7 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
   const { data: pessoasRaw } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, role, rank, data_admissao, data_saida, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(nome)"
+      "id, full_name, role, rank, data_admissao, data_saida, created_at, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(nome)"
     )
     // Investidor é gestão pura (sem produção/comissão/salário-base real) —
     // nunca entra na Folha, pedido explícito do Diretor.
@@ -183,7 +183,20 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
   // desligada continuava custando o fixo mínimo pra sempre em todo mês
   // seguinte, porque calcularRemuneracao sempre devolve pelo menos o tier 0
   // mesmo com produção zero.
-  const pessoas = (pessoasRaw ?? []).filter((p) => !p.data_saida || p.data_saida >= inicioMes);
+  //
+  // Espelho pro lado da ENTRADA — achado 2026-09-11: reabrir/fechar Agosto
+  // de novo (pra aplicar a regra nova de comissão) trouxe junto 3 SDRs
+  // contratados HOJE, cada um com fixo cheio de Agosto — um mês antes de
+  // sequer existirem no sistema. `data_admissao` costuma ficar em branco no
+  // cadastro inicial; usa `created_at` (quando o perfil foi criado) como
+  // aproximação de quando a pessoa entrou, pra não depender de alguém
+  // lembrar de preencher a data certinho.
+  const pessoas = (pessoasRaw ?? []).filter((p) => {
+    if (p.data_saida && p.data_saida < inicioMes) return false;
+    const entrada = p.data_admissao ?? p.created_at?.slice(0, 10) ?? null;
+    if (entrada && entrada >= fimMesExclusivo) return false;
+    return true;
+  });
 
   const { data: vendasMes } = await supabase
     .from("vendas")
@@ -222,16 +235,23 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
       let fixoBase = tiers.length > 0 ? tiers[0].fixo : 0;
       let fixoAtual = remuneracao?.fixo ?? 0;
 
-      // Saiu DENTRO desse mês (não antes — esses já foram filtrados acima):
-      // fixo proporcional aos dias trabalhados, não o mês cheio. Admissão
-      // no mesmo mês (raro) também entra na conta — ninguém recebe por dia
-      // que nem tinha entrado ainda.
-      if (p.data_saida && p.data_saida < fimMesExclusivo) {
+      // Saiu DENTRO desse mês, ou entrou DENTRO desse mês (não antes/depois
+      // — esses já foram filtrados acima): fixo proporcional aos dias
+      // trabalhados, não o mês cheio. Achado 2026-09-11: a proporção de
+      // entrada só disparava quando a pessoa TAMBÉM tinha saído no mesmo
+      // mês — quem só entrou (sem sair) recebia o fixo cheio mesmo tendo
+      // trabalhado poucos dias.
+      const entrada = p.data_admissao ?? p.created_at?.slice(0, 10) ?? null;
+      const saiuDentroDoMes = !!p.data_saida && p.data_saida < fimMesExclusivo;
+      const entrouDentroDoMes = !!entrada && entrada >= inicioMes && entrada < fimMesExclusivo;
+      if (saiuDentroDoMes || entrouDentroDoMes) {
         const diasNoMes = new Date(ano, mes, 0).getDate();
-        const inicioTrabalho = p.data_admissao && p.data_admissao > inicioMes ? p.data_admissao : inicioMes;
+        const inicioTrabalho = entrouDentroDoMes ? entrada! : inicioMes;
+        const fimMesInclusivo = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
+        const fimTrabalho = saiuDentroDoMes ? p.data_saida! : fimMesInclusivo;
         const diaInicio = Number(inicioTrabalho.slice(8, 10));
-        const diaFim = Number(p.data_saida.slice(8, 10));
-        const diasTrabalhados = Math.max(0, Math.min(diaFim, diasNoMes) - diaInicio + 1);
+        const diaFim = Number(fimTrabalho.slice(8, 10));
+        const diasTrabalhados = Math.max(0, diaFim - diaInicio + 1);
         const proporcao = diasNoMes > 0 ? diasTrabalhados / diasNoMes : 0;
         fixoBase = Math.round(fixoBase * proporcao);
         fixoAtual = Math.round(fixoAtual * proporcao);
@@ -304,7 +324,7 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
     supabase
       .from("profiles")
       .select(
-        "id, full_name, role, rank, data_admissao, data_saida, tribo:tribos!profiles_tribo_id_fkey(nome, exercito_id, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(id, nome)"
+        "id, full_name, role, rank, data_admissao, data_saida, created_at, tribo:tribos!profiles_tribo_id_fkey(nome, exercito_id, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(id, nome)"
       )
       .neq("role", "investidor")
       .order("full_name"),
@@ -318,8 +338,16 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
   ]);
 
   const opsBase = (opsRaw ?? []).filter((o) => o.status === "PAGO" || o.status_manual === "aguardando_pagamento");
-  // Mesmo corte de buscarFolha: quem saiu antes desse mês começar nem entra.
-  const pessoas = (pessoasRaw ?? []).filter((p) => !p.data_saida || p.data_saida >= inicioMes);
+  // Mesmo corte de buscarFolha (ver comentário lá): quem saiu antes desse
+  // mês começar, ou ainda nem tinha entrado (data_admissao, com created_at
+  // como aproximação), nem entra.
+  const fimMesExclusivoForecast = fimMesExclusivoDe(ano, mes);
+  const pessoas = (pessoasRaw ?? []).filter((p) => {
+    if (p.data_saida && p.data_saida < inicioMes) return false;
+    const entrada = p.data_admissao ?? p.created_at?.slice(0, 10) ?? null;
+    if (entrada && entrada >= fimMesExclusivoForecast) return false;
+    return true;
+  });
 
   const tiersPorRank = new Map<string, Tier[]>();
   for (const t of tiersRaw ?? []) {
@@ -406,17 +434,24 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
     let fixoBase = tiers.length > 0 ? tiers[0].fixo : 0;
     let fixoAtual = remuneracao?.fixo ?? 0;
 
-    // Mesma proporcionalidade de buscarFolha — saiu dentro desse mês (quem
-    // saiu antes já foi filtrado lá em cima).
-    if (p.data_saida && p.data_saida <= fimMes) {
-      const diasNoMes = new Date(ano, mes, 0).getDate();
-      const inicioTrabalho = p.data_admissao && p.data_admissao > inicioMes ? p.data_admissao : inicioMes;
-      const diaInicio = Number(inicioTrabalho.slice(8, 10));
-      const diaFim = Number(p.data_saida.slice(8, 10));
-      const diasTrabalhados = Math.max(0, Math.min(diaFim, diasNoMes) - diaInicio + 1);
-      const proporcao = diasNoMes > 0 ? diasTrabalhados / diasNoMes : 0;
-      fixoBase = Math.round(fixoBase * proporcao);
-      fixoAtual = Math.round(fixoAtual * proporcao);
+    // Mesma proporcionalidade de buscarFolha — saiu dentro desse mês, ou
+    // entrou dentro desse mês (quem saiu antes, ou ainda nem tinha entrado,
+    // já foi filtrado lá em cima).
+    {
+      const entradaP = p.data_admissao ?? p.created_at?.slice(0, 10) ?? null;
+      const saiuDentroDoMes = !!p.data_saida && p.data_saida <= fimMes;
+      const entrouDentroDoMes = !!entradaP && entradaP >= inicioMes && entradaP <= fimMes;
+      if (saiuDentroDoMes || entrouDentroDoMes) {
+        const diasNoMes = new Date(ano, mes, 0).getDate();
+        const inicioTrabalho = entrouDentroDoMes ? entradaP! : inicioMes;
+        const fimTrabalho = saiuDentroDoMes ? p.data_saida! : fimMes;
+        const diaInicio = Number(inicioTrabalho.slice(8, 10));
+        const diaFim = Number(fimTrabalho.slice(8, 10));
+        const diasTrabalhados = Math.max(0, diaFim - diaInicio + 1);
+        const proporcao = diasNoMes > 0 ? diasTrabalhados / diasNoMes : 0;
+        fixoBase = Math.round(fixoBase * proporcao);
+        fixoAtual = Math.round(fixoAtual * proporcao);
+      }
     }
 
     const bonus = Math.max(0, fixoAtual - fixoBase);
