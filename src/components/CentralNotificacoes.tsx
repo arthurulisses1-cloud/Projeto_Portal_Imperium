@@ -16,7 +16,7 @@ function moeda(v: number) {
 // escopo = sem filtro extra = firma inteira).
 type Escopo = EscopoTime;
 
-export default async function CentralNotificacoes({ escopo = null }: { escopo?: Escopo }) {
+export default async function CentralNotificacoes({ escopo = null, viewerId }: { escopo?: Escopo; viewerId?: string }) {
   const supabase = await createClient();
   const pessoal = escopo?.tipo === "individual";
 
@@ -40,7 +40,13 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   const hoje = hojeBR();
 
   const { data: compromissosHoje } = ids.length
-    ? await supabase.from("compromissos").select("profile_id, lancado, falta").eq("data", hoje).in("profile_id", ids)
+    ? await supabase
+        .from("compromissos")
+        .select(
+          "profile_id, lancado, falta, entrevistas_comp, entrevistas_real, assinaturas_comp, assinaturas_real, pagos_comp, pagos_real"
+        )
+        .eq("data", hoje)
+        .in("profile_id", ids)
     : { data: [] };
   const lancouHoje = new Set((compromissosHoje ?? []).filter((c) => c.lancado).map((c) => c.profile_id));
   // Quem já foi marcado como falta hoje não "esqueceu" de lançar — não faz
@@ -51,6 +57,26 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   const naoLancaram = ehFimDeSemana(hoje)
     ? []
     : (pessoas ?? []).filter((p) => !lancouHoje.has(p.id) && !faltouHoje.has(p.id));
+
+  // Compromisso do dia — pedido do Diretor, 2026-09-11: SDR vê o próprio;
+  // Closer vê o próprio + o da Tribo; Líder vê o do Exército inteiro. Só o
+  // dono da UI (SDR/Closer) tem uma linha PESSOAL pra mostrar — pra Líder,
+  // "meuCompromisso" fica null de propósito (ele só acompanha a equipe).
+  const meuCompromisso = viewerId ? (compromissosHoje ?? []).find((c) => c.profile_id === viewerId) ?? null : null;
+  const mostrarCompromissoTime = escopo?.tipo === "tribo" || escopo?.tipo === "exercito";
+  const agregadoCompromissoTime = mostrarCompromissoTime
+    ? (compromissosHoje ?? []).reduce(
+        (acc, c) => ({
+          entrevistasComp: acc.entrevistasComp + c.entrevistas_comp,
+          entrevistasReal: acc.entrevistasReal + c.entrevistas_real,
+          assinaturasComp: acc.assinaturasComp + c.assinaturas_comp,
+          assinaturasReal: acc.assinaturasReal + c.assinaturas_real,
+          pagosComp: acc.pagosComp + c.pagos_comp,
+          pagosReal: acc.pagosReal + c.pagos_real,
+        }),
+        { entrevistasComp: 0, entrevistasReal: 0, assinaturasComp: 0, assinaturasReal: 0, pagosComp: 0, pagosReal: 0 }
+      )
+    : null;
 
   const { data: marcos } = await supabase.from("marcos").select("id, nome, threshold, icone").order("ordem");
   // Mesma base que buscarProgressoMarcos (src/lib/marcos.ts): mês corrente,
@@ -199,8 +225,19 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
   const rPagoOntem = (opsPagoOntem ?? []).reduce((s, o) => s + Number(o.valor), 0);
 
   const temAlgumaMeta = Object.values(metaOntemPorEtapa).some((v) => v !== null);
+  // Sempre mostra a seção pra quem tem escopo pessoal/time (mesmo sem ter
+  // lançado ainda — vira um call-to-action, igual o card antigo fazia).
+  const temCompromissoPraMostrar = pessoal || mostrarCompromissoTime;
 
-  if (naoLancaram.length === 0 && bateuMarco.length === 0 && pertoDeMarco.length === 0 && aniversarios.length === 0 && !temAlgumaMeta) return null;
+  if (
+    naoLancaram.length === 0 &&
+    bateuMarco.length === 0 &&
+    pertoDeMarco.length === 0 &&
+    aniversarios.length === 0 &&
+    !temAlgumaMeta &&
+    !temCompromissoPraMostrar
+  )
+    return null;
 
   return (
     <details open className="card-imp group">
@@ -212,6 +249,69 @@ export default async function CentralNotificacoes({ escopo = null }: { escopo?: 
         </span>
       </summary>
       <div className="space-y-5">
+        {temCompromissoPraMostrar && (
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Compromisso de hoje</p>
+            <div className="space-y-2">
+              {meuCompromisso ? (
+                <div className="rounded border border-imperium-line bg-imperium-bg/40 p-3">
+                  {mostrarCompromissoTime && (
+                    <p className="mb-1.5 text-[11px] uppercase tracking-wide text-stone-500">Seu compromisso</p>
+                  )}
+                  <ul className="grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
+                    {(["entrevistas", "assinaturas", "pagos"] as const).map((etapa) => (
+                      <li key={etapa} className="flex items-center justify-between">
+                        <span className="text-stone-400">{FUNNEL_LABELS[etapa]}</span>
+                        <span className="text-stone-200">
+                          {meuCompromisso![`${etapa}_real`]}/{meuCompromisso![`${etapa}_comp`]}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                pessoal &&
+                !ehFimDeSemana(hoje) && (
+                  <p className="text-sm text-stone-500">
+                    Você ainda não lançou o compromisso de hoje.{" "}
+                    <a href="/compromisso" className="text-gold hover:underline">
+                      Lançar agora
+                    </a>
+                  </p>
+                )
+              )}
+
+              {agregadoCompromissoTime && (
+                <div className="rounded border border-imperium-line bg-imperium-bg/40 p-3">
+                  <p className="mb-1.5 text-[11px] uppercase tracking-wide text-stone-500">
+                    {escopo?.tipo === "exercito" ? "Compromisso do Exército" : "Compromisso da Tribo"}
+                  </p>
+                  <ul className="grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
+                    <li className="flex items-center justify-between">
+                      <span className="text-stone-400">Entrevistas</span>
+                      <span className="text-stone-200">
+                        {agregadoCompromissoTime.entrevistasReal}/{agregadoCompromissoTime.entrevistasComp}
+                      </span>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span className="text-stone-400">Assinaturas</span>
+                      <span className="text-stone-200">
+                        {agregadoCompromissoTime.assinaturasReal}/{agregadoCompromissoTime.assinaturasComp}
+                      </span>
+                    </li>
+                    <li className="flex items-center justify-between">
+                      <span className="text-stone-400">Pagos</span>
+                      <span className="text-stone-200">
+                        {agregadoCompromissoTime.pagosReal}/{agregadoCompromissoTime.pagosComp}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {temAlgumaMeta && (
           <div>
             <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">

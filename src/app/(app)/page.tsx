@@ -60,18 +60,12 @@ export default async function MuralPage({
   await supabase.from("profiles").update({ mural_visto_em: new Date().toISOString() }).eq("id", meId);
 
   const hoje = hojeBR();
-  const { data: compromissoHoje } = await supabase
-    .from("compromissos")
-    .select("*")
-    .eq("profile_id", meId)
-    .eq("data", hoje)
-    .maybeSingle();
 
   // "Resultados do mês" pode ser um mês passado (pedido do Diretor,
   // 2026-09-01: ver Agosto de novo mesmo já em Setembro) — mesmo padrão de
-  // seletor ?ano=&mes= de /comissao, /dre etc. "Compromisso de hoje" acima
-  // fica de fora de propósito (é sempre HOJE, não faz sentido olhar um
-  // compromisso de um mês passado).
+  // seletor ?ano=&mes= de /comissao, /dre etc. Compromisso de hoje (Central
+  // de Notificações, abaixo) fica de fora de propósito (é sempre HOJE, não
+  // faz sentido olhar um compromisso de um mês passado).
   const [anoHoje, mesHoje] = hoje.split("-").map(Number);
   const ano = Number(searchParams.ano) || anoHoje;
   const mes = Number(searchParams.mes) || mesHoje;
@@ -112,8 +106,6 @@ export default async function MuralPage({
   const { metaCreditoIndividual: metaIndividual } = await buscarMetaIndividual(supabase, meId, { ano, mes });
 
   const campanhasAtivas = await buscarCampanhasAtivas(supabase);
-
-  const ehExecutivo = meRole === "sdr" || meRole === "closer";
 
   // Central de Notificações: Diretor vê a firma inteira (sem escopo), Líder só
   // o próprio Exército, Closer só a própria Tribo, SDR só a própria produção
@@ -313,7 +305,7 @@ export default async function MuralPage({
       )}
 
       {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr") && (
-        <CentralNotificacoes escopo={escopoCentral} />
+        <CentralNotificacoes escopo={escopoCentral} viewerId={meId} />
       )}
 
       {meRole === "sdr" && metaIndividual > 0 && (
@@ -372,50 +364,6 @@ export default async function MuralPage({
             <p className="mt-1 text-[11px] text-stone-600">Pago + Em pagamento + Resolvendo pendência</p>
           </Card>
         </div>
-      )}
-
-      {ehExecutivo && (
-        <Card title="Compromisso de hoje">
-          {compromissoHoje ? (
-            <div className="grid grid-cols-4 gap-4 text-sm">
-              <div>
-                <p className="text-stone-500">Status</p>
-                <p className="font-medium text-gold">
-                  {compromissoHoje.status === "cumprido"
-                    ? "Cumprido"
-                    : compromissoHoje.status === "nao_cumprido"
-                      ? "Não cumprido"
-                      : "Em andamento"}
-                </p>
-              </div>
-              <div>
-                <p className="text-stone-500">Entrevistas</p>
-                <p className="text-stone-100">
-                  {compromissoHoje.entrevistas_real}/{compromissoHoje.entrevistas_comp}
-                </p>
-              </div>
-              <div>
-                <p className="text-stone-500">Assinaturas</p>
-                <p className="text-stone-100">
-                  {compromissoHoje.assinaturas_real}/{compromissoHoje.assinaturas_comp}
-                </p>
-              </div>
-              <div>
-                <p className="text-stone-500">Pagos</p>
-                <p className="text-stone-100">
-                  {compromissoHoje.pagos_real}/{compromissoHoje.pagos_comp}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-stone-500">
-              Você ainda não lançou o compromisso de hoje.{" "}
-              <a href="/compromisso" className="text-gold hover:underline">
-                Lançar agora
-              </a>
-            </p>
-          )}
-        </Card>
       )}
 
       {quote && (
