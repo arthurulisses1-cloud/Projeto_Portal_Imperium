@@ -51,11 +51,56 @@ export function calcularFunilMeta(
   return resultado;
 }
 
+// Meta individual fixada manualmente pelo Diretor (metas_individuais,
+// migration 0077) — sobrescreve a divisão igual pra essa pessoa nesse
+// mês/ano específico. Quem não tem override continua dividindo igualmente
+// o que SOBRA da meta da Tribo depois de tirar as metas fixadas (ver
+// dividirMetaTriboComOverrides abaixo).
+export async function buscarOverridesIndividuais(
+  supabase: SupabaseClient,
+  ano: number,
+  mes: number,
+  profileIds?: string[]
+): Promise<Map<string, number>> {
+  let query = supabase.from("metas_individuais").select("profile_id, meta_credito").eq("ano", ano).eq("mes", mes);
+  if (profileIds) query = query.in("profile_id", profileIds);
+  const { data } = await query;
+  return new Map((data ?? []).map((o) => [o.profile_id, Number(o.meta_credito)]));
+}
+
+// Pura — dado o total da Tribo e quem tem override, devolve a meta de CADA
+// membro: quem tem override recebe exatamente aquele valor; o resto da
+// meta da Tribo (total menos a soma dos overrides) é dividido igualmente
+// entre quem não tem override. Reaproveitada tanto por buscarMetaIndividual
+// (1 pessoa) quanto pela tela de Metas Mensais (Tribo inteira de uma vez).
+export function dividirMetaTriboComOverrides(
+  metaTribo: number,
+  membrosIds: string[],
+  overrides: Map<string, number>
+): Map<string, number> {
+  const resultado = new Map<string, number>();
+  let somaOverrides = 0;
+  const semOverride: string[] = [];
+  for (const id of membrosIds) {
+    if (overrides.has(id)) {
+      const valor = overrides.get(id)!;
+      resultado.set(id, valor);
+      somaOverrides += valor;
+    } else {
+      semOverride.push(id);
+    }
+  }
+  const restante = Math.max(0, metaTribo - somaOverrides);
+  const fatia = semOverride.length > 0 ? restante / semOverride.length : 0;
+  for (const id of semOverride) resultado.set(id, fatia);
+  return resultado;
+}
+
 // Meta de crédito individual do mês: meta da TRIBO (já com a regra especial
 // de Inbound = metade de uma Tribo lógica — ver mapaMetaCreditoPorTribo)
-// dividida pelos membros dela. Também devolve a tabela de taxas de
-// conversão esperadas e a meta de ticket médio, pra reaproveitar em várias
-// telas.
+// dividida pelos membros dela, respeitando overrides manuais (ver acima).
+// Também devolve a tabela de taxas de conversão esperadas e a meta de
+// ticket médio, pra reaproveitar em várias telas.
 //
 // Achado 2026-08-24: essa função tinha sua PRÓPRIA divisão (firma ÷
 // Exércitos ÷ Tribos do Exército ÷ membros), separada da de
@@ -91,12 +136,14 @@ export async function buscarMetaIndividual(supabase: SupabaseClient, userId: str
 
   let metaIndividual = 0;
   if (profile?.tribo_id && metaMes?.meta_credito_total) {
-    const [mapaPorTribo, { count: numMembros }] = await Promise.all([
+    const [mapaPorTribo, { data: membros }] = await Promise.all([
       mapaMetaCreditoPorTribo(supabase, metaMes.meta_credito_total),
-      supabase.from("profiles").select("id", { count: "exact", head: true }).eq("tribo_id", profile.tribo_id).in("role", ["sdr", "closer"]),
+      supabase.from("profiles").select("id").eq("tribo_id", profile.tribo_id).in("role", ["sdr", "closer"]),
     ]);
     const metaTribo = mapaPorTribo.get(profile.tribo_id) ?? 0;
-    if (numMembros) metaIndividual = metaTribo / numMembros;
+    const idsMembros = (membros ?? []).map((m) => m.id);
+    const overrides = await buscarOverridesIndividuais(supabase, anoAgora, mesAgora, idsMembros);
+    metaIndividual = dividirMetaTriboComOverrides(metaTribo, idsMembros, overrides).get(userId) ?? 0;
   }
 
   return {

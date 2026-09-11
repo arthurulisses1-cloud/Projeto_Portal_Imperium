@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { TRANSICOES, MESES_LABEL } from "@/lib/metas";
-import { salvarMeta } from "./actions";
+import { TRANSICOES, MESES_LABEL, mapaMetaCreditoPorTribo, buscarOverridesIndividuais, dividirMetaTriboComOverrides } from "@/lib/metas";
+import { salvarMeta, salvarMetaIndividual } from "./actions";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
 import { hojeBR } from "@/lib/data-br";
 
@@ -39,10 +39,41 @@ export default async function MetasPage({
 
   const { data: exercitos } = await supabase.from("exercitos").select("id, nome");
   const { data: tribos } = await supabase.from("tribos").select("id, nome, exercito_id");
+  const { data: pessoasRaw } = await supabase
+    .from("profiles")
+    .select("id, full_name, tribo_id")
+    .in("role", ["sdr", "closer"])
+    .eq("ativo", true)
+    .order("full_name");
 
   const metaCredito = meta?.meta_credito_total ?? 0;
-  const numExercitos = exercitos?.length ?? 0;
-  const metaPorExercito = numExercitos > 0 ? metaCredito / numExercitos : 0;
+  // Mesma fonte que buscarMetaIndividual/buscarMetaTribo já usam em
+  // qualquer outra tela (já trata Inbound como metade de uma Tribo lógica)
+  // — achado 2026-09-11: essa página tinha sua PRÓPRIA divisão (÷Exércitos
+  // ÷Tribos do Exército), ignorando a regra do Inbound e o próprio corte de
+  // "Tribo lógica" que mapaMetaCreditoPorTribo já aplica em todo lugar.
+  const mapaMetaPorTribo = metaCredito > 0 ? await mapaMetaCreditoPorTribo(supabase, metaCredito) : new Map<string, number>();
+
+  const pessoasPorTribo = new Map<string, { id: string; nome: string }[]>();
+  for (const p of pessoasRaw ?? []) {
+    if (!p.tribo_id) continue;
+    if (!pessoasPorTribo.has(p.tribo_id)) pessoasPorTribo.set(p.tribo_id, []);
+    pessoasPorTribo.get(p.tribo_id)!.push({ id: p.id, nome: p.full_name });
+  }
+
+  const overrides = await buscarOverridesIndividuais(supabase, ano, mes);
+  const metaPorPessoaPorTribo = new Map<string, Map<string, number>>();
+  for (const [triboId, membros] of Array.from(pessoasPorTribo)) {
+    const metaTribo = mapaMetaPorTribo.get(triboId) ?? 0;
+    metaPorPessoaPorTribo.set(
+      triboId,
+      dividirMetaTriboComOverrides(
+        metaTribo,
+        membros.map((m) => m.id),
+        overrides
+      )
+    );
+  }
 
   // ---------- Evolução mês a mês (últimos 6 meses com meta cadastrada) ----------
   const { data: historicoMetas } = await supabase
@@ -170,32 +201,74 @@ export default async function MetasPage({
       </section>
 
       <section className="card-imp">
-        <h2 className="kicker mb-4">Divisão automática — Exército → Tribo</h2>
+        <h2 className="kicker mb-4">Divisão — Exército → Tribo → Pessoa</h2>
+        <p className="mb-4 text-xs text-stone-500">
+          Por padrão a meta da Tribo é dividida igualmente entre os membros. Pra dar uma meta diferente pra alguém
+          específico, edita o campo dela e salva — o resto da Tribo automaticamente divide igualmente o que sobrou.
+          Deixa o campo em branco e salva de novo pra voltar a dividir igual.
+        </p>
         {metaCredito <= 0 ? (
           <p className="text-sm text-stone-500">Cadastra a meta de crédito acima pra ver a divisão.</p>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-5">
             {(exercitos ?? []).map((ex) => {
               const tribosDoExercito = (tribos ?? []).filter((t) => t.exercito_id === ex.id);
-              const metaPorTribo =
-                tribosDoExercito.length > 0 ? metaPorExercito / tribosDoExercito.length : 0;
+              const metaExercito = tribosDoExercito.reduce((s, t) => s + (mapaMetaPorTribo.get(t.id) ?? 0), 0);
               return (
                 <div key={ex.id} className="border-t border-imperium-line pt-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-stone-100">{ex.nome}</span>
-                    <span className="text-gold-bright">{moeda(metaPorExercito)}</span>
+                    <span className="text-gold-bright">{moeda(metaExercito)}</span>
                   </div>
-                  <ul className="mt-2 space-y-1 pl-4">
-                    {tribosDoExercito.map((t) => (
-                      <li key={t.id} className="flex justify-between text-xs">
-                        <span className="text-stone-400">{t.nome}</span>
-                        <span className="text-stone-300">{moeda(metaPorTribo)}</span>
-                      </li>
-                    ))}
+                  <div className="mt-2 space-y-3 pl-4">
+                    {tribosDoExercito.map((t) => {
+                      const metaTribo = mapaMetaPorTribo.get(t.id) ?? 0;
+                      const membros = pessoasPorTribo.get(t.id) ?? [];
+                      const metaPorPessoa = metaPorPessoaPorTribo.get(t.id) ?? new Map<string, number>();
+                      return (
+                        <div key={t.id}>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-stone-400">{t.nome}</span>
+                            <span className="text-stone-300">{moeda(metaTribo)}</span>
+                          </div>
+                          <ul className="mt-1.5 space-y-1 pl-3">
+                            {membros.map((m) => {
+                              const temOverride = overrides.has(m.id);
+                              return (
+                                <li key={m.id} className="flex items-center justify-between gap-2 text-xs">
+                                  <span className={temOverride ? "text-gold" : "text-stone-500"}>
+                                    {m.nome}
+                                    {temOverride && <span className="ml-1 text-[9px] uppercase text-gold-dim">editado</span>}
+                                  </span>
+                                  <form action={salvarMetaIndividual} className="flex items-center gap-1.5">
+                                    <input type="hidden" name="ano" value={ano} />
+                                    <input type="hidden" name="mes" value={mes} />
+                                    <input type="hidden" name="profile_id" value={m.id} />
+                                    <span className="text-stone-600">R$</span>
+                                    <input
+                                      type="number"
+                                      name="meta_credito"
+                                      step="0.01"
+                                      placeholder={String(Math.round(metaPorPessoa.get(m.id) ?? 0))}
+                                      defaultValue={temOverride ? overrides.get(m.id) : undefined}
+                                      className="input-imp w-28 px-2 py-1 text-xs"
+                                    />
+                                    <button type="submit" className="btn-outline px-2 py-1 text-[10px]">
+                                      Salvar
+                                    </button>
+                                  </form>
+                                </li>
+                              );
+                            })}
+                            {membros.length === 0 && <li className="text-[11px] text-stone-600">Sem membros nessa Tribo.</li>}
+                          </ul>
+                        </div>
+                      );
+                    })}
                     {tribosDoExercito.length === 0 && (
-                      <li className="text-xs text-stone-600">Nenhuma Tribo cadastrada ainda.</li>
+                      <p className="text-xs text-stone-600">Nenhuma Tribo cadastrada ainda.</p>
                     )}
-                  </ul>
+                  </div>
                 </div>
               );
             })}
