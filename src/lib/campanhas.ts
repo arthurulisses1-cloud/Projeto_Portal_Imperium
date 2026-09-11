@@ -22,6 +22,7 @@ export type CampanhaParticipanteProgresso = {
 };
 
 export type ImagemPosicao = "top" | "center" | "bottom";
+export type RecompensaTipo = "estrela" | "dinheiro";
 
 export type CampanhaComProgresso = {
   id: string;
@@ -42,6 +43,43 @@ export type CampanhaComProgresso = {
   // Diretor, 2026-08-28: "entrevistas valerá uma pontuação e assinaturas
   // outra") — { etapa: peso }, chaves de FUNNEL_STAGES.
   pesos: Record<string, number> | null;
+  // Recompensa estruturada (migration 0078, pedido do Diretor, 2026-09-11)
+  // — quando recompensaTipo é null, a campanha só tem o texto livre acima,
+  // sem concessão automática.
+  recompensaTipo: RecompensaTipo | null;
+  recompensaValorSdr: number;
+  recompensaValorCloser: number;
+  recompensaValorLider: number;
+  // Mínimo pra "bater a meta" na mesma unidade da métrica — fallback pro
+  // metaValor quando não preenchido (ver calcularConcessaoCampanha).
+  requisitoMinimoValor: number | null;
+  apuradaEm: string | null;
+};
+
+const CAMPANHA_COLUNAS =
+  "id, titulo, descricao, requisitos_minimos, recompensa, imagem_url, imagem_posicao, alvo, metrica, papel_credito, meta_valor, data_inicio, data_fim, pesos, recompensa_tipo, recompensa_valor_sdr, recompensa_valor_closer, recompensa_valor_lider, requisito_minimo_valor, apurada_em";
+
+type CampanhaRow = {
+  id: string;
+  titulo: string;
+  descricao: string | null;
+  requisitos_minimos: string | null;
+  recompensa: string | null;
+  imagem_url: string | null;
+  imagem_posicao: string | null;
+  alvo: string;
+  metrica: string;
+  papel_credito: string | null;
+  meta_valor: number | null;
+  data_inicio: string;
+  data_fim: string;
+  pesos: Record<string, number> | null;
+  recompensa_tipo: string | null;
+  recompensa_valor_sdr: number | null;
+  recompensa_valor_closer: number | null;
+  recompensa_valor_lider: number | null;
+  requisito_minimo_valor: number | null;
+  apurada_em: string | null;
 };
 
 // Todas as campanhas cujo período cobre hoje, com o progresso de cada
@@ -66,31 +104,14 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
   const hoje = hojeBR();
 
   // requisitos_minimos/recompensa vêm da migration 0034, imagem_posicao da
-  // 0046, papel_credito da 0047 — se alguma ainda não rodou nesse banco, o
-  // select com essas colunas falha e cai no fallback sem elas, pra não
-  // quebrar o Mural inteiro enquanto a migration pendente não roda (mesmo
-  // padrão do Forecast com motivo_queda).
-  let campanhas: {
-    id: string;
-    titulo: string;
-    descricao: string | null;
-    requisitos_minimos: string | null;
-    recompensa: string | null;
-    imagem_url: string | null;
-    imagem_posicao: string | null;
-    alvo: string;
-    metrica: string;
-    papel_credito: string | null;
-    meta_valor: number | null;
-    data_inicio: string;
-    data_fim: string;
-    pesos: Record<string, number> | null;
-  }[] | null;
+  // 0046, papel_credito da 0047, recompensa estruturada da 0078 — se
+  // alguma ainda não rodou nesse banco, o select com essas colunas falha e
+  // cai no fallback sem elas, pra não quebrar o Mural inteiro enquanto a
+  // migration pendente não roda (mesmo padrão do Forecast com motivo_queda).
+  let campanhas: CampanhaRow[] | null;
   const comColunasNovas = await supabase
     .from("campanhas")
-    .select(
-      "id, titulo, descricao, requisitos_minimos, recompensa, imagem_url, imagem_posicao, alvo, metrica, papel_credito, meta_valor, data_inicio, data_fim, pesos"
-    )
+    .select(CAMPANHA_COLUNAS)
     .lte("data_inicio", hoje)
     .gte("data_fim", hoje)
     .order("created_at", { ascending: false });
@@ -108,13 +129,36 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
       imagem_posicao: null,
       papel_credito: null,
       pesos: null,
+      recompensa_tipo: null,
+      recompensa_valor_sdr: null,
+      recompensa_valor_closer: null,
+      recompensa_valor_lider: null,
+      requisito_minimo_valor: null,
+      apurada_em: null,
     }));
   } else {
-    campanhas = comColunasNovas.data;
+    campanhas = comColunasNovas.data as unknown as CampanhaRow[];
   }
 
   if (!campanhas || campanhas.length === 0) return [];
 
+  return calcularProgresso(supabase, campanhas);
+}
+
+// Progresso de UMA campanha específica, sem filtro de data — usado na
+// apuração (campanha já pode ter terminado). Mesmo cálculo de "quem tá na
+// frente" que o Mural usa, só que escopado a um id fixo.
+export async function buscarProgressoCampanha(
+  supabase: SupabaseClient,
+  campanhaId: string
+): Promise<CampanhaComProgresso | null> {
+  const { data } = await supabase.from("campanhas").select(CAMPANHA_COLUNAS).eq("id", campanhaId).maybeSingle();
+  if (!data) return null;
+  const [resultado] = await calcularProgresso(supabase, [data as unknown as CampanhaRow]);
+  return resultado ?? null;
+}
+
+async function calcularProgresso(supabase: SupabaseClient, campanhas: CampanhaRow[]): Promise<CampanhaComProgresso[]> {
   const campanhaIds = campanhas.map((c) => c.id);
   const { data: participantesRows } = await supabase
     .from("campanha_participantes")
@@ -324,6 +368,12 @@ export async function buscarCampanhasAtivas(supabase: SupabaseClient): Promise<C
       dataFim: c.data_fim,
       participantes,
       pesos: c.pesos ?? null,
+      recompensaTipo: (c.recompensa_tipo as RecompensaTipo | null) ?? null,
+      recompensaValorSdr: Number(c.recompensa_valor_sdr ?? 0),
+      recompensaValorCloser: Number(c.recompensa_valor_closer ?? 0),
+      recompensaValorLider: Number(c.recompensa_valor_lider ?? 0),
+      requisitoMinimoValor: c.requisito_minimo_valor !== null && c.requisito_minimo_valor !== undefined ? Number(c.requisito_minimo_valor) : null,
+      apuradaEm: c.apurada_em,
     };
   });
 }

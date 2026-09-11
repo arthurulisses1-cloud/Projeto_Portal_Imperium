@@ -18,6 +18,12 @@ export type CampanhaParaEditar = {
   dataInicio: string;
   dataFim: string;
   pesos: Record<string, number> | null;
+  recompensaTipo: "estrela" | "dinheiro" | null;
+  recompensaValorSdr: number;
+  recompensaValorCloser: number;
+  recompensaValorLider: number;
+  requisitoMinimoValor: number | null;
+  apuradaEm: string | null;
 };
 
 // Edita só os dados "de conteúdo" da campanha (título, descrição, imagem,
@@ -25,6 +31,8 @@ export type CampanhaParaEditar = {
 // participantes (ver comentário em atualizarCampanha, src/app/(app)/campanhas/actions.ts).
 export default function EditarCampanhaForm({ campanha }: { campanha: CampanhaParaEditar }) {
   const [metrica, setMetrica] = useState(campanha.metrica);
+  const [recompensaTipo, setRecompensaTipo] = useState<"" | "estrela" | "dinheiro">(campanha.recompensaTipo ?? "");
+  const jaApurada = !!campanha.apuradaEm;
 
   return (
     <details className="mt-2 w-full rounded border border-imperium-line p-2">
@@ -49,6 +57,83 @@ export default function EditarCampanhaForm({ campanha }: { campanha: CampanhaPar
           <label className="mb-1 block text-xs text-stone-400">Recompensa</label>
           <input name="recompensa" defaultValue={campanha.recompensa ?? ""} className="input-imp" />
         </div>
+
+        <div className="rounded border border-imperium-line p-3">
+          <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Recompensa automática</p>
+          {jaApurada && (
+            <p className="mb-2 text-[11px] text-wine-bright">
+              Essa campanha já foi apurada em {new Date(campanha.apuradaEm!).toLocaleDateString("pt-BR")} — mudar os
+              valores agora não afeta quem já recebeu.
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-xs text-stone-400">Tipo</label>
+              <select
+                name="recompensa_tipo"
+                value={recompensaTipo}
+                onChange={(e) => setRecompensaTipo(e.target.value as typeof recompensaTipo)}
+                className="input-imp"
+              >
+                <option value="">Nenhuma (só o texto acima)</option>
+                <option value="dinheiro">Dinheiro (entra na DRE)</option>
+                <option value="estrela">Estrela (entra no plano de carreira)</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-stone-400">Requisito mínimo</label>
+              <input
+                type="number"
+                name="requisito_minimo_valor"
+                step="0.01"
+                defaultValue={campanha.requisitoMinimoValor ?? undefined}
+                placeholder="Vazio = usa a meta numérica"
+                className="input-imp"
+              />
+            </div>
+          </div>
+          {recompensaTipo && (
+            <div className="mt-3 grid grid-cols-3 gap-3">
+              <div>
+                <label className="mb-0.5 block text-[10px] text-stone-500">SDR</label>
+                <input
+                  type="number"
+                  name="recompensa_valor_sdr"
+                  min={0}
+                  step="0.01"
+                  defaultValue={campanha.recompensaValorSdr || undefined}
+                  placeholder="0"
+                  className="input-imp text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-0.5 block text-[10px] text-stone-500">Closer</label>
+                <input
+                  type="number"
+                  name="recompensa_valor_closer"
+                  min={0}
+                  step="0.01"
+                  defaultValue={campanha.recompensaValorCloser || undefined}
+                  placeholder="0"
+                  className="input-imp text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-0.5 block text-[10px] text-stone-500">Líder</label>
+                <input
+                  type="number"
+                  name="recompensa_valor_lider"
+                  min={0}
+                  step="0.01"
+                  defaultValue={campanha.recompensaValorLider || undefined}
+                  placeholder="0"
+                  className="input-imp text-sm"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         <div>
           <label className="mb-1 block text-xs text-stone-400">Trocar imagem (opcional — deixe vazio pra manter a atual)</label>
           <input type="file" name="imagem" accept="image/*" className="text-sm text-stone-300" />

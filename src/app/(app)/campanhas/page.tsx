@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import CampanhaForm from "./campanha-form";
 import EditarCampanhaForm from "./editar-campanha-form";
 import { excluirCampanha, atualizarEnquadramentoCampanha } from "./actions";
 import { buscarCampanhasAtivas } from "@/lib/campanhas";
+import { hojeBR } from "@/lib/data-br";
 import Card from "@/components/ui/Card";
 
 export default async function CampanhasPage() {
@@ -15,6 +17,8 @@ export default async function CampanhasPage() {
     ? await supabase.from("profiles").select("role").eq("id", user.id).single()
     : { data: null };
   if (profile?.role !== "lider" && profile?.role !== "diretor") redirect("/");
+  const ehDiretor = profile?.role === "diretor";
+  const hoje = hojeBR();
 
   const { data: pessoas } = await supabase
     .from("profiles")
@@ -27,7 +31,7 @@ export default async function CampanhasPage() {
   const { data: todasCampanhas } = await supabase
     .from("campanhas")
     .select(
-      "id, titulo, descricao, requisitos_minimos, recompensa, metrica, papel_credito, alvo, meta_valor, data_inicio, data_fim, imagem_url, imagem_posicao, pesos"
+      "id, titulo, descricao, requisitos_minimos, recompensa, metrica, papel_credito, alvo, meta_valor, data_inicio, data_fim, imagem_url, imagem_posicao, pesos, recompensa_tipo, recompensa_valor_sdr, recompensa_valor_closer, recompensa_valor_lider, requisito_minimo_valor, apurada_em"
     )
     .order("data_inicio", { ascending: false });
 
@@ -57,12 +61,20 @@ export default async function CampanhasPage() {
                 <span className="text-stone-200">
                   {c.titulo}{" "}
                   {idsAtivas.has(c.id) && <span className="ml-1 text-[10px] uppercase text-success-bright">ativa</span>}
+                  {c.recompensa_tipo && c.apurada_em && (
+                    <span className="ml-1 text-[10px] uppercase text-gold">concedida</span>
+                  )}
                 </span>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-stone-500">
                     {new Date(c.data_inicio + "T00:00:00").toLocaleDateString("pt-BR")} –{" "}
                     {new Date(c.data_fim + "T00:00:00").toLocaleDateString("pt-BR")}
                   </span>
+                  {ehDiretor && c.recompensa_tipo && !c.apurada_em && c.data_fim < hoje && (
+                    <Link href={`/campanhas/${c.id}/apurar`} className="text-xs text-gold hover:underline">
+                      Apurar campanha
+                    </Link>
+                  )}
                   {c.imagem_url && (
                     <form action={atualizarEnquadramentoCampanha} className="flex items-center gap-1">
                       <input type="hidden" name="id" value={c.id} />
@@ -98,6 +110,12 @@ export default async function CampanhasPage() {
                     dataInicio: c.data_inicio,
                     dataFim: c.data_fim,
                     pesos: c.pesos,
+                    recompensaTipo: c.recompensa_tipo,
+                    recompensaValorSdr: Number(c.recompensa_valor_sdr ?? 0),
+                    recompensaValorCloser: Number(c.recompensa_valor_closer ?? 0),
+                    recompensaValorLider: Number(c.recompensa_valor_lider ?? 0),
+                    requisitoMinimoValor: c.requisito_minimo_valor,
+                    apuradaEm: c.apurada_em,
                   }}
                 />
               </li>

@@ -19,6 +19,7 @@ export default function CampanhaForm({
 }) {
   const [alvo, setAlvo] = useState<"geral" | "individual" | "tribo" | "exercito" | "grupo_rank">("geral");
   const [metrica, setMetrica] = useState("credito");
+  const [recompensaTipo, setRecompensaTipo] = useState<"" | "estrela" | "dinheiro">("");
 
   const opcoes = alvo === "individual" ? pessoas : alvo === "tribo" ? tribos : alvo === "exercito" ? exercitos : [];
 
@@ -74,7 +75,65 @@ export default function CampanhaForm({
       <div>
         <label className="mb-1 block text-xs text-stone-400">Recompensa da campanha (opcional)</label>
         <input name="recompensa" placeholder="Ex: R$500 de bônus + jantar de equipe" className="input-imp" />
+        <p className="mt-1 text-[11px] text-stone-600">
+          Isso aqui é só o texto exibido no Mural. Pra conceder de verdade quem bater a meta, configure abaixo.
+        </p>
       </div>
+
+      <div className="rounded border border-imperium-line p-3">
+        <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Recompensa automática (opcional)</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="mb-1 block text-xs text-stone-400">Tipo</label>
+            <select
+              name="recompensa_tipo"
+              value={recompensaTipo}
+              onChange={(e) => setRecompensaTipo(e.target.value as typeof recompensaTipo)}
+              className="input-imp"
+            >
+              <option value="">Nenhuma (só o texto acima)</option>
+              <option value="dinheiro">Dinheiro (entra na DRE)</option>
+              <option value="estrela">Estrela (entra no plano de carreira)</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-stone-400">
+              Requisito mínimo {metrica === "credito" ? "(R$)" : metrica === "pontuacao" ? "(pontos)" : "(unidades)"}
+            </label>
+            <input
+              type="number"
+              name="requisito_minimo_valor"
+              step="0.01"
+              placeholder="Vazio = usa a meta numérica"
+              className="input-imp"
+            />
+          </div>
+        </div>
+        {recompensaTipo && (
+          <div className="mt-3">
+            <p className="mb-1.5 text-[11px] text-stone-600">
+              Quanto cada papel recebe quando bate o requisito acima — em campanha de Tribo/Exército/Geral, cada
+              pessoa do grupo vencedor recebe o valor do próprio papel; em duelo, o participante recebe o valor do
+              papel que ele tem.
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="mb-0.5 block text-[10px] text-stone-500">SDR</label>
+                <input type="number" name="recompensa_valor_sdr" min={0} step="0.01" placeholder="0" className="input-imp text-sm" />
+              </div>
+              <div>
+                <label className="mb-0.5 block text-[10px] text-stone-500">Closer</label>
+                <input type="number" name="recompensa_valor_closer" min={0} step="0.01" placeholder="0" className="input-imp text-sm" />
+              </div>
+              <div>
+                <label className="mb-0.5 block text-[10px] text-stone-500">Líder</label>
+                <input type="number" name="recompensa_valor_lider" min={0} step="0.01" placeholder="0" className="input-imp text-sm" />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div>
         <label className="mb-1 block text-xs text-stone-400">Imagem (opcional)</label>
         <input type="file" name="imagem" accept="image/*" className="text-sm text-stone-300" />

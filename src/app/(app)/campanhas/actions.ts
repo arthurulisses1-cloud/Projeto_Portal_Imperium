@@ -3,12 +3,33 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { FUNNEL_STAGES } from "@/lib/funil";
+import { calcularConcessaoCampanha } from "@/lib/campanha-recompensas";
 
 async function exigirLiderOuDiretor(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", userId).single();
   if (profile?.role !== "lider" && profile?.role !== "diretor") {
     throw new Error("Só Líder ou Diretor podem gerenciar campanhas.");
   }
+}
+
+async function exigirDiretor(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", userId).single();
+  if (profile?.role !== "diretor") throw new Error("Só o Diretor pode conceder recompensa de campanha.");
+}
+
+// Lê tipo/valores de recompensa estruturada do form — mesmos 3 campos
+// (sdr/closer/líder) tanto pra criar quanto editar (ver campanha-form.tsx).
+function lerRecompensaEstruturada(formData: FormData) {
+  const tipoRaw = String(formData.get("recompensa_tipo") ?? "").trim();
+  const recompensaTipo = tipoRaw === "estrela" || tipoRaw === "dinheiro" ? tipoRaw : null;
+  const requisitoRaw = String(formData.get("requisito_minimo_valor") ?? "").trim();
+  return {
+    recompensa_tipo: recompensaTipo,
+    recompensa_valor_sdr: Number(String(formData.get("recompensa_valor_sdr") ?? "0").trim() || "0"),
+    recompensa_valor_closer: Number(String(formData.get("recompensa_valor_closer") ?? "0").trim() || "0"),
+    recompensa_valor_lider: Number(String(formData.get("recompensa_valor_lider") ?? "0").trim() || "0"),
+    requisito_minimo_valor: requisitoRaw ? Number(requisitoRaw) : null,
+  };
 }
 
 // Métrica "pontuacao" (migration 0063, pedido do Diretor, 2026-08-28:
@@ -50,6 +71,7 @@ export async function criarCampanha(formData: FormData) {
   const dataFim = String(formData.get("data_fim") ?? "");
   if (!titulo || !dataInicio || !dataFim) throw new Error("Título e período são obrigatórios.");
   const pesos = lerPesos(formData, metrica);
+  const recompensaEstruturada = lerRecompensaEstruturada(formData);
 
   let imagemUrl: string | null = null;
   const imagem = formData.get("imagem") as File | null;
@@ -78,6 +100,7 @@ export async function criarCampanha(formData: FormData) {
       data_fim: dataFim,
       pesos,
       created_by: user.id,
+      ...recompensaEstruturada,
     })
     .select("id")
     .single();
@@ -151,6 +174,7 @@ export async function atualizarCampanha(formData: FormData) {
   const dataFim = String(formData.get("data_fim") ?? "");
   if (!id || !titulo || !dataInicio || !dataFim) throw new Error("Título e período são obrigatórios.");
   const pesos = lerPesos(formData, metrica);
+  const recompensaEstruturada = lerRecompensaEstruturada(formData);
 
   const payload: Record<string, unknown> = {
     titulo,
@@ -164,6 +188,7 @@ export async function atualizarCampanha(formData: FormData) {
     data_inicio: dataInicio,
     data_fim: dataFim,
     pesos,
+    ...recompensaEstruturada,
   };
 
   const imagem = formData.get("imagem") as File | null;
@@ -201,6 +226,87 @@ export async function atualizarEnquadramentoCampanha(formData: FormData) {
 
   revalidatePath("/campanhas");
   revalidatePath("/");
+}
+
+// Concede de fato a recompensa estruturada de uma campanha já encerrada —
+// pedido do Diretor, 2026-09-11: "aparece botão para eu aprovar a
+// concessão, então libero ou não". Recalcula tudo aqui de novo (nunca
+// confia em valor vindo do form) pra evitar qualquer divergência entre o
+// que foi mostrado na prévia e o que é de fato gravado.
+export async function confirmarConcessaoCampanha(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+  await exigirDiretor(supabase, user.id);
+
+  const campanhaId = String(formData.get("campanha_id") ?? "");
+  if (!campanhaId) throw new Error("Campanha inválida.");
+
+  const { data: campanhaRow } = await supabase
+    .from("campanhas")
+    .select("id, data_fim, apurada_em, recompensa_tipo")
+    .eq("id", campanhaId)
+    .maybeSingle();
+  if (!campanhaRow) throw new Error("Campanha não encontrada.");
+  if (campanhaRow.apurada_em) throw new Error("Essa campanha já foi apurada.");
+  if (!campanhaRow.recompensa_tipo) throw new Error("Essa campanha não tem recompensa estruturada configurada.");
+
+  const resultado = await calcularConcessaoCampanha(supabase, campanhaId);
+  if (!resultado || resultado.concessoes.length === 0) {
+    throw new Error("Ninguém bateu o requisito mínimo — nada a conceder.");
+  }
+
+  const tipo = resultado.campanha.recompensaTipo!;
+  const ano = Number(campanhaRow.data_fim.slice(0, 4));
+  const mes = Number(campanhaRow.data_fim.slice(5, 7));
+
+  for (const c of resultado.concessoes) {
+    let despesaExtraId: string | null = null;
+
+    if (tipo === "dinheiro") {
+      const { data: despesa, error: despesaError } = await supabase
+        .from("dre_despesas_extras")
+        .insert({
+          ano,
+          mes,
+          profile_id: c.profileId,
+          valor: c.valor,
+          descricao: `Recompensa campanha: ${resultado.campanha.titulo}`,
+        })
+        .select("id")
+        .single();
+      if (despesaError) throw new Error(despesaError.message);
+      despesaExtraId = despesa.id;
+    } else {
+      const { data: pessoa } = await supabase.from("profiles").select("stars_total").eq("id", c.profileId).single();
+      const novoTotal = Number(pessoa?.stars_total ?? 0) + c.valor;
+      const { error: starsError } = await supabase.from("profiles").update({ stars_total: novoTotal }).eq("id", c.profileId);
+      if (starsError) throw new Error(starsError.message);
+    }
+
+    const { error: ledgerError } = await supabase.from("campanha_recompensas").insert({
+      campanha_id: campanhaId,
+      profile_id: c.profileId,
+      tipo,
+      valor: c.valor,
+      despesa_extra_id: despesaExtraId,
+      concedido_por: user.id,
+    });
+    if (ledgerError) throw new Error(ledgerError.message);
+  }
+
+  const { error: marcarError } = await supabase
+    .from("campanhas")
+    .update({ apurada_em: new Date().toISOString(), apurada_por: user.id })
+    .eq("id", campanhaId);
+  if (marcarError) throw new Error(marcarError.message);
+
+  revalidatePath("/campanhas");
+  revalidatePath(`/campanhas/${campanhaId}/apurar`);
+  revalidatePath("/dre");
+  revalidatePath("/comissao");
 }
 
 export async function excluirCampanha(formData: FormData) {
