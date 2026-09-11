@@ -241,9 +241,10 @@ export async function buscarRemuneracaoMes(
   );
   const { data: pessoasContraparte } =
     idsContraparte.length > 0
-      ? await supabase.from("profiles").select("id, full_name").in("id", idsContraparte)
+      ? await supabase.from("profiles").select("id, full_name, role").in("id", idsContraparte)
       : { data: [] };
   const nomePorIdContraparte = new Map((pessoasContraparte ?? []).map((p) => [p.id, p.full_name as string]));
+  const rolePorIdContraparte = new Map((pessoasContraparte ?? []).map((p) => [p.id, p.role as string]));
 
   const producaoSdrPura = vendasMes
     .filter((v) => v.papel === "sdr")
@@ -257,12 +258,43 @@ export async function buscarRemuneracaoMes(
   const producaoPrincipal =
     papelPrincipal === "sdr" ? producaoSdrPura + producaoAmbos : producaoCloserPura + producaoAmbos;
 
+  // Regra do Diretor, 2026-09-11: pra quem o cargo é Closer (Tribuno/Pretor),
+  // a produção onde ele faz o papel de SDR numa venda que um LÍDER fechou —
+  // ou onde ele fechou sozinho como SDR+Closer (papel='ambos') — vira 0,6%
+  // fixo, igual ao líder, em vez do pct_sdr normal do tier (hoje 0,5% em
+  // todos os tiers de Tribuno/Pretor) ou da regra "maior % do tier" que
+  // valia pra 'ambos'. Não muda o TIER (ainda escolhido pela produção
+  // total, incluindo essa fatia) — só a taxa aplicada sobre ela. SDR puro
+  // (Legionário/Centurião) não é afetado.
+  const ehCargoDeCloser = papelPrincipal === "closer";
+  const producaoSdrComLiderFechando = ehCargoDeCloser
+    ? vendasMes
+        .filter((v) => v.papel === "sdr")
+        .reduce((s, v) => {
+          const op = opDaVenda(v);
+          const closerRole = op?.closer_profile_id ? rolePorIdContraparte.get(op.closer_profile_id) : null;
+          return closerRole === "lider" ? s + Number(v.valor) : s;
+        }, 0)
+    : 0;
+  const producaoSdrNormal = producaoSdrPura - producaoSdrComLiderFechando;
+  const producaoAmbosBonus06 = ehCargoDeCloser ? producaoAmbos : 0;
+  const producaoAmbosNormal = ehCargoDeCloser ? 0 : producaoAmbos;
+
   const remuneracao = calcularRemuneracao(tiers, producaoPrincipal, {
-    sdr: producaoSdrPura,
+    sdr: producaoSdrNormal,
     closer: producaoCloserPura,
-    ambos: producaoAmbos,
+    ambos: producaoAmbosNormal,
     gestao: 0,
   });
+
+  const PCT_CRUZADO_COM_LIDER = 0.6;
+  const producaoBonus06 = producaoSdrComLiderFechando + producaoAmbosBonus06;
+  if (remuneracao && producaoBonus06 > 0) {
+    const variavelBonus06 = Math.round((PCT_CRUZADO_COM_LIDER / 100) * producaoBonus06);
+    remuneracao.sdr.producao += producaoBonus06;
+    remuneracao.sdr.variavel += variavelBonus06;
+    remuneracao.total += variavelBonus06;
+  }
 
   const extrato: LinhaExtrato[] = vendasMes.map((v) => {
     const op = opDaVenda(v);
