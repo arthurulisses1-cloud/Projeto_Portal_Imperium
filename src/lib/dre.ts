@@ -171,7 +171,7 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
   const { data: pessoasRaw } = await supabase
     .from("profiles")
     .select(
-      "id, full_name, role, rank, data_admissao, data_saida, created_at, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(nome)"
+      "id, full_name, role, rank, data_admissao, data_saida, tribo:tribos!profiles_tribo_id_fkey(nome, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(nome)"
     )
     // Investidor é gestão pura (sem produção/comissão/salário-base real) —
     // nunca entra na Folha, pedido explícito do Diretor.
@@ -184,17 +184,18 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
   // seguinte, porque calcularRemuneracao sempre devolve pelo menos o tier 0
   // mesmo com produção zero.
   //
-  // Espelho pro lado da ENTRADA — achado 2026-09-11: reabrir/fechar Agosto
-  // de novo (pra aplicar a regra nova de comissão) trouxe junto 3 SDRs
-  // contratados HOJE, cada um com fixo cheio de Agosto — um mês antes de
-  // sequer existirem no sistema. `data_admissao` costuma ficar em branco no
-  // cadastro inicial; usa `created_at` (quando o perfil foi criado) como
-  // aproximação de quando a pessoa entrou, pra não depender de alguém
-  // lembrar de preencher a data certinho.
+  // Espelho pro lado da ENTRADA, só com `data_admissao` explícito (nunca
+  // `created_at` como aproximação — tentei isso em 2026-09-11 e quebrou:
+  // TODO MUNDO no banco tem o mesmo `created_at`, 17/08, porque foi quando
+  // as contas foram criadas em lote na implantação do Senatus, não a data
+  // real de admissão de ninguém — prorateou o fixo de agosto do time
+  // inteiro por engano). Sem `data_admissao` preenchido, assume que a
+  // pessoa já estava empregada o mês inteiro (comportamento de sempre).
+  // Cadastrar a admissão de gente nova em /legado (Meu Legado) é o que
+  // faz esse corte funcionar certo pra ela.
   const pessoas = (pessoasRaw ?? []).filter((p) => {
     if (p.data_saida && p.data_saida < inicioMes) return false;
-    const entrada = p.data_admissao ?? p.created_at?.slice(0, 10) ?? null;
-    if (entrada && entrada >= fimMesExclusivo) return false;
+    if (p.data_admissao && p.data_admissao >= fimMesExclusivo) return false;
     return true;
   });
 
@@ -237,11 +238,9 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
 
       // Saiu DENTRO desse mês, ou entrou DENTRO desse mês (não antes/depois
       // — esses já foram filtrados acima): fixo proporcional aos dias
-      // trabalhados, não o mês cheio. Achado 2026-09-11: a proporção de
-      // entrada só disparava quando a pessoa TAMBÉM tinha saído no mesmo
-      // mês — quem só entrou (sem sair) recebia o fixo cheio mesmo tendo
-      // trabalhado poucos dias.
-      const entrada = p.data_admissao ?? p.created_at?.slice(0, 10) ?? null;
+      // trabalhados, não o mês cheio. Só com `data_admissao` explícito (ver
+      // comentário acima sobre não usar `created_at`).
+      const entrada = p.data_admissao ?? null;
       const saiuDentroDoMes = !!p.data_saida && p.data_saida < fimMesExclusivo;
       const entrouDentroDoMes = !!entrada && entrada >= inicioMes && entrada < fimMesExclusivo;
       if (saiuDentroDoMes || entrouDentroDoMes) {
@@ -324,7 +323,7 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
     supabase
       .from("profiles")
       .select(
-        "id, full_name, role, rank, data_admissao, data_saida, created_at, tribo:tribos!profiles_tribo_id_fkey(nome, exercito_id, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(id, nome)"
+        "id, full_name, role, rank, data_admissao, data_saida, tribo:tribos!profiles_tribo_id_fkey(nome, exercito_id, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(id, nome)"
       )
       .neq("role", "investidor")
       .order("full_name"),
@@ -339,13 +338,12 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
 
   const opsBase = (opsRaw ?? []).filter((o) => o.status === "PAGO" || o.status_manual === "aguardando_pagamento");
   // Mesmo corte de buscarFolha (ver comentário lá): quem saiu antes desse
-  // mês começar, ou ainda nem tinha entrado (data_admissao, com created_at
-  // como aproximação), nem entra.
+  // mês começar, ou ainda nem tinha entrado, nem entra — só com
+  // `data_admissao` explícito, nunca `created_at`.
   const fimMesExclusivoForecast = fimMesExclusivoDe(ano, mes);
   const pessoas = (pessoasRaw ?? []).filter((p) => {
     if (p.data_saida && p.data_saida < inicioMes) return false;
-    const entrada = p.data_admissao ?? p.created_at?.slice(0, 10) ?? null;
-    if (entrada && entrada >= fimMesExclusivoForecast) return false;
+    if (p.data_admissao && p.data_admissao >= fimMesExclusivoForecast) return false;
     return true;
   });
 
@@ -438,7 +436,7 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
     // entrou dentro desse mês (quem saiu antes, ou ainda nem tinha entrado,
     // já foi filtrado lá em cima).
     {
-      const entradaP = p.data_admissao ?? p.created_at?.slice(0, 10) ?? null;
+      const entradaP = p.data_admissao ?? null;
       const saiuDentroDoMes = !!p.data_saida && p.data_saida <= fimMes;
       const entrouDentroDoMes = !!entradaP && entradaP >= inicioMes && entradaP <= fimMes;
       if (saiuDentroDoMes || entrouDentroDoMes) {
