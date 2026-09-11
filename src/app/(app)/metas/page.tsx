@@ -1,5 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
-import { TRANSICOES, MESES_LABEL, mapaMetaCreditoPorTribo, buscarOverridesIndividuais, dividirMetaTriboComOverrides } from "@/lib/metas";
+import {
+  TRANSICOES,
+  MESES_LABEL,
+  mapaMetaCreditoPorTribo,
+  buscarOverridesIndividuais,
+  dividirMetaTriboComOverrides,
+  buscarProducaoPagaFirma,
+} from "@/lib/metas";
 import { salvarMeta, salvarMetaIndividual } from "./actions";
 import { Table, Th, Td, Tr } from "@/components/ui/Table";
 import { hojeBR } from "@/lib/data-br";
@@ -84,20 +91,22 @@ export default async function MetasPage({
     .limit(6);
 
   const historicoOrdenado = [...(historicoMetas ?? [])].reverse();
-  const inicioHistorico = historicoOrdenado.length
-    ? `${historicoOrdenado[0].ano}-${String(historicoOrdenado[0].mes).padStart(2, "0")}-01`
-    : null;
-  const { data: vendasHistorico } = inicioHistorico
-    ? await supabase.from("vendas").select("valor, data").gte("data", inicioHistorico)
-    : { data: [] };
-  const pagoPorMes = new Map<string, number>();
-  for (const v of vendasHistorico ?? []) {
-    const chave = v.data.slice(0, 7);
-    pagoPorMes.set(chave, (pagoPorMes.get(chave) ?? 0) + Number(v.valor));
-  }
-  const evolucao = historicoOrdenado.map((h) => {
-    const chave = `${h.ano}-${String(h.mes).padStart(2, "0")}`;
-    const realizado = pagoPorMes.get(chave) ?? 0;
+  // Achado 2026-09-11: isso somava `vendas.valor` direto — mas cada
+  // operação vira DUAS linhas em `vendas` (uma pro SDR, uma pro Closer,
+  // cada uma com o valor CHEIO), então somar sem filtrar dobra o crédito
+  // real sempre que a venda teve os dois papéis (o caso comum). Agosto
+  // mostrava ~R$9M sendo que o real era ~R$4,6M. Troca pra
+  // buscarProducaoPagaFirma (weekly_operacoes, 1 linha por operação —
+  // mesma fonte que a DRE/Mural/Visão Diária já usam).
+  const realizadoPorMes = await Promise.all(
+    historicoOrdenado.map((h) => {
+      const inicioMes = `${h.ano}-${String(h.mes).padStart(2, "0")}-01`;
+      const fimMesExclusivo = h.mes === 12 ? `${h.ano + 1}-01-01` : `${h.ano}-${String(h.mes + 1).padStart(2, "0")}-01`;
+      return buscarProducaoPagaFirma(supabase, inicioMes, fimMesExclusivo);
+    })
+  );
+  const evolucao = historicoOrdenado.map((h, i) => {
+    const realizado = realizadoPorMes[i];
     return {
       label: `${MESES_LABEL[h.mes - 1].slice(0, 3)}/${h.ano}`,
       meta: h.meta_credito_total,
