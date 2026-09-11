@@ -159,6 +159,23 @@ export default function CampanhasFeed({
           const max = Math.max(...c.participantes.map((p) => p.valor), c.metaValor ?? 0, 1);
           const comentarios = comentariosPorCampanha.get(c.id) ?? [];
 
+          // Requisito/premiação estruturados (migration 0078, pedido do
+          // Diretor, 2026-09-11) — o texto livre de requisitosMinimos/
+          // recompensa continua abaixo pra detalhe extra, mas o número/
+          // valor que de fato é checado e concedido agora aparece aqui.
+          const requisitoEstruturado = c.requisitoMinimoValor ?? c.metaValor;
+          const fmtPremio = (v: number) =>
+            c.recompensaTipo === "dinheiro"
+              ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
+              : `${v} estrela${v === 1 ? "" : "s"}`;
+          const premiacaoPartes = c.recompensaTipo
+            ? [
+                c.recompensaValorSdr > 0 ? `${fmtPremio(c.recompensaValorSdr)} (SDR)` : null,
+                c.recompensaValorCloser > 0 ? `${fmtPremio(c.recompensaValorCloser)} (Closer)` : null,
+                c.recompensaValorLider > 0 ? `${fmtPremio(c.recompensaValorLider)} (Líder)` : null,
+              ].filter((v): v is string => v !== null)
+            : [];
+
           // Duelo entre pessoas (alvo="individual") — pedido do Diretor
           // (2026-08-27): "ao invés de eu colocar fotos nos duelos, coloca
           // a foto de quem tá duelando" — vale pra 2, 3 ou mais duelistas
@@ -238,6 +255,18 @@ export default function CampanhasFeed({
                 </div>
                 {c.descricao && <p className="mt-1 text-xs text-stone-400">{c.descricao}</p>}
                 {pesosLabel && <p className="mt-1 text-[11px] text-gold">{pesosLabel}</p>}
+                {requisitoEstruturado !== null && (
+                  <p className="mt-1.5 text-[11px] text-stone-400">
+                    <span className="text-stone-600">Requisito mínimo: </span>
+                    {fmt(requisitoEstruturado)}
+                  </p>
+                )}
+                {premiacaoPartes.length > 0 && (
+                  <p className="mt-1 text-[11px] text-gold">
+                    <span className="text-stone-600">Premiação: </span>
+                    {premiacaoPartes.join(" · ")}
+                  </p>
+                )}
                 {c.requisitosMinimos && (
                   <p className="mt-1.5 text-[11px] text-stone-500">
                     <span className="text-stone-600">Requisitos mínimos: </span>
