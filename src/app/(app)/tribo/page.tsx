@@ -71,7 +71,8 @@ export default async function TriboPage({
   const { data: sdrs } = await supabase
     .from("profiles")
     .select("id, full_name")
-    .eq("tribo_id", tribo.id);
+    .eq("tribo_id", tribo.id)
+    .eq("ativo", true);
 
   const idsSdrs = (sdrs ?? []).map((s) => s.id);
 

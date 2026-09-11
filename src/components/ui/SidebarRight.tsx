@@ -130,7 +130,8 @@ export default async function SidebarRight({ userId }: { userId: string }) {
       .from("profiles")
       .select("id, full_name, rank, avatar_url")
       .eq("tribo_id", profile.tribo_id)
-      .eq("role", "sdr");
+      .eq("role", "sdr")
+      .eq("ativo", true);
 
     const idsMembros = (membros ?? []).map((m) => m.id);
     const { data: vendasMembros } =
@@ -207,6 +208,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
               .select("id, full_name, rank, avatar_url, role, tribo_id")
               .in("tribo_id", triboIds)
               .in("role", ["sdr", "closer"])
+              .eq("ativo", true)
               .order("full_name")
           : { data: [] };
 

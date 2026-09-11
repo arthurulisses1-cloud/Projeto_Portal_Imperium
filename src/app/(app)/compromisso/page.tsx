@@ -135,7 +135,8 @@ export default async function CompromissoPage() {
       .from("profiles")
       .select("id, full_name, avatar_url")
       .eq("tribo_id", profile.tribo_id)
-      .eq("role", "sdr");
+      .eq("role", "sdr")
+      .eq("ativo", true);
     logErroSupabase(`CompromissoPage: profiles sdrs da tribo (tribo_id=${profile.tribo_id})`, sdrsError);
 
     const idsTribo = [meId, ...(sdrs ?? []).map((s) => s.id)];

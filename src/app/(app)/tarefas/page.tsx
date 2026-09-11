@@ -22,6 +22,7 @@ export default async function TarefasPage() {
       .select("id, full_name")
       .eq("tribo_id", profile.tribo_id)
       .eq("role", "sdr")
+      .eq("ativo", true)
       .order("full_name");
     liderados = data ?? [];
   } else if (profile.role === "lider") {
@@ -32,7 +33,7 @@ export default async function TarefasPage() {
       const closerIds = (tribos ?? []).map((t) => t.closer_id).filter((x): x is string => !!x);
       const [{ data: sdrs }, { data: closers }] = await Promise.all([
         idsTribos.length > 0
-          ? supabase.from("profiles").select("id, full_name").in("tribo_id", idsTribos).eq("role", "sdr")
+          ? supabase.from("profiles").select("id, full_name").in("tribo_id", idsTribos).eq("role", "sdr").eq("ativo", true)
           : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
         closerIds.length > 0
           ? supabase.from("profiles").select("id, full_name").in("id", closerIds)

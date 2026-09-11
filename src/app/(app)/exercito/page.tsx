@@ -61,6 +61,7 @@ export default async function ExercitoPage() {
         .select("id, full_name, tribo_id")
         .in("tribo_id", triboIds)
         .eq("role", "sdr")
+        .eq("ativo", true)
     : { data: [], error: null };
   logErroSupabase(`ExercitoPage: profiles sdrs (exercito=${exercito.id})`, sdrsError);
 
