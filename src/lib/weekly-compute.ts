@@ -86,14 +86,24 @@ export function isDiaUtil(dataISO: string): boolean {
   return dow >= 1 && dow <= 5;
 }
 
+// Fórmula fechada em vez de iterar dia a dia — achado 2026-09-16: enquanto
+// o usuário digita o ano no filtro "Personalizado" (Weekly de Receita), o
+// <input type="date"> dispara onChange a cada dígito com uma data válida
+// mas às vezes absurda no meio da digitação (ex: ano "0002"), e um loop
+// dia-a-dia entre 0002 e o ano atual trava a aba (mais de 700 mil
+// iterações a cada tecla). Contagem de dias úteis por matemática direta é
+// O(1) e imune a esse caso, sem mudar o resultado pro caso normal.
 export function utilDaysInRange(from: string, to: string): number {
-  let n = 0;
-  const cur = new Date(from + "T12:00:00");
+  const start = new Date(from + "T12:00:00");
   const end = new Date(to + "T12:00:00");
-  while (cur <= end) {
-    const dow = cur.getDay();
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return 0;
+  const totalDias = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+  const semanasCheias = Math.floor(totalDias / 7);
+  let n = semanasCheias * 5;
+  let dow = start.getDay();
+  for (let i = 0; i < totalDias % 7; i++) {
     if (dow >= 1 && dow <= 5) n++;
-    cur.setDate(cur.getDate() + 1);
+    dow = (dow + 1) % 7;
   }
   return n;
 }

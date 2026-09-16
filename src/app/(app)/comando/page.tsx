@@ -158,6 +158,27 @@ export default async function ComandoPage() {
     (r) => r.proxima_revisao && r.proxima_revisao <= hoje
   );
 
+  // Conversão entre etapas — mesma leitura "onde está o gargalo" que
+  // Weekly de Receita/Minha Produção já mostram pro líder/investidor, só
+  // que direto aqui no Comando Geral (pedido do Diretor, 2026-09-16: "quero
+  // que coloque aqui... igual tem [o painel de] minha produção... só que
+  // adaptado a minha realidade onde posso ver tudo"). Mesmos 4 pares —
+  // Tentativas→Alô fica de fora de propósito, igual no painel Weekly.
+  const CONVERSOES: { label: string; de: (typeof FUNNEL_STAGES)[number]; para: (typeof FUNNEL_STAGES)[number] }[] = [
+    { label: "Alô → Conexão", de: "alos", para: "conexoes" },
+    { label: "Conexão → Entrevista", de: "conexoes", para: "entrevistas" },
+    { label: "Entrevista → Assinatura", de: "entrevistas", para: "assinaturas" },
+    { label: "Assinatura → Pago", de: "assinaturas", para: "pagos" },
+  ];
+  const conversaoFirma = CONVERSOES.map((c) => {
+    const denom = funilColetivo[c.de].realizado;
+    const numer = funilColetivo[c.para].realizado;
+    const realizada = denom > 0 ? numer / denom : null;
+    const meta = taxasFirma.get(`${c.de}_${c.para}`) ?? null;
+    const dif = realizada !== null && meta !== null ? realizada - meta : null;
+    return { ...c, realizada, meta, dif };
+  });
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       <div>
@@ -236,30 +257,68 @@ export default async function ComandoPage() {
         </Card>
       )}
 
-      <Card title="Funil coletivo do mês — firma inteira">
-        <Table>
-          <thead>
-            <tr>
-              <Th>Etapa</Th>
-              <Th align="right">Realizado</Th>
-              <Th align="right">Meta</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {FUNNEL_STAGES.map((etapa) => (
-              <Tr key={etapa}>
-                <Td className="text-stone-300">{FUNNEL_LABELS[etapa]}</Td>
-                <Td align="right" className="text-stone-100">
-                  {funilColetivo[etapa].realizado}
-                </Td>
-                <Td align="right" className="text-stone-500">
-                  {metaFunilFirma[etapa] !== null ? Math.round(metaFunilFirma[etapa]!) : "—"}
-                </Td>
-              </Tr>
-            ))}
-          </tbody>
-        </Table>
-      </Card>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card title="Volume por etapa — firma inteira">
+          <Table>
+            <thead>
+              <tr>
+                <Th>Etapa</Th>
+                <Th align="right">Realizado</Th>
+                <Th align="right">Meta</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {FUNNEL_STAGES.map((etapa) => (
+                <Tr key={etapa}>
+                  <Td className="text-stone-300">{FUNNEL_LABELS[etapa]}</Td>
+                  <Td align="right" className="text-stone-100">
+                    {funilColetivo[etapa].realizado}
+                  </Td>
+                  <Td align="right" className="text-stone-500">
+                    {metaFunilFirma[etapa] !== null ? Math.round(metaFunilFirma[etapa]!) : "—"}
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
+
+        <Card title="Conversão entre etapas — onde está o gargalo">
+          <Table>
+            <thead>
+              <tr>
+                <Th>Etapa</Th>
+                <Th align="right">Realizada</Th>
+                <Th align="right">Meta</Th>
+                <Th align="right">Dif.</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {conversaoFirma.map((c) => (
+                <Tr key={c.label}>
+                  <Td className="text-stone-300">{c.label}</Td>
+                  <Td align="right" className="text-stone-100">
+                    {c.realizada !== null ? `${(c.realizada * 100).toFixed(0)}%` : "—"}
+                  </Td>
+                  <Td align="right" className="text-stone-500">
+                    {c.meta !== null ? `${(c.meta * 100).toFixed(0)}%` : "—"}
+                  </Td>
+                  <Td align="right">
+                    {c.dif !== null ? (
+                      <span className={Math.abs(c.dif) < 0.03 ? "text-stone-500" : c.dif > 0 ? "text-success-bright" : "text-wine-bright"}>
+                        {c.dif > 0 ? "+" : ""}
+                        {(c.dif * 100).toFixed(0)}%
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </Td>
+                </Tr>
+              ))}
+            </tbody>
+          </Table>
+        </Card>
+      </div>
 
       {/* Detalhe por Exército — colapsado por padrão, senão a página fica
           gigante com todo mundo da firma aberto de uma vez. */}
