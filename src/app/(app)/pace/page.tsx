@@ -203,19 +203,27 @@ export default async function PacePage({
 
   // Acumulado = soma corrida de (realizado - meta) dia a dia, mesma
   // fórmula da planilha — computado aqui pra não guardar estado redundante
-  // em buscarPaceMes.
+  // em buscarPaceMes. Também soma Realizado/Meta do mês inteiro por campo,
+  // pra linha de Total no fim da tabela (pedido do Diretor, 2026-09-16:
+  // "na última linha do pace coloque o total... total realizado x meta
+  // total e conversão média x meta também na tabela").
   const acumulado: Record<CampoAcumulavel, number> = {
     tentativas: 0, alos: 0, conexoes: 0, entrevistas: 0,
     assinadosQtd: 0, assinadosValor: 0, pagosQtd: 0, pagosValor: 0,
   };
+  const totalRealizado: Record<CampoAcumulavel, number> = { ...acumulado };
+  const totalMeta: Record<CampoAcumulavel, number> = { ...acumulado };
   const linhas = pace.dias.map((dia) => {
     const acc: Record<CampoAcumulavel, number> = { ...acumulado };
     for (const campo of CAMPOS_ACUMULAVEIS) {
       acumulado[campo] += dia[campo].realizado - dia[campo].meta;
       acc[campo] = acumulado[campo];
+      totalRealizado[campo] += dia[campo].realizado;
+      totalMeta[campo] += dia[campo].meta;
     }
     return { dia, acc };
   });
+  const tkmTotal = { realizado: pace.realizado.tkm, meta: pace.meta.tkm };
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-6 px-6 py-8">
@@ -344,6 +352,9 @@ export default async function PacePage({
                 <LinhaDia key={dia.data} dia={dia} acc={acc} />
               ))}
             </tbody>
+            <tfoot>
+              <LinhaTotal totalRealizado={totalRealizado} totalMeta={totalMeta} acumulado={acumulado} tkm={tkmTotal} />
+            </tfoot>
           </table>
         </div>
       </Card>
@@ -425,6 +436,46 @@ function LinhaDia({ dia, acc }: { dia: PaceDia; acc: Record<CampoAcumulavel, num
       <Celula>{moeda(dia.tkm.realizado)}</Celula>
       <Celula mut>{moeda(dia.tkm.meta)}</Celula>
       <Celula mut>{pctDia(dia.tkm.realizado, dia.tkm.meta)}</Celula>
+    </tr>
+  );
+}
+
+// Linha de total do mês — pedido do Diretor, 2026-09-16: "na última
+// linha do pace coloque o total... total realizado x meta total e
+// conversão média x meta também na tabela, não só lá em cima". Mesma
+// estrutura de colunas de LinhaDia (reaproveita GrupoCelulas), só que
+// com a soma do mês inteiro em vez do dia — "Acum." aqui é o mesmo
+// número que a última linha de Acumulado já mostrava, só que junto do
+// Realizado/Meta/Atingimento% totais, sem precisar rolar até o fim.
+function LinhaTotal({
+  totalRealizado,
+  totalMeta,
+  acumulado,
+  tkm,
+}: {
+  totalRealizado: Record<CampoAcumulavel, number>;
+  totalMeta: Record<CampoAcumulavel, number>;
+  acumulado: Record<CampoAcumulavel, number>;
+  tkm: { realizado: number; meta: number };
+}) {
+  return (
+    <tr className="border-t-2 border-gold/40 bg-imperium-surface font-medium">
+      <td className="sticky left-0 z-10 bg-imperium-surface px-2 py-1.5 text-gold-bright" colSpan={3}>
+        Total do mês
+      </td>
+      {/* Mesma ordem de colunas de LinhaDia — Valor antes de Qtd em
+          Assinados/Pagos, senão a linha de total desalinha com o cabeçalho. */}
+      <GrupoCelulas par={{ realizado: totalRealizado.tentativas, meta: totalMeta.tentativas }} acumulado={acumulado.tentativas} />
+      <GrupoCelulas par={{ realizado: totalRealizado.alos, meta: totalMeta.alos }} acumulado={acumulado.alos} />
+      <GrupoCelulas par={{ realizado: totalRealizado.conexoes, meta: totalMeta.conexoes }} acumulado={acumulado.conexoes} />
+      <GrupoCelulas par={{ realizado: totalRealizado.entrevistas, meta: totalMeta.entrevistas }} acumulado={acumulado.entrevistas} />
+      <GrupoCelulas par={{ realizado: totalRealizado.assinadosValor, meta: totalMeta.assinadosValor }} acumulado={acumulado.assinadosValor} moedaFmt />
+      <GrupoCelulas par={{ realizado: totalRealizado.assinadosQtd, meta: totalMeta.assinadosQtd }} acumulado={acumulado.assinadosQtd} />
+      <GrupoCelulas par={{ realizado: totalRealizado.pagosValor, meta: totalMeta.pagosValor }} acumulado={acumulado.pagosValor} moedaFmt />
+      <GrupoCelulas par={{ realizado: totalRealizado.pagosQtd, meta: totalMeta.pagosQtd }} acumulado={acumulado.pagosQtd} />
+      <Celula>{moeda(tkm.realizado)}</Celula>
+      <Celula mut>{moeda(tkm.meta)}</Celula>
+      <Celula mut>{pctDia(tkm.realizado, tkm.meta)}</Celula>
     </tr>
   );
 }
