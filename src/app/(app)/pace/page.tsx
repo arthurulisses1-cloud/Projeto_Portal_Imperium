@@ -339,7 +339,7 @@ export default async function PacePage({
             </thead>
             <tbody>
               {linhas.map(({ dia, acc }) => (
-                <LinhaDia key={dia.data} dia={dia} acc={acc} />
+                <LinhaDia key={dia.data} dia={dia} acc={acc} hoje={hoje} />
               ))}
             </tbody>
             <tfoot>
@@ -472,10 +472,17 @@ function GrupoCelulas({
   );
 }
 
-function LinhaDia({ dia, acc }: { dia: PaceDia; acc: Record<CampoAcumulavel, number> }) {
+function LinhaDia({ dia, acc, hoje }: { dia: PaceDia; acc: Record<CampoAcumulavel, number>; hoje: string }) {
+  // Destaca a linha do dia atual — pedido do Diretor, 2026-09-18: "deixe a
+  // linha toda pintada ou com algum destaque pra ser perceptível qual o
+  // dia" — sem isso é fácil se perder rolando a tabela do mês inteiro.
+  const ehHoje = dia.data === hoje;
   return (
-    <tr className={`border-b border-imperium-line/50 ${!dia.util ? "opacity-40" : ""}`}>
-      <td className="sticky left-0 z-10 bg-imperium-bg px-2 py-1 capitalize text-stone-300">{dia.diaSemana.replace("-feira", "")}</td>
+    <tr className={`border-b border-imperium-line/50 ${!dia.util ? "opacity-40" : ""} ${ehHoje ? "bg-gold/10 ring-1 ring-inset ring-gold/40" : ""}`}>
+      <td className={`sticky left-0 z-10 px-2 py-1 capitalize text-stone-300 ${ehHoje ? "bg-imperium-surface font-semibold text-gold-bright" : "bg-imperium-bg"}`}>
+        {dia.diaSemana.replace("-feira", "")}
+        {ehHoje && <span className="ml-1 text-[10px] uppercase tracking-wide text-gold">hoje</span>}
+      </td>
       <td className="px-2 py-1 text-stone-400">{new Date(dia.data + "T00:00:00").toLocaleDateString("pt-BR")}</td>
       <td className="px-2 py-1 text-stone-500">{dia.util ? "Útil" : "—"}</td>
       <GrupoCelulas par={dia.tentativas} acumulado={acc.tentativas} />

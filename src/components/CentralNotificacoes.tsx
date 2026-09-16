@@ -3,11 +3,64 @@ import { IconLaurel } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
 import { calcularThreshold, buscarProducaoMesParaMarcos } from "@/lib/marcos";
 import { buscarMetaComTaxas, calcularFunilMeta, buscarRealizadoDia, type EscopoTime } from "@/lib/metas";
+import { resolverIdsDoEscopo } from "@/lib/pace";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 import { hojeBR, paraDataUTC, ehFimDeSemana, ultimoDiaUtilAntes } from "@/lib/data-br";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+}
+
+type StatusTime = {
+  nivel: "exercito" | "tribo";
+  nome: string;
+  entrevistas: number;
+  entrevistasMeta: number | null;
+  assinaturas: number;
+  assinaturasMeta: number | null;
+  pagos: number;
+  pagosMeta: number | null;
+};
+
+// "X está fazendo..." por Exército/Tribo — pedido do Diretor, 2026-09-18.
+// Cada time usa a MESMA fórmula do bloco "Até agora, seu time está
+// fazendo" (buscarRealizadoDia + calcularFunilMeta/diasNoMes), só que
+// escopado a cada Exército/Tribo em vez da firma inteira.
+async function buscarStatusPorTime(supabase: SupabaseClient, hojeStr: string, diasNoMes: number): Promise<StatusTime[]> {
+  const [{ data: exercitos }, { data: tribos }] = await Promise.all([
+    supabase.from("exercitos").select("id, nome").order("nome"),
+    supabase.from("tribos").select("id, nome, exercito_id"),
+  ]);
+
+  async function statusDoEscopo(nivel: "exercito" | "tribo", nome: string, escopoTime: EscopoTime): Promise<StatusTime> {
+    const ids = await resolverIdsDoEscopo(supabase, escopoTime);
+    const [{ metaCredito, metaTicketMedio, taxas }, realizado] = await Promise.all([
+      buscarMetaComTaxas(supabase, escopoTime),
+      buscarRealizadoDia(supabase, escopoTime, ids, hojeStr),
+    ]);
+    const cascata = calcularFunilMeta(metaCredito, metaTicketMedio, taxas);
+    const metaDia = (v: number | null) => (v !== null ? Math.round(v / diasNoMes) : null);
+    return {
+      nivel,
+      nome,
+      entrevistas: realizado.entrevistas,
+      entrevistasMeta: metaDia(cascata.entrevistas),
+      assinaturas: realizado.assinaturas,
+      assinaturasMeta: metaDia(cascata.assinaturas),
+      pagos: realizado.pagos,
+      pagosMeta: metaDia(cascata.pagos),
+    };
+  }
+
+  const resultado: StatusTime[] = [];
+  for (const e of exercitos ?? []) {
+    resultado.push(await statusDoEscopo("exercito", e.nome, { tipo: "exercito", exercitoId: e.id }));
+    for (const t of (tribos ?? []).filter((t) => t.exercito_id === e.id)) {
+      resultado.push(await statusDoEscopo("tribo", t.nome, { tipo: "tribo", triboId: t.id }));
+    }
+  }
+  return resultado;
 }
 
 // Antes era a aba "/central" — agora embutido direto no Mural, escopado por
@@ -229,6 +282,12 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
   // lançado ainda — vira um call-to-action, igual o card antigo fazia).
   const temCompromissoPraMostrar = pessoal || mostrarCompromissoTime;
 
+  // "Por time" — pedido do Diretor, 2026-09-18: mesma leitura de "Até agora
+  // seu time está fazendo", só que quebrada por Exército/Tribo, só na visão
+  // do Diretor (escopo=null=firma inteira; Líder/Closer/SDR já têm o
+  // próprio recorte acima, não precisam ver o detalhe dos outros times).
+  const statusPorTime = !escopo ? await buscarStatusPorTime(supabase, hojeStr, diasNoMes) : [];
+
   if (
     naoLancaram.length === 0 &&
     bateuMarco.length === 0 &&
@@ -248,6 +307,14 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
           <span className="text-[10px] transition group-open:rotate-180">▾</span>
         </span>
       </summary>
+      <div className="mb-4">
+        <a
+          href="/pace"
+          className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 px-3 py-1 text-xs text-gold hover:bg-gold/10"
+        >
+          Ver pace →
+        </a>
+      </div>
       <div className="space-y-5">
         {temCompromissoPraMostrar && (
           <div>
@@ -328,6 +395,38 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
               ))}
             </ul>
           </div>
+        )}
+
+        {statusPorTime.length > 0 && (
+          <details className="group/times">
+            <summary className="mb-2 flex cursor-pointer list-none items-center gap-1.5 text-xs uppercase tracking-wide text-stone-500 hover:text-gold [&::-webkit-details-marker]:hidden">
+              Por time
+              <span className="text-[10px] normal-case text-stone-600 transition group-open/times:rotate-180">▾</span>
+            </summary>
+            <ul className="space-y-1">
+              {statusPorTime.map((t) => (
+                <li
+                  key={t.nome}
+                  className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-0.5 rounded px-2 py-1 text-sm ${
+                    t.nivel === "exercito" ? "mt-1.5 bg-imperium-bg/40 font-medium text-stone-100 first:mt-0" : "pl-5 text-stone-300"
+                  }`}
+                >
+                  <span>{t.nome} está fazendo</span>
+                  <span className="flex gap-3 text-xs text-stone-400">
+                    <span>
+                      Entrev. <span className="text-stone-200">{t.entrevistas}/{t.entrevistasMeta ?? "—"}</span>
+                    </span>
+                    <span>
+                      Assin. <span className="text-stone-200">{t.assinaturas}/{t.assinaturasMeta ?? "—"}</span>
+                    </span>
+                    <span>
+                      Pagos <span className="text-stone-200">{t.pagos}/{t.pagosMeta ?? "—"}</span>
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
 
         {temAlgumaMeta && (
