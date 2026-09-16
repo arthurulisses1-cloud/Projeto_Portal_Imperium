@@ -13,7 +13,7 @@ export default async function LeadsPage() {
   if (!viewer) return null;
   const meRole = viewer.effectiveRole;
 
-  if (!["closer", "lider", "diretor"].includes(meRole)) {
+  if (!["closer", "lider", "diretor", "analista"].includes(meRole)) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>

@@ -41,7 +41,7 @@ export default async function TarefasPage() {
       ]);
       liderados = [...(closers ?? []), ...(sdrs ?? [])].sort((a, b) => a.full_name.localeCompare(b.full_name));
     }
-  } else if (profile.role === "diretor") {
+  } else if (profile.role === "diretor" || profile.role === "analista") {
     const { data } = await supabase.from("profiles").select("id, full_name").in("role", ["sdr", "closer", "lider"]).order("full_name");
     liderados = data ?? [];
   }

@@ -66,7 +66,7 @@ export default async function CompromissosPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "diretor") redirect("/");
+  if (profile?.role !== "diretor" && profile?.role !== "analista") redirect("/");
 
   const hoje = hojeBR();
   const finalDeSemana = ehFimDeSemana(hoje);

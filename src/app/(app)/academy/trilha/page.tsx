@@ -11,7 +11,7 @@ export default async function TrilhaFormacaoPage() {
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase.from("profiles").select("rank, role").eq("id", user.id).single();
-  if (profile?.role === "diretor") redirect("/academy");
+  if (profile?.role === "diretor" || profile?.role === "analista") redirect("/academy");
 
   const trilhas = await buscarTrilhas(supabase);
   const minhaTrilha = trilhas.find((t) => t.rank === profile?.rank);

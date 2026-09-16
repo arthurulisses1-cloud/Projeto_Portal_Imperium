@@ -162,7 +162,7 @@ export default async function VisaoDiariaPage({ searchParams }: { searchParams: 
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "diretor" && profile?.role !== "lider") redirect("/");
+  if (profile?.role !== "diretor" && profile?.role !== "lider" && profile?.role !== "analista") redirect("/");
 
   const periodo: Periodo = (["hoje", "semana", "mes"] as const).includes(searchParams.periodo as Periodo)
     ? (searchParams.periodo as Periodo)
@@ -224,9 +224,9 @@ export default async function VisaoDiariaPage({ searchParams }: { searchParams: 
     realizadosSemanaTribos,
     crestsTribos,
   ] = await Promise.all([
-    profile.role === "diretor" ? buscarMetaFirma(supabase) : Promise.resolve(0),
-    profile.role === "diretor" ? buscarProducaoPagaFirma(supabase, inicioMes, hojeFimExclusivo) : Promise.resolve(0),
-    profile.role === "diretor" && periodo === "semana" ? buscarProducaoPagaFirma(supabase, inicioSemana, hojeFimExclusivo) : Promise.resolve(0),
+    (profile.role === "diretor" || profile.role === "analista") ? buscarMetaFirma(supabase) : Promise.resolve(0),
+    (profile.role === "diretor" || profile.role === "analista") ? buscarProducaoPagaFirma(supabase, inicioMes, hojeFimExclusivo) : Promise.resolve(0),
+    (profile.role === "diretor" || profile.role === "analista") && periodo === "semana" ? buscarProducaoPagaFirma(supabase, inicioSemana, hojeFimExclusivo) : Promise.resolve(0),
     Promise.all(exercitosBase.map((e) => buscarMetaExercito(supabase, e.id))),
     Promise.all(exercitosBase.map((e) => buscarProducaoPagaExercito(supabase, e.id, inicioMes, hojeFimExclusivo))),
     periodo === "semana"
@@ -303,18 +303,18 @@ export default async function VisaoDiariaPage({ searchParams }: { searchParams: 
             🏛️
           </div>
           <div>
-            <h2 className="font-display text-lg text-gold-bright">{profile.role === "diretor" ? "Império — Geral" : "Meu Exército"}</h2>
+            <h2 className="font-display text-lg text-gold-bright">{(profile.role === "diretor" || profile.role === "analista") ? "Império — Geral" : "Meu Exército"}</h2>
             <p className="text-[11px] text-stone-500">{TITULO_PERIODO[periodo]}</p>
           </div>
         </div>
-        {profile.role === "diretor" && (
+        {(profile.role === "diretor" || profile.role === "analista") && (
           <CardCredito
             titulo="Império"
             mes={{ realizado: realizadoMesFirma, meta: metaMensalFirma }}
             semana={periodo === "semana" ? { realizado: realizadoSemanaFirma, meta: metaMensalFirma * fatorSemana } : null}
           />
         )}
-        {profile.role === "diretor" && (
+        {(profile.role === "diretor" || profile.role === "analista") && (
           <PipelineFunil
             periodo={periodo}
             atual={funilDe()}

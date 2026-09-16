@@ -14,7 +14,7 @@ export default async function WeeklyPage() {
   if (!user) return null;
 
   const { data: meProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (!meProfile || !["lider", "diretor", "investidor"].includes(meProfile.role)) {
+  if (!meProfile || !["lider", "diretor", "investidor", "analista"].includes(meProfile.role)) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>

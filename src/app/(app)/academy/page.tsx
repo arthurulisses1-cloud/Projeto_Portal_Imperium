@@ -11,7 +11,7 @@ export default async function AcademyPage() {
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "diretor") redirect("/academy/trilha");
+  if (profile?.role !== "diretor" && profile?.role !== "analista") redirect("/academy/trilha");
 
   const trilhas = await buscarTrilhas(supabase);
   const todasAulas = await buscarTodasAulas(supabase);

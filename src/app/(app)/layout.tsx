@@ -30,40 +30,53 @@ type NavConfigEntry =
 // Visão Geral da Firma saiu (a Weekly de Receita cobre o mesmo terreno);
 // Campanhas virou um atalho na lateral do Mural em vez de aba fixa.
 const NAV_ITEMS: NavConfigEntry[] = [
-  { type: "link", href: "/", label: "Mural", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
-  { type: "link", href: "/compromissos", label: "Compromissos", roles: ["diretor"] },
+  { type: "link", href: "/", label: "Mural", roles: ["sdr", "closer", "lider", "diretor", "investidor", "analista"] },
   { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer"] },
-  { type: "link", href: "/tarefas", label: "Tarefas", roles: ["sdr", "closer", "lider", "diretor"] },
-  { type: "link", href: "/leads", label: "Meus Leads", roles: ["closer", "lider", "diretor"] },
+  { type: "link", href: "/tarefas", label: "Tarefas", roles: ["sdr", "closer", "lider", "diretor", "analista"] },
+  { type: "link", href: "/leads", label: "Meus Leads", roles: ["closer", "lider", "diretor", "analista"] },
   { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
   { type: "link", href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
   { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
   { type: "link", href: "/minha-producao", label: "Minha Produção", roles: ["lider"] },
-  { type: "link", href: "/pace", label: "Pace", roles: ["sdr", "closer", "lider", "diretor"] },
   { type: "link", href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider"] },
   {
     type: "group",
-    label: "Resultados",
-    roles: ["sdr", "closer", "lider", "diretor", "investidor"],
+    label: "Legado",
+    roles: ["sdr", "closer", "lider", "diretor", "investidor", "analista"],
     items: [
       { href: "/ranking", label: "Ranking" },
       { href: "/recordes", label: "Recordes" },
     ],
   },
-  { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor", "investidor"] },
+  { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor", "investidor", "analista"] },
   { type: "link", href: "/parceiros", label: "Parceiros", roles: ["closer", "lider"] },
-  { type: "link", href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor", "investidor"] },
-  { type: "link", href: "/visao-diaria", label: "Visão Diária", roles: ["lider", "diretor"] },
   { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
   {
     type: "group",
     label: "Imperium Academy",
-    roles: ["sdr", "closer", "lider", "diretor"],
+    roles: ["sdr", "closer", "lider", "diretor", "analista"],
     items: [
       { href: "/academy", label: "Academy Geral" },
       { href: "/academy/instrutor", label: "Aulas para Ministrar" },
       { href: "/academy/trilha", label: "Minha Trilha" },
+    ],
+  },
+  // Aba mãe "Dados" — pedido do Diretor, 2026-09-18: Pace/Compromissos/
+  // Weekly/Visão Diária/Metas Mensais eram links soltos, viraram um grupo
+  // só (mesmo espírito da reorganização de Pessoas/Resultados de
+  // 2026-09-15) — cada item mantém exatamente o mesmo recorte de papel
+  // que já tinha como link solto.
+  {
+    type: "group",
+    label: "Dados",
+    roles: ["sdr", "closer", "lider", "diretor", "investidor", "analista"],
+    items: [
+      { href: "/pace", label: "Pace", roles: ["sdr", "closer", "lider", "diretor", "analista"] },
+      { href: "/compromissos", label: "Compromissos", roles: ["diretor", "analista"] },
+      { href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor", "investidor", "analista"] },
+      { href: "/visao-diaria", label: "Visão Diária", roles: ["lider", "diretor", "analista"] },
+      { href: "/metas", label: "Metas Mensais", roles: ["diretor", "analista"] },
     ],
   },
   {
@@ -89,7 +102,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
       { href: "/gestao", label: "Gestão de Pessoas", roles: ["diretor"] },
     ],
   },
-  { type: "link", href: "/metas", label: "Metas Mensais", roles: ["diretor"] },
   {
     type: "group",
     label: "Validações",

@@ -20,7 +20,7 @@ export async function resolverEscopo(supabase: SupabaseClient, viewerId: string,
   // liberado a pedido, 2026-08-22) — mas nunca aparece como "pessoa" nos
   // agregados de ninguém, porque as tools já filtram por role sdr/closer/
   // lider (ver pessoasNoEscopo em tools.ts), igual o Diretor já não aparecia.
-  if (role === "diretor" || role === "investidor") return { idsPermitidos: null, role, viewerId };
+  if (role === "diretor" || role === "investidor" || role === "analista") return { idsPermitidos: null, role, viewerId };
 
   if (role === "sdr") return { idsPermitidos: [viewerId], role, viewerId };
 

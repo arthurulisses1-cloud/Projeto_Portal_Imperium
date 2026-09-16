@@ -80,7 +80,7 @@ export default async function PacePage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   const { data: meuPerfil } = await supabase.from("profiles").select("role, tribo_id, full_name").eq("id", user.id).single();
-  if (!meuPerfil || !["sdr", "closer", "lider", "diretor"].includes(meuPerfil.role)) redirect("/");
+  if (!meuPerfil || !["sdr", "closer", "lider", "diretor", "analista"].includes(meuPerfil.role)) redirect("/");
 
   const [{ data: exercitos }, { data: tribos }] = await Promise.all([
     supabase.from("exercitos").select("id, nome, legado_id").order("nome"),

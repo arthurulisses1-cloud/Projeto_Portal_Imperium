@@ -23,7 +23,7 @@ export default async function ForecastPage({
   // não reconhece papel "sdr", então os controles continuam bloqueados.
   const sdrComForecastLiberado = meRole === "sdr" && SDR_FORECAST_LIBERADO.has(meId);
 
-  if (!["closer", "lider", "diretor", "investidor"].includes(meRole) && !sdrComForecastLiberado) {
+  if (!["closer", "lider", "diretor", "investidor", "analista"].includes(meRole) && !sdrComForecastLiberado) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>
@@ -201,7 +201,7 @@ export default async function ForecastPage({
     .sort()
     .map((chave) => {
       const [exercitoNome, triboNome] = chave.split("|");
-      return { chave, label: meRole === "diretor" ? `${exercitoNome} · ${triboNome}` : triboNome };
+      return { chave, label: meRole === "diretor" || meRole === "analista" ? `${exercitoNome} · ${triboNome}` : triboNome };
     });
 
   const escopoBase =

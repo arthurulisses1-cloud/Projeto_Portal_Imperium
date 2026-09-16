@@ -159,7 +159,7 @@ export default async function MuralPage({
   // que SDR/Closer/Líder já tinham no Mural, só que no nível da firma inteira.
   let metaFirma = 0;
   let pagoFirmaMes = 0;
-  if (meRole === "diretor" || meRole === "investidor") {
+  if (meRole === "diretor" || meRole === "investidor" || meRole === "analista") {
     [metaFirma, pagoFirmaMes] = await Promise.all([
       buscarMetaFirma(supabase, { ano, mes }),
       buscarProducaoPagaFirma(supabase, inicioMes, fimMesExclusivo),
@@ -174,7 +174,7 @@ export default async function MuralPage({
   // definido). Diretor vê a firma, Closer a própria Tribo, SDR a própria
   // produção — Líder fica de fora por enquanto (não foi pedido).
   let painelFinanceiro: PainelFinanceiro | null = null;
-  if (meRole === "diretor" || meRole === "investidor") {
+  if (meRole === "diretor" || meRole === "investidor" || meRole === "analista") {
     const { data: opsMes } = await supabase
       .from("weekly_operacoes")
       .select("valor, status, status_manual")
@@ -300,11 +300,11 @@ export default async function MuralPage({
         </div>
       </div>
 
-      {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr") && (
+      {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
         <TarefasMuralWidget userId={meId} />
       )}
 
-      {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr") && (
+      {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
         <CentralNotificacoes escopo={escopoCentral} viewerId={meId} />
       )}
 
@@ -333,7 +333,7 @@ export default async function MuralPage({
         </Card>
       )}
 
-      {(meRole === "diretor" || meRole === "investidor") && metaFirma > 0 && (
+      {(meRole === "diretor" || meRole === "investidor" || meRole === "analista") && metaFirma > 0 && (
         <Card title={`Meta ${mesEhAtual ? "do mês" : `de ${MESES[mes - 1]}/${ano}`} · Firma`}>
           <BarraMeta realizado={pagoFirmaMes} meta={metaFirma} mesFechado={!mesEhAtual} />
         </Card>
