@@ -6,7 +6,7 @@ import { RANK_LABELS, ROLE_LABELS } from "@/lib/labels";
 import { RANK_ORDER } from "@/lib/carreira";
 import { IconCheck } from "./icons";
 
-const ROLES = ["sdr", "closer", "lider"] as const;
+const ROLES = ["sdr", "closer", "lider", "analista"] as const;
 
 type Tribo = { id: string; nome: string; exercitoNome: string | null };
 
@@ -82,28 +82,32 @@ export default function CriarUsuarioForm({ tribos }: { tribos: Tribo[] }) {
             ))}
           </select>
         </div>
-        <div>
-          <label className="mb-1 block text-[10px] uppercase text-stone-500">Cargo inicial</label>
-          <select value={rank} onChange={(e) => setRank(e.target.value)} className="input-imp text-sm">
-            {RANK_ORDER.map((r) => (
-              <option key={r} value={r}>
-                {RANK_LABELS[r] ?? r}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="sm:col-span-2">
-          <label className="mb-1 block text-[10px] uppercase text-stone-500">Tribo (opcional)</label>
-          <select value={triboId} onChange={(e) => setTriboId(e.target.value)} className="input-imp text-sm">
-            <option value="">— sem Tribo —</option>
-            {tribos.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.exercitoNome ? `${t.exercitoNome} · ` : ""}
-                {t.nome}
-              </option>
-            ))}
-          </select>
-        </div>
+        {role !== "analista" && (
+          <div>
+            <label className="mb-1 block text-[10px] uppercase text-stone-500">Cargo inicial</label>
+            <select value={rank} onChange={(e) => setRank(e.target.value)} className="input-imp text-sm">
+              {RANK_ORDER.map((r) => (
+                <option key={r} value={r}>
+                  {RANK_LABELS[r] ?? r}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {role !== "analista" && (
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-[10px] uppercase text-stone-500">Tribo (opcional)</label>
+            <select value={triboId} onChange={(e) => setTriboId(e.target.value)} className="input-imp text-sm">
+              <option value="">— sem Tribo —</option>
+              {tribos.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.exercitoNome ? `${t.exercitoNome} · ` : ""}
+                  {t.nome}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <button
