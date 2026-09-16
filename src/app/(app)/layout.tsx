@@ -40,7 +40,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
   { type: "link", href: "/minha-producao", label: "Minha Produção", roles: ["lider"] },
   { type: "link", href: "/comando", label: "Comando Geral", roles: ["diretor"] },
-  { type: "link", href: "/pace", label: "Pace", roles: ["diretor"] },
+  { type: "link", href: "/pace", label: "Pace", roles: ["sdr", "closer", "lider", "diretor"] },
   { type: "link", href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider"] },
   {

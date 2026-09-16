@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { buscarPaceMes, type PaceDia } from "@/lib/pace";
+import type { EscopoTime } from "@/lib/metas";
 import Card from "@/components/ui/Card";
 
 const MESES = [
@@ -38,16 +39,137 @@ function LinhaResumo({ label, valor, percentual, formato }: { label: string; val
 const CAMPOS_ACUMULAVEIS = ["tentativas", "alos", "conexoes", "entrevistas", "assinadosQtd", "assinadosValor", "pagosQtd", "pagosValor"] as const;
 type CampoAcumulavel = (typeof CAMPOS_ACUMULAVEIS)[number];
 
-export default async function PacePage() {
+type Pill = { label: string; href: string; ativo: boolean };
+
+export default async function PacePage({
+  searchParams,
+}: {
+  searchParams: { exercito?: string; tribo?: string; pessoa?: string };
+}) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  const { data: meuPerfil } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (meuPerfil?.role !== "diretor") redirect("/");
+  const { data: meuPerfil } = await supabase.from("profiles").select("role, tribo_id, full_name").eq("id", user.id).single();
+  if (!meuPerfil || !["sdr", "closer", "lider", "diretor"].includes(meuPerfil.role)) redirect("/");
 
-  const pace = await buscarPaceMes(supabase);
+  const [{ data: exercitos }, { data: tribos }] = await Promise.all([
+    supabase.from("exercitos").select("id, nome, legado_id").order("nome"),
+    supabase.from("tribos").select("id, nome, exercito_id, closer:profiles!tribos_closer_id_fkey(id, full_name)").order("nome"),
+  ]);
+  const nomeExercitoPorId = new Map((exercitos ?? []).map((e) => [e.id, e.nome]));
+  const nomeTriboPorId = new Map((tribos ?? []).map((t) => [t.id, t.nome]));
+
+  // Resolve o escopo pedido (searchParams), validando permissão por papel
+  // — pedido do Diretor, 2026-09-16: Diretor escolhe Geral/Exército/Tribo à
+  // vontade; Líder vê o próprio Exército e pode entrar em cada Tribo dele;
+  // Closer vê a própria Tribo e pode entrar em cada pessoa dela; SDR só
+  // enxerga o próprio pace, sem seletor.
+  let escopo: EscopoTime = null;
+  let subtitulo = "Geral da firma";
+  let pills: { titulo: string; itens: Pill[] }[] = [];
+
+  if (meuPerfil.role === "sdr") {
+    escopo = { tipo: "individual", profileId: user.id };
+    subtitulo = "Seu pace pessoal";
+  } else if (meuPerfil.role === "closer") {
+    const minhaTribo = (tribos ?? []).find((t) => (t.closer as unknown as { id: string } | null)?.id === user.id);
+    if (!minhaTribo) {
+      return (
+        <main className="mx-auto max-w-lg px-6 py-16 text-center">
+          <h1 className="font-display text-xl text-gold-bright">Sem Tribo vinculada</h1>
+          <p className="mt-2 text-sm text-stone-400">Você ainda não tem uma Tribo. Crie uma em &ldquo;Minha Tribo&rdquo; primeiro.</p>
+        </main>
+      );
+    }
+    const { data: sdrsDaTribo } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .eq("tribo_id", minhaTribo.id)
+      .eq("role", "sdr")
+      .eq("ativo", true)
+      .order("full_name");
+    const pessoasValidas = new Set([user.id, ...(sdrsDaTribo ?? []).map((s) => s.id)]);
+    if (searchParams.pessoa && pessoasValidas.has(searchParams.pessoa)) {
+      escopo = { tipo: "individual", profileId: searchParams.pessoa };
+      subtitulo = searchParams.pessoa === user.id ? "Seu pace pessoal" : (sdrsDaTribo ?? []).find((s) => s.id === searchParams.pessoa)?.full_name ?? "Pessoa";
+    } else {
+      escopo = { tipo: "tribo", triboId: minhaTribo.id };
+      subtitulo = `Tribo ${minhaTribo.nome}`;
+    }
+    pills = [
+      {
+        titulo: "Ver",
+        itens: [
+          { label: `Geral da Tribo`, href: "/pace", ativo: !searchParams.pessoa },
+          { label: "Eu", href: "/pace?pessoa=" + user.id, ativo: searchParams.pessoa === user.id },
+          ...(sdrsDaTribo ?? []).map((s) => ({ label: s.full_name, href: `/pace?pessoa=${s.id}`, ativo: searchParams.pessoa === s.id })),
+        ],
+      },
+    ];
+  } else if (meuPerfil.role === "lider") {
+    const meuExercito = (exercitos ?? []).find((e) => e.legado_id === user.id);
+    if (!meuExercito) {
+      return (
+        <main className="mx-auto max-w-lg px-6 py-16 text-center">
+          <h1 className="font-display text-xl text-gold-bright">Sem Exército vinculado</h1>
+          <p className="mt-2 text-sm text-stone-400">Peça pro Diretor te vincular como Legado de um Exército.</p>
+        </main>
+      );
+    }
+    const minhasTribos = (tribos ?? []).filter((t) => t.exercito_id === meuExercito.id);
+    const triboValida = searchParams.tribo && minhasTribos.some((t) => t.id === searchParams.tribo) ? searchParams.tribo : null;
+    if (triboValida) {
+      escopo = { tipo: "tribo", triboId: triboValida };
+      subtitulo = `Tribo ${nomeTriboPorId.get(triboValida) ?? ""}`;
+    } else {
+      escopo = { tipo: "exercito", exercitoId: meuExercito.id };
+      subtitulo = `Exército ${meuExercito.nome}`;
+    }
+    pills = [
+      {
+        titulo: "Ver",
+        itens: [
+          { label: `Meu Exército`, href: "/pace", ativo: !triboValida },
+          ...minhasTribos.map((t) => ({ label: t.nome, href: `/pace?tribo=${t.id}`, ativo: triboValida === t.id })),
+        ],
+      },
+    ];
+  } else {
+    // diretor
+    const triboValida = searchParams.tribo && (tribos ?? []).some((t) => t.id === searchParams.tribo) ? searchParams.tribo : null;
+    const exercitoValido = searchParams.exercito && (exercitos ?? []).some((e) => e.id === searchParams.exercito) ? searchParams.exercito : null;
+    if (triboValida) {
+      escopo = { tipo: "tribo", triboId: triboValida };
+      subtitulo = `Tribo ${nomeTriboPorId.get(triboValida) ?? ""}`;
+    } else if (exercitoValido) {
+      escopo = { tipo: "exercito", exercitoId: exercitoValido };
+      subtitulo = `Exército ${nomeExercitoPorId.get(exercitoValido) ?? ""}`;
+    } else {
+      escopo = null;
+      subtitulo = "Geral da firma (IMPERIUM)";
+    }
+    pills = [
+      {
+        titulo: "Visão geral",
+        itens: [
+          { label: "IMPERIUM (geral)", href: "/pace", ativo: !triboValida && !exercitoValido },
+          ...(exercitos ?? []).map((e) => ({ label: e.nome, href: `/pace?exercito=${e.id}`, ativo: exercitoValido === e.id })),
+        ],
+      },
+      {
+        titulo: "Tribos",
+        itens: (tribos ?? []).map((t) => ({
+          label: `${t.nome} (${nomeExercitoPorId.get(t.exercito_id) ?? ""})`,
+          href: `/pace?tribo=${t.id}`,
+          ativo: triboValida === t.id,
+        })),
+      },
+    ];
+  }
+
+  const pace = await buscarPaceMes(supabase, escopo);
   const agora = new Date();
 
   // Acumulado = soma corrida de (realizado - meta) dia a dia, mesma
@@ -71,9 +193,30 @@ export default async function PacePage() {
       <div>
         <h1 className="font-display text-2xl text-gold-bright">Pace</h1>
         <p className="kicker mt-1">
-          Ritmo diário do funil — {MESES[agora.getUTCMonth() + 1]}, firma inteira
+          Ritmo diário do funil — {MESES[agora.getUTCMonth() + 1]}, {subtitulo}
         </p>
       </div>
+
+      {pills.length > 0 && (
+        <div className="space-y-2">
+          {pills.map((grupo) => (
+            <div key={grupo.titulo} className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] uppercase tracking-wide text-stone-500">{grupo.titulo}:</span>
+              {grupo.itens.map((p) => (
+                <a
+                  key={p.href}
+                  href={p.href}
+                  className={`rounded-full px-3 py-1 text-xs transition ${
+                    p.ativo ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-300 hover:border-gold/40"
+                  }`}
+                >
+                  {p.label}
+                </a>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card title="Meta do mês">

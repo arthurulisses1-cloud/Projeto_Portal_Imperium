@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { calcularFunilMeta, type AnoMes } from "@/lib/metas";
+import { calcularFunilMeta, buscarMetaComTaxas, type AnoMes, type EscopoTime } from "@/lib/metas";
 import { ehFimDeSemana, paraDataUTC } from "@/lib/data-br";
 
 export type ParDia<T = number> = { realizado: T; meta: T };
@@ -43,31 +43,59 @@ export type PaceMes = {
 
 const DIAS_SEMANA = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
 
+// Resolve o conjunto de profile_id que contam pro escopo pedido — mesmo
+// recorte já usado em Comando Geral/Exército/Tribo pra "produção do time":
+// firma = todo SDR/Closer ativo; Exército = Closers+SDRs das Tribos dele;
+// Tribo = seu Closer + seus SDRs; individual = só a própria pessoa.
+async function resolverIdsDoEscopo(supabase: SupabaseClient, escopo: EscopoTime): Promise<string[]> {
+  if (escopo?.tipo === "individual") return [escopo.profileId];
+
+  if (escopo?.tipo === "tribo") {
+    const [{ data: tribo }, { data: sdrs }] = await Promise.all([
+      supabase.from("tribos").select("closer_id").eq("id", escopo.triboId).maybeSingle(),
+      supabase.from("profiles").select("id").eq("tribo_id", escopo.triboId).eq("role", "sdr").eq("ativo", true),
+    ]);
+    return Array.from(new Set([...(tribo?.closer_id ? [tribo.closer_id] : []), ...(sdrs ?? []).map((s) => s.id)]));
+  }
+
+  if (escopo?.tipo === "exercito") {
+    const { data: tribosDoExercito } = await supabase.from("tribos").select("id, closer_id").eq("exercito_id", escopo.exercitoId);
+    const idsTribos = (tribosDoExercito ?? []).map((t) => t.id);
+    const closerIds = (tribosDoExercito ?? []).map((t) => t.closer_id).filter((id): id is string => !!id);
+    const { data: sdrs } =
+      idsTribos.length > 0
+        ? await supabase.from("profiles").select("id").in("tribo_id", idsTribos).eq("role", "sdr").eq("ativo", true)
+        : { data: [] };
+    return Array.from(new Set([...closerIds, ...(sdrs ?? []).map((s) => s.id)]));
+  }
+
+  // null = firma inteira
+  const [{ data: tribos }, { data: sdrs }] = await Promise.all([
+    supabase.from("tribos").select("closer_id"),
+    supabase.from("profiles").select("id").eq("role", "sdr").eq("ativo", true),
+  ]);
+  const closerIds = (tribos ?? []).map((t) => t.closer_id).filter((id): id is string => !!id);
+  return Array.from(new Set([...closerIds, ...(sdrs ?? []).map((s) => s.id)]));
+}
+
 // Replica a aba "Pace" da planilha de Forecast (pedido do Diretor,
 // 2026-09-16) — meta em cascata (Tentativas→...→Pagos, via taxas de
 // metas_conversao, mesma fórmula de calcularFunilMeta já usada em
 // Comando Geral/Mural) e, pra cada dia útil do mês, meta diária = meta
 // do mês / dias úteis, com "Acumulado" = soma corrida de (realizado -
 // meta) dia a dia — quem tá calculando o acumulado é a página (soma
-// direto do array `dias`), não esta função.
-export async function buscarPaceMes(supabase: SupabaseClient, anoMes?: AnoMes): Promise<PaceMes> {
+// direto do array `dias`), não esta função. `escopo` (mesmo tipo de
+// metas.ts: null=firma, exercito/tribo/individual) decide tanto a meta
+// (via buscarMetaComTaxas) quanto quem entra na conta do realizado —
+// pedido do Diretor, 2026-09-16: Diretor escolhe Geral/Exército/Tribo,
+// Líder vê o próprio Exército e pode entrar em cada Tribo, Closer vê a
+// própria Tribo e cada pessoa, SDR só o próprio pace.
+export async function buscarPaceMes(supabase: SupabaseClient, escopo: EscopoTime, anoMes?: AnoMes): Promise<PaceMes> {
   const hoje = new Date();
   const ano = anoMes?.ano ?? hoje.getUTCFullYear();
   const mes = anoMes?.mes ?? hoje.getUTCMonth() + 1;
 
-  const { data: metaMes } = await supabase
-    .from("metas_mensais")
-    .select("id, meta_credito_total, meta_ticket_medio")
-    .eq("ano", ano)
-    .eq("mes", mes)
-    .maybeSingle();
-  const { data: conversoes } = metaMes
-    ? await supabase.from("metas_conversao").select("etapa_de, etapa_para, taxa_esperada").eq("meta_mensal_id", metaMes.id)
-    : { data: [] };
-  const taxas = new Map((conversoes ?? []).map((c) => [`${c.etapa_de}_${c.etapa_para}`, Number(c.taxa_esperada)]));
-
-  const metaCreditoPago = metaMes?.meta_credito_total ?? 0;
-  const metaTicketMedio = metaMes?.meta_ticket_medio ?? 0;
+  const { metaCredito: metaCreditoPago, metaTicketMedio, taxas } = await buscarMetaComTaxas(supabase, escopo);
   const cascata = calcularFunilMeta(metaCreditoPago, metaTicketMedio, taxas);
   const taxaAssinadoPago = taxas.get("assinaturas_pagos") ?? null;
   const metaCreditoAssinado = taxaAssinadoPago ? metaCreditoPago / taxaAssinadoPago : 0;
@@ -83,14 +111,7 @@ export async function buscarPaceMes(supabase: SupabaseClient, anoMes?: AnoMes): 
   }
   const divisor = diasUteis || 1;
 
-  // Escopo: todo SDR/Closer ativo da firma — mesmo recorte de Comando
-  // Geral/Mural pra "produção da firma inteira".
-  const [{ data: tribos }, { data: sdrs }] = await Promise.all([
-    supabase.from("tribos").select("id, closer_id"),
-    supabase.from("profiles").select("id").eq("role", "sdr").eq("ativo", true),
-  ]);
-  const closerIds = (tribos ?? []).map((t) => t.closer_id).filter((id): id is string => !!id);
-  const todosIds = Array.from(new Set([...closerIds, ...(sdrs ?? []).map((s) => s.id)]));
+  const todosIds = await resolverIdsDoEscopo(supabase, escopo);
 
   const funilPorDiaEtapa = new Map<string, number>(); // "data|etapa"
   if (todosIds.length > 0) {
