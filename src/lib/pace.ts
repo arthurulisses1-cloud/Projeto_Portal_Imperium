@@ -277,7 +277,15 @@ export async function buscarPaceMes(supabase: SupabaseClient, escopo: EscopoTime
   };
 }
 
-export type TotaisSimples = { tentativas: number; alos: number; conexoes: number; entrevistas: number; assinados: number; pagos: number };
+export type TotaisSimples = {
+  tentativas: number;
+  alos: number;
+  conexoes: number;
+  entrevistas: number;
+  assinados: number;
+  pagos: number;
+  pagosValor: number;
+};
 
 // Totais de um período explícito [inicio, fim] (inclusive nos dois lados)
 // pra um conjunto de profile_id — usado pelo comparativo "média por
@@ -289,7 +297,7 @@ export type TotaisSimples = { tentativas: number; alos: number; conexoes: number
 // "pagos" filtra status=PAGO pela mesma convenção de data (assinatura) que
 // o resto do Pace já usa, não pago_em (ver comentário em buscarFunilColetivo).
 export async function buscarTotaisPeriodo(supabase: SupabaseClient, ids: string[], inicio: string, fim: string): Promise<TotaisSimples> {
-  if (ids.length === 0) return { tentativas: 0, alos: 0, conexoes: 0, entrevistas: 0, assinados: 0, pagos: 0 };
+  if (ids.length === 0) return { tentativas: 0, alos: 0, conexoes: 0, entrevistas: 0, assinados: 0, pagos: 0, pagosValor: 0 };
   const idsCsv = ids.join(",");
 
   const [{ data: funilRows }, { data: opsAssinadas }, { data: opsPagas }] = await Promise.all([
@@ -308,7 +316,7 @@ export async function buscarTotaisPeriodo(supabase: SupabaseClient, ids: string[
       .or(`sdr_profile_id.in.(${idsCsv}),closer_profile_id.in.(${idsCsv})`),
     supabase
       .from("weekly_operacoes")
-      .select("id")
+      .select("valor")
       .eq("status", "PAGO")
       .gte("data", inicio)
       .lte("data", fim)
@@ -322,6 +330,7 @@ export async function buscarTotaisPeriodo(supabase: SupabaseClient, ids: string[
     entrevistas: 0,
     assinados: (opsAssinadas ?? []).length,
     pagos: (opsPagas ?? []).length,
+    pagosValor: (opsPagas ?? []).reduce((s, o) => s + Number(o.valor), 0),
   };
   for (const row of funilRows ?? []) {
     const etapa = row.etapa as "tentativas" | "alos" | "conexoes" | "entrevistas";
@@ -452,6 +461,10 @@ export async function buscarComparativoPorCabeca(
       entrevistas: ((cascataMes.entrevistas ?? 0) * proporcao) / numPessoas,
       assinados: ((cascataMes.assinaturas ?? 0) * proporcao) / numPessoas,
       pagos: ((cascataMes.pagos ?? 0) * proporcao) / numPessoas,
+      // Pagos R$ usa a meta de crédito direto (já é R$, sem passar pela
+      // cascata de contagem) — mesma fonte que "Crédito"/"Pagos R$" no
+      // resto do Pace.
+      pagosValor: (l.metaCredito * proporcao) / numPessoas,
     };
     resultado.push({ label: l.label, numPessoas: l.ids.length, porCabeca: totais, ideal });
   }

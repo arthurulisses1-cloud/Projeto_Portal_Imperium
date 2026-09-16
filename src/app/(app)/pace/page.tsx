@@ -446,16 +446,27 @@ function TabelaComparativo({ titulo, comparativo }: { titulo: string; comparativ
             </tr>
           </thead>
           <tbody>
-            {(["tentativas", "alos", "conexoes", "entrevistas", "assinados", "pagos"] as const).map((campo) => (
+            {(
+              [
+                { campo: "tentativas", label: "Tentativas", moedaFmt: false },
+                { campo: "alos", label: "Alôs", moedaFmt: false },
+                { campo: "conexoes", label: "Conexões", moedaFmt: false },
+                { campo: "entrevistas", label: "Entrevistas", moedaFmt: false },
+                { campo: "assinados", label: "Assinados", moedaFmt: false },
+                { campo: "pagos", label: "Pagos", moedaFmt: false },
+                { campo: "pagosValor", label: "Pagos R$", moedaFmt: true },
+              ] as const
+            ).map(({ campo, label, moedaFmt }) => (
               <tr key={campo} className="border-t border-imperium-line/50">
-                <td className="py-1.5 pr-4 capitalize text-stone-300">{campo}</td>
+                <td className="py-1.5 pr-4 text-stone-300">{label}</td>
                 {comparativo.map((c) => {
                   const real = c.numPessoas > 0 ? c.porCabeca[campo] / c.numPessoas : 0;
                   const ideal = c.ideal[campo];
+                  const fmt = (v: number) => (moedaFmt ? moeda(v) : v.toFixed(1));
                   return (
                     <Fragment key={c.label}>
-                      <td className={`px-2 py-1.5 text-right ${corRealVsIdeal(real, ideal)}`}>{c.numPessoas > 0 ? real.toFixed(1) : "—"}</td>
-                      <td className="px-2 py-1.5 text-right text-stone-500">{ideal.toFixed(1)}</td>
+                      <td className={`px-2 py-1.5 text-right ${corRealVsIdeal(real, ideal)}`}>{c.numPessoas > 0 ? fmt(real) : "—"}</td>
+                      <td className="px-2 py-1.5 text-right text-stone-500">{fmt(ideal)}</td>
                     </Fragment>
                   );
                 })}
