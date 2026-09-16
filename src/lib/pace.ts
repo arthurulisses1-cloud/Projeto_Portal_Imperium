@@ -234,22 +234,15 @@ export async function buscarPaceMes(supabase: SupabaseClient, escopo: EscopoTime
 
 export type TotaisSimples = { tentativas: number; alos: number; conexoes: number; assinados: number };
 
-// Totais do mês (sem quebra por dia) pra um conjunto explícito de
-// profile_id — usado pelo comparativo "média por cabeça", que precisa
-// somar vários grupos diferentes (Tribo, Exército, Outras Tribos,
-// Empresa) sem montar a tabela dia-a-dia inteira de cada um. Mesma
-// lógica de dedupe do resto de pace.ts: entrevistas não entra aqui
-// (não pedida no comparativo), assinados vem de weekly_operacoes (1
-// linha por operação).
-export async function buscarTotaisMes(supabase: SupabaseClient, ids: string[], anoMes?: AnoMes): Promise<TotaisSimples> {
+// Totais de um período explícito [inicio, fim] (inclusive nos dois lados)
+// pra um conjunto de profile_id — usado pelo comparativo "média por
+// cabeça", que precisa somar vários grupos diferentes (Tribo, Exército,
+// Outras Tribos, Empresa) em 3 recortes (mês/semana/dia) sem montar a
+// tabela dia-a-dia inteira de cada um. Mesma lógica de dedupe do resto de
+// pace.ts: entrevistas não entra aqui (não pedida no comparativo),
+// assinados vem de weekly_operacoes (1 linha por operação).
+export async function buscarTotaisPeriodo(supabase: SupabaseClient, ids: string[], inicio: string, fim: string): Promise<TotaisSimples> {
   if (ids.length === 0) return { tentativas: 0, alos: 0, conexoes: 0, assinados: 0 };
-
-  const hoje = new Date();
-  const ano = anoMes?.ano ?? hoje.getUTCFullYear();
-  const mes = anoMes?.mes ?? hoje.getUTCMonth() + 1;
-  const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
-  const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
-  const fimMesInclusivo = `${ano}-${String(mes).padStart(2, "0")}-${String(ultimoDia).padStart(2, "0")}`;
   const idsCsv = ids.join(",");
 
   const [{ data: funilRows }, { data: opsAssinadas }] = await Promise.all([
@@ -258,13 +251,13 @@ export async function buscarTotaisMes(supabase: SupabaseClient, ids: string[], a
       .select("etapa, realizado")
       .in("profile_id", ids)
       .in("etapa", ["tentativas", "alos", "conexoes"])
-      .gte("data", inicioMes)
-      .lte("data", fimMesInclusivo),
+      .gte("data", inicio)
+      .lte("data", fim),
     supabase
       .from("weekly_operacoes")
       .select("id")
-      .gte("data", inicioMes)
-      .lte("data", fimMesInclusivo)
+      .gte("data", inicio)
+      .lte("data", fim)
       .or(`sdr_profile_id.in.(${idsCsv}),closer_profile_id.in.(${idsCsv})`),
   ]);
 
@@ -276,52 +269,69 @@ export async function buscarTotaisMes(supabase: SupabaseClient, ids: string[], a
   return totais;
 }
 
+export type LinhaEscopo = { label: string; ids: string[] };
 export type LinhaComparativo = { label: string; numPessoas: number; porCabeca: TotaisSimples };
 
-// Monta o quadro "Média por cabeça", com um comparativo que se adapta ao
-// nível do escopo atual — pedido do Diretor, 2026-09-16:
+// Resolve QUEM entra em cada linha do comparativo "média por cabeça",
+// adaptado ao nível do escopo atual — pedido do Diretor, 2026-09-16:
 //   individual → Eu / Tribo / Exército / Empresa
 //   tribo      → Esta Tribo / Exército / Outras Tribos
 //   exercito   → Este Exército / Empresa
 //   geral      → só Empresa (não tem nível acima pra comparar)
-// `tribos` já vem carregado pela página (pra achar o exercito_id de uma
-// Tribo sem outra query) — mesmo formato do select em page.tsx.
-export async function buscarComparativoPorCabeca(
+// Separado de buscarComparativoPorCabeca pra resolver os ids UMA vez só
+// e reusar em 3 períodos (mês/semana/dia) sem repetir as mesmas queries
+// de estrutura organizacional 3x. `tribos` já vem carregado pela página
+// (pra achar o exercito_id de uma Tribo sem outra query).
+export async function resolverLinhasComparativo(
   supabase: SupabaseClient,
   escopo: EscopoTime,
-  tribos: { id: string; exercito_id: string }[],
-  anoMes?: AnoMes
-): Promise<LinhaComparativo[]> {
-  async function linha(label: string, ids: string[]): Promise<LinhaComparativo> {
-    const totais = await buscarTotaisMes(supabase, ids, anoMes);
-    return { label, numPessoas: ids.length, porCabeca: totais };
-  }
-
+  tribos: { id: string; exercito_id: string }[]
+): Promise<LinhaEscopo[]> {
   if (escopo?.tipo === "individual") {
     const { data: pessoa } = await supabase.from("profiles").select("tribo_id").eq("id", escopo.profileId).maybeSingle();
     const triboId = pessoa?.tribo_id ?? null;
     const exercitoId = triboId ? tribos.find((t) => t.id === triboId)?.exercito_id ?? null : null;
-    const linhas: LinhaComparativo[] = [await linha("Eu", [escopo.profileId])];
-    if (triboId) linhas.push(await linha("Tribo", await resolverIdsDoEscopo(supabase, { tipo: "tribo", triboId })));
-    if (exercitoId) linhas.push(await linha("Exército", await resolverIdsDoEscopo(supabase, { tipo: "exercito", exercitoId })));
-    linhas.push(await linha("Empresa", await resolverIdsDoEscopo(supabase, null)));
+    const linhas: LinhaEscopo[] = [{ label: "Eu", ids: [escopo.profileId] }];
+    if (triboId) linhas.push({ label: "Tribo", ids: await resolverIdsDoEscopo(supabase, { tipo: "tribo", triboId }) });
+    if (exercitoId) linhas.push({ label: "Exército", ids: await resolverIdsDoEscopo(supabase, { tipo: "exercito", exercitoId }) });
+    linhas.push({ label: "Empresa", ids: await resolverIdsDoEscopo(supabase, null) });
     return linhas;
   }
 
   if (escopo?.tipo === "tribo") {
     const exercitoId = tribos.find((t) => t.id === escopo.triboId)?.exercito_id ?? null;
     const idsTribo = await resolverIdsDoEscopo(supabase, escopo);
-    const linhas: LinhaComparativo[] = [await linha("Esta Tribo", idsTribo)];
-    if (exercitoId) linhas.push(await linha("Exército", await resolverIdsDoEscopo(supabase, { tipo: "exercito", exercitoId })));
+    const linhas: LinhaEscopo[] = [{ label: "Esta Tribo", ids: idsTribo }];
+    if (exercitoId) linhas.push({ label: "Exército", ids: await resolverIdsDoEscopo(supabase, { tipo: "exercito", exercitoId }) });
     const idsFirma = await resolverIdsDoEscopo(supabase, null);
     const idsTriboSet = new Set(idsTribo);
-    linhas.push(await linha("Outras Tribos", idsFirma.filter((id) => !idsTriboSet.has(id))));
+    linhas.push({ label: "Outras Tribos", ids: idsFirma.filter((id) => !idsTriboSet.has(id)) });
     return linhas;
   }
 
   if (escopo?.tipo === "exercito") {
-    return [await linha("Este Exército", await resolverIdsDoEscopo(supabase, escopo)), await linha("Empresa", await resolverIdsDoEscopo(supabase, null))];
+    return [
+      { label: "Este Exército", ids: await resolverIdsDoEscopo(supabase, escopo) },
+      { label: "Empresa", ids: await resolverIdsDoEscopo(supabase, null) },
+    ];
   }
 
-  return [await linha("Empresa", await resolverIdsDoEscopo(supabase, null))];
+  return [{ label: "Empresa", ids: await resolverIdsDoEscopo(supabase, null) }];
+}
+
+// Totais por cabeça de cada linha (já resolvida por resolverLinhasComparativo)
+// num período [inicio, fim] — chamada 1x por recorte (mês/semana/dia) pela
+// página, reaproveitando os mesmos ids resolvidos uma única vez.
+export async function buscarComparativoPorCabeca(
+  supabase: SupabaseClient,
+  linhasEscopo: LinhaEscopo[],
+  inicio: string,
+  fim: string
+): Promise<LinhaComparativo[]> {
+  const resultado: LinhaComparativo[] = [];
+  for (const l of linhasEscopo) {
+    const totais = await buscarTotaisPeriodo(supabase, l.ids, inicio, fim);
+    resultado.push({ label: l.label, numPessoas: l.ids.length, porCabeca: totais });
+  }
+  return resultado;
 }

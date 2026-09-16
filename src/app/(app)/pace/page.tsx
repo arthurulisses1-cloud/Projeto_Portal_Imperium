@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { buscarPaceMes, buscarComparativoPorCabeca, type PaceDia } from "@/lib/pace";
+import { buscarPaceMes, resolverLinhasComparativo, buscarComparativoPorCabeca, type PaceDia, type LinhaComparativo } from "@/lib/pace";
 import type { EscopoTime } from "@/lib/metas";
+import { hojeBR, paraDataUTC } from "@/lib/data-br";
 import Card from "@/components/ui/Card";
 
 const MESES = [
@@ -195,9 +196,19 @@ export default async function PacePage({
     ];
   }
 
-  const [pace, comparativo] = await Promise.all([
-    buscarPaceMes(supabase, escopo),
-    buscarComparativoPorCabeca(supabase, escopo, tribos ?? []),
+  const hoje = hojeBR();
+  const inicioMesStr = hoje.slice(0, 7) + "-01";
+  const inicioSemana = (() => {
+    const seg = paraDataUTC(hoje);
+    seg.setUTCDate(seg.getUTCDate() - ((seg.getUTCDay() + 6) % 7));
+    return seg.toISOString().slice(0, 10);
+  })();
+
+  const [pace, linhasEscopo] = await Promise.all([buscarPaceMes(supabase, escopo), resolverLinhasComparativo(supabase, escopo, tribos ?? [])]);
+  const [comparativoMes, comparativoSemana, comparativoDia] = await Promise.all([
+    buscarComparativoPorCabeca(supabase, linhasEscopo, inicioMesStr, hoje),
+    buscarComparativoPorCabeca(supabase, linhasEscopo, inicioSemana, hoje),
+    buscarComparativoPorCabeca(supabase, linhasEscopo, hoje, hoje),
   ]);
   const agora = new Date();
 
@@ -255,34 +266,12 @@ export default async function PacePage({
         </div>
       )}
 
-      {comparativo.length > 0 && (
-        <Card title="Média por cabeça (mês)">
-          <div className="overflow-x-auto">
-            <table className="min-w-full border-collapse text-sm">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-stone-500">
-                  <th className="py-1 pr-4">Etapa</th>
-                  {comparativo.map((c) => (
-                    <th key={c.label} className="px-3 py-1 text-right">
-                      {c.label}
-                      <span className="block text-[10px] normal-case text-stone-600">{c.numPessoas} pessoa{c.numPessoas === 1 ? "" : "s"}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(["tentativas", "alos", "conexoes", "assinados"] as const).map((campo) => (
-                  <tr key={campo} className="border-t border-imperium-line/50">
-                    <td className="py-1.5 pr-4 capitalize text-stone-300">{campo}</td>
-                    {comparativo.map((c) => (
-                      <td key={c.label} className="px-3 py-1.5 text-right text-stone-100">
-                        {c.numPessoas > 0 ? (c.porCabeca[campo] / c.numPessoas).toFixed(1) : "—"}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {comparativoMes.length > 0 && (
+        <Card title="Média por cabeça">
+          <div className="grid gap-4 lg:grid-cols-3">
+            <TabelaComparativo titulo="Mês" comparativo={comparativoMes} />
+            <TabelaComparativo titulo="Semana" comparativo={comparativoSemana} />
+            <TabelaComparativo titulo="Dia" comparativo={comparativoDia} />
           </div>
         </Card>
       )}
@@ -359,6 +348,45 @@ export default async function PacePage({
         </div>
       </Card>
     </main>
+  );
+}
+
+// Um dos 3 blocos (Mês/Semana/Dia) do quadro "Média por cabeça" — pedido
+// do Diretor, 2026-09-17: "pode quebrar em 3 colunas, mês, semana e dia".
+function TabelaComparativo({ titulo, comparativo }: { titulo: string; comparativo: LinhaComparativo[] }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] uppercase tracking-wide text-stone-500">{titulo}</p>
+      <div className="overflow-x-auto">
+        <table className="min-w-full border-collapse text-sm">
+          <thead>
+            <tr className="text-left text-[11px] uppercase tracking-wide text-stone-500">
+              <th className="py-1 pr-4">Etapa</th>
+              {comparativo.map((c) => (
+                <th key={c.label} className="px-3 py-1 text-right">
+                  {c.label}
+                  <span className="block text-[10px] normal-case text-stone-600">
+                    {c.numPessoas} pessoa{c.numPessoas === 1 ? "" : "s"}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(["tentativas", "alos", "conexoes", "assinados"] as const).map((campo) => (
+              <tr key={campo} className="border-t border-imperium-line/50">
+                <td className="py-1.5 pr-4 capitalize text-stone-300">{campo}</td>
+                {comparativo.map((c) => (
+                  <td key={c.label} className="px-3 py-1.5 text-right text-stone-100">
+                    {c.numPessoas > 0 ? (c.porCabeca[campo] / c.numPessoas).toFixed(1) : "—"}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
