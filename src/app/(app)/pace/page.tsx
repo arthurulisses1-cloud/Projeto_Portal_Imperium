@@ -72,7 +72,7 @@ type Pill = { label: string; href: string; ativo: boolean };
 export default async function PacePage({
   searchParams,
 }: {
-  searchParams: { exercito?: string; tribo?: string; pessoa?: string };
+  searchParams: { exercito?: string; tribo?: string; pessoa?: string; ano?: string; mes?: string };
 }) {
   const supabase = await createClient();
   const {
@@ -197,21 +197,56 @@ export default async function PacePage({
     ];
   }
 
+  // Seletor de mês — pedido do Diretor, 2026-09-18. Mesmo padrão de /dre
+  // (setas ← mês / mês →, via searchParams), preservando o escopo (Tribo/
+  // Exército/pessoa) já escolhido ao trocar de mês.
   const hoje = hojeBR();
-  const inicioMesStr = hoje.slice(0, 7) + "-01";
+  const [anoAtual, mesAtual] = hoje.split("-").map(Number);
+  const ano = Number(searchParams.ano) || anoAtual;
+  const mes = Number(searchParams.mes) || mesAtual;
+  const ehMesAtual = ano === anoAtual && mes === mesAtual;
+
+  const inicioMesStr = `${ano}-${String(mes).padStart(2, "0")}-01`;
+  const ultimoDiaDoMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const fimDoMesStr = `${ano}-${String(mes).padStart(2, "0")}-${String(ultimoDiaDoMes).padStart(2, "0")}`;
+  // "Semana"/"Dia" só fazem sentido pro mês corrente (são recortes até
+  // HOJE) — num mês passado/futuro, "Mês" já cobre o mês inteiro.
+  const fimPeriodoMes = ehMesAtual ? hoje : fimDoMesStr;
   const inicioSemana = (() => {
     const seg = paraDataUTC(hoje);
     seg.setUTCDate(seg.getUTCDate() - ((seg.getUTCDay() + 6) % 7));
     return seg.toISOString().slice(0, 10);
   })();
 
-  const [pace, linhasEscopo] = await Promise.all([buscarPaceMes(supabase, escopo), resolverLinhasComparativo(supabase, escopo, tribos ?? [])]);
-  const [comparativoMes, comparativoSemana, comparativoDia] = await Promise.all([
-    buscarComparativoPorCabeca(supabase, linhasEscopo, inicioMesStr, hoje),
-    buscarComparativoPorCabeca(supabase, linhasEscopo, inicioSemana, hoje),
-    buscarComparativoPorCabeca(supabase, linhasEscopo, hoje, hoje),
+  function comMes(href: string): string {
+    if (ehMesAtual) return href;
+    const sep = href.includes("?") ? "&" : "?";
+    return `${href}${sep}ano=${ano}&mes=${mes}`;
+  }
+  function hrefMes(novoAno: number, novoMes: number): string {
+    const params = new URLSearchParams();
+    if (searchParams.tribo) params.set("tribo", searchParams.tribo);
+    if (searchParams.exercito) params.set("exercito", searchParams.exercito);
+    if (searchParams.pessoa) params.set("pessoa", searchParams.pessoa);
+    if (!(novoAno === anoAtual && novoMes === mesAtual)) {
+      params.set("ano", String(novoAno));
+      params.set("mes", String(novoMes));
+    }
+    const qs = params.toString();
+    return qs ? `/pace?${qs}` : "/pace";
+  }
+  const mesAnterior = mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 };
+  const mesSeguinte = mes === 12 ? { ano: ano + 1, mes: 1 } : { ano, mes: mes + 1 };
+
+  const [pace, linhasEscopo] = await Promise.all([
+    buscarPaceMes(supabase, escopo, { ano, mes }),
+    resolverLinhasComparativo(supabase, escopo, tribos ?? [], { ano, mes }),
   ]);
-  const agora = new Date();
+  const [comparativoMes, comparativoSemana, comparativoDia] = await Promise.all([
+    buscarComparativoPorCabeca(supabase, linhasEscopo, inicioMesStr, fimPeriodoMes),
+    ehMesAtual ? buscarComparativoPorCabeca(supabase, linhasEscopo, inicioSemana, hoje) : Promise.resolve([]),
+    ehMesAtual ? buscarComparativoPorCabeca(supabase, linhasEscopo, hoje, hoje) : Promise.resolve([]),
+  ]);
 
   // Acumulado = soma corrida de (realizado - meta) dia a dia, mesma
   // fórmula da planilha — computado aqui pra não guardar estado redundante
@@ -239,11 +274,24 @@ export default async function PacePage({
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-6 px-6 py-8">
-      <div>
-        <h1 className="font-display text-2xl text-gold-bright">Pace</h1>
-        <p className="kicker mt-1">
-          Ritmo diário do funil — {MESES[agora.getUTCMonth() + 1]}, {subtitulo}
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl text-gold-bright">Pace</h1>
+          <p className="kicker mt-1">
+            Ritmo diário do funil — {MESES[mes]}, {subtitulo}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <a href={hrefMes(mesAnterior.ano, mesAnterior.mes)} className="btn-outline px-2.5 py-1.5 text-xs">
+            ← {MESES[mesAnterior.mes].slice(0, 3)}
+          </a>
+          <span className="font-display text-sm text-stone-200">
+            {MESES[mes]}/{ano}
+          </span>
+          <a href={hrefMes(mesSeguinte.ano, mesSeguinte.mes)} className="btn-outline px-2.5 py-1.5 text-xs">
+            {MESES[mesSeguinte.mes].slice(0, 3)} →
+          </a>
+        </div>
       </div>
 
       {pills.length > 0 && (
@@ -254,7 +302,7 @@ export default async function PacePage({
               {grupo.itens.map((p) => (
                 <a
                   key={p.href}
-                  href={p.href}
+                  href={comMes(p.href)}
                   className={`rounded-full px-3 py-1 text-xs transition ${
                     p.ativo ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-300 hover:border-gold/40"
                   }`}
@@ -269,11 +317,16 @@ export default async function PacePage({
 
       {comparativoMes.length > 0 && (
         <Card title="Média por cabeça">
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className={`grid gap-4 ${ehMesAtual ? "lg:grid-cols-3" : ""}`}>
             <TabelaComparativo titulo="Mês" comparativo={comparativoMes} />
-            <TabelaComparativo titulo="Semana" comparativo={comparativoSemana} />
-            <TabelaComparativo titulo="Dia" comparativo={comparativoDia} />
+            {ehMesAtual && (
+              <>
+                <TabelaComparativo titulo="Semana" comparativo={comparativoSemana} />
+                <TabelaComparativo titulo="Dia" comparativo={comparativoDia} />
+              </>
+            )}
           </div>
+          {!ehMesAtual && <p className="mt-2 text-[11px] text-stone-600">Semana e Dia só aparecem pro mês corrente.</p>}
         </Card>
       )}
 
@@ -393,7 +446,7 @@ function TabelaComparativo({ titulo, comparativo }: { titulo: string; comparativ
             </tr>
           </thead>
           <tbody>
-            {(["tentativas", "alos", "conexoes", "assinados"] as const).map((campo) => (
+            {(["tentativas", "alos", "conexoes", "entrevistas", "assinados", "pagos"] as const).map((campo) => (
               <tr key={campo} className="border-t border-imperium-line/50">
                 <td className="py-1.5 pr-4 capitalize text-stone-300">{campo}</td>
                 {comparativo.map((c) => {

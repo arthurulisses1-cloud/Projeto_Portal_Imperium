@@ -220,21 +220,25 @@ export type EscopoTime =
 // metas_mensais/metas_conversao, que não são por Tribo/Exército (só a meta
 // de crédito é dividida) — por isso busca ela uma vez só, direto, pros
 // casos que buscarMetaTribo não cobre (Exército/firma só devolvem o número).
+// `anoMes` opcional — sem ele, sempre o mês corrente (comportamento
+// original). Passado explicitamente pelo seletor de mês do Pace
+// (2026-09-18), que precisa da meta do mês SELECIONADO, não do atual.
 export async function buscarMetaComTaxas(
   supabase: SupabaseClient,
-  escopo: EscopoTime
+  escopo: EscopoTime,
+  anoMes?: AnoMes
 ): Promise<{ metaCredito: number; metaTicketMedio: number; taxas: Map<string, number> }> {
   if (escopo?.tipo === "tribo") {
-    const r = await buscarMetaTribo(supabase, escopo.triboId);
+    const r = await buscarMetaTribo(supabase, escopo.triboId, anoMes);
     return { metaCredito: r.metaCreditoTribo, metaTicketMedio: r.metaTicketMedio, taxas: r.taxas };
   }
 
   if (escopo?.tipo === "individual") {
-    const r = await buscarMetaIndividual(supabase, escopo.profileId);
+    const r = await buscarMetaIndividual(supabase, escopo.profileId, anoMes);
     return { metaCredito: r.metaCreditoIndividual, metaTicketMedio: r.metaTicketMedio, taxas: r.taxas };
   }
 
-  const [anoAgora, mesAgora] = hojeBR().split("-").map(Number);
+  const { ano: anoAgora, mes: mesAgora } = resolverAnoMes(anoMes);
   const { data: metaMes } = await supabase
     .from("metas_mensais")
     .select("id, meta_credito_total, meta_ticket_medio")
@@ -247,7 +251,7 @@ export async function buscarMetaComTaxas(
   const taxas = new Map((conversoes ?? []).map((c) => [`${c.etapa_de}_${c.etapa_para}`, c.taxa_esperada]));
 
   if (escopo?.tipo === "exercito") {
-    const metaCredito = await buscarMetaExercito(supabase, escopo.exercitoId);
+    const metaCredito = await buscarMetaExercito(supabase, escopo.exercitoId, anoMes);
     return { metaCredito, metaTicketMedio: metaMes?.meta_ticket_medio ?? 0, taxas };
   }
 

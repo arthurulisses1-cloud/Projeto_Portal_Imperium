@@ -140,7 +140,7 @@ export async function buscarPaceMes(supabase: SupabaseClient, escopo: EscopoTime
   const ano = anoMes?.ano ?? hoje.getUTCFullYear();
   const mes = anoMes?.mes ?? hoje.getUTCMonth() + 1;
 
-  const { metaCredito: metaCreditoPago, metaTicketMedio, taxas } = await buscarMetaComTaxas(supabase, escopo);
+  const { metaCredito: metaCreditoPago, metaTicketMedio, taxas } = await buscarMetaComTaxas(supabase, escopo, { ano, mes });
   const cascata = calcularFunilMeta(metaCreditoPago, metaTicketMedio, taxas);
   const taxaAssinadoPago = taxas.get("assinaturas_pagos") ?? null;
   const metaCreditoAssinado = taxaAssinadoPago ? metaCreditoPago / taxaAssinadoPago : 0;
@@ -277,25 +277,27 @@ export async function buscarPaceMes(supabase: SupabaseClient, escopo: EscopoTime
   };
 }
 
-export type TotaisSimples = { tentativas: number; alos: number; conexoes: number; assinados: number };
+export type TotaisSimples = { tentativas: number; alos: number; conexoes: number; entrevistas: number; assinados: number; pagos: number };
 
 // Totais de um período explícito [inicio, fim] (inclusive nos dois lados)
 // pra um conjunto de profile_id — usado pelo comparativo "média por
 // cabeça", que precisa somar vários grupos diferentes (Tribo, Exército,
 // Outras Tribos, Empresa) em 3 recortes (mês/semana/dia) sem montar a
 // tabela dia-a-dia inteira de cada um. Mesma lógica de dedupe do resto de
-// pace.ts: entrevistas não entra aqui (não pedida no comparativo),
-// assinados vem de weekly_operacoes (1 linha por operação).
+// pace.ts: entrevistas conta só o lado SDR (papel != closer), assinados/
+// pagos vêm de weekly_operacoes (1 linha por operação, não por papel) —
+// "pagos" filtra status=PAGO pela mesma convenção de data (assinatura) que
+// o resto do Pace já usa, não pago_em (ver comentário em buscarFunilColetivo).
 export async function buscarTotaisPeriodo(supabase: SupabaseClient, ids: string[], inicio: string, fim: string): Promise<TotaisSimples> {
-  if (ids.length === 0) return { tentativas: 0, alos: 0, conexoes: 0, assinados: 0 };
+  if (ids.length === 0) return { tentativas: 0, alos: 0, conexoes: 0, entrevistas: 0, assinados: 0, pagos: 0 };
   const idsCsv = ids.join(",");
 
-  const [{ data: funilRows }, { data: opsAssinadas }] = await Promise.all([
+  const [{ data: funilRows }, { data: opsAssinadas }, { data: opsPagas }] = await Promise.all([
     supabase
       .from("producao_funil")
-      .select("etapa, realizado")
+      .select("etapa, realizado, papel")
       .in("profile_id", ids)
-      .in("etapa", ["tentativas", "alos", "conexoes"])
+      .in("etapa", ["tentativas", "alos", "conexoes", "entrevistas"])
       .gte("data", inicio)
       .lte("data", fim),
     supabase
@@ -304,12 +306,30 @@ export async function buscarTotaisPeriodo(supabase: SupabaseClient, ids: string[
       .gte("data", inicio)
       .lte("data", fim)
       .or(`sdr_profile_id.in.(${idsCsv}),closer_profile_id.in.(${idsCsv})`),
+    supabase
+      .from("weekly_operacoes")
+      .select("id")
+      .eq("status", "PAGO")
+      .gte("data", inicio)
+      .lte("data", fim)
+      .or(`sdr_profile_id.in.(${idsCsv}),closer_profile_id.in.(${idsCsv})`),
   ]);
 
-  const totais: TotaisSimples = { tentativas: 0, alos: 0, conexoes: 0, assinados: (opsAssinadas ?? []).length };
+  const totais: TotaisSimples = {
+    tentativas: 0,
+    alos: 0,
+    conexoes: 0,
+    entrevistas: 0,
+    assinados: (opsAssinadas ?? []).length,
+    pagos: (opsPagas ?? []).length,
+  };
   for (const row of funilRows ?? []) {
-    const etapa = row.etapa as "tentativas" | "alos" | "conexoes";
-    if (etapa === "tentativas" || etapa === "alos" || etapa === "conexoes") totais[etapa] += row.realizado;
+    const etapa = row.etapa as "tentativas" | "alos" | "conexoes" | "entrevistas";
+    if (etapa === "entrevistas") {
+      if (row.papel !== "closer") totais.entrevistas += row.realizado;
+    } else {
+      totais[etapa] += row.realizado;
+    }
   }
   return totais;
 }
@@ -334,7 +354,8 @@ export type LinhaComparativo = { label: string; numPessoas: number; porCabeca: T
 export async function resolverLinhasComparativo(
   supabase: SupabaseClient,
   escopo: EscopoTime,
-  tribos: { id: string; exercito_id: string }[]
+  tribos: { id: string; exercito_id: string }[],
+  anoMes?: AnoMes
 ): Promise<LinhaEscopo[]> {
   if (escopo?.tipo === "individual") {
     const { data: pessoa } = await supabase.from("profiles").select("tribo_id").eq("id", escopo.profileId).maybeSingle();
@@ -343,17 +364,17 @@ export async function resolverLinhasComparativo(
     // "Eu" fica como a própria pessoa selecionada, mesmo se ela não for SDR
     // (Closer conferindo o próprio número) — o filtro SDR-only vale só pras
     // linhas de MÉDIA (Tribo/Exército/Empresa), não pro "eu" literal.
-    const metaEu = await buscarMetaComTaxas(supabase, escopo);
+    const metaEu = await buscarMetaComTaxas(supabase, escopo, anoMes);
     const linhas: LinhaEscopo[] = [{ label: "Eu", ids: [escopo.profileId], metaCredito: metaEu.metaCredito }];
     if (triboId) {
-      const meta = await buscarMetaComTaxas(supabase, { tipo: "tribo", triboId });
+      const meta = await buscarMetaComTaxas(supabase, { tipo: "tribo", triboId }, anoMes);
       linhas.push({ label: "Tribo", ids: await resolverIdsSdrDoEscopo(supabase, { tipo: "tribo", triboId }), metaCredito: meta.metaCredito });
     }
     if (exercitoId) {
-      const meta = await buscarMetaComTaxas(supabase, { tipo: "exercito", exercitoId });
+      const meta = await buscarMetaComTaxas(supabase, { tipo: "exercito", exercitoId }, anoMes);
       linhas.push({ label: "Exército", ids: await resolverIdsSdrDoEscopo(supabase, { tipo: "exercito", exercitoId }), metaCredito: meta.metaCredito });
     }
-    const metaFirma = await buscarMetaComTaxas(supabase, null);
+    const metaFirma = await buscarMetaComTaxas(supabase, null, anoMes);
     linhas.push({ label: "Empresa", ids: await resolverIdsSdrDoEscopo(supabase, null), metaCredito: metaFirma.metaCredito });
     return linhas;
   }
@@ -361,15 +382,15 @@ export async function resolverLinhasComparativo(
   if (escopo?.tipo === "tribo") {
     const exercitoId = tribos.find((t) => t.id === escopo.triboId)?.exercito_id ?? null;
     const idsTribo = await resolverIdsSdrDoEscopo(supabase, escopo);
-    const metaTribo = await buscarMetaComTaxas(supabase, escopo);
+    const metaTribo = await buscarMetaComTaxas(supabase, escopo, anoMes);
     const linhas: LinhaEscopo[] = [{ label: "Esta Tribo", ids: idsTribo, metaCredito: metaTribo.metaCredito }];
     if (exercitoId) {
-      const meta = await buscarMetaComTaxas(supabase, { tipo: "exercito", exercitoId });
+      const meta = await buscarMetaComTaxas(supabase, { tipo: "exercito", exercitoId }, anoMes);
       linhas.push({ label: "Exército", ids: await resolverIdsSdrDoEscopo(supabase, { tipo: "exercito", exercitoId }), metaCredito: meta.metaCredito });
     }
     const idsFirma = await resolverIdsSdrDoEscopo(supabase, null);
     const idsTriboSet = new Set(idsTribo);
-    const metaFirma = await buscarMetaComTaxas(supabase, null);
+    const metaFirma = await buscarMetaComTaxas(supabase, null, anoMes);
     linhas.push({
       label: "Outras Tribos",
       ids: idsFirma.filter((id) => !idsTriboSet.has(id)),
@@ -382,14 +403,17 @@ export async function resolverLinhasComparativo(
   }
 
   if (escopo?.tipo === "exercito") {
-    const [metaExercito, metaFirma] = await Promise.all([buscarMetaComTaxas(supabase, escopo), buscarMetaComTaxas(supabase, null)]);
+    const [metaExercito, metaFirma] = await Promise.all([
+      buscarMetaComTaxas(supabase, escopo, anoMes),
+      buscarMetaComTaxas(supabase, null, anoMes),
+    ]);
     return [
       { label: "Este Exército", ids: await resolverIdsSdrDoEscopo(supabase, escopo), metaCredito: metaExercito.metaCredito },
       { label: "Empresa", ids: await resolverIdsSdrDoEscopo(supabase, null), metaCredito: metaFirma.metaCredito },
     ];
   }
 
-  const metaFirma = await buscarMetaComTaxas(supabase, null);
+  const metaFirma = await buscarMetaComTaxas(supabase, null, anoMes);
   return [{ label: "Empresa", ids: await resolverIdsSdrDoEscopo(supabase, null), metaCredito: metaFirma.metaCredito }];
 }
 
@@ -407,8 +431,8 @@ export async function buscarComparativoPorCabeca(
   inicio: string,
   fim: string
 ): Promise<LinhaComparativo[]> {
-  const { metaTicketMedio, taxas } = await buscarMetaComTaxas(supabase, null);
   const [ano, mes] = fim.slice(0, 7).split("-").map(Number);
+  const { metaTicketMedio, taxas } = await buscarMetaComTaxas(supabase, null, { ano, mes });
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const ultimoDiaMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
   const fimMes = `${ano}-${String(mes).padStart(2, "0")}-${String(ultimoDiaMes).padStart(2, "0")}`;
@@ -425,7 +449,9 @@ export async function buscarComparativoPorCabeca(
       tentativas: ((cascataMes.tentativas ?? 0) * proporcao) / numPessoas,
       alos: ((cascataMes.alos ?? 0) * proporcao) / numPessoas,
       conexoes: ((cascataMes.conexoes ?? 0) * proporcao) / numPessoas,
+      entrevistas: ((cascataMes.entrevistas ?? 0) * proporcao) / numPessoas,
       assinados: ((cascataMes.assinaturas ?? 0) * proporcao) / numPessoas,
+      pagos: ((cascataMes.pagos ?? 0) * proporcao) / numPessoas,
     };
     resultado.push({ label: l.label, numPessoas: l.ids.length, porCabeca: totais, ideal });
   }
