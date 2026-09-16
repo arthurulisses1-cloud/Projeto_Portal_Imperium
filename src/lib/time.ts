@@ -46,6 +46,15 @@ export async function buscarPagosMes(supabase: SupabaseClient, profileIds: strin
   return map;
 }
 
+// Auditoria 2026-09-16 (achado no Comando Geral: 22 assinaturas/10 pagos
+// mostrados quando o real era 12/6) — producao_funil tem uma linha por
+// PAPEL pra entrevistas/assinaturas/pagos (SDR e Closer cada um credita a
+// própria linha da MESMA operação), então somar toda linha do grupo conta
+// a operação 2x sempre que os dois lados estão no mesmo escopo (Tribo/
+// Exército/Firma). Tentativas/Alôs/Conexões não têm esse risco — só o SDR
+// loga. Mesma raiz de bug já corrigida em buscarVisaoDiaria (2026-09-09,
+// ver visao-diaria.ts) — replicado aqui, que alimenta Tribo/Exército/
+// Comando Geral.
 export async function buscarFunilColetivo(supabase: SupabaseClient, profileIds: string[]) {
   const totais = Object.fromEntries(
     FUNNEL_STAGES.map((e) => [e, { realizado: 0, meta: 0 }])
@@ -53,17 +62,45 @@ export async function buscarFunilColetivo(supabase: SupabaseClient, profileIds: 
   if (profileIds.length === 0) return totais;
 
   const inicioMes = inicioMesBR();
-  const { data } = await supabase
-    .from("producao_funil")
-    .select("etapa, realizado, meta")
-    .in("profile_id", profileIds)
-    .gte("data", inicioMes);
 
-  for (const row of data ?? []) {
+  // Tentativas/Alôs/Conexões: soma direta (sem risco de duplicar).
+  // Entrevistas: cada entrevista credita SDR e Closer separados — conta só
+  // o lado SDR (papel != "closer"), mesmo padrão de buscarVisaoDiaria.
+  const { data: funilRows } = await supabase
+    .from("producao_funil")
+    .select("etapa, realizado, meta, papel")
+    .in("profile_id", profileIds)
+    .in("etapa", ["tentativas", "alos", "conexoes", "entrevistas"])
+    .gte("data", inicioMes);
+  for (const row of funilRows ?? []) {
     const etapa = row.etapa as FunilEtapa;
+    if (etapa === "entrevistas" && row.papel === "closer") continue;
     totais[etapa].realizado += row.realizado;
     totais[etapa].meta += row.meta;
   }
+
+  // Assinaturas/Pagos: vêm de weekly_operacoes (1 linha por OPERAÇÃO, dono
+  // = SDR+Closer) em vez de producao_funil — crédito 1x quando pelo menos
+  // um dos dois lados está no escopo pedido, mesma convenção de "data" (não
+  // pago_em) que o resto do sistema já usa pra crédito do mês (ver
+  // comentário em campanhas.ts).
+  const idsCsv = profileIds.join(",");
+  const [{ data: opsAssinadas }, { data: opsPagas }] = await Promise.all([
+    supabase
+      .from("weekly_operacoes")
+      .select("sdr_profile_id, closer_profile_id")
+      .gte("data", inicioMes)
+      .or(`sdr_profile_id.in.(${idsCsv}),closer_profile_id.in.(${idsCsv})`),
+    supabase
+      .from("weekly_operacoes")
+      .select("sdr_profile_id, closer_profile_id")
+      .eq("status", "PAGO")
+      .gte("data", inicioMes)
+      .or(`sdr_profile_id.in.(${idsCsv}),closer_profile_id.in.(${idsCsv})`),
+  ]);
+  totais.assinaturas.realizado = (opsAssinadas ?? []).length;
+  totais.pagos.realizado = (opsPagas ?? []).length;
+
   return totais;
 }
 
