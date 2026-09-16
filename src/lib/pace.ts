@@ -43,6 +43,22 @@ export type PaceMes = {
 
 const DIAS_SEMANA = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
 
+// Conta dias úteis num intervalo [inicio, fim] (YYYY-MM-DD, inclusive nos
+// dois lados) — usado tanto pra achar quantos dias úteis o mês inteiro tem
+// quanto quantos já passaram dentro de um recorte (mês-até-hoje, semana-
+// até-hoje, hoje), pra "proratear" a meta mensal na mesma proporção.
+function diasUteisEmIntervalo(inicio: string, fim: string): number {
+  let n = 0;
+  let cursor = inicio;
+  while (cursor <= fim) {
+    if (!ehFimDeSemana(cursor)) n++;
+    const d = paraDataUTC(cursor);
+    d.setUTCDate(d.getUTCDate() + 1);
+    cursor = d.toISOString().slice(0, 10);
+  }
+  return n;
+}
+
 // Resolve o conjunto de profile_id que contam pro escopo pedido — mesmo
 // recorte já usado em Comando Geral/Exército/Tribo pra "produção do time":
 // firma = todo SDR/Closer ativo; Exército = Closers+SDRs das Tribos dele;
@@ -76,6 +92,35 @@ export async function resolverIdsDoEscopo(supabase: SupabaseClient, escopo: Esco
   ]);
   const closerIds = (tribos ?? []).map((t) => t.closer_id).filter((id): id is string => !!id);
   return Array.from(new Set([...closerIds, ...(sdrs ?? []).map((s) => s.id)]));
+}
+
+// Mesma ideia de resolverIdsDoEscopo, mas só SDR — pedido do Diretor,
+// 2026-09-17: "média por cabeça" não deve incluir Closer nem Líder, já
+// que a produção individual deles não é cobrada (Closer tem produção bem
+// menor, puxando a média pra baixo sem ser um número que ele de fato
+// precisa bater). Usado só pelo comparativo "média por cabeça" — o resto
+// de pace.ts (meta/realizado do time, Pace diário) continua usando
+// resolverIdsDoEscopo normal, que inclui Closer de propósito (produção
+// de time de verdade inclui o crédito que ele fecha).
+async function resolverIdsSdrDoEscopo(supabase: SupabaseClient, escopo: EscopoTime): Promise<string[]> {
+  if (escopo?.tipo === "individual") return [escopo.profileId];
+
+  if (escopo?.tipo === "tribo") {
+    const { data: sdrs } = await supabase.from("profiles").select("id").eq("tribo_id", escopo.triboId).eq("role", "sdr").eq("ativo", true);
+    return (sdrs ?? []).map((s) => s.id);
+  }
+
+  if (escopo?.tipo === "exercito") {
+    const { data: tribosDoExercito } = await supabase.from("tribos").select("id").eq("exercito_id", escopo.exercitoId);
+    const idsTribos = (tribosDoExercito ?? []).map((t) => t.id);
+    if (idsTribos.length === 0) return [];
+    const { data: sdrs } = await supabase.from("profiles").select("id").in("tribo_id", idsTribos).eq("role", "sdr").eq("ativo", true);
+    return (sdrs ?? []).map((s) => s.id);
+  }
+
+  // null = firma inteira
+  const { data: sdrs } = await supabase.from("profiles").select("id").eq("role", "sdr").eq("ativo", true);
+  return (sdrs ?? []).map((s) => s.id);
 }
 
 // Replica a aba "Pace" da planilha de Forecast (pedido do Diretor,
@@ -269,19 +314,23 @@ export async function buscarTotaisPeriodo(supabase: SupabaseClient, ids: string[
   return totais;
 }
 
-export type LinhaEscopo = { label: string; ids: string[] };
-export type LinhaComparativo = { label: string; numPessoas: number; porCabeca: TotaisSimples };
+// `metaCredito` é sempre a meta MENSAL (não prorateada) daquele escopo —
+// buscarComparativoPorCabeca proratea pro período (mês-até-hoje/semana/
+// dia) na hora de montar a "Média ideal".
+export type LinhaEscopo = { label: string; ids: string[]; metaCredito: number };
+export type LinhaComparativo = { label: string; numPessoas: number; porCabeca: TotaisSimples; ideal: TotaisSimples };
 
-// Resolve QUEM entra em cada linha do comparativo "média por cabeça",
-// adaptado ao nível do escopo atual — pedido do Diretor, 2026-09-16:
+// Resolve QUEM entra em cada linha do comparativo "média por cabeça" e
+// qual a meta de crédito MENSAL daquele grupo, adaptado ao nível do
+// escopo atual — pedido do Diretor, 2026-09-16/17:
 //   individual → Eu / Tribo / Exército / Empresa
 //   tribo      → Esta Tribo / Exército / Outras Tribos
 //   exercito   → Este Exército / Empresa
 //   geral      → só Empresa (não tem nível acima pra comparar)
-// Separado de buscarComparativoPorCabeca pra resolver os ids UMA vez só
-// e reusar em 3 períodos (mês/semana/dia) sem repetir as mesmas queries
-// de estrutura organizacional 3x. `tribos` já vem carregado pela página
-// (pra achar o exercito_id de uma Tribo sem outra query).
+// Separado de buscarComparativoPorCabeca pra resolver os ids (e a meta) UMA
+// vez só e reusar em 3 períodos (mês/semana/dia) sem repetir as mesmas
+// queries de estrutura organizacional 3x. `tribos` já vem carregado pela
+// página (pra achar o exercito_id de uma Tribo sem outra query).
 export async function resolverLinhasComparativo(
   supabase: SupabaseClient,
   escopo: EscopoTime,
@@ -291,47 +340,94 @@ export async function resolverLinhasComparativo(
     const { data: pessoa } = await supabase.from("profiles").select("tribo_id").eq("id", escopo.profileId).maybeSingle();
     const triboId = pessoa?.tribo_id ?? null;
     const exercitoId = triboId ? tribos.find((t) => t.id === triboId)?.exercito_id ?? null : null;
-    const linhas: LinhaEscopo[] = [{ label: "Eu", ids: [escopo.profileId] }];
-    if (triboId) linhas.push({ label: "Tribo", ids: await resolverIdsDoEscopo(supabase, { tipo: "tribo", triboId }) });
-    if (exercitoId) linhas.push({ label: "Exército", ids: await resolverIdsDoEscopo(supabase, { tipo: "exercito", exercitoId }) });
-    linhas.push({ label: "Empresa", ids: await resolverIdsDoEscopo(supabase, null) });
+    // "Eu" fica como a própria pessoa selecionada, mesmo se ela não for SDR
+    // (Closer conferindo o próprio número) — o filtro SDR-only vale só pras
+    // linhas de MÉDIA (Tribo/Exército/Empresa), não pro "eu" literal.
+    const metaEu = await buscarMetaComTaxas(supabase, escopo);
+    const linhas: LinhaEscopo[] = [{ label: "Eu", ids: [escopo.profileId], metaCredito: metaEu.metaCredito }];
+    if (triboId) {
+      const meta = await buscarMetaComTaxas(supabase, { tipo: "tribo", triboId });
+      linhas.push({ label: "Tribo", ids: await resolverIdsSdrDoEscopo(supabase, { tipo: "tribo", triboId }), metaCredito: meta.metaCredito });
+    }
+    if (exercitoId) {
+      const meta = await buscarMetaComTaxas(supabase, { tipo: "exercito", exercitoId });
+      linhas.push({ label: "Exército", ids: await resolverIdsSdrDoEscopo(supabase, { tipo: "exercito", exercitoId }), metaCredito: meta.metaCredito });
+    }
+    const metaFirma = await buscarMetaComTaxas(supabase, null);
+    linhas.push({ label: "Empresa", ids: await resolverIdsSdrDoEscopo(supabase, null), metaCredito: metaFirma.metaCredito });
     return linhas;
   }
 
   if (escopo?.tipo === "tribo") {
     const exercitoId = tribos.find((t) => t.id === escopo.triboId)?.exercito_id ?? null;
-    const idsTribo = await resolverIdsDoEscopo(supabase, escopo);
-    const linhas: LinhaEscopo[] = [{ label: "Esta Tribo", ids: idsTribo }];
-    if (exercitoId) linhas.push({ label: "Exército", ids: await resolverIdsDoEscopo(supabase, { tipo: "exercito", exercitoId }) });
-    const idsFirma = await resolverIdsDoEscopo(supabase, null);
+    const idsTribo = await resolverIdsSdrDoEscopo(supabase, escopo);
+    const metaTribo = await buscarMetaComTaxas(supabase, escopo);
+    const linhas: LinhaEscopo[] = [{ label: "Esta Tribo", ids: idsTribo, metaCredito: metaTribo.metaCredito }];
+    if (exercitoId) {
+      const meta = await buscarMetaComTaxas(supabase, { tipo: "exercito", exercitoId });
+      linhas.push({ label: "Exército", ids: await resolverIdsSdrDoEscopo(supabase, { tipo: "exercito", exercitoId }), metaCredito: meta.metaCredito });
+    }
+    const idsFirma = await resolverIdsSdrDoEscopo(supabase, null);
     const idsTriboSet = new Set(idsTribo);
-    linhas.push({ label: "Outras Tribos", ids: idsFirma.filter((id) => !idsTriboSet.has(id)) });
+    const metaFirma = await buscarMetaComTaxas(supabase, null);
+    linhas.push({
+      label: "Outras Tribos",
+      ids: idsFirma.filter((id) => !idsTriboSet.has(id)),
+      // Meta da firma menos a meta desta Tribo — não existe conceito de
+      // "meta das outras tribos" pronto em metas_mensais, mas dá pra
+      // derivar por subtração (mesmas 2 buscas que já fizemos acima).
+      metaCredito: metaFirma.metaCredito - metaTribo.metaCredito,
+    });
     return linhas;
   }
 
   if (escopo?.tipo === "exercito") {
+    const [metaExercito, metaFirma] = await Promise.all([buscarMetaComTaxas(supabase, escopo), buscarMetaComTaxas(supabase, null)]);
     return [
-      { label: "Este Exército", ids: await resolverIdsDoEscopo(supabase, escopo) },
-      { label: "Empresa", ids: await resolverIdsDoEscopo(supabase, null) },
+      { label: "Este Exército", ids: await resolverIdsSdrDoEscopo(supabase, escopo), metaCredito: metaExercito.metaCredito },
+      { label: "Empresa", ids: await resolverIdsSdrDoEscopo(supabase, null), metaCredito: metaFirma.metaCredito },
     ];
   }
 
-  return [{ label: "Empresa", ids: await resolverIdsDoEscopo(supabase, null) }];
+  const metaFirma = await buscarMetaComTaxas(supabase, null);
+  return [{ label: "Empresa", ids: await resolverIdsSdrDoEscopo(supabase, null), metaCredito: metaFirma.metaCredito }];
 }
 
 // Totais por cabeça de cada linha (já resolvida por resolverLinhasComparativo)
 // num período [inicio, fim] — chamada 1x por recorte (mês/semana/dia) pela
-// página, reaproveitando os mesmos ids resolvidos uma única vez.
+// página, reaproveitando os mesmos ids/meta resolvidos uma única vez.
+// `ideal` = o que CADA pessoa do grupo precisaria fazer nesse período pra
+// bater a meta mensal, na mesma proporção de dias úteis já passados
+// (mesma lógica de "meta diária" do Pace diário) — pedido do Diretor,
+// 2026-09-17: "em todos os níveis tá faltando um comparativo: a média
+// ideal (de acordo com a meta)".
 export async function buscarComparativoPorCabeca(
   supabase: SupabaseClient,
   linhasEscopo: LinhaEscopo[],
   inicio: string,
   fim: string
 ): Promise<LinhaComparativo[]> {
+  const { metaTicketMedio, taxas } = await buscarMetaComTaxas(supabase, null);
+  const [ano, mes] = fim.slice(0, 7).split("-").map(Number);
+  const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
+  const ultimoDiaMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const fimMes = `${ano}-${String(mes).padStart(2, "0")}-${String(ultimoDiaMes).padStart(2, "0")}`;
+  const diasUteisNoMes = diasUteisEmIntervalo(inicioMes, fimMes) || 1;
+  const diasUteisNoPeriodo = diasUteisEmIntervalo(inicio, fim);
+  const proporcao = diasUteisNoPeriodo / diasUteisNoMes;
+
   const resultado: LinhaComparativo[] = [];
   for (const l of linhasEscopo) {
     const totais = await buscarTotaisPeriodo(supabase, l.ids, inicio, fim);
-    resultado.push({ label: l.label, numPessoas: l.ids.length, porCabeca: totais });
+    const cascataMes = calcularFunilMeta(l.metaCredito, metaTicketMedio, taxas);
+    const numPessoas = l.ids.length || 1;
+    const ideal: TotaisSimples = {
+      tentativas: ((cascataMes.tentativas ?? 0) * proporcao) / numPessoas,
+      alos: ((cascataMes.alos ?? 0) * proporcao) / numPessoas,
+      conexoes: ((cascataMes.conexoes ?? 0) * proporcao) / numPessoas,
+      assinados: ((cascataMes.assinaturas ?? 0) * proporcao) / numPessoas,
+    };
+    resultado.push({ label: l.label, numPessoas: l.ids.length, porCabeca: totais, ideal });
   }
   return resultado;
 }

@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { buscarPaceMes, resolverLinhasComparativo, buscarComparativoPorCabeca, type PaceDia, type LinhaComparativo } from "@/lib/pace";
@@ -353,6 +354,15 @@ export default async function PacePage({
 
 // Um dos 3 blocos (Mês/Semana/Dia) do quadro "Média por cabeça" — pedido
 // do Diretor, 2026-09-17: "pode quebrar em 3 colunas, mês, semana e dia".
+// Real vs Ideal por cabeça — mesmo semáforo de corConversao (abaixo do
+// ideal: vermelho, perto — dentro de 85%: amarelo, na meta ou acima: verde).
+function corRealVsIdeal(real: number, ideal: number): string {
+  if (ideal <= 0) return "text-stone-100";
+  if (real >= ideal) return "text-success-bright";
+  if (real >= ideal * 0.85) return "text-amber-400";
+  return "text-wine-bright";
+}
+
 function TabelaComparativo({ titulo, comparativo }: { titulo: string; comparativo: LinhaComparativo[] }) {
   return (
     <div>
@@ -360,10 +370,12 @@ function TabelaComparativo({ titulo, comparativo }: { titulo: string; comparativ
       <div className="overflow-x-auto">
         <table className="min-w-full border-collapse text-sm">
           <thead>
-            <tr className="text-left text-[11px] uppercase tracking-wide text-stone-500">
-              <th className="py-1 pr-4">Etapa</th>
+            <tr className="text-left text-[10px] uppercase tracking-wide text-stone-500">
+              <th className="py-1 pr-4" rowSpan={2}>
+                Etapa
+              </th>
               {comparativo.map((c) => (
-                <th key={c.label} className="px-3 py-1 text-right">
+                <th key={c.label} colSpan={2} className="border-b border-imperium-line px-3 py-1 text-center">
                   {c.label}
                   <span className="block text-[10px] normal-case text-stone-600">
                     {c.numPessoas} pessoa{c.numPessoas === 1 ? "" : "s"}
@@ -371,16 +383,29 @@ function TabelaComparativo({ titulo, comparativo }: { titulo: string; comparativ
                 </th>
               ))}
             </tr>
+            <tr className="text-left text-[10px] uppercase tracking-wide text-stone-600">
+              {comparativo.map((c) => (
+                <Fragment key={c.label}>
+                  <th className="px-2 py-0.5 text-right font-normal">Real</th>
+                  <th className="px-2 py-0.5 text-right font-normal">Ideal</th>
+                </Fragment>
+              ))}
+            </tr>
           </thead>
           <tbody>
             {(["tentativas", "alos", "conexoes", "assinados"] as const).map((campo) => (
               <tr key={campo} className="border-t border-imperium-line/50">
                 <td className="py-1.5 pr-4 capitalize text-stone-300">{campo}</td>
-                {comparativo.map((c) => (
-                  <td key={c.label} className="px-3 py-1.5 text-right text-stone-100">
-                    {c.numPessoas > 0 ? (c.porCabeca[campo] / c.numPessoas).toFixed(1) : "—"}
-                  </td>
-                ))}
+                {comparativo.map((c) => {
+                  const real = c.numPessoas > 0 ? c.porCabeca[campo] / c.numPessoas : 0;
+                  const ideal = c.ideal[campo];
+                  return (
+                    <Fragment key={c.label}>
+                      <td className={`px-2 py-1.5 text-right ${corRealVsIdeal(real, ideal)}`}>{c.numPessoas > 0 ? real.toFixed(1) : "—"}</td>
+                      <td className="px-2 py-1.5 text-right text-stone-500">{ideal.toFixed(1)}</td>
+                    </Fragment>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
