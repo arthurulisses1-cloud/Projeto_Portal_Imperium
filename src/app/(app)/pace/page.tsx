@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { buscarPaceMes, type PaceDia } from "@/lib/pace";
+import { buscarPaceMes, buscarComparativoPorCabeca, type PaceDia } from "@/lib/pace";
 import type { EscopoTime } from "@/lib/metas";
 import Card from "@/components/ui/Card";
 
@@ -22,15 +22,41 @@ function pctDia(realizado: number, meta: number) {
   return meta > 0 ? `${((realizado / meta) * 100).toFixed(0)}%` : "—";
 }
 
+// Semáforo da conversão realizada contra a meta — pedido do Diretor,
+// 2026-09-16: "abaixo da meta: vermelho, dentro ou próximo da meta:
+// amarelo, acima da meta: verde". "Próximo" = dentro de 15% do alvo
+// (mesma tolerância que o "em risco" de Comando Geral usa, só que
+// espelhada: lá é <80% do esperado, aqui >=85% já conta como perto).
+function corConversao(realizadoPct: number | null, metaPct: number | null): string {
+  if (realizadoPct === null || metaPct === null || metaPct === 0) return "text-gold";
+  if (realizadoPct >= metaPct) return "text-success-bright";
+  if (realizadoPct >= metaPct * 0.85) return "text-amber-400";
+  return "text-wine-bright";
+}
+
 // Linha do resumo Meta/Realizado (mesmo par etapa+conversão que a
-// planilha de Forecast mostra: "Alôs: 48.000 (50,0%)").
-function LinhaResumo({ label, valor, percentual, formato }: { label: string; valor: number; percentual: number | null; formato: "num" | "moeda" }) {
+// planilha de Forecast mostra: "Alôs: 48.000 (50,0%)"). `metaPercentual`
+// só é passado no card Realizado, pra colorir a conversão contra a meta.
+function LinhaResumo({
+  label,
+  valor,
+  percentual,
+  metaPercentual,
+  formato,
+}: {
+  label: string;
+  valor: number;
+  percentual: number | null;
+  metaPercentual?: number | null;
+  formato: "num" | "moeda";
+}) {
+  const cor = metaPercentual !== undefined ? corConversao(percentual, metaPercentual) : "text-gold";
   return (
     <div className="flex items-center justify-between text-sm">
       <span className="text-stone-400">{label}</span>
       <span className="text-stone-100">
         {formato === "moeda" ? moeda(valor) : num(valor)}
-        {percentual !== null && <span className="ml-1.5 text-xs text-gold">({pct(percentual)})</span>}
+        {percentual !== null && <span className={`ml-1.5 text-xs ${cor}`}>({pct(percentual)})</span>}
       </span>
     </div>
   );
@@ -169,7 +195,10 @@ export default async function PacePage({
     ];
   }
 
-  const pace = await buscarPaceMes(supabase, escopo);
+  const [pace, comparativo] = await Promise.all([
+    buscarPaceMes(supabase, escopo),
+    buscarComparativoPorCabeca(supabase, escopo, tribos ?? []),
+  ]);
   const agora = new Date();
 
   // Acumulado = soma corrida de (realizado - meta) dia a dia, mesma
@@ -218,6 +247,38 @@ export default async function PacePage({
         </div>
       )}
 
+      {comparativo.length > 0 && (
+        <Card title="Média por cabeça (mês)">
+          <div className="overflow-x-auto">
+            <table className="min-w-full border-collapse text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-stone-500">
+                  <th className="py-1 pr-4">Etapa</th>
+                  {comparativo.map((c) => (
+                    <th key={c.label} className="px-3 py-1 text-right">
+                      {c.label}
+                      <span className="block text-[10px] normal-case text-stone-600">{c.numPessoas} pessoa{c.numPessoas === 1 ? "" : "s"}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(["tentativas", "alos", "conexoes", "assinados"] as const).map((campo) => (
+                  <tr key={campo} className="border-t border-imperium-line/50">
+                    <td className="py-1.5 pr-4 capitalize text-stone-300">{campo}</td>
+                    {comparativo.map((c) => (
+                      <td key={c.label} className="px-3 py-1.5 text-right text-stone-100">
+                        {c.numPessoas > 0 ? (c.porCabeca[campo] / c.numPessoas).toFixed(1) : "—"}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Card title="Meta do mês">
           <div className="space-y-1.5">
@@ -237,11 +298,11 @@ export default async function PacePage({
         <Card title="Realizado do mês">
           <div className="space-y-1.5">
             <LinhaResumo label="Tentativas" valor={pace.realizado.tentativas} percentual={null} formato="num" />
-            <LinhaResumo label="Alôs" valor={pace.realizado.alos} percentual={pace.realizado.alosPct} formato="num" />
-            <LinhaResumo label="Conexões" valor={pace.realizado.conexoes} percentual={pace.realizado.conexoesPct} formato="num" />
-            <LinhaResumo label="Entrevistas" valor={pace.realizado.entrevistas} percentual={pace.realizado.entrevistasPct} formato="num" />
-            <LinhaResumo label="Assinados" valor={pace.realizado.assinados} percentual={pace.realizado.assinadosPct} formato="num" />
-            <LinhaResumo label="Pagos" valor={pace.realizado.pagos} percentual={pace.realizado.pagosPct} formato="num" />
+            <LinhaResumo label="Alôs" valor={pace.realizado.alos} percentual={pace.realizado.alosPct} metaPercentual={pace.meta.alosPct} formato="num" />
+            <LinhaResumo label="Conexões" valor={pace.realizado.conexoes} percentual={pace.realizado.conexoesPct} metaPercentual={pace.meta.conexoesPct} formato="num" />
+            <LinhaResumo label="Entrevistas" valor={pace.realizado.entrevistas} percentual={pace.realizado.entrevistasPct} metaPercentual={pace.meta.entrevistasPct} formato="num" />
+            <LinhaResumo label="Assinados" valor={pace.realizado.assinados} percentual={pace.realizado.assinadosPct} metaPercentual={pace.meta.assinadosPct} formato="num" />
+            <LinhaResumo label="Pagos" valor={pace.realizado.pagos} percentual={pace.realizado.pagosPct} metaPercentual={pace.meta.pagosPct} formato="num" />
             <div className="mt-2 border-t border-imperium-line pt-2">
               <LinhaResumo label="Ticket médio" valor={pace.realizado.tkm} percentual={null} formato="moeda" />
               <LinhaResumo label="Crédito" valor={pace.realizado.credito} percentual={null} formato="moeda" />
