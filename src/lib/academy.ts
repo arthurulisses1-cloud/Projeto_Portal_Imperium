@@ -300,3 +300,19 @@ export async function buscarItensPorModulos(supabase: SupabaseClient, moduloIds:
   }
   return porModulo;
 }
+
+// "Assistido" no Imperioflix — set de `alvo_id`s que ESSE aluno já marcou
+// como vistos, pra um lote de aulas + itens de módulo de uma vez.
+export async function buscarAssistidos(
+  supabase: SupabaseClient,
+  alunoId: string,
+  idsAulas: string[],
+  idsItens: string[]
+): Promise<Set<string>> {
+  const todosIds = [...idsAulas, ...idsItens];
+  if (todosIds.length === 0) return new Set();
+  // alvo_id é UUID gerado pelo banco — não precisa distinguir por alvo_tipo
+  // aqui, colisão entre uma aula e um item de módulo é praticamente impossível.
+  const { data } = await supabase.from("academy_progresso").select("alvo_id").eq("aluno_id", alunoId).in("alvo_id", todosIds);
+  return new Set((data ?? []).map((r) => r.alvo_id));
+}

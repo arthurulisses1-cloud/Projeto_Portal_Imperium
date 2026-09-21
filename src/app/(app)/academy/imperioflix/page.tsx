@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { buscarTrilhas, buscarTodasAulas, buscarAulasDaTrilha, buscarModulos, buscarItensPorModulos } from "@/lib/academy";
+import { buscarTrilhas, buscarTodasAulas, buscarAulasDaTrilha, buscarModulos, buscarItensPorModulos, buscarAssistidos } from "@/lib/academy";
 import { buscarComentarios, buscarReacoes } from "@/lib/social";
 import NetflixAcademy from "../NetflixAcademy";
+import ImperioflixLogo from "../ImperioflixLogo";
 
 // Imperioflix — sub-aba própria de "Imperium Academy" (pedido do Diretor,
 // 2026-09-21: não é uma aba dentro de Academy Geral nem de Trilhas de
@@ -46,19 +47,17 @@ export default async function ImperioflixPage() {
 
   const idsAulas = aulasFechadas.map((a) => a.id);
   const idsItens = Object.values(itensPorModulo).flat().map((i) => i.id);
-  const [comentariosAulas, reacoesAulas, comentariosItens, reacoesItens] = await Promise.all([
+  const [comentariosAulas, reacoesAulas, comentariosItens, reacoesItens, assistidos] = await Promise.all([
     buscarComentarios(supabase, "academy_aula", idsAulas),
     buscarReacoes(supabase, "academy_aula", idsAulas, user.id),
     buscarComentarios(supabase, "academy_modulo_item", idsItens),
     buscarReacoes(supabase, "academy_modulo_item", idsItens, user.id),
+    buscarAssistidos(supabase, user.id, idsAulas, idsItens),
   ]);
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
-      <div>
-        <h1 className="font-display text-2xl text-gold-bright">Imperioflix</h1>
-        <p className="text-xs text-stone-400">Reveja aulas já dadas e explore os módulos extras, no seu tempo.</p>
-      </div>
+    <main className="mx-auto max-w-6xl space-y-8 px-6 py-8">
+      <ImperioflixLogo />
 
       <NetflixAcademy
         trilhas={trilhas}
@@ -73,6 +72,7 @@ export default async function ImperioflixPage() {
         reacoesAulas={Object.fromEntries(reacoesAulas)}
         comentariosItens={Object.fromEntries(comentariosItens)}
         reacoesItens={Object.fromEntries(reacoesItens)}
+        assistidos={assistidos}
       />
     </main>
   );

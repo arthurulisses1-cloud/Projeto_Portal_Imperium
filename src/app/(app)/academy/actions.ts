@@ -534,3 +534,33 @@ export async function excluirModuloItem(formData: FormData) {
   if (error) throw new Error(error.message);
   revalidarModulos();
 }
+
+// "Já assisti" no Imperioflix — cada aluno marca pra si mesmo, sem gate de
+// Diretor (é progresso pessoal, não uma validação de carreira).
+export async function marcarAssistido(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const alvoTipo = String(formData.get("alvo_tipo"));
+  const alvoId = String(formData.get("alvo_id"));
+  const assistido = formData.get("assistido") === "true";
+
+  if (assistido) {
+    const { error } = await supabase
+      .from("academy_progresso")
+      .upsert({ aluno_id: user.id, alvo_tipo: alvoTipo, alvo_id: alvoId }, { onConflict: "aluno_id,alvo_tipo,alvo_id" });
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await supabase
+      .from("academy_progresso")
+      .delete()
+      .eq("aluno_id", user.id)
+      .eq("alvo_tipo", alvoTipo)
+      .eq("alvo_id", alvoId);
+    if (error) throw new Error(error.message);
+  }
+  revalidatePath("/academy/imperioflix");
+}
