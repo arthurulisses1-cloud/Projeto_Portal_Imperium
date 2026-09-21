@@ -95,6 +95,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
       { href: "/visao-diaria", label: "Visão Diária", roles: ["lider", "diretor", "analista"] },
       { href: "/metas", label: "Metas Mensais", roles: ["diretor", "analista"] },
       { href: "/tv", label: "Painel TV (gestão à vista)", roles: ["diretor", "analista"] },
+      { href: "/tv/config", label: "Configurar ordem do Painel TV", roles: ["diretor"] },
     ],
   },
   {

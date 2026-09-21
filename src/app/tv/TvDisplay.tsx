@@ -66,6 +66,7 @@ const TEMAS = {
 } as const;
 
 type Props = {
+  ordem: string[];
   funilHoje: FunilContagem;
   rankingLigacoesHoje: PessoaVisao[];
   duelo: DueloExercito[];
@@ -86,57 +87,68 @@ export default function TvDisplay(props: Props) {
   const router = useRouter();
   const [slide, setSlide] = useState(0);
 
-  const slides: React.ReactElement[] = [
-    <SlideLigacoesHoje key="ligacoes" funil={props.funilHoje} ranking={props.rankingLigacoesHoje} />,
-  ];
-  if (props.duelo.length === 2) {
-    slides.push(<SlideDuelo key="duelo" a={props.duelo[0]} b={props.duelo[1]} />);
-  }
-  slides.push(
-    <SlideEntrevistasHoje key="entrevistas-hoje" entrevistas={props.entrevistasHoje} />,
-    <SlideRanking
-      key="conexoes"
-      icon={IconTarget}
-      titulo="Top 10 Conexões do dia"
-      tema={TEMAS.conexoes}
-      linhas={props.topConexoesHoje.map((p) => ({ nome: p.nome, valor: p.funil.conexoes }))}
-    />,
-    <SlideRanking
-      key="tribos"
-      icon={IconShield}
-      titulo="Guerra de Tribos"
-      tema={TEMAS.guerraTribos}
-      linhas={props.confrontoTribos}
-      crests={props.crestsTribos}
-      formatoMoeda
-    />,
-    <SlideRanking
-      key="credito"
-      icon={IconCoin}
-      titulo="Top 10 Crédito do mês"
-      tema={TEMAS.credito}
-      linhas={props.topCreditoMes}
-      formatoMoeda
-    />,
-    <SlideRanking
-      key="exercitos"
-      icon={IconEagle}
-      titulo="Guerra de Exércitos"
-      tema={TEMAS.guerraExercitos}
-      linhas={props.confrontoExercitos}
-      crests={props.crestsExercitos}
-      formatoMoeda
-    />,
-    <SlideCampanhas key="campanhas" campanhas={props.campanhasAtivas} />,
-    <SlideRanking
-      key="entrevistas"
-      icon={IconScroll}
-      titulo="Top 5 Entrevistas do mês"
-      tema={TEMAS.entrevistas}
-      linhas={props.topEntrevistasMes.map((p) => ({ nome: p.nome, valor: p.funil.entrevistas }))}
-    />,
-    <SlideLendas key="lendas" auto={props.recordesAuto} curados={props.recordesCurados} />
-  );
+  // Chaves batem com TV_SLIDES em src/lib/tv-config.ts (ordem editável em
+  // /tv/config) — "duelo" só entra de fato quando existem 2 Exércitos pra
+  // comparar; as outras 9 sempre aparecem, sujeitas só à ordem escolhida.
+  const slidesPorChave: Record<string, React.ReactElement | null> = {
+    ligacoes: <SlideLigacoesHoje key="ligacoes" funil={props.funilHoje} ranking={props.rankingLigacoesHoje} />,
+    duelo: props.duelo.length === 2 ? <SlideDuelo key="duelo" a={props.duelo[0]} b={props.duelo[1]} /> : null,
+    "entrevistas-hoje": <SlideEntrevistasHoje key="entrevistas-hoje" entrevistas={props.entrevistasHoje} />,
+    conexoes: (
+      <SlideRanking
+        key="conexoes"
+        icon={IconTarget}
+        titulo="Top 10 Conexões do dia"
+        tema={TEMAS.conexoes}
+        linhas={props.topConexoesHoje.map((p) => ({ nome: p.nome, valor: p.funil.conexoes }))}
+      />
+    ),
+    tribos: (
+      <SlideRanking
+        key="tribos"
+        icon={IconShield}
+        titulo="Guerra de Tribos"
+        tema={TEMAS.guerraTribos}
+        linhas={props.confrontoTribos}
+        crests={props.crestsTribos}
+        formatoMoeda
+      />
+    ),
+    credito: (
+      <SlideRanking
+        key="credito"
+        icon={IconCoin}
+        titulo="Top 10 Crédito do mês"
+        tema={TEMAS.credito}
+        linhas={props.topCreditoMes}
+        formatoMoeda
+      />
+    ),
+    exercitos: (
+      <SlideRanking
+        key="exercitos"
+        icon={IconEagle}
+        titulo="Guerra de Exércitos"
+        tema={TEMAS.guerraExercitos}
+        linhas={props.confrontoExercitos}
+        crests={props.crestsExercitos}
+        formatoMoeda
+      />
+    ),
+    campanhas: <SlideCampanhas key="campanhas" campanhas={props.campanhasAtivas} />,
+    "entrevistas-mes": (
+      <SlideRanking
+        key="entrevistas-mes"
+        icon={IconScroll}
+        titulo="Top 5 Entrevistas do mês"
+        tema={TEMAS.entrevistas}
+        linhas={props.topEntrevistasMes.map((p) => ({ nome: p.nome, valor: p.funil.entrevistas }))}
+      />
+    ),
+    lendas: <SlideLendas key="lendas" auto={props.recordesAuto} curados={props.recordesCurados} />,
+  };
+
+  const slides = props.ordem.map((chave) => slidesPorChave[chave]).filter((s): s is React.ReactElement => s !== null && s !== undefined);
 
   useEffect(() => {
     const id = setInterval(() => setSlide((s) => (s + 1) % slides.length), INTERVALO_SLIDE_MS);
@@ -148,6 +160,14 @@ export default function TvDisplay(props: Props) {
     const id = setInterval(() => router.refresh(), INTERVALO_REFRESH_MS);
     return () => clearInterval(id);
   }, [router]);
+
+  if (slides.length === 0) {
+    return (
+      <div className="fixed inset-0 flex items-center justify-center bg-imperium-bg">
+        <p className="text-stone-500">Nenhuma tela configurada.</p>
+      </div>
+    );
+  }
 
   const atual = slide % slides.length;
 

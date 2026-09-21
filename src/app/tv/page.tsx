@@ -6,6 +6,7 @@ import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, busc
 import { buscarCampanhasAtivas } from "@/lib/campanhas";
 import { buscarRecordesAuto, buscarRecordesCurados } from "@/lib/recordes";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
+import { buscarOrdemSlides } from "@/lib/tv-config";
 import TvDisplay, { type DueloExercito, type EntrevistaHoje } from "./TvDisplay";
 
 // Gestão à vista — pedido do Diretor, 2026-09-21: uma TV na sala rodando os
@@ -125,8 +126,11 @@ export default async function TvPage() {
     };
   });
 
+  const ordem = await buscarOrdemSlides(supabase);
+
   return (
     <TvDisplay
+      ordem={ordem}
       funilHoje={visaoHoje.funil}
       rankingLigacoesHoje={rankingLigacoesHoje}
       duelo={duelo}
