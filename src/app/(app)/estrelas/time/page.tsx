@@ -4,6 +4,7 @@ import { NEXT_RANK, STAR_PACE, type Rank } from "@/lib/carreira";
 import { RANK_LABELS } from "@/lib/labels";
 import { buscarHistoricoEstrelas, ultimosMesesChaves, type PessoaEstrelas } from "@/lib/estrelas-historico";
 import { hojeBR } from "@/lib/data-br";
+import { podeVerArea } from "@/lib/permissoes-analista";
 import Card from "@/components/ui/Card";
 
 const MESES_NOME = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -38,7 +39,8 @@ export default async function EstrelasTimePage() {
   if (!user) redirect("/login");
 
   const { data: meProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (meProfile?.role !== "diretor" && meProfile?.role !== "lider") redirect("/");
+  const analistaLiberado = meProfile?.role === "analista" && (await podeVerArea(supabase, user.id, meProfile.role, "pessoas"));
+  if (meProfile?.role !== "diretor" && meProfile?.role !== "lider" && !analistaLiberado) redirect("/");
 
   let exercitoIdFiltro: string | null = null;
   if (meProfile.role === "lider") {

@@ -18,6 +18,7 @@ import { getViewerContext } from "@/lib/preview";
 import { buscarComentarios, buscarReacoes } from "@/lib/social";
 import ComentariosReacoes from "@/components/ui/ComentariosReacoes";
 import { hojeBR } from "@/lib/data-br";
+import { podeVerArea } from "@/lib/permissoes-analista";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -39,6 +40,10 @@ export default async function MuralPage({
   if (!viewer) return null;
   const meId = viewer.effectiveId;
   const meRole = viewer.effectiveRole;
+  // Meta/painel financeiro do Mural são conteúdo de $$ — só entra pro
+  // Analista se a área "financeiro" estiver liberada (os outros widgets do
+  // Mural, tipo Central de Notificações, são do "mural" mesmo, sempre on).
+  const analistaFinanceiroLiberado = meRole === "analista" && (await podeVerArea(supabase, meId, meRole, "financeiro"));
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -159,7 +164,7 @@ export default async function MuralPage({
   // que SDR/Closer/Líder já tinham no Mural, só que no nível da firma inteira.
   let metaFirma = 0;
   let pagoFirmaMes = 0;
-  if (meRole === "diretor" || meRole === "investidor" || meRole === "analista") {
+  if (meRole === "diretor" || meRole === "investidor" || analistaFinanceiroLiberado) {
     [metaFirma, pagoFirmaMes] = await Promise.all([
       buscarMetaFirma(supabase, { ano, mes }),
       buscarProducaoPagaFirma(supabase, inicioMes, fimMesExclusivo),
@@ -174,7 +179,7 @@ export default async function MuralPage({
   // definido). Diretor vê a firma, Closer a própria Tribo, SDR a própria
   // produção — Líder fica de fora por enquanto (não foi pedido).
   let painelFinanceiro: PainelFinanceiro | null = null;
-  if (meRole === "diretor" || meRole === "investidor" || meRole === "analista") {
+  if (meRole === "diretor" || meRole === "investidor" || analistaFinanceiroLiberado) {
     const { data: opsMes } = await supabase
       .from("weekly_operacoes")
       .select("valor, status, status_manual")
@@ -333,7 +338,7 @@ export default async function MuralPage({
         </Card>
       )}
 
-      {(meRole === "diretor" || meRole === "investidor" || meRole === "analista") && metaFirma > 0 && (
+      {(meRole === "diretor" || meRole === "investidor" || analistaFinanceiroLiberado) && metaFirma > 0 && (
         <Card title={`Meta ${mesEhAtual ? "do mês" : `de ${MESES[mes - 1]}/${ano}`} · Firma`}>
           <BarraMeta realizado={pagoFirmaMes} meta={metaFirma} mesFechado={!mesEhAtual} />
         </Card>

@@ -1,10 +1,19 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { podeVerArea } from "@/lib/permissoes-analista";
 import { RANK_LABELS } from "@/lib/labels";
 import { NEXT_RANK, type Rank } from "@/lib/carreira";
 import { decidirPromocao } from "./actions";
 
 export default async function AprovacoesPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const { data: meuPerfil } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const analistaLiberado = meuPerfil?.role === "analista" && (await podeVerArea(supabase, user.id, meuPerfil.role, "validacoes"));
+  if (meuPerfil?.role !== "diretor" && !analistaLiberado) redirect("/");
 
   const { data: pendentes } = await supabase
     .from("promotion_requests")

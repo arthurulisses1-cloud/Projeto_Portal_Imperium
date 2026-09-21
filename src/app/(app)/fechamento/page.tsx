@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buscarNotaMes, buscarPendenciasAprovacao, buscarFechamento, buscarConfigDre } from "@/lib/dre";
 import { aprovarComissaoParceiro, fecharMes, reabrirMes, atualizarPctReceitaOperacao } from "./actions";
 import { hojeBR } from "@/lib/data-br";
+import { podeVerArea } from "@/lib/permissoes-analista";
 import NotaMesTable from "./nota-mes-table";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -19,10 +20,12 @@ export default async function FechamentoPage({ searchParams }: { searchParams: {
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  // Mesma regra da DRE: Diretor edita, Investidor só enxerga (RLS das
-  // tabelas fechamento_*/comissoes_parceiro já barra escrita dele no banco).
+  // Mesma regra da DRE: Diretor edita, Investidor e Analista-com-Financeiro-
+  // liberado só enxergam (RLS das tabelas fechamento_*/comissoes_parceiro
+  // já barra escrita deles no banco).
   const isDiretor = profile?.role === "diretor";
-  if (!isDiretor && profile?.role !== "investidor") redirect("/");
+  const analistaLiberado = profile?.role === "analista" && (await podeVerArea(supabase, user.id, profile.role, "financeiro"));
+  if (!isDiretor && profile?.role !== "investidor" && !analistaLiberado) redirect("/");
 
   const [anoHoje, mesHoje] = hojeBR().split("-").map(Number);
   const ano = Number(searchParams.ano) || anoHoje;

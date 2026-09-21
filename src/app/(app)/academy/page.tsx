@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { buscarTrilhas, buscarTodasAulas, buscarInstrutoresElegiveis } from "@/lib/academy";
+import { podeVerArea } from "@/lib/permissoes-analista";
 import AcademyGeralView from "./AcademyGeralView";
 
 export default async function AcademyPage() {
@@ -11,7 +12,8 @@ export default async function AcademyPage() {
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "diretor" && profile?.role !== "analista") redirect("/academy/trilha");
+  const analistaLiberado = profile?.role === "analista" && (await podeVerArea(supabase, user.id, profile.role, "academy"));
+  if (profile?.role !== "diretor" && !analistaLiberado) redirect("/academy/trilha");
 
   const trilhas = await buscarTrilhas(supabase);
   const todasAulas = await buscarTodasAulas(supabase);

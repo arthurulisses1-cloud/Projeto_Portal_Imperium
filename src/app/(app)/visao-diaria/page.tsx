@@ -15,6 +15,7 @@ import { buscarCrestsTribos } from "@/lib/guerra";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 import { hojeBR, paraDataUTC, ultimoDiaUtilAntes } from "@/lib/data-br";
+import { podeVerArea } from "@/lib/permissoes-analista";
 import Card from "@/components/ui/Card";
 import BarraMeta from "@/components/ui/BarraMeta";
 
@@ -162,7 +163,8 @@ export default async function VisaoDiariaPage({ searchParams }: { searchParams: 
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "diretor" && profile?.role !== "lider" && profile?.role !== "analista") redirect("/");
+  const analistaLiberado = profile?.role === "analista" && (await podeVerArea(supabase, user.id, profile.role, "dados"));
+  if (profile?.role !== "diretor" && profile?.role !== "lider" && !analistaLiberado) redirect("/");
 
   const periodo: Periodo = (["hoje", "semana", "mes"] as const).includes(searchParams.periodo as Periodo)
     ? (searchParams.periodo as Periodo)

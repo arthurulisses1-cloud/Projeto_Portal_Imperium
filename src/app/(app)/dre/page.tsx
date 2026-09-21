@@ -22,6 +22,7 @@ import Card from "@/components/ui/Card";
 import SimuladorDre from "@/components/dre/SimuladorDre";
 import EstruturaDreView from "@/components/dre/EstruturaDreView";
 import { hojeBR } from "@/lib/data-br";
+import { podeVerArea } from "@/lib/permissoes-analista";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -37,11 +38,13 @@ export default async function DrePage({ searchParams }: { searchParams: { ano?: 
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", user.id).single();
-  // Diretor edita tudo; Investidor só enxerga (RLS das tabelas dre_* já
-  // barra escrita dele no banco — is_investidor() só tem policy de select,
-  // ver migration 0040). Qualquer outro papel nem chega aqui.
+  // Diretor edita tudo; Investidor e Analista-com-Financeiro-liberado só
+  // enxergam (RLS das tabelas dre_* já barra escrita deles no banco —
+  // is_investidor()/analista_pode_ver('financeiro') só têm policy de
+  // select, ver migrations 0040/0082). Qualquer outro papel nem chega aqui.
   const isDiretor = profile?.role === "diretor";
-  if (!isDiretor && profile?.role !== "investidor") redirect("/");
+  const analistaLiberado = profile?.role === "analista" && (await podeVerArea(supabase, user.id, profile.role, "financeiro"));
+  if (!isDiretor && profile?.role !== "investidor" && !analistaLiberado) redirect("/");
 
   const [anoHoje, mesHoje] = hojeBR().split("-").map(Number);
   const ano = Number(searchParams.ano) || anoHoje;

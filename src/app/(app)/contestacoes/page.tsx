@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { podeVerArea } from "@/lib/permissoes-analista";
 import { resolverContestacao } from "./actions";
 
 function moeda(v: number | null) {
@@ -8,6 +10,13 @@ function moeda(v: number | null) {
 
 export default async function ContestacoesPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const { data: meuPerfil } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const analistaLiberado = meuPerfil?.role === "analista" && (await podeVerArea(supabase, user.id, meuPerfil.role, "validacoes"));
+  if (meuPerfil?.role !== "diretor" && !analistaLiberado) redirect("/");
 
   const { data: abertas } = await supabase
     .from("contestacoes")

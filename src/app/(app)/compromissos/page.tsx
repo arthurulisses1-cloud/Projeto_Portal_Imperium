@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/Badge";
 import { cumpriuCompromisso, type StreakRow } from "@/lib/streak";
 import { marcarFaltaTime, desmarcarFaltaTime } from "@/app/(app)/exercito/actions";
 import { hojeBR, ehFimDeSemana } from "@/lib/data-br";
+import { podeVerArea } from "@/lib/permissoes-analista";
 
 type Totais = {
   entrevistasComp: number;
@@ -66,7 +67,8 @@ export default async function CompromissosPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "diretor" && profile?.role !== "analista") redirect("/");
+  const analistaLiberado = profile?.role === "analista" && (await podeVerArea(supabase, user.id, profile.role, "dados"));
+  if (profile?.role !== "diretor" && !analistaLiberado) redirect("/");
 
   const hoje = hojeBR();
   const finalDeSemana = ehFimDeSemana(hoje);

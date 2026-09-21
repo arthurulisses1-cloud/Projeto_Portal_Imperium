@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { buscarPaceMes, resolverLinhasComparativo, buscarComparativoPorCabeca, type PaceDia, type LinhaComparativo } from "@/lib/pace";
 import type { EscopoTime } from "@/lib/metas";
 import { hojeBR, paraDataUTC } from "@/lib/data-br";
+import { podeVerArea } from "@/lib/permissoes-analista";
 import Card from "@/components/ui/Card";
 
 const MESES = [
@@ -81,6 +82,7 @@ export default async function PacePage({
   if (!user) redirect("/login");
   const { data: meuPerfil } = await supabase.from("profiles").select("role, tribo_id, full_name").eq("id", user.id).single();
   if (!meuPerfil || !["sdr", "closer", "lider", "diretor", "analista"].includes(meuPerfil.role)) redirect("/");
+  if (meuPerfil.role === "analista" && !(await podeVerArea(supabase, user.id, meuPerfil.role, "dados"))) redirect("/");
 
   const [{ data: exercitos }, { data: tribos }] = await Promise.all([
     supabase.from("exercitos").select("id, nome, legado_id").order("nome"),

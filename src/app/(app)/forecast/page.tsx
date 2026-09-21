@@ -5,6 +5,7 @@ import { getViewerContext } from "@/lib/preview";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { SDR_FORECAST_LIBERADO } from "@/lib/acessos-especiais";
 import { hojeBR } from "@/lib/data-br";
+import { podeVerArea } from "@/lib/permissoes-analista";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -22,8 +23,9 @@ export default async function ForecastPage({
   // Closer (só as próprias operações), mas nunca edita: podeEditarOperacao
   // não reconhece papel "sdr", então os controles continuam bloqueados.
   const sdrComForecastLiberado = meRole === "sdr" && SDR_FORECAST_LIBERADO.has(meId);
+  const analistaLiberado = meRole === "analista" && (await podeVerArea(supabase, meId, meRole, "forecast"));
 
-  if (!["closer", "lider", "diretor", "investidor", "analista"].includes(meRole) && !sdrComForecastLiberado) {
+  if (!["closer", "lider", "diretor", "investidor"].includes(meRole) && !sdrComForecastLiberado && !analistaLiberado) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>

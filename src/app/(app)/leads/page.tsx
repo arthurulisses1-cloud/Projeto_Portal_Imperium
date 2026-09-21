@@ -6,14 +6,16 @@ import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { normalizarNome } from "@/lib/sync/parse";
 import { classificarBalde, type StatusManual } from "@/lib/forecast";
 import { inicioMesBR } from "@/lib/data-br";
+import { podeVerArea } from "@/lib/permissoes-analista";
 
 export default async function LeadsPage() {
   const supabase = await createClient();
   const viewer = await getViewerContext(supabase);
   if (!viewer) return null;
   const meRole = viewer.effectiveRole;
+  const analistaLiberado = meRole === "analista" && (await podeVerArea(supabase, viewer.effectiveId, meRole, "leads"));
 
-  if (!["closer", "lider", "diretor", "analista"].includes(meRole)) {
+  if (!["closer", "lider", "diretor"].includes(meRole) && !analistaLiberado) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>

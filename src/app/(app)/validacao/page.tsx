@@ -1,10 +1,24 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { podeVerArea } from "@/lib/permissoes-analista";
 import { RANK_LABELS } from "@/lib/labels";
 import { decidirEvidencia, decidirPromocao } from "./actions";
 import { IconBell } from "@/components/ui/icons";
 
 export default async function ValidacaoPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  // Página não tinha checagem nenhuma até aqui (achado ao implementar a
+  // permissão customizada de Analista, 2026-09-21) — as decisões
+  // (decidirEvidencia/decidirPromocao) já exigem Diretor via RLS
+  // (promo_evidence_update/promo_requests_update usam is_director()), essa
+  // checagem aqui é só pra LEITURA da fila.
+  const { data: meuPerfil } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const analistaLiberado = meuPerfil?.role === "analista" && (await podeVerArea(supabase, user.id, meuPerfil.role, "validacoes"));
+  if (meuPerfil?.role !== "diretor" && !analistaLiberado) redirect("/");
 
   const { data: pendentes } = await supabase
     .from("promotion_evidence")

@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -5,7 +6,8 @@ import { RANK_LABELS, ROLE_LABELS } from "@/lib/labels";
 import { RANK_ORDER } from "@/lib/carreira";
 import { listarNomesPlanilha } from "@/lib/sync/nomes";
 import { buscarUltimaSyncOk } from "@/lib/sync/status";
-import { atualizarCargo, atualizarTribo, atualizarLegado } from "./actions";
+import { atualizarCargo, atualizarTribo, atualizarLegado, salvarPermissoesAnalista } from "./actions";
+import { AREAS_ANALISTA, buscarPermissoesAnalistaEmLote } from "@/lib/permissoes-analista";
 import Card from "@/components/ui/Card";
 import SincronizarPlanilha from "@/components/ui/SincronizarPlanilha";
 import SeletorNomesPlanilha from "@/components/ui/SeletorNomesPlanilha";
@@ -49,6 +51,11 @@ export default async function GestaoPage() {
   const lideres = (pessoas ?? []).filter((p) => p.role === "lider");
   const nomesPlanilha = await listarNomesPlanilha();
   const ultimaSync = await buscarUltimaSyncOk(supabase);
+
+  // Permissão customizada por Analista (pedido do Diretor, 2026-09-21) —
+  // busca de todo mundo de uma vez, só quem é Analista precisa disso.
+  const idsAnalistas = (pessoas ?? []).filter((p) => p.role === "analista").map((p) => p.id);
+  const permissoesPorAnalista = await buscarPermissoesAnalistaEmLote(supabase, idsAnalistas);
 
   // Email mora só em auth.users (profiles não tem essa coluna) — só o
   // service role enxerga essa tabela, daí o client admin. listUsers pagina
@@ -181,6 +188,52 @@ export default async function GestaoPage() {
                     </p>
                     <GerarSenhaButton profileId={p.id} />
                   </div>
+
+                  {p.role === "analista" && (
+                    <details className="mt-3">
+                      <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-stone-500">
+                        Permissões de acesso (Analista)
+                      </summary>
+                      <p className="mb-2 mt-2 text-[10px] text-stone-600">
+                        Sem marcar nada, um Analista já vê o mesmo que o Diretor, exceto Financeiro/
+                        Validações/Pessoas — marque &ldquo;Ver&rdquo; pra liberar uma dessas áreas só
+                        pra essa pessoa, ou desmarque uma área liberada por padrão pra tirar o acesso
+                        dela. &ldquo;Editar&rdquo; ainda não libera nenhuma ação de escrita — só fica
+                        salvo pra quando essa parte for implementada.
+                      </p>
+                      <form action={salvarPermissoesAnalista} className="space-y-1.5">
+                        <input type="hidden" name="profile_id" value={p.id} />
+                        <div className="grid grid-cols-[1fr,auto,auto] items-center gap-x-3 gap-y-1 text-xs">
+                          <span className="text-[10px] uppercase text-stone-600">Área</span>
+                          <span className="text-[10px] uppercase text-stone-600">Ver</span>
+                          <span className="text-[10px] uppercase text-stone-600">Editar</span>
+                          {AREAS_ANALISTA.map((a) => {
+                            const atual = permissoesPorAnalista.get(p.id)?.[a.key];
+                            return (
+                              <Fragment key={a.key}>
+                                <span className="text-stone-300">{a.label}</span>
+                                <input
+                                  type="checkbox"
+                                  name={`ver_${a.key}`}
+                                  defaultChecked={atual?.ver ?? a.verPadrao}
+                                  className="justify-self-center"
+                                />
+                                <input
+                                  type="checkbox"
+                                  name={`editar_${a.key}`}
+                                  defaultChecked={atual?.editar ?? false}
+                                  className="justify-self-center"
+                                />
+                              </Fragment>
+                            );
+                          })}
+                        </div>
+                        <button type="submit" className="btn-outline mt-2 px-3 py-1.5 text-xs">
+                          Salvar permissões
+                        </button>
+                      </form>
+                    </details>
+                  )}
 
                   <details className="mt-3">
                     <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-stone-500">

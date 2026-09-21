@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { podeVerArea } from "@/lib/permissoes-analista";
 import { RANK_LABELS } from "@/lib/labels";
 import { FUNNEL_STAGES, type FunilEtapa } from "@/lib/funil";
 import { calcularGargalo } from "@/lib/gargalo";
@@ -24,6 +26,17 @@ export default async function LegadoPage({
   searchParams: { filtro?: string; papel?: string };
 }) {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const { data: meuPerfil } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  // Página não tinha checagem nenhuma até aqui (achado ao implementar a
+  // permissão customizada de Analista, 2026-09-21) — Meu Legado é do
+  // Diretor, ou do Analista com a área "pessoas" liberada.
+  const analistaLiberado = meuPerfil?.role === "analista" && (await podeVerArea(supabase, user.id, meuPerfil.role, "pessoas"));
+  if (meuPerfil?.role !== "diretor" && !analistaLiberado) redirect("/");
+
   const filtro = searchParams.filtro === "todos" ? "todos" : "ativos";
   const papelFiltro: "tudo" | "sdr" | "closer" =
     searchParams.papel === "sdr" || searchParams.papel === "closer" ? searchParams.papel : "tudo";

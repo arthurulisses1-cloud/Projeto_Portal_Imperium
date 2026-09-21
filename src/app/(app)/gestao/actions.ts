@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { runSync } from "@/lib/sync/run";
+import { AREAS_ANALISTA } from "@/lib/permissoes-analista";
 
 async function exigirDiretor() {
   const supabase = await createClient();
@@ -28,6 +29,32 @@ async function exigirLiderOuDiretor() {
     throw new Error("Só líderes e o Diretor podem fazer isso.");
   }
   return supabase;
+}
+
+// Permissão customizada por Analista — pedido do Diretor, 2026-09-21:
+// "quero poder setar o que cada um pode ver e editar". Um checkbox
+// ver/editar por área (ver AREAS_ANALISTA, src/lib/permissoes-analista.ts)
+// — grava as 10 áreas sempre, mesmo desmarcadas (upsert idempotente é mais
+// simples que só gravar diferença do padrão, e a tabela é minúscula).
+export async function salvarPermissoesAnalista(formData: FormData) {
+  const supabase = await exigirDiretor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const profileId = String(formData.get("profile_id"));
+
+  const linhas = AREAS_ANALISTA.map((a) => ({
+    profile_id: profileId,
+    area: a.key,
+    pode_ver: formData.get(`ver_${a.key}`) === "on",
+    pode_editar: formData.get(`editar_${a.key}`) === "on",
+    atualizado_por: user!.id,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase.from("analista_permissoes").upsert(linhas, { onConflict: "profile_id,area" });
+  if (error) throw new Error(error.message);
+  revalidatePath("/gestao");
 }
 
 export async function atualizarCargo(formData: FormData) {

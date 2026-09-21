@@ -5,6 +5,7 @@ import type { WeeklyDataset, WeeklyOp, PersonInfo, EntrevistaEvento } from "@/li
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 import { mapaMetaCreditoPorTribo } from "@/lib/metas";
 import { hojeBR } from "@/lib/data-br";
+import { podeVerArea } from "@/lib/permissoes-analista";
 
 export default async function WeeklyPage() {
   const supabase = await createClient();
@@ -14,7 +15,8 @@ export default async function WeeklyPage() {
   if (!user) return null;
 
   const { data: meProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (!meProfile || !["lider", "diretor", "investidor", "analista"].includes(meProfile.role)) {
+  const analistaLiberado = meProfile?.role === "analista" && (await podeVerArea(supabase, user.id, meProfile.role, "dados"));
+  if (!meProfile || (!["lider", "diretor", "investidor"].includes(meProfile.role) && !analistaLiberado)) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>

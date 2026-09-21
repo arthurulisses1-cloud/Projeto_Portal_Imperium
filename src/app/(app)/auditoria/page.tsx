@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { podeVerArea } from "@/lib/permissoes-analista";
 import Card from "@/components/ui/Card";
 import { IconMedal, IconScales, IconAlert } from "@/components/ui/icons";
 
@@ -29,6 +31,16 @@ type EventoAuditoria = {
 
 export default async function AuditoriaPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  // Página não tinha checagem nenhuma até aqui (achado ao implementar a
+  // permissão customizada de Analista, 2026-09-21) — Auditoria é do
+  // Diretor, ou do Analista com a área "validacoes" liberada.
+  const { data: meuPerfil } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const analistaLiberado = meuPerfil?.role === "analista" && (await podeVerArea(supabase, user.id, meuPerfil.role, "validacoes"));
+  if (meuPerfil?.role !== "diretor" && !analistaLiberado) redirect("/");
 
   const [{ data: promocoes }, { data: contestacoes }, { data: strikes }] = await Promise.all([
     supabase

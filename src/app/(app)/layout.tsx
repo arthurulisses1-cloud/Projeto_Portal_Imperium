@@ -15,6 +15,7 @@ import { SDR_FORECAST_LIBERADO } from "@/lib/acessos-especiais";
 import { buscarUltimaSyncOk } from "@/lib/sync/status";
 import { buscarMencoesPendentes } from "@/lib/social";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
+import { buscarPermissoesAnalista, type AreaAnalista } from "@/lib/permissoes-analista";
 
 export const dynamic = "force-dynamic";
 
@@ -22,18 +23,30 @@ export const dynamic = "force-dynamic";
 // visibilidade do grupo inteiro (comportamento de sempre). Usado pra caber
 // papéis diferentes dentro do MESMO grupo (ex: "Pessoas" mistura item de
 // todo mundo com item só do Diretor), sem duplicar o grupo uma vez por papel.
+// `area` é opcional e só importa pro papel Analista — quando presente,
+// pedido do Diretor 2026-09-21 ("quero poder setar o que cada um pode
+// ver"): a visibilidade pra um Analista específico usa a permissão
+// customizada dessa área (ver src/lib/permissoes-analista.ts) em vez do
+// `roles` estático. Item sem `area` (páginas de SDR/Closer/Líder, que não
+// têm esse sistema) continua só no `roles` de sempre.
 type NavConfigEntry =
-  | { type: "link"; href: string; label: string; roles: string[] }
-  | { type: "group"; label: string; roles: string[]; items: { href: string; label: string; roles?: string[] }[] };
+  | { type: "link"; href: string; label: string; roles: string[]; area?: AreaAnalista }
+  | {
+      type: "group";
+      label: string;
+      roles: string[];
+      area?: AreaAnalista;
+      items: { href: string; label: string; roles?: string[] }[];
+    };
 
 // Central de Notificações agora vive dentro do Mural (não é mais aba própria);
 // Visão Geral da Firma saiu (a Weekly de Receita cobre o mesmo terreno);
 // Campanhas virou um atalho na lateral do Mural em vez de aba fixa.
 const NAV_ITEMS: NavConfigEntry[] = [
-  { type: "link", href: "/", label: "Mural", roles: ["sdr", "closer", "lider", "diretor", "investidor", "analista"] },
+  { type: "link", href: "/", label: "Mural", roles: ["sdr", "closer", "lider", "diretor", "investidor", "analista"], area: "mural" },
   { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer"] },
-  { type: "link", href: "/tarefas", label: "Tarefas", roles: ["sdr", "closer", "lider", "diretor", "analista"] },
-  { type: "link", href: "/leads", label: "Meus Leads", roles: ["closer", "lider", "diretor", "analista"] },
+  { type: "link", href: "/tarefas", label: "Tarefas", roles: ["sdr", "closer", "lider", "diretor", "analista"], area: "tarefas" },
+  { type: "link", href: "/leads", label: "Meus Leads", roles: ["closer", "lider", "diretor", "analista"], area: "leads" },
   { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
   { type: "link", href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
   { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
@@ -44,18 +57,20 @@ const NAV_ITEMS: NavConfigEntry[] = [
     type: "group",
     label: "Legado",
     roles: ["sdr", "closer", "lider", "diretor", "investidor", "analista"],
+    area: "legado",
     items: [
       { href: "/ranking", label: "Ranking" },
       { href: "/recordes", label: "Recordes" },
     ],
   },
-  { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor", "investidor", "analista"] },
+  { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor", "investidor", "analista"], area: "forecast" },
   { type: "link", href: "/parceiros", label: "Parceiros", roles: ["closer", "lider"] },
   { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
   {
     type: "group",
     label: "Imperium Academy",
     roles: ["sdr", "closer", "lider", "diretor", "analista"],
+    area: "academy",
     items: [
       { href: "/academy", label: "Academy Geral" },
       { href: "/academy/instrutor", label: "Aulas para Ministrar" },
@@ -71,6 +86,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
     type: "group",
     label: "Dados",
     roles: ["sdr", "closer", "lider", "diretor", "investidor", "analista"],
+    area: "dados",
     items: [
       { href: "/pace", label: "Pace", roles: ["sdr", "closer", "lider", "diretor", "analista"] },
       { href: "/compromissos", label: "Compromissos", roles: ["diretor", "analista"] },
@@ -83,6 +99,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
     type: "group",
     label: "Financeiro",
     roles: ["diretor", "investidor"],
+    area: "financeiro",
     items: [
       { href: "/comissao", label: "Comissão do Mês" },
       { href: "/parceiros", label: "Parceiros" },
@@ -94,6 +111,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
     type: "group",
     label: "Pessoas",
     roles: ["sdr", "closer", "lider", "diretor", "investidor"],
+    area: "pessoas",
     items: [
       { href: "/estrelas", label: "Estrelas", roles: ["sdr", "closer"] },
       { href: "/estrelas/time", label: "Estrelas do Time", roles: ["lider", "diretor"] },
@@ -106,6 +124,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
     type: "group",
     label: "Validações",
     roles: ["diretor"],
+    area: "validacoes",
     items: [
       { href: "/auditoria", label: "Auditoria" },
       { href: "/validacao", label: "Fila de Validação" },
@@ -154,25 +173,46 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const papelVisualizado = previewPessoa?.role ?? profile?.role;
 
   const papelAtual = papelVisualizado ?? profile?.role;
-  const itensVisiveis: NavEntry[] = NAV_ITEMS.filter((item) => !profile || item.roles.includes(papelAtual ?? profile.role)).map(
-    (entry) => {
-      const { roles, ...rest } = entry;
-      void roles;
-      // Item de grupo com `roles` próprio (ex: "Pessoas" mistura item de
-      // todo mundo com item só do Diretor) filtra de novo aqui dentro —
-      // sem `roles`, o item herda a visibilidade do grupo (comportamento
-      // de sempre, ver Academy/Financeiro/Validações acima).
-      if (rest.type === "group") {
-        return {
-          ...rest,
-          items: rest.items
-            .filter((i) => !i.roles || !profile || i.roles.includes(papelAtual ?? profile.role))
-            .map(({ href, label }) => ({ href, label })),
-        };
-      }
-      return rest;
+
+  // Permissão customizada por Analista (pedido do Diretor, 2026-09-21) —
+  // busca a conta REAL logada (não papelAtual/previewPessoa, que hoje nem
+  // tem jeito de ativar pela UI mesmo — ver comentário acima). Item com
+  // `area` definida usa essa permissão pra decidir visibilidade quando
+  // quem tá olhando é Analista, em vez do `roles` estático.
+  const permissoesAnalista =
+    user && profile?.role === "analista" ? await buscarPermissoesAnalista(supabase, user.id) : null;
+  function visivelParaMim(rolesDoItem: string[], area?: AreaAnalista): boolean {
+    if (!profile) return true;
+    if (permissoesAnalista && area) return permissoesAnalista[area].ver;
+    return rolesDoItem.includes(papelAtual ?? profile.role);
+  }
+
+  const itensVisiveis: NavEntry[] = NAV_ITEMS.filter((item) => visivelParaMim(item.roles, item.area)).map((entry) => {
+    const { roles, area, ...rest } = entry;
+    void roles;
+    void area;
+    // Item de grupo com `roles` próprio (ex: "Pessoas" mistura item de
+    // todo mundo com item só do Diretor) filtra de novo aqui dentro —
+    // sem `roles`, o item herda a visibilidade do grupo (comportamento
+    // de sempre, ver Academy/Financeiro/Validações acima). Itens dentro
+    // de um grupo não têm `area` própria — a permissão do Analista é por
+    // aba mãe inteira, não por item individual dela.
+    if (rest.type === "group") {
+      // Analista com a área liberada vê TODOS os itens do grupo (mesmo os
+      // que, por `roles`, seriam só de outro papel — ex: "Gestão de
+      // Pessoas" é roles:["diretor"], mas se a área "pessoas" foi liberada
+      // pro Analista, ele precisa ver o item, não só o rótulo do grupo
+      // vazio por dentro). Sem a área liberada, cai no `roles` de sempre.
+      const analistaComAreaLiberada = permissoesAnalista && area ? permissoesAnalista[area].ver : false;
+      return {
+        ...rest,
+        items: rest.items
+          .filter((i) => analistaComAreaLiberada || !i.roles || visivelParaMim(i.roles))
+          .map(({ href, label }) => ({ href, label })),
+      };
     }
-  );
+    return rest;
+  });
 
   // Exceção pontual (ver src/lib/acessos-especiais.ts): Forecast liberado
   // pra 2 SDRs específicos, sem virar um papel novo — não usa
