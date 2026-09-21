@@ -140,7 +140,7 @@ export default function AcademyGeralView({
                 <p className="text-xs uppercase tracking-wide opacity-80">{aulasDaTrilha.length} aulas</p>
                 <h2 className="font-display text-xl">{visualAtual.icone} {trilhaAtual.nome}</h2>
               </div>
-              <form action={atualizarTrilha} className="flex flex-wrap items-center gap-2 text-xs">
+              <form action={atualizarTrilha} className="flex flex-wrap items-center gap-2 text-xs" encType="multipart/form-data">
                 <input type="hidden" name="id" value={trilhaAtual.id} />
                 <select name="dia_semana" defaultValue={trilhaAtual.diaSemana} className="rounded border-none bg-white/20 px-2 py-1 text-xs text-white">
                   {DIAS_SEMANA.map((d, i) => (
@@ -150,6 +150,10 @@ export default function AcademyGeralView({
                 <input type="time" name="hora_inicio" defaultValue={trilhaAtual.horaInicio} className="w-24 rounded border-none bg-white/20 px-2 py-1 text-xs text-white" />
                 <span>–</span>
                 <input type="time" name="hora_fim" defaultValue={trilhaAtual.horaFim} className="w-24 rounded border-none bg-white/20 px-2 py-1 text-xs text-white" />
+                <label className="flex items-center gap-1 text-[10px] text-white/80">
+                  Capa (Imperioflix)
+                  <input type="file" name="capa" accept="image/*" className="max-w-[140px] rounded border-none bg-white/20 px-1 py-1 text-[10px] text-white" />
+                </label>
                 <button type="submit" className="rounded bg-white/25 px-2 py-1 text-[10px] hover:bg-white/40">Salvar</button>
               </form>
             </div>

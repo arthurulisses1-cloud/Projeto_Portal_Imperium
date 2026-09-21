@@ -3,7 +3,7 @@
 // em vez de sans-serif + vermelho puro), sem copiar a fonte/arquivo da marca.
 export default function ImperioflixLogo({ className = "" }: { className?: string }) {
   return (
-    <div className={`select-none ${className}`}>
+    <div className={`select-none text-center ${className}`}>
       <h1
         className="font-display text-4xl font-bold italic tracking-wide sm:text-5xl"
         style={{

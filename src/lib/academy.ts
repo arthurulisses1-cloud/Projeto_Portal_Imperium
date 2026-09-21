@@ -11,6 +11,9 @@ export type Trilha = {
   horaFim: string;
   ordem: number;
   ativa: boolean;
+  // Pôster da "série" no Imperioflix (2026-09-21) — sem capa, cai no
+  // gradiente/ícone padrão da trilha (visualDaTrilha).
+  capaUrl: string | null;
 };
 
 export type Aula = {
@@ -51,6 +54,11 @@ export type Modulo = {
   ordem: number;
   ativo: boolean;
   ranksLiberados: Rank[];
+  // Categoria livre pra agrupar em prateleiras temáticas no Imperioflix
+  // (ex: "marketing", "vendas") — null cai na prateleira "Outros".
+  categoria: string | null;
+  // Aparece também na prateleira "Top 5", curada manualmente pelo Diretor.
+  destaque: boolean;
 };
 
 export type ModuloItem = {
@@ -63,6 +71,17 @@ export type ModuloItem = {
   arquivoUrl: string | null;
   ordem: number;
 };
+
+// Categorias fixas pré-criadas (migration 0086) pra organizar os módulos
+// alternativos em prateleiras temáticas no Imperioflix — Diretor pode
+// deixar um módulo fora de todas (cai em "Outros").
+export const CATEGORIAS_MODULO: { value: string; label: string }[] = [
+  { value: "marketing", label: "Marketing" },
+  { value: "vendas", label: "Vendas" },
+  { value: "mentalidade", label: "Mentalidade" },
+  { value: "gestao", label: "Gestão" },
+  { value: "podcast", label: "Podcasts" },
+];
 
 // Diretor/Analista/Legado não têm rank de trilha (fora do RANK_ORDER
 // legionario..legado) — trata como "sem rank", só entra em módulo aberto
@@ -84,6 +103,7 @@ export async function buscarTrilhas(supabase: SupabaseClient): Promise<Trilha[]>
     horaFim: t.hora_fim,
     ordem: t.ordem,
     ativa: t.ativa,
+    capaUrl: t.capa_url ?? null,
   }));
 }
 
@@ -260,6 +280,8 @@ function mapModulo(m: any): Modulo {
     ordem: m.ordem,
     ativo: m.ativo,
     ranksLiberados: m.ranks_liberados ?? [],
+    categoria: m.categoria ?? null,
+    destaque: m.destaque ?? false,
   };
 }
 

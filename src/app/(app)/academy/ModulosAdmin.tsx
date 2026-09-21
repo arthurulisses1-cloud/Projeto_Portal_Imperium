@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { Modulo, ModuloItem } from "@/lib/academy";
+import { CATEGORIAS_MODULO } from "@/lib/academy";
 import { RANK_ORDER, type Rank } from "@/lib/carreira";
 import { RANK_LABELS } from "@/lib/labels";
 import { criarModulo, atualizarModulo, excluirModulo, criarModuloItem, excluirModuloItem } from "./actions";
@@ -62,6 +63,17 @@ function RanksCheckboxes({ defaultValue }: { defaultValue: Rank[] }) {
   );
 }
 
+function CategoriaSelect({ defaultValue }: { defaultValue: string | null }) {
+  return (
+    <select name="categoria" defaultValue={defaultValue ?? ""} className="input-imp px-2 py-1 text-xs">
+      <option value="">Sem categoria (cai em &quot;Outros&quot;)</option>
+      {CATEGORIAS_MODULO.map((c) => (
+        <option key={c.value} value={c.value}>{c.label}</option>
+      ))}
+    </select>
+  );
+}
+
 function FormNovoModulo({ onDone }: { onDone: () => void }) {
   return (
     <form
@@ -74,7 +86,15 @@ function FormNovoModulo({ onDone }: { onDone: () => void }) {
     >
       <input name="titulo" placeholder="Título do módulo (ex: Prospecção Ativa)" required className="input-imp px-2 py-1 text-xs" />
       <textarea name="descricao" placeholder="Descrição (opcional)" rows={2} className="input-imp text-xs" />
-      <input type="file" name="capa" accept="image/*" className="text-xs text-stone-300" />
+      <div>
+        <label className="mb-1 block text-[10px] uppercase text-stone-500">Capa (aparece como pôster no Imperioflix)</label>
+        <input type="file" name="capa" accept="image/*" className="text-xs text-stone-300" />
+      </div>
+      <CategoriaSelect defaultValue={null} />
+      <label className="flex items-center gap-1 text-[10px] text-stone-400">
+        <input type="checkbox" name="destaque" className="accent-gold" />
+        Destacar na prateleira &quot;Top 5&quot;
+      </label>
       <RanksCheckboxes defaultValue={[]} />
       <button type="submit" className="btn-outline px-3 py-1 text-[10px]">Criar módulo</button>
     </form>
@@ -99,8 +119,18 @@ function ModuloCard({
     <div className="overflow-hidden rounded border border-imperium-line">
       <button type="button" onClick={onToggle} className="flex w-full items-center justify-between gap-2 bg-imperium-bg/40 p-3 text-left">
         <div className="flex items-center gap-2">
+          {modulo.capaUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={modulo.capaUrl} alt="" className="h-8 w-14 rounded object-cover" />
+          )}
           <span className="text-sm text-stone-100">{modulo.titulo}</span>
           {!modulo.ativo && <span className="rounded-full bg-wine/30 px-2 py-0.5 text-[10px] text-wine-bright">inativo</span>}
+          {modulo.destaque && <span className="rounded-full bg-gold/20 px-2 py-0.5 text-[10px] text-gold-bright">Top 5</span>}
+          {modulo.categoria && (
+            <span className="rounded-full bg-imperium-line px-2 py-0.5 text-[10px] text-stone-400">
+              {CATEGORIAS_MODULO.find((c) => c.value === modulo.categoria)?.label ?? modulo.categoria}
+            </span>
+          )}
           <span className="text-[10px] text-stone-500">{itens.length} item(ns)</span>
         </div>
         <span className="text-[10px] text-stone-500">{aberto ? "▾" : "▸"}</span>
@@ -124,10 +154,18 @@ function ModuloCard({
               <input type="hidden" name="id" value={modulo.id} />
               <input name="titulo" defaultValue={modulo.titulo} className="input-imp px-2 py-1 text-xs" />
               <textarea name="descricao" defaultValue={modulo.descricao ?? ""} rows={2} className="input-imp text-xs" />
-              <input type="file" name="capa" accept="image/*" className="text-xs text-stone-300" />
+              <div>
+                <label className="mb-1 block text-[10px] uppercase text-stone-500">Trocar capa</label>
+                <input type="file" name="capa" accept="image/*" className="text-xs text-stone-300" />
+              </div>
+              <CategoriaSelect defaultValue={modulo.categoria} />
               <label className="flex items-center gap-1 text-[10px] text-stone-400">
                 <input type="checkbox" name="ativo" defaultChecked={modulo.ativo} className="accent-gold" />
                 Ativo (visível pra quem tem acesso)
+              </label>
+              <label className="flex items-center gap-1 text-[10px] text-stone-400">
+                <input type="checkbox" name="destaque" defaultChecked={modulo.destaque} className="accent-gold" />
+                Destacar na prateleira &quot;Top 5&quot;
               </label>
               <RanksCheckboxes defaultValue={modulo.ranksLiberados} />
               <button type="submit" className="btn-outline px-3 py-1 text-[10px]">Salvar</button>

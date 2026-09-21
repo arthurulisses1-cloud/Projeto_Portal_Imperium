@@ -38,6 +38,7 @@ function revalidar() {
   revalidatePath("/academy");
   revalidatePath("/academy/instrutor");
   revalidatePath("/academy/trilha");
+  revalidatePath("/academy/imperioflix");
   revalidatePath("/tarefas");
   revalidatePath("/");
 }
@@ -132,10 +133,19 @@ export async function atualizarTrilha(formData: FormData) {
   const horaFim = String(formData.get("hora_fim") ?? "").trim();
   if (!horaInicio || !horaFim) throw new Error("Preencha o horário.");
 
-  const { error } = await supabase
-    .from("academy_trilhas")
-    .update({ dia_semana: diaSemana, hora_inicio: horaInicio, hora_fim: horaFim })
-    .eq("id", id);
+  const payload: Record<string, unknown> = { dia_semana: diaSemana, hora_inicio: horaInicio, hora_fim: horaFim };
+
+  // Pôster da trilha no Imperioflix — pedido do Diretor, 2026-09-21.
+  const capa = formData.get("capa") as File | null;
+  if (capa && capa.size > 0) {
+    const ext = capa.name.split(".").pop() || "jpg";
+    const path = `trilhas/${id}-${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from("academy-modulos").upload(path, capa, { contentType: capa.type });
+    if (uploadError) throw new Error(uploadError.message);
+    payload.capa_url = supabase.storage.from("academy-modulos").getPublicUrl(path).data.publicUrl;
+  }
+
+  const { error } = await supabase.from("academy_trilhas").update(payload).eq("id", id);
   if (error) throw new Error(error.message);
   revalidar();
 }
@@ -411,6 +421,7 @@ export async function salvarResumoAula(formData: FormData) {
 function revalidarModulos() {
   revalidatePath("/academy");
   revalidatePath("/academy/trilha");
+  revalidatePath("/academy/imperioflix");
 }
 
 // ---------- Módulos alternativos (Netflix fora da trilha oficial) ----------
@@ -421,6 +432,8 @@ export async function criarModulo(formData: FormData) {
   if (!titulo) throw new Error("Título é obrigatório.");
   const descricao = String(formData.get("descricao") ?? "").trim();
   const ranksLiberados = formData.getAll("ranks_liberados").map(String);
+  const categoria = String(formData.get("categoria") ?? "").trim();
+  const destaque = formData.get("destaque") === "on";
 
   let capaUrl: string | null = null;
   const capa = formData.get("capa") as File | null;
@@ -438,6 +451,8 @@ export async function criarModulo(formData: FormData) {
     descricao: descricao || null,
     capa_url: capaUrl,
     ranks_liberados: ranksLiberados.length > 0 ? ranksLiberados : null,
+    categoria: categoria || null,
+    destaque,
     ordem: (ultimo?.ordem ?? 0) + 1,
     created_by: userId,
   });
@@ -453,12 +468,16 @@ export async function atualizarModulo(formData: FormData) {
   const descricao = String(formData.get("descricao") ?? "").trim();
   const ranksLiberados = formData.getAll("ranks_liberados").map(String);
   const ativo = formData.get("ativo") === "on";
+  const categoria = String(formData.get("categoria") ?? "").trim();
+  const destaque = formData.get("destaque") === "on";
 
   const payload: Record<string, unknown> = {
     titulo,
     descricao: descricao || null,
     ranks_liberados: ranksLiberados.length > 0 ? ranksLiberados : null,
     ativo,
+    categoria: categoria || null,
+    destaque,
   };
 
   const capa = formData.get("capa") as File | null;

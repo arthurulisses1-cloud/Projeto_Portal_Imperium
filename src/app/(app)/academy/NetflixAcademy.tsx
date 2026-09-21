@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { Aula, Trilha, Modulo, ModuloItem } from "@/lib/academy";
-import { moduloLiberadoPara } from "@/lib/academy";
+import { moduloLiberadoPara, CATEGORIAS_MODULO } from "@/lib/academy";
 import type { Rank } from "@/lib/carreira";
 import type { Comentario, ReacaoResumo } from "@/lib/social";
 import { visualDaTrilha } from "@/lib/academy-visual";
@@ -48,10 +48,25 @@ type CardItem = {
   cor: string;
   gradiente: string;
   icone: string;
-  bloqueado: boolean;
 };
 
-type Prateleira = { titulo: string; icone: string; itens: CardItem[] };
+// "Série" — uma trilha oficial ou um módulo alternativo: um card grande
+// (pôster) que, ao clicar, abre a lista de episódios (aulas/itens) dentro.
+// Pedido do Diretor, 2026-09-21: "Mentalidade do Legionário" é uma AULA
+// dentro da trilha Legionário, não um card solto — a trilha é o card, a
+// aula é o episódio.
+type Serie = {
+  id: string;
+  titulo: string;
+  descricao: string | null;
+  capaUrl: string | null;
+  gradiente: string;
+  icone: string;
+  bloqueado: boolean;
+  episodios: CardItem[];
+};
+
+type Prateleira = { titulo: string; series: Serie[] };
 
 export default function NetflixAcademy({
   trilhas,
@@ -83,80 +98,125 @@ export default function NetflixAcademy({
   assistidos: Set<string>;
 }) {
   const [aberto, setAberto] = useState<CardItem | null>(null);
+  const [serieAberta, setSerieAberta] = useState<Serie | null>(null);
   const [vistos, setVistos] = useState<Set<string>>(assistidos);
 
-  // Uma prateleira POR TRILHA oficial (ex: "Legionário" com a aula
-  // "Mentalidade do Legionário" dentro) — pedido do Diretor, 2026-09-21:
-  // a aula é um "episódio" dentro do "card da série" (a trilha), não um
-  // módulo solto.
-  const prateleirasOficiais: Prateleira[] = trilhas
-    .map((t) => {
-      const visual = visualDaTrilha(t.nome);
-      return {
-        titulo: t.nome,
-        icone: visual.icone,
-        itens: (aulasPorTrilha[t.id] ?? [])
-          .filter((a) => a.realizada)
-          .sort((a, b) => a.ordem - b.ordem)
-          .map((a) => ({
-            id: a.id,
-            tipo: "aula" as const,
-            titulo: a.tema,
-            subtitulo: t.nome,
-            resumo: a.resumo,
-            videoUrl: a.videoUrl,
-            arquivoUrl: null,
-            cor: visual.cor,
-            gradiente: visual.gradiente,
-            icone: visual.icone,
-            bloqueado: false,
-          })),
-      };
-    })
-    .filter((p) => p.itens.length > 0);
+  const seriesTrilhas: Serie[] = trilhas.map((t) => {
+    const visual = visualDaTrilha(t.nome);
+    return {
+      id: t.id,
+      titulo: t.nome,
+      descricao: null,
+      capaUrl: t.capaUrl,
+      gradiente: visual.gradiente,
+      icone: visual.icone,
+      bloqueado: false,
+      episodios: (aulasPorTrilha[t.id] ?? [])
+        .filter((a) => a.realizada)
+        .sort((a, b) => a.ordem - b.ordem)
+        .map((a) => ({
+          id: a.id,
+          tipo: "aula" as const,
+          titulo: a.tema,
+          subtitulo: t.nome,
+          resumo: a.resumo,
+          videoUrl: a.videoUrl,
+          arquivoUrl: null,
+          cor: visual.cor,
+          gradiente: visual.gradiente,
+          icone: visual.icone,
+        })),
+    };
+  });
 
-  const prateleirasModulos: Prateleira[] = modulos.map((m) => ({
-    titulo: m.titulo,
-    icone: "🎬",
-    itens: (itensPorModulo[m.id] ?? []).map((item) => ({
-      id: item.id,
-      tipo: "modulo_item" as const,
-      titulo: item.titulo,
-      subtitulo: m.titulo,
-      resumo: item.resumo,
-      videoUrl: item.videoUrl,
-      arquivoUrl: item.arquivoUrl,
-      cor: "#c9a227",
+  function serieDoModulo(m: Modulo): Serie {
+    return {
+      id: m.id,
+      titulo: m.titulo,
+      descricao: m.descricao,
+      capaUrl: m.capaUrl,
       gradiente: "linear-gradient(135deg, #c9a227, #8a6d1a)",
-      icone: item.tipo === "video" ? "🎬" : "📄",
+      icone: "🎬",
       // Diretor sempre vê tudo destravado aqui — o cadeado é pra quem
       // realmente não tem acesso, não pra prévia de quem administra.
       bloqueado: !isDiretor && !moduloLiberadoPara(m, meuRank as Rank | null),
-    })),
-  })).filter((p) => p.itens.length > 0);
+      episodios: (itensPorModulo[m.id] ?? []).map((item) => ({
+        id: item.id,
+        tipo: "modulo_item" as const,
+        titulo: item.titulo,
+        subtitulo: m.titulo,
+        resumo: item.resumo,
+        videoUrl: item.videoUrl,
+        arquivoUrl: item.arquivoUrl,
+        cor: "#c9a227",
+        gradiente: "linear-gradient(135deg, #c9a227, #8a6d1a)",
+        icone: item.tipo === "video" ? "🎬" : "📄",
+      })),
+    };
+  }
 
-  if (prateleirasOficiais.length === 0 && prateleirasModulos.length === 0) {
-    return <p className="text-sm text-stone-500">Nenhum conteúdo disponível ainda.</p>;
+  // Módulo sem nenhum episódio ainda (das categorias pré-criadas, à espera
+  // de conteúdo) só aparece pro Diretor — pro time seria um card vazio.
+  const modulosVisiveis = modulos.filter((m) => isDiretor || (itensPorModulo[m.id] ?? []).length > 0);
+
+  const prateleiraTop5: Prateleira = {
+    titulo: "🔥 Top 5",
+    series: modulosVisiveis.filter((m) => m.destaque).map(serieDoModulo),
+  };
+
+  const prateleirasPorCategoria: Prateleira[] = CATEGORIAS_MODULO.map((c) => ({
+    titulo: c.label,
+    series: modulosVisiveis.filter((m) => m.categoria === c.value).map(serieDoModulo),
+  }));
+
+  const prateleiraOutros: Prateleira = {
+    titulo: "Outros",
+    series: modulosVisiveis.filter((m) => !m.categoria).map(serieDoModulo),
+  };
+
+  const prateleirasModulos = [prateleiraTop5, ...prateleirasPorCategoria, prateleiraOutros].filter(
+    (p) => p.series.length > 0
+  );
+
+  function abrirEpisodio(ep: CardItem) {
+    setAberto(ep);
   }
 
   return (
     <div className="space-y-10">
-      {prateleirasOficiais.length > 0 && (
-        <div className="space-y-6">
+      {seriesTrilhas.length > 0 && (
+        <div className="space-y-3">
           <SectionLabel texto="Trilhas Oficiais" />
-          {prateleirasOficiais.map((prat) => (
-            <Fileira key={prat.titulo} prateleira={prat} vistos={vistos} onAbrir={setAberto} />
-          ))}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
+            {seriesTrilhas.map((s) => (
+              <SerieCard key={s.id} serie={s} onAbrir={() => setSerieAberta(s)} />
+            ))}
+          </div>
         </div>
       )}
 
-      {prateleirasModulos.length > 0 && (
-        <div className="space-y-6">
-          <SectionLabel texto="Trilhas Alternativas" />
-          {prateleirasModulos.map((prat) => (
-            <Fileira key={prat.titulo} prateleira={prat} vistos={vistos} onAbrir={setAberto} />
-          ))}
+      {prateleirasModulos.map((prat) => (
+        <div key={prat.titulo} className="space-y-2">
+          <h3 className="text-sm font-medium text-stone-300">{prat.titulo}</h3>
+          <div className="flex gap-3 overflow-x-auto pb-3">
+            {prat.series.map((s) => (
+              <SerieCard key={s.id} serie={s} small onAbrir={() => !s.bloqueado && setSerieAberta(s)} />
+            ))}
+          </div>
         </div>
+      ))}
+
+      {seriesTrilhas.length === 0 && prateleirasModulos.length === 0 && (
+        <p className="text-sm text-stone-500">Nenhum conteúdo disponível ainda.</p>
+      )}
+
+      {serieAberta && (
+        <SerieModal
+          serie={serieAberta}
+          vistos={vistos}
+          onClose={() => setSerieAberta(null)}
+          onAbrirEpisodio={abrirEpisodio}
+        />
       )}
 
       {aberto && (
@@ -194,45 +254,84 @@ function SectionLabel({ texto }: { texto: string }) {
   );
 }
 
-function Fileira({
-  prateleira,
+function SerieCard({ serie, small, onAbrir }: { serie: Serie; small?: boolean; onAbrir: () => void }) {
+  return (
+    <button
+      onClick={onAbrir}
+      className={`group relative shrink-0 overflow-hidden rounded-lg border border-imperium-line text-left shadow-md transition duration-200 hover:z-10 hover:scale-[1.05] hover:shadow-xl ${
+        small ? "w-44 sm:w-52" : "w-full"
+      }`}
+      style={{ opacity: serie.bloqueado ? 0.5 : 1 }}
+    >
+      <div
+        className="flex aspect-[2/3] items-center justify-center bg-cover bg-center text-5xl text-white"
+        style={{ background: serie.capaUrl ? `url(${serie.capaUrl}) center/cover` : serie.gradiente }}
+      >
+        {!serie.capaUrl && (serie.bloqueado ? "🔒" : serie.icone)}
+        {serie.bloqueado && serie.capaUrl && (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-4xl">🔒</span>
+        )}
+      </div>
+      <div className="bg-imperium-surface p-2.5">
+        <p className="line-clamp-1 text-xs font-medium text-stone-100">{serie.titulo}</p>
+        <p className="mt-0.5 text-[10px] text-stone-500">
+          {serie.episodios.length} {serie.episodios.length === 1 ? "aula" : "aulas"}
+        </p>
+      </div>
+    </button>
+  );
+}
+
+function SerieModal({
+  serie,
   vistos,
-  onAbrir,
+  onClose,
+  onAbrirEpisodio,
 }: {
-  prateleira: Prateleira;
+  serie: Serie;
   vistos: Set<string>;
-  onAbrir: (item: CardItem) => void;
+  onClose: () => void;
+  onAbrirEpisodio: (ep: CardItem) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <h3 className="text-sm font-medium text-stone-300">
-        {prateleira.icone} {prateleira.titulo}
-      </h3>
-      <div className="flex gap-3 overflow-x-auto pb-3">
-        {prateleira.itens.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => !item.bloqueado && onAbrir(item)}
-            className="group relative w-60 shrink-0 overflow-hidden rounded-lg border border-imperium-line text-left shadow-md transition duration-200 hover:z-10 hover:scale-[1.06] hover:shadow-xl sm:w-72"
-            style={{ opacity: item.bloqueado ? 0.5 : 1 }}
-          >
-            <div
-              className="flex aspect-video items-center justify-center text-5xl text-white"
-              style={{ background: item.gradiente }}
-            >
-              {item.bloqueado ? "🔒" : item.icone}
-              {vistos.has(item.id) && (
-                <span className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-medium text-success-bright">
-                  ✓ visto
-                </span>
-              )}
-            </div>
-            <div className="bg-imperium-surface p-2.5">
-              <p className="line-clamp-1 text-xs font-medium text-stone-100">{item.titulo}</p>
-              <p className="mt-0.5 text-[10px] text-stone-500">{item.subtitulo}</p>
-            </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div
+        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-imperium-line bg-imperium-bg"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="flex items-center justify-between p-5 text-white"
+          style={{ background: serie.capaUrl ? `url(${serie.capaUrl}) center/cover` : serie.gradiente }}
+        >
+          <div className="rounded bg-black/30 p-2">
+            <h2 className="font-display text-xl">{serie.icone} {serie.titulo}</h2>
+            {serie.descricao && <p className="mt-1 max-w-md text-xs opacity-90">{serie.descricao}</p>}
+          </div>
+          <button onClick={onClose} className="rounded-full bg-white/20 px-3 py-1 text-xs hover:bg-white/30">
+            fechar ✕
           </button>
-        ))}
+        </div>
+
+        <div className="space-y-1.5 p-4">
+          {serie.episodios.length === 0 && (
+            <p className="text-xs text-stone-600">Nenhuma aula/episódio cadastrado nessa trilha ainda.</p>
+          )}
+          {serie.episodios.map((ep, i) => (
+            <button
+              key={ep.id}
+              onClick={() => onAbrirEpisodio(ep)}
+              className="flex w-full items-center gap-3 rounded border border-imperium-line p-2.5 text-left transition hover:border-gold/50 hover:bg-imperium-surface"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-imperium-line text-xs text-stone-400">
+                {vistos.has(ep.id) ? "✓" : i + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs text-stone-100">{ep.titulo}</p>
+              </div>
+              {vistos.has(ep.id) && <span className="shrink-0 text-[10px] text-success-bright">visto</span>}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -263,7 +362,7 @@ function DetalheModal({
   const [isPending, startTransition] = useTransition();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <div
         className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-imperium-line bg-imperium-bg"
         onClick={(e) => e.stopPropagation()}
