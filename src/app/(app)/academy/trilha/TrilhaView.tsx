@@ -1,11 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Trilha, Aula, Material, Modulo, ModuloItem } from "@/lib/academy";
+import type { Trilha, Aula, Material } from "@/lib/academy";
 import { visualDaTrilha } from "@/lib/academy-visual";
 import MonthCalendar, { type EventoCalendario } from "@/components/academy/MonthCalendar";
-import type { Comentario, ReacaoResumo } from "@/lib/social";
-import NetflixAcademy from "./NetflixAcademy";
 
 function fmtData(iso: string | null) {
   if (!iso) return "sem data";
@@ -16,30 +14,10 @@ export default function TrilhaView({
   trilhas,
   aulasPorTrilha,
   materiaisPorAula,
-  meuRank,
-  meId,
-  isDiretor,
-  pessoas,
-  modulos,
-  itensPorModulo,
-  comentariosAulas,
-  reacoesAulas,
-  comentariosItens,
-  reacoesItens,
 }: {
   trilhas: Trilha[];
   aulasPorTrilha: Record<string, Aula[]>;
   materiaisPorAula: Record<string, Material[]>;
-  meuRank: string | null;
-  meId: string;
-  isDiretor: boolean;
-  pessoas: { id: string; nome: string }[];
-  modulos: Modulo[];
-  itensPorModulo: Record<string, ModuloItem[]>;
-  comentariosAulas: Record<string, Comentario[]>;
-  reacoesAulas: Record<string, ReacaoResumo>;
-  comentariosItens: Record<string, Comentario[]>;
-  reacoesItens: Record<string, ReacaoResumo>;
 }) {
   const [trilhaSelecionada, setTrilhaSelecionada] = useState<string>(trilhas[0]?.id ?? "");
   const trilhaPorId = useMemo(() => Object.fromEntries(trilhas.map((t) => [t.id, t])), [trilhas]);
@@ -83,25 +61,9 @@ export default function TrilhaView({
 
   if (trilhas.length === 0) {
     return (
-      <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
-        <div>
-          <h1 className="font-display text-2xl text-gold-bright">Imperium Academy</h1>
-          <p className="mt-2 text-sm text-stone-500">Nenhuma trilha oficial configurada pro seu cargo ainda.</p>
-        </div>
-        <NetflixAcademy
-          trilhas={trilhas}
-          aulasPorTrilha={aulasPorTrilha}
-          modulos={modulos}
-          itensPorModulo={itensPorModulo}
-          meuRank={meuRank}
-          meId={meId}
-          isDiretor={isDiretor}
-          pessoas={pessoas}
-          comentariosAulas={comentariosAulas}
-          reacoesAulas={reacoesAulas}
-          comentariosItens={comentariosItens}
-          reacoesItens={reacoesItens}
-        />
+      <main className="mx-auto max-w-4xl px-6 py-8">
+        <h1 className="font-display text-2xl text-gold-bright">Imperium Academy</h1>
+        <p className="mt-2 text-sm text-stone-500">Nenhuma trilha de formação configurada pro seu cargo ainda.</p>
       </main>
     );
   }
@@ -204,21 +166,6 @@ export default function TrilhaView({
           </div>
         </section>
       )}
-
-      <NetflixAcademy
-        trilhas={trilhas}
-        aulasPorTrilha={aulasPorTrilha}
-        modulos={modulos}
-        itensPorModulo={itensPorModulo}
-        meuRank={meuRank}
-        meId={meId}
-        isDiretor={isDiretor}
-        pessoas={pessoas}
-        comentariosAulas={comentariosAulas}
-        reacoesAulas={reacoesAulas}
-        comentariosItens={comentariosItens}
-        reacoesItens={reacoesItens}
-      />
     </main>
   );
 }

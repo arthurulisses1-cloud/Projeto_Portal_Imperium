@@ -131,11 +131,6 @@ export default function NetflixAcademy({
 
   return (
     <section className="space-y-6">
-      <div>
-        <h2 className="font-display text-xl text-gold-bright">Trilhas de Formação — pra rever e explorar</h2>
-        <p className="text-xs text-stone-400">Aulas já dadas e conteúdo extra, pra assistir quando quiser.</p>
-      </div>
-
       {prateleiras.map((prat) => (
         <div key={prat.titulo} className="space-y-2">
           <h3 className="text-sm font-medium text-stone-300">{prat.titulo}</h3>
