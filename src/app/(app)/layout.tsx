@@ -74,7 +74,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
     items: [
       { href: "/academy", label: "Academy Geral" },
       { href: "/academy/instrutor", label: "Aulas para Ministrar" },
-      { href: "/academy/trilha", label: "Minha Trilha" },
+      { href: "/academy/trilha", label: "Trilhas de Formação" },
     ],
   },
   // Aba mãe "Dados" — pedido do Diretor, 2026-09-18: Pace/Compromissos/

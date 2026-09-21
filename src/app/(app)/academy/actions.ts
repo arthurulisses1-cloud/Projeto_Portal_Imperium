@@ -383,3 +383,154 @@ export async function excluirMaterial(formData: FormData) {
   if (error) throw new Error(error.message);
   revalidar();
 }
+
+// Resumo + gravação pós-aula — pedido do Diretor, 2026-09-21: alimenta a
+// "Netflix" de Trilhas de Formação (o que o aluno vê ao rever a aula).
+// RLS (academy_aulas_update_instrutor) + o trigger de overreach (que não
+// lista resumo/video_url) já garantem que só o instrutor daquela aula (ou
+// o Diretor) grava isso.
+export async function salvarResumoAula(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const id = String(formData.get("id"));
+  const resumo = String(formData.get("resumo") ?? "").trim();
+  const videoUrl = String(formData.get("video_url") ?? "").trim();
+
+  const { error } = await supabase
+    .from("academy_aulas")
+    .update({ resumo: resumo || null, video_url: videoUrl || null })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidar();
+}
+
+function revalidarModulos() {
+  revalidatePath("/academy");
+  revalidatePath("/academy/trilha");
+}
+
+// ---------- Módulos alternativos (Netflix fora da trilha oficial) ----------
+
+export async function criarModulo(formData: FormData) {
+  const { supabase, userId } = await exigirDiretor();
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  if (!titulo) throw new Error("Título é obrigatório.");
+  const descricao = String(formData.get("descricao") ?? "").trim();
+  const ranksLiberados = formData.getAll("ranks_liberados").map(String);
+
+  let capaUrl: string | null = null;
+  const capa = formData.get("capa") as File | null;
+  if (capa && capa.size > 0) {
+    const ext = capa.name.split(".").pop() || "jpg";
+    const path = `capas/${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from("academy-modulos").upload(path, capa, { contentType: capa.type });
+    if (uploadError) throw new Error(uploadError.message);
+    capaUrl = supabase.storage.from("academy-modulos").getPublicUrl(path).data.publicUrl;
+  }
+
+  const { data: ultimo } = await supabase.from("academy_modulos").select("ordem").order("ordem", { ascending: false }).limit(1).maybeSingle();
+  const { error } = await supabase.from("academy_modulos").insert({
+    titulo,
+    descricao: descricao || null,
+    capa_url: capaUrl,
+    ranks_liberados: ranksLiberados.length > 0 ? ranksLiberados : null,
+    ordem: (ultimo?.ordem ?? 0) + 1,
+    created_by: userId,
+  });
+  if (error) throw new Error(error.message);
+  revalidarModulos();
+}
+
+export async function atualizarModulo(formData: FormData) {
+  const { supabase } = await exigirDiretor();
+  const id = String(formData.get("id"));
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  if (!id || !titulo) throw new Error("Título é obrigatório.");
+  const descricao = String(formData.get("descricao") ?? "").trim();
+  const ranksLiberados = formData.getAll("ranks_liberados").map(String);
+  const ativo = formData.get("ativo") === "on";
+
+  const payload: Record<string, unknown> = {
+    titulo,
+    descricao: descricao || null,
+    ranks_liberados: ranksLiberados.length > 0 ? ranksLiberados : null,
+    ativo,
+  };
+
+  const capa = formData.get("capa") as File | null;
+  if (capa && capa.size > 0) {
+    const ext = capa.name.split(".").pop() || "jpg";
+    const path = `capas/${Date.now()}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from("academy-modulos").upload(path, capa, { contentType: capa.type });
+    if (uploadError) throw new Error(uploadError.message);
+    payload.capa_url = supabase.storage.from("academy-modulos").getPublicUrl(path).data.publicUrl;
+  }
+
+  const { error } = await supabase.from("academy_modulos").update(payload).eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidarModulos();
+}
+
+export async function excluirModulo(formData: FormData) {
+  const { supabase } = await exigirDiretor();
+  const id = String(formData.get("id"));
+  const { error } = await supabase.from("academy_modulos").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidarModulos();
+}
+
+export async function criarModuloItem(formData: FormData) {
+  const { supabase, userId } = await exigirDiretor();
+  const moduloId = String(formData.get("modulo_id"));
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  if (!moduloId || !titulo) throw new Error("Título é obrigatório.");
+  const resumo = String(formData.get("resumo") ?? "").trim();
+  const tipo = String(formData.get("tipo") ?? "video") === "arquivo" ? "arquivo" : "video";
+
+  let videoUrl: string | null = null;
+  let arquivoUrl: string | null = null;
+  if (tipo === "video") {
+    videoUrl = String(formData.get("video_url") ?? "").trim() || null;
+    if (!videoUrl) throw new Error("Cole o link do vídeo (YouTube/Vimeo/Loom).");
+  } else {
+    const arquivo = formData.get("arquivo") as File | null;
+    if (!arquivo || arquivo.size === 0) throw new Error("Selecione um arquivo.");
+    const ext = arquivo.name.split(".").pop() || "bin";
+    const path = `itens/${Date.now()}-${moduloId}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from("academy-modulos").upload(path, arquivo, { contentType: arquivo.type });
+    if (uploadError) throw new Error(uploadError.message);
+    arquivoUrl = supabase.storage.from("academy-modulos").getPublicUrl(path).data.publicUrl;
+  }
+
+  const { data: ultimo } = await supabase
+    .from("academy_modulo_itens")
+    .select("ordem")
+    .eq("modulo_id", moduloId)
+    .order("ordem", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { error } = await supabase.from("academy_modulo_itens").insert({
+    modulo_id: moduloId,
+    titulo,
+    resumo: resumo || null,
+    tipo,
+    video_url: videoUrl,
+    arquivo_url: arquivoUrl,
+    ordem: (ultimo?.ordem ?? 0) + 1,
+    created_by: userId,
+  });
+  if (error) throw new Error(error.message);
+  revalidarModulos();
+}
+
+export async function excluirModuloItem(formData: FormData) {
+  const { supabase } = await exigirDiretor();
+  const id = String(formData.get("id"));
+  const { error } = await supabase.from("academy_modulo_itens").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidarModulos();
+}

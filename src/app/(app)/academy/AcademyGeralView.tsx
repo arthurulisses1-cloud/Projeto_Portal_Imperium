@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Trilha, Aula } from "@/lib/academy";
+import type { Trilha, Aula, Modulo, ModuloItem } from "@/lib/academy";
 import { visualDaTrilha } from "@/lib/academy-visual";
 import MonthCalendar, { type EventoCalendario } from "@/components/academy/MonthCalendar";
+import ModulosAdmin from "./ModulosAdmin";
 import {
   atualizarTrilha,
   criarAula,
@@ -24,11 +25,16 @@ export default function AcademyGeralView({
   trilhas,
   todasAulas,
   instrutoresPorTrilha,
+  modulos,
+  itensPorModulo,
 }: {
   trilhas: Trilha[];
   todasAulas: Aula[];
   instrutoresPorTrilha: Record<string, { id: string; nome: string }[]>;
+  modulos: Modulo[];
+  itensPorModulo: Record<string, ModuloItem[]>;
 }) {
+  const [aba, setAba] = useState<"oficial" | "alternativas">("oficial");
   const [trilhaSelecionada, setTrilhaSelecionada] = useState<string>(trilhas[0]?.id ?? "");
   const [aulaAberta, setAulaAberta] = useState<string | null>(null);
 
@@ -71,6 +77,25 @@ export default function AcademyGeralView({
         <p className="text-xs text-stone-400">Academy Geral — calendário de todas as trilhas + edição de aulas.</p>
       </div>
 
+      <div className="flex gap-2">
+        <button
+          onClick={() => setAba("oficial")}
+          className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${aba === "oficial" ? "btn-gold" : "btn-outline"}`}
+        >
+          Trilhas Oficiais
+        </button>
+        <button
+          onClick={() => setAba("alternativas")}
+          className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${aba === "alternativas" ? "btn-gold" : "btn-outline"}`}
+        >
+          Trilhas Alternativas
+        </button>
+      </div>
+
+      {aba === "alternativas" && <ModulosAdmin modulos={modulos} itensPorModulo={itensPorModulo} />}
+
+      {aba === "oficial" && (
+      <>
       <MonthCalendar
         eventos={eventos}
         onClickEvento={(id) => {
@@ -158,6 +183,8 @@ export default function AcademyGeralView({
           </div>
         )}
       </section>
+      </>
+      )}
     </main>
   );
 }

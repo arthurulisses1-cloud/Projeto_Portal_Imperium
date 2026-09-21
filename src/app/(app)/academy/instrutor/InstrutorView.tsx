@@ -2,7 +2,7 @@
 
 import type { Aula, Material, AlunoAudiencia } from "@/lib/academy";
 import { visualDaTrilha } from "@/lib/academy-visual";
-import { marcarRealizada, enviarMaterial, excluirMaterial, salvarPresencas } from "../actions";
+import { marcarRealizada, enviarMaterial, excluirMaterial, salvarPresencas, salvarResumoAula } from "../actions";
 
 function fmtData(iso: string | null) {
   if (!iso) return "sem data";
@@ -126,6 +126,7 @@ export default function InstrutorView({
                   </form>
                 </div>
 
+                <ResumoAula aula={aula} />
                 <ListaPresenca aula={aula} audiencia={audienciaPorAula[aula.id] ?? []} presencas={presencasPorAula[aula.id] ?? {}} />
               </section>
             );
@@ -133,6 +134,34 @@ export default function InstrutorView({
         </div>
       )}
     </main>
+  );
+}
+
+// Resumo + gravação pós-aula — pedido do Diretor, 2026-09-21: alimenta a
+// "Netflix" de Trilhas de Formação (o que o aluno vê ao rever a aula).
+function ResumoAula({ aula }: { aula: Aula }) {
+  return (
+    <details className="border-t border-imperium-line bg-imperium-surface p-4">
+      <summary className="cursor-pointer text-xs uppercase tracking-wide text-stone-500">
+        Resumo e gravação (Trilhas de Formação)
+      </summary>
+      <form action={salvarResumoAula} className="mt-3 space-y-2">
+        <input type="hidden" name="id" value={aula.id} />
+        <div>
+          <label className="mb-1 block text-[10px] uppercase text-stone-500">
+            Resumo do que rolou na aula (fica visível pra quem quiser rever)
+          </label>
+          <textarea name="resumo" rows={3} defaultValue={aula.resumo ?? ""} className="input-imp text-xs" />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] uppercase text-stone-500">Link da gravação (YouTube/Vimeo/Loom, opcional)</label>
+          <input name="video_url" type="url" defaultValue={aula.videoUrl ?? ""} placeholder="https://..." className="input-imp text-xs" />
+        </div>
+        <button type="submit" className="btn-outline px-3 py-1 text-[10px]">
+          Salvar resumo
+        </button>
+      </form>
+    </details>
   );
 }
 

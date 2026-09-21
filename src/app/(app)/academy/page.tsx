@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { buscarTrilhas, buscarTodasAulas, buscarInstrutoresElegiveis } from "@/lib/academy";
+import { buscarTrilhas, buscarTodasAulas, buscarInstrutoresElegiveis, buscarModulos, buscarItensPorModulos } from "@/lib/academy";
 import { podeVerArea } from "@/lib/permissoes-analista";
 import AcademyGeralView from "./AcademyGeralView";
 
@@ -22,5 +22,16 @@ export default async function AcademyPage() {
   );
   const instrutoresPorTrilha = Object.fromEntries(pares);
 
-  return <AcademyGeralView trilhas={trilhas} todasAulas={todasAulas} instrutoresPorTrilha={instrutoresPorTrilha} />;
+  const modulos = await buscarModulos(supabase);
+  const itensPorModulo = await buscarItensPorModulos(supabase, modulos.map((m) => m.id));
+
+  return (
+    <AcademyGeralView
+      trilhas={trilhas}
+      todasAulas={todasAulas}
+      instrutoresPorTrilha={instrutoresPorTrilha}
+      modulos={modulos}
+      itensPorModulo={itensPorModulo}
+    />
+  );
 }

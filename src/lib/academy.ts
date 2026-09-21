@@ -25,6 +25,10 @@ export type Aula = {
   marco: boolean;
   realizada: boolean;
   numMateriais: number;
+  // Escritos pelo instrutor DEPOIS de dar a aula (2026-09-21) — alimentam
+  // a "Netflix" de Trilhas de Formação (resumo do que rolou + gravação).
+  resumo: string | null;
+  videoUrl: string | null;
 };
 
 export type Material = {
@@ -34,6 +38,39 @@ export type Material = {
   enviadoPorNome: string | null;
   createdAt: string;
 };
+
+// "Prateleira" alternativa (Netflix) — conteúdo solto, sem agenda,
+// criado livremente pelo Diretor (2026-09-21). `ranksLiberados` vazio =
+// liberado pra todo mundo; com rank(s), quem não tem ainda VÊ o módulo
+// (cadeado na UI), só não abre.
+export type Modulo = {
+  id: string;
+  titulo: string;
+  descricao: string | null;
+  capaUrl: string | null;
+  ordem: number;
+  ativo: boolean;
+  ranksLiberados: Rank[];
+};
+
+export type ModuloItem = {
+  id: string;
+  moduloId: string;
+  titulo: string;
+  resumo: string | null;
+  tipo: "video" | "arquivo";
+  videoUrl: string | null;
+  arquivoUrl: string | null;
+  ordem: number;
+};
+
+// Diretor/Analista/Legado não têm rank de trilha (fora do RANK_ORDER
+// legionario..legado) — trata como "sem rank", só entra em módulo aberto
+// pra todo mundo. `rank` null cobre esse caso e qualquer papel sem rank.
+export function moduloLiberadoPara(modulo: Pick<Modulo, "ranksLiberados">, rank: Rank | null): boolean {
+  if (modulo.ranksLiberados.length === 0) return true;
+  return rank !== null && modulo.ranksLiberados.includes(rank);
+}
 
 export async function buscarTrilhas(supabase: SupabaseClient): Promise<Trilha[]> {
   const { data } = await supabase.from("academy_trilhas").select("*").order("ordem");
@@ -135,6 +172,8 @@ function mapAula(a: any): Aula {
     marco: a.marco,
     realizada: a.realizada,
     numMateriais: Array.isArray(a.academy_materiais) ? (a.academy_materiais[0]?.count ?? 0) : 0,
+    resumo: a.resumo ?? null,
+    videoUrl: a.video_url ?? null,
   };
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -209,4 +248,55 @@ export async function buscarInstrutoresElegiveis(
   return elegiveis
     .map((p) => ({ id: p.id, nome: p.full_name }))
     .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapModulo(m: any): Modulo {
+  return {
+    id: m.id,
+    titulo: m.titulo,
+    descricao: m.descricao,
+    capaUrl: m.capa_url,
+    ordem: m.ordem,
+    ativo: m.ativo,
+    ranksLiberados: m.ranks_liberados ?? [],
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapModuloItem(i: any): ModuloItem {
+  return {
+    id: i.id,
+    moduloId: i.modulo_id,
+    titulo: i.titulo,
+    resumo: i.resumo,
+    tipo: i.tipo,
+    videoUrl: i.video_url,
+    arquivoUrl: i.arquivo_url,
+    ordem: i.ordem,
+  };
+}
+
+export async function buscarModulos(supabase: SupabaseClient, { soAtivos = false }: { soAtivos?: boolean } = {}): Promise<Modulo[]> {
+  let query = supabase.from("academy_modulos").select("*").order("ordem");
+  if (soAtivos) query = query.eq("ativo", true);
+  const { data } = await query;
+  return (data ?? []).map(mapModulo);
+}
+
+export async function buscarItensDoModulo(supabase: SupabaseClient, moduloId: string): Promise<ModuloItem[]> {
+  const { data } = await supabase.from("academy_modulo_itens").select("*").eq("modulo_id", moduloId).order("ordem");
+  return (data ?? []).map(mapModuloItem);
+}
+
+// Batched — evita 1 query por módulo na Netflix (várias prateleiras de
+// uma vez) e na Academy Geral (lista de módulos com contagem de itens).
+export async function buscarItensPorModulos(supabase: SupabaseClient, moduloIds: string[]): Promise<Record<string, ModuloItem[]>> {
+  if (moduloIds.length === 0) return {};
+  const { data } = await supabase.from("academy_modulo_itens").select("*").in("modulo_id", moduloIds).order("ordem");
+  const porModulo: Record<string, ModuloItem[]> = {};
+  for (const i of data ?? []) {
+    (porModulo[i.modulo_id] ??= []).push(mapModuloItem(i));
+  }
+  return porModulo;
 }

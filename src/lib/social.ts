@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type AlvoTipo = "mural_post" | "campanha";
+export type AlvoTipo = "mural_post" | "campanha" | "academy_aula" | "academy_modulo_item";
 
 export type Comentario = {
   id: string;
