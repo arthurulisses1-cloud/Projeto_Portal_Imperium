@@ -109,7 +109,29 @@ export type ContextoAvaliacaoCriterios = {
   vendaSozinho: boolean;
   livroApresentado: boolean | null; // null = nem escolheu livro ainda
   top1Tribo: Record<number, boolean>; // chave = janela em dias corridos, extraída do texto do critério
+  rankAtual: Rank; // pra critério "N aulas" sem trilha nomeada no texto (fallback = trilha do próprio rank)
+  aulasPresentesPorRank: Partial<Record<Rank, number>>; // presença confirmada em academy_presencas, por trilha
 };
+
+// Detecta qual(is) trilha(s) um texto de critério "N aulas..." está
+// citando pelo nome (plural em português, como aparece nos critérios
+// cadastrados: "trilha de Tribunos", "trilha de Legados + trilha de
+// Pretores") — usado por avaliarCriterioAutomatico pra somar presença da
+// trilha certa mesmo quando ela não bate com o rank atual da pessoa (ver
+// comentário ali: "trilha de Tribunos" conta tanto pra quem tá virando
+// Tribuno quanto pra quem já é Tribuno virando Pretor).
+const RANK_PLURAL_REGEX: [RegExp, Rank][] = [
+  [/legion[aá]rios/i, "legionario"],
+  [/centuri[oõ]es/i, "centuriao"],
+  [/tribunos/i, "tribuno"],
+  [/pretores/i, "pretor"],
+  [/legados/i, "legado"],
+];
+function ranksCitadosNoTexto(texto: string): Rank[] {
+  const achados: Rank[] = [];
+  for (const [regex, rank] of RANK_PLURAL_REGEX) if (regex.test(texto)) achados.push(rank);
+  return achados;
+}
 
 function moedaSimples(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -221,6 +243,29 @@ export function avaliarCriterioAutomatico(
     };
   }
 
+  // "N aulas [da trilha de/— trilha] X" — pedido do Diretor, 2026-09-21:
+  // presença marcada pelo instrutor (academy_presencas) passa a contar
+  // aqui. Exclui texto com "livro" de propósito (ver critério seguinte —
+  // "8 aulas + trilha + livro + apresentação" é um composto que ainda cai
+  // no fluxo de evidência manual, não dá pra reduzir a uma contagem só).
+  // A trilha é extraída do PRÓPRIO texto quando ele nomeia um rank (ex:
+  // "trilha de Tribunos" → soma só a trilha do Tribuno, mesmo pra quem
+  // ainda é Centurião se preparando); sem rank nomeado (ex: "8 aulas
+  // presenciais + trilha completa"), usa a trilha do rank ATUAL da pessoa.
+  const matchAulas = /aulas?\b/i.test(texto) && !/livro/i.test(texto);
+  if (matchAulas && target_value) {
+    const ranksCitados = ranksCitadosNoTexto(texto);
+    const ranksAlvo = ranksCitados.length > 0 ? ranksCitados : [ctx.rankAtual];
+    const atual = ranksAlvo.reduce((s, r) => s + (ctx.aulasPresentesPorRank[r] ?? 0), 0);
+    return {
+      automatico: true,
+      cumprido: atual >= target_value,
+      atual,
+      meta: target_value,
+      detalhe: `${atual}/${target_value} aulas com presença confirmada`,
+    };
+  }
+
   if (/livro.*apresenta/i.test(texto)) {
     if (ctx.livroApresentado === null) return null; // ainda não escolheu livro — deixa cair no card de Biblioteca
     return {
@@ -293,7 +338,8 @@ export async function buscarContextoAvaliacaoCriterios(
   starsTotal: number,
   livroApresentado: boolean | null,
   triboId: string | null,
-  criterios: Pick<CriterioPromocao, "texto">[]
+  criterios: Pick<CriterioPromocao, "texto">[],
+  rankAtual: Rank
 ): Promise<ContextoAvaliacaoCriterios> {
   const hoje = paraDataUTC(hojeBR());
   const trintaDiasAtras = new Date();
@@ -306,7 +352,7 @@ export async function buscarContextoAvaliacaoCriterios(
     if (m) janelasTop1.add(Number(m[1]));
   }
 
-  const [{ data: entrevistasRows }, { data: vendasHistorico }, top1Entries] = await Promise.all([
+  const [{ data: entrevistasRows }, { data: vendasHistorico }, top1Entries, { data: presencasRows }] = await Promise.all([
     supabase
       .from("producao_funil")
       .select("realizado")
@@ -319,8 +365,22 @@ export async function buscarContextoAvaliacaoCriterios(
         async (dias) => [dias, await calcularTop1Tribo(supabase, profileId, triboId, dias)] as const
       )
     ),
+    // Formação (bloco 4) — quantas aulas com presença confirmada, por
+    // trilha (ver academy_presencas, pedido do Diretor 2026-09-21).
+    supabase
+      .from("academy_presencas")
+      .select("aula:academy_aulas(trilha:academy_trilhas(rank))")
+      .eq("aluno_id", profileId)
+      .eq("presente", true),
   ]);
   const top1Tribo = Object.fromEntries(top1Entries);
+
+  const aulasPresentesPorRank: Partial<Record<Rank, number>> = {};
+  for (const row of presencasRows ?? []) {
+    const rank = (row.aula as unknown as { trilha: { rank: Rank | null } | null } | null)?.trilha?.rank;
+    if (!rank) continue; // Arena (rank null) não entra em nenhum critério de bloco 4 hoje
+    aulasPresentesPorRank[rank] = (aulasPresentesPorRank[rank] ?? 0) + 1;
+  }
 
   const totalEntrevistas30d = (entrevistasRows ?? []).reduce((s: number, r: { realizado: number }) => s + r.realizado, 0);
   const entrevistasPorDia = totalEntrevistas30d / 30;
@@ -339,7 +399,7 @@ export async function buscarContextoAvaliacaoCriterios(
     .slice(-3)
     .map(([mes, valor]) => ({ mes, valor }));
 
-  return { starsTotal, entrevistasPorDia, mesesFechados, vendaSozinho, livroApresentado, top1Tribo };
+  return { starsTotal, entrevistasPorDia, mesesFechados, vendaSozinho, livroApresentado, top1Tribo, rankAtual, aulasPresentesPorRank };
 }
 
 // Quantos critérios do próximo rank já batem (auto + evidência aprovada) —
@@ -371,7 +431,8 @@ export async function avaliarProntidaoPromocao(
     starsTotal,
     escolhaLivro ? !!escolhaLivro.apresentado : null,
     triboId,
-    criterios
+    criterios,
+    rank
   );
   const { data: evidenciasAprovadas } = await supabase
     .from("promotion_evidence")

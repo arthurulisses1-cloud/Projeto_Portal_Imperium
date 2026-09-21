@@ -142,6 +142,49 @@ function mapAulas(data: any[] | null): Aula[] {
   return (data ?? []).map(mapAula);
 }
 
+export type AlunoAudiencia = { id: string; nome: string };
+
+// Quem "deveria" assistir uma aula, dado o {tipo, rank} da trilha dela —
+// mesmo recorte que já era usado (embutido, não reaproveitável) em
+// sincronizarTasksDaAula (src/app/(app)/academy/actions.ts): Arena é
+// cross-rank (todo SDR/Closer ativo); trilha normal é só quem tem o rank
+// exato dela. Extraído pra cá pra a lista de presença (2026-09-21) usar a
+// MESMA regra da geração de tarefas-lembrete, sem duplicar a lógica.
+// Recebe {tipo, rank} já carregados (em vez de trilhaId) pra quem já tem a
+// trilha em mãos não precisar buscar de novo — ver resolverAudienciaDaAula
+// abaixo pra quem só tem o id.
+export async function resolverAudienciaDaTrilha(
+  supabase: SupabaseClient,
+  trilha: { tipo: string; rank: string | null }
+): Promise<AlunoAudiencia[]> {
+  let query = supabase.from("profiles").select("id, full_name").eq("ativo", true);
+  query = trilha.tipo === "arena" ? query.in("role", ["sdr", "closer"]) : query.eq("rank", trilha.rank);
+  const { data } = await query.order("full_name");
+  return (data ?? []).map((p) => ({ id: p.id, nome: p.full_name }));
+}
+
+export async function resolverAudienciaDaAula(supabase: SupabaseClient, trilhaId: string): Promise<AlunoAudiencia[]> {
+  const { data: trilha } = await supabase.from("academy_trilhas").select("tipo, rank").eq("id", trilhaId).maybeSingle();
+  if (!trilha) return [];
+  return resolverAudienciaDaTrilha(supabase, trilha);
+}
+
+// Presença já marcada (aluno_id -> presente) pra um lote de aulas — usado
+// na página "Aulas para Ministrar" pra pré-marcar os checkboxes de quem
+// já foi confirmado antes.
+export async function buscarPresencasPorAulas(
+  supabase: SupabaseClient,
+  aulaIds: string[]
+): Promise<Record<string, Record<string, boolean>>> {
+  if (aulaIds.length === 0) return {};
+  const { data } = await supabase.from("academy_presencas").select("aula_id, aluno_id, presente").in("aula_id", aulaIds);
+  const porAula: Record<string, Record<string, boolean>> = {};
+  for (const p of data ?? []) {
+    (porAula[p.aula_id] ??= {})[p.aluno_id] = p.presente;
+  }
+  return porAula;
+}
+
 // Quem pode dar aula pra um rank (ou pra Arena, quando rank é null): todo
 // mundo com rank ESTRITAMENTE acima na trilha (RANK_ORDER), mais o Diretor
 // sempre elegível pra qualquer trilha (é o topo do ecossistema). Arena

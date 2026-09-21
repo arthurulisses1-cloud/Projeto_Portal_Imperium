@@ -95,7 +95,8 @@ export default async function CarreiraPage() {
     profile.stars_total,
     escolha ? !!escolha.apresentado : null,
     profile.tribo_id,
-    criterios ?? []
+    criterios ?? [],
+    rankAtual
   );
 
   // ---------- Solicitações de evidência (critérios sem dado automático) ----------

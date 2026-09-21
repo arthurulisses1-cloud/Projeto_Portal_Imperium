@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { resolverAudienciaDaTrilha } from "@/lib/academy";
 
 async function exigirDiretor() {
   const supabase = await createClient();
@@ -65,10 +66,8 @@ async function sincronizarTasksDaAula(supabase: SupabaseClient, aulaId: string) 
     });
   }
 
-  let alunosQuery = supabase.from("profiles").select("id").eq("ativo", true);
-  alunosQuery = trilha.tipo === "arena" ? alunosQuery.in("role", ["sdr", "closer"]) : alunosQuery.eq("rank", trilha.rank);
-  const { data: alunos } = await alunosQuery;
-  for (const a of alunos ?? []) {
+  const alunos = await resolverAudienciaDaTrilha(supabase, trilha);
+  for (const a of alunos) {
     if (a.id === aula.instrutor_id) continue; // já ganhou a tarefa de instrutor acima
     linhas.push({
       profile_id: a.id,
@@ -248,6 +247,40 @@ export async function marcarRealizada(formData: FormData) {
   const { error } = await supabase.from("academy_aulas").update({ realizada }).eq("id", id);
   if (error) throw new Error(error.message);
   revalidar();
+}
+
+// Lista de presença — pedido do Diretor, 2026-09-21: "coloque a lista de
+// presença, pra que ele [instrutor] cadastre quem participou da aula...
+// isso contabiliza no plano de carreira no quesito formação". O form manda
+// TODOS os alunos da audiência como hidden `aluno_id` (pra saber quem
+// existe, mesmo quem não foi marcado) e só os presentes como `presente`
+// (checkbox) — grava true/false pra todo mundo, nunca deixa "faltando".
+// RLS (academy_presencas_insert/update) já garante que só o instrutor
+// daquela aula ou o Diretor consegue gravar.
+export async function salvarPresencas(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const aulaId = String(formData.get("aula_id"));
+  const alunoIds = formData.getAll("aluno_id").map(String);
+  const presentesIds = new Set(formData.getAll("presente").map(String));
+  if (alunoIds.length === 0) return;
+
+  const linhas = alunoIds.map((alunoId) => ({
+    aula_id: aulaId,
+    aluno_id: alunoId,
+    presente: presentesIds.has(alunoId),
+    marcado_por: user.id,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase.from("academy_presencas").upsert(linhas, { onConflict: "aula_id,aluno_id" });
+  if (error) throw new Error(error.message);
+  revalidatePath("/academy/instrutor");
+  revalidatePath("/carreira");
 }
 
 export async function enviarMaterial(formData: FormData) {

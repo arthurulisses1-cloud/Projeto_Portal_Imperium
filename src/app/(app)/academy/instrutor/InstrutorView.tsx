@@ -1,8 +1,8 @@
 "use client";
 
-import type { Aula, Material } from "@/lib/academy";
+import type { Aula, Material, AlunoAudiencia } from "@/lib/academy";
 import { visualDaTrilha } from "@/lib/academy-visual";
-import { marcarRealizada, enviarMaterial, excluirMaterial } from "../actions";
+import { marcarRealizada, enviarMaterial, excluirMaterial, salvarPresencas } from "../actions";
 
 function fmtData(iso: string | null) {
   if (!iso) return "sem data";
@@ -12,9 +12,13 @@ function fmtData(iso: string | null) {
 export default function InstrutorView({
   aulas,
   materiaisPorAula,
+  audienciaPorAula,
+  presencasPorAula,
 }: {
   aulas: (Aula & { trilhaNome: string })[];
   materiaisPorAula: Record<string, Material[]>;
+  audienciaPorAula: Record<string, AlunoAudiencia[]>;
+  presencasPorAula: Record<string, Record<string, boolean>>;
 }) {
   const dadas = aulas.filter((a) => a.realizada).length;
   const hoje = new Date().toISOString().slice(0, 10);
@@ -102,11 +106,63 @@ export default function InstrutorView({
                     <button type="submit" className="btn-outline px-3 py-1 text-[10px]">Enviar</button>
                   </form>
                 </div>
+
+                <ListaPresenca aula={aula} audiencia={audienciaPorAula[aula.id] ?? []} presencas={presencasPorAula[aula.id] ?? {}} />
               </section>
             );
           })}
         </div>
       )}
     </main>
+  );
+}
+
+// Lista de presença — pedido do Diretor, 2026-09-21: o instrutor marca
+// quem participou; a partir daí conta pro quesito Formação do Plano de
+// Carreira (bloco 4, ver avaliarCriterioAutomatico em src/lib/carreira.ts).
+// `audiencia` já vem filtrada pela trilha da aula (Arena = todo SDR/
+// Closer ativo; trilha normal = só quem tem o rank dela).
+function ListaPresenca({
+  aula,
+  audiencia,
+  presencas,
+}: {
+  aula: Aula;
+  audiencia: AlunoAudiencia[];
+  presencas: Record<string, boolean>;
+}) {
+  const totalPresentes = audiencia.filter((a) => presencas[a.id]).length;
+
+  if (audiencia.length === 0) {
+    return (
+      <div className="border-t border-imperium-line bg-imperium-surface p-4">
+        <p className="text-xs text-stone-600">
+          Ninguém no rank/time dessa trilha ainda — sem audiência pra marcar presença.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <details className="border-t border-imperium-line bg-imperium-surface p-4">
+      <summary className="cursor-pointer text-xs uppercase tracking-wide text-stone-500">
+        Lista de presença ({totalPresentes}/{audiencia.length})
+      </summary>
+      <form action={salvarPresencas} className="mt-3 space-y-2">
+        <input type="hidden" name="aula_id" value={aula.id} />
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          {audiencia.map((aluno) => (
+            <label key={aluno.id} className="flex items-center gap-2 text-xs text-stone-300">
+              <input type="hidden" name="aluno_id" value={aluno.id} />
+              <input type="checkbox" name="presente" value={aluno.id} defaultChecked={!!presencas[aluno.id]} />
+              {aluno.nome}
+            </label>
+          ))}
+        </div>
+        <button type="submit" className="btn-outline px-3 py-1 text-[10px]">
+          Salvar presença
+        </button>
+      </form>
+    </details>
   );
 }
