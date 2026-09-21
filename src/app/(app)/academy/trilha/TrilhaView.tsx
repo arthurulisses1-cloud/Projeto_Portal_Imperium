@@ -83,9 +83,25 @@ export default function TrilhaView({
 
   if (trilhas.length === 0) {
     return (
-      <main className="mx-auto max-w-4xl px-6 py-8">
-        <h1 className="font-display text-2xl text-gold-bright">Imperium Academy</h1>
-        <p className="mt-2 text-sm text-stone-500">Nenhuma trilha de formação configurada pro seu cargo ainda.</p>
+      <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
+        <div>
+          <h1 className="font-display text-2xl text-gold-bright">Imperium Academy</h1>
+          <p className="mt-2 text-sm text-stone-500">Nenhuma trilha oficial configurada pro seu cargo ainda.</p>
+        </div>
+        <NetflixAcademy
+          trilhas={trilhas}
+          aulasPorTrilha={aulasPorTrilha}
+          modulos={modulos}
+          itensPorModulo={itensPorModulo}
+          meuRank={meuRank}
+          meId={meId}
+          isDiretor={isDiretor}
+          pessoas={pessoas}
+          comentariosAulas={comentariosAulas}
+          reacoesAulas={reacoesAulas}
+          comentariosItens={comentariosItens}
+          reacoesItens={reacoesItens}
+        />
       </main>
     );
   }

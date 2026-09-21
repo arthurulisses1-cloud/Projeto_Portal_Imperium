@@ -8,9 +8,11 @@ import {
   buscarItensPorModulos,
 } from "@/lib/academy";
 import { buscarComentarios, buscarReacoes } from "@/lib/social";
-import { podeVerArea } from "@/lib/permissoes-analista";
 import TrilhaView from "./TrilhaView";
 
+// Diretor e Analista com acesso admin a Academy também acessam essa página
+// (sem redirecionar pra /academy) — eles têm o link "Academy Geral" separado
+// pra editar; aqui é a visão de espectador da Netflix (rever aulas + módulos).
 export default async function TrilhaFormacaoPage() {
   const supabase = await createClient();
   const {
@@ -19,15 +21,12 @@ export default async function TrilhaFormacaoPage() {
   if (!user) redirect("/login");
 
   const { data: profile } = await supabase.from("profiles").select("rank, role, full_name").eq("id", user.id).single();
-  // Só redireciona pra /academy quem de fato ENXERGA a versão admin lá —
-  // Diretor sempre; Analista só se a área "academy" estiver liberada
-  // (senão vira loop: /academy manda de volta pra cá).
-  const analistaComAcademyAdmin = profile?.role === "analista" && (await podeVerArea(supabase, user.id, profile.role, "academy"));
-  if (profile?.role === "diretor" || analistaComAcademyAdmin) redirect("/academy");
   const isDiretor = profile?.role === "diretor";
 
   const trilhas = await buscarTrilhas(supabase);
-  const minhaTrilha = trilhas.find((t) => t.rank === profile?.rank);
+  // profile.rank é null pra Diretor/Analista — sem esse filtro, `minhaTrilha`
+  // bateria com a Arena (rank também null) e duplicaria ela ao lado de `arena`.
+  const minhaTrilha = profile?.rank ? trilhas.find((t) => t.rank === profile.rank) : undefined;
   const arena = trilhas.find((t) => t.tipo === "arena");
 
   const trilhasRelevantes = [minhaTrilha, arena].filter((t): t is NonNullable<typeof t> => !!t);
