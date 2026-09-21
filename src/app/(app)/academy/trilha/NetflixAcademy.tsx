@@ -119,7 +119,9 @@ export default function NetflixAcademy({
       cor: "#c9a227",
       gradiente: "linear-gradient(135deg, #c9a227, #8a6d1a)",
       icone: item.tipo === "video" ? "🎬" : "📄",
-      bloqueado: !moduloLiberadoPara(m, meuRank as Rank | null),
+      // Diretor sempre vê tudo destravado aqui — o cadeado é pra quem
+      // realmente não tem acesso, não pra prévia de quem administra.
+      bloqueado: !isDiretor && !moduloLiberadoPara(m, meuRank as Rank | null),
     })),
   }));
 

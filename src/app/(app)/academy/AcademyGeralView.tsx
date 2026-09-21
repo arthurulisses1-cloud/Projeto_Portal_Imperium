@@ -2,9 +2,11 @@
 
 import { useMemo, useState } from "react";
 import type { Trilha, Aula, Modulo, ModuloItem } from "@/lib/academy";
+import type { Comentario, ReacaoResumo } from "@/lib/social";
 import { visualDaTrilha } from "@/lib/academy-visual";
 import MonthCalendar, { type EventoCalendario } from "@/components/academy/MonthCalendar";
 import ModulosAdmin from "./ModulosAdmin";
+import NetflixAcademy from "./trilha/NetflixAcademy";
 import {
   atualizarTrilha,
   criarAula,
@@ -27,14 +29,30 @@ export default function AcademyGeralView({
   instrutoresPorTrilha,
   modulos,
   itensPorModulo,
+  aulasPorTrilha,
+  meId,
+  isDiretor,
+  pessoas,
+  comentariosAulas,
+  reacoesAulas,
+  comentariosItens,
+  reacoesItens,
 }: {
   trilhas: Trilha[];
   todasAulas: Aula[];
   instrutoresPorTrilha: Record<string, { id: string; nome: string }[]>;
   modulos: Modulo[];
   itensPorModulo: Record<string, ModuloItem[]>;
+  aulasPorTrilha: Record<string, Aula[]>;
+  meId: string;
+  isDiretor: boolean;
+  pessoas: { id: string; nome: string }[];
+  comentariosAulas: Record<string, Comentario[]>;
+  reacoesAulas: Record<string, ReacaoResumo>;
+  comentariosItens: Record<string, Comentario[]>;
+  reacoesItens: Record<string, ReacaoResumo>;
 }) {
-  const [aba, setAba] = useState<"oficial" | "alternativas">("oficial");
+  const [aba, setAba] = useState<"oficial" | "alternativas" | "netflix">("oficial");
   const [trilhaSelecionada, setTrilhaSelecionada] = useState<string>(trilhas[0]?.id ?? "");
   const [aulaAberta, setAulaAberta] = useState<string | null>(null);
 
@@ -90,9 +108,32 @@ export default function AcademyGeralView({
         >
           Trilhas Alternativas
         </button>
+        <button
+          onClick={() => setAba("netflix")}
+          className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${aba === "netflix" ? "btn-gold" : "btn-outline"}`}
+        >
+          🎬 Netflix
+        </button>
       </div>
 
       {aba === "alternativas" && <ModulosAdmin modulos={modulos} itensPorModulo={itensPorModulo} />}
+
+      {aba === "netflix" && (
+        <NetflixAcademy
+          trilhas={trilhas}
+          aulasPorTrilha={aulasPorTrilha}
+          modulos={modulos}
+          itensPorModulo={itensPorModulo}
+          meuRank={null}
+          meId={meId}
+          isDiretor={isDiretor}
+          pessoas={pessoas}
+          comentariosAulas={comentariosAulas}
+          reacoesAulas={reacoesAulas}
+          comentariosItens={comentariosItens}
+          reacoesItens={reacoesItens}
+        />
+      )}
 
       {aba === "oficial" && (
       <>
