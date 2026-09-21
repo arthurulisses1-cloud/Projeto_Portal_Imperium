@@ -21,6 +21,23 @@ export function inicioMesBR(): string {
   return hojeBR().slice(0, 7) + "-01";
 }
 
+// Dia seguinte a hoje, no calendário do Brasil — usado como fim EXCLUSIVO
+// em queries de "hoje" (ex: buscarVisaoDiaria), mesmo raciocínio de
+// hojeBR() acima.
+export function amanhaBR(): string {
+  const d = paraDataUTC(hojeBR());
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// Primeiro dia do mês seguinte, no calendário do Brasil — fim EXCLUSIVO do
+// mês corrente (diferente de fimMesBR(), que é o último dia, INCLUSIVE).
+export function fimMesExclusivoBR(): string {
+  const d = paraDataUTC(fimMesBR());
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 // Último dia do mês corrente, no calendário do Brasil — mesmo raciocínio de
 // hojeBR()/inicioMesBR(), pra substituir o padrão `new Date(hoje.getFullYear(),
 // hoje.getMonth() + 1, 0)` (que também dependia do fuso do runtime).

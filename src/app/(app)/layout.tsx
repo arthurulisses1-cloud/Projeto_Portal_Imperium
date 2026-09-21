@@ -94,6 +94,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
       { href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor", "investidor", "analista"] },
       { href: "/visao-diaria", label: "Visão Diária", roles: ["lider", "diretor", "analista"] },
       { href: "/metas", label: "Metas Mensais", roles: ["diretor", "analista"] },
+      { href: "/tv", label: "Painel TV (gestão à vista)", roles: ["diretor", "analista"] },
     ],
   },
   {
