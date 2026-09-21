@@ -4,6 +4,24 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { resolverAudienciaDaTrilha } from "@/lib/academy";
+import { ACADEMY_RH } from "@/lib/acessos-especiais";
+
+// Checklist pré-aula do RH — pedido do Diretor, 2026-09-21: "pra que cada
+// aula exista, o RH tem que realizar algumas atividades... que podem já
+// ficar cadastradas como tarefas". Prazo = data da aula menos N dias.
+const RH_CHECKLIST: { chave: string; titulo: string; diasAntes: number }[] = [
+  { chave: "agendar_sala", titulo: "Agendar sala de reunião e confirmar horário da aula", diasAntes: 3 },
+  { chave: "confirmar_professor", titulo: "Confirmar aula com o professor", diasAntes: 2 },
+  { chave: "confirmar_slide", titulo: "Confirmar com o professor se o slide da aula está pronto", diasAntes: 1 },
+  { chave: "enviar_arte", titulo: "Enviar arte com os dados da aula no Grupo do Imperium", diasAntes: 1 },
+];
+
+function subtrairDias(dataISO: string, dias: number): string {
+  const [y, m, d] = dataISO.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() - dias);
+  return dt.toISOString().slice(0, 10);
+}
 
 async function exigirDiretor() {
   const supabase = await createClient();
@@ -45,7 +63,7 @@ async function sincronizarTasksDaAula(supabase: SupabaseClient, aulaId: string) 
     profile_id: string;
     titulo: string;
     due_date: string;
-    due_time: string;
+    due_time: string | null;
     coluna: "afazer";
     prioridade: "alta" | "normal";
     tags: string[];
@@ -79,6 +97,25 @@ async function sincronizarTasksDaAula(supabase: SupabaseClient, aulaId: string) 
       tags: ["academy"],
       origem_academy_aula_id: aula.id,
     });
+  }
+
+  // Checklist do RH — qualquer uma das 2 pessoas de ACADEMY_RH ganha a
+  // MESMA tarefa (2 linhas, mesma tag+aula) e dar check numa fecha pra
+  // ambas (ver moverTarefa, src/app/(app)/tarefas/actions.ts).
+  for (const item of RH_CHECKLIST) {
+    const dueDate = subtrairDias(aula.data, item.diasAntes);
+    for (const pessoa of ACADEMY_RH) {
+      linhas.push({
+        profile_id: pessoa.id,
+        titulo: `${item.titulo} — ${trilha.nome}: ${aula.tema}`,
+        due_date: dueDate,
+        due_time: null,
+        coluna: "afazer",
+        prioridade: "alta",
+        tags: [`academy_rh:${item.chave}`],
+        origem_academy_aula_id: aula.id,
+      });
+    }
   }
 
   if (linhas.length > 0) {
@@ -232,6 +269,11 @@ export async function definirDatasEmLote(formData: FormData) {
   revalidar();
 }
 
+// "Fechar aula" — pedido do Diretor, 2026-09-21: "quero que seja
+// obrigatório o professor alocar os materiais e dar a lista de presença
+// da aula... uma espécie de 'fechar aula do módulo'". Só valida na hora
+// de FECHAR (realizada true) — reabrir (voltar pra false) continua livre,
+// não faz sentido travar isso.
 export async function marcarRealizada(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -241,6 +283,20 @@ export async function marcarRealizada(formData: FormData) {
 
   const id = String(formData.get("id"));
   const realizada = String(formData.get("realizada")) === "true";
+
+  if (realizada) {
+    const [{ count: numMateriais }, { count: numPresencas }] = await Promise.all([
+      supabase.from("academy_materiais").select("id", { count: "exact", head: true }).eq("aula_id", id),
+      supabase.from("academy_presencas").select("id", { count: "exact", head: true }).eq("aula_id", id),
+    ]);
+    const faltando: string[] = [];
+    if (!numMateriais) faltando.push("nenhum material enviado");
+    if (!numPresencas) faltando.push("lista de presença ainda não salva");
+    if (faltando.length > 0) {
+      throw new Error(`Pra fechar a aula, resolve antes: ${faltando.join(" e ")}.`);
+    }
+  }
+
   // RLS já garante que só o instrutor daquela aula (ou o Diretor) consegue
   // de fato gravar — o trigger prevent_academy_aula_overreach barra
   // qualquer outra coluna sendo tocada por quem não é Diretor.

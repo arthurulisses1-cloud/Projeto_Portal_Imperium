@@ -10,3 +10,13 @@ export const SDR_FORECAST_LIBERADO = new Set<string>([
   "b5a30ced-7309-4629-8d91-c8d1274cfc23", // Cristina Santos
   "74658908-c885-4dd1-bcd4-f44b03011f8f", // Marcus Ryquelme
 ]);
+
+// RH responsável pelo checklist pré-aula da Imperium Academy (pedido do
+// Diretor, 2026-09-21: "Confirmar aula com professor", "Confirmar slide",
+// "Agendar sala", "Enviar arte no grupo") — qualquer uma das duas pode dar
+// check numa tarefa que conste como feita pra ambas (ver moverTarefa,
+// src/app/(app)/tarefas/actions.ts, e sincronizarChecklistRhDaAula).
+export const ACADEMY_RH = [
+  { id: "2b708a5e-f991-4ffc-a1ed-52490be68290", nome: "Alana Veras" },
+  { id: "de1b99f2-e1c1-4ba7-bfa1-d3da2f28f527", nome: "Letícia Diniz" },
+];

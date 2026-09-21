@@ -55,6 +55,11 @@ export default function InstrutorView({
           {aulas.map((aula) => {
             const visual = visualDaTrilha(aula.trilhaNome);
             const atrasada = !aula.realizada && aula.data !== null && aula.data < hoje;
+            // "Fechar aula" exige material + presença — pedido do Diretor,
+            // 2026-09-21. Reabrir (aula.realizada -> false) continua livre.
+            const temMaterial = (materiaisPorAula[aula.id] ?? []).length > 0;
+            const temPresenca = Object.keys(presencasPorAula[aula.id] ?? {}).length > 0;
+            const podeFechar = temMaterial && temPresenca;
             return (
               <section key={aula.id} className="overflow-hidden rounded-lg border border-imperium-line shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 p-4 text-white" style={{ background: visual.gradiente }}>
@@ -66,18 +71,32 @@ export default function InstrutorView({
                     <h2 className="font-display text-lg">{aula.marco ? "★ " : ""}{aula.tema}</h2>
                     {aula.descricao && <p className="text-xs opacity-90">{aula.descricao}</p>}
                   </div>
-                  <form action={marcarRealizada}>
-                    <input type="hidden" name="id" value={aula.id} />
-                    <input type="hidden" name="realizada" value={(!aula.realizada).toString()} />
-                    <button
-                      type="submit"
-                      className={`rounded px-3 py-1.5 text-xs font-medium ${
-                        aula.realizada ? "bg-white/20 hover:bg-white/30" : "bg-white text-imperium-bg hover:brightness-95"
-                      }`}
-                    >
-                      {aula.realizada ? "✓ Ministrada" : "Marcar como dada"}
-                    </button>
-                  </form>
+                  <div className="text-right">
+                    <form action={marcarRealizada}>
+                      <input type="hidden" name="id" value={aula.id} />
+                      <input type="hidden" name="realizada" value={(!aula.realizada).toString()} />
+                      <button
+                        type="submit"
+                        disabled={!aula.realizada && !podeFechar}
+                        className={`rounded px-3 py-1.5 text-xs font-medium ${
+                          aula.realizada
+                            ? "bg-white/20 hover:bg-white/30"
+                            : podeFechar
+                              ? "bg-white text-imperium-bg hover:brightness-95"
+                              : "cursor-not-allowed bg-white/40 text-imperium-bg/60"
+                        }`}
+                      >
+                        {aula.realizada ? "✓ Aula fechada — reabrir" : "Fechar aula"}
+                      </button>
+                    </form>
+                    {!aula.realizada && !podeFechar && (
+                      <p className="mt-1 text-[10px] opacity-90">
+                        Falta {!temMaterial && "material"}
+                        {!temMaterial && !temPresenca && " e "}
+                        {!temPresenca && "presença"}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="bg-imperium-surface p-4">

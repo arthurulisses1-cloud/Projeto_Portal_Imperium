@@ -113,8 +113,30 @@ export async function moverTarefa(formData: FormData) {
   const coluna = String(formData.get("coluna") ?? "");
   if (!id || !coluna) throw new Error("Tarefa ou coluna inválida.");
 
-  const { error } = await supabase.from("tasks").update({ coluna }).eq("id", id);
+  const { data: tarefa, error } = await supabase
+    .from("tasks")
+    .update({ coluna })
+    .eq("id", id)
+    .select("origem_academy_aula_id, tags")
+    .single();
   if (error) throw new Error(error.message);
+
+  // Checklist do RH da Academy (tag "academy_rh:<item>") — qualquer uma
+  // das pessoas concluindo fecha pras duas (pedido do Diretor,
+  // 2026-09-21: "qualquer uma das duas pode dar check"). Acha a irmã pela
+  // MESMA aula + MESMA tag de item, ignorando quem é o dono.
+  if (coluna === "concluido" && tarefa?.origem_academy_aula_id) {
+    const tagRh = (tarefa.tags ?? []).find((t: string) => t.startsWith("academy_rh:"));
+    if (tagRh) {
+      await supabase
+        .from("tasks")
+        .update({ coluna: "concluido" })
+        .eq("origem_academy_aula_id", tarefa.origem_academy_aula_id)
+        .contains("tags", [tagRh])
+        .neq("id", id);
+    }
+  }
+
   revalidatePath("/tarefas");
   // Também usada pelo check de "concluída" direto no widget do Mural
   // (TarefasMuralItem) — sem isso a tarefa continuava aparecendo lá até a
