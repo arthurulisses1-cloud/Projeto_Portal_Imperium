@@ -125,17 +125,36 @@ export default function TvDisplay(props: Props) {
         formatoMoeda
       />
     ),
-    exercitos: (
-      <SlideRanking
-        key="exercitos"
-        icon={IconEagle}
-        titulo="Guerra de Exércitos"
-        tema={TEMAS.guerraExercitos}
-        linhas={props.confrontoExercitos}
-        crests={props.crestsExercitos}
-        formatoMoeda
-      />
-    ),
+    exercitos:
+      props.confrontoExercitos.length >= 2 ? (
+        <SlideDuelPoster
+          key="exercitos"
+          icon={IconEagle}
+          titulo="Guerra de Exércitos"
+          tema={TEMAS.guerraExercitos}
+          esquerda={{
+            nome: props.confrontoExercitos[0].nome,
+            valor: props.confrontoExercitos[0].valor,
+            foto: props.crestsExercitos[props.confrontoExercitos[0].nome] ?? null,
+          }}
+          direita={{
+            nome: props.confrontoExercitos[1].nome,
+            valor: props.confrontoExercitos[1].valor,
+            foto: props.crestsExercitos[props.confrontoExercitos[1].nome] ?? null,
+          }}
+          formatoMoeda
+        />
+      ) : (
+        <SlideRanking
+          key="exercitos"
+          icon={IconEagle}
+          titulo="Guerra de Exércitos"
+          tema={TEMAS.guerraExercitos}
+          linhas={props.confrontoExercitos}
+          crests={props.crestsExercitos}
+          formatoMoeda
+        />
+      ),
     "entrevistas-mes": (
       <SlideRanking
         key="entrevistas-mes"
@@ -154,7 +173,27 @@ export default function TvDisplay(props: Props) {
   const slides = props.ordem.flatMap((chave): React.ReactElement[] => {
     if (chave === "campanhas") {
       if (props.campanhasAtivas.length === 0) return [<SlideCampanhaVazia key="campanhas-vazia" />];
-      return props.campanhasAtivas.map((c) => <SlideCampanha key={`campanha-${c.id}`} campanha={c} />);
+      return props.campanhasAtivas.map((c) => {
+        // Duelo de 2 (Copa Sampel, Tribal Wars/Balde War) vira o mesmo
+        // pôster de foto gigante da Guerra de Exércitos — pedido do
+        // Diretor, 2026-09-22: "quero que tomem a tela inteira". Campanha
+        // com mais de 2 participantes continua na lista (não cabe como
+        // duelo de 2 lados).
+        if (c.participantes.length === 2) {
+          const [p1, p2] = c.participantes;
+          return (
+            <SlideDuelPoster
+              key={`campanha-${c.id}`}
+              icon={IconTrophy}
+              titulo={c.titulo}
+              tema={TEMAS.campanhas}
+              esquerda={{ nome: p1.label, valor: p1.valor, foto: p1.avatarUrl ?? p1.triboCrestUrl ?? p1.exercitoCrestUrl ?? null }}
+              direita={{ nome: p2.label, valor: p2.valor, foto: p2.avatarUrl ?? p2.triboCrestUrl ?? p2.exercitoCrestUrl ?? null }}
+            />
+          );
+        }
+        return <SlideCampanha key={`campanha-${c.id}`} campanha={c} />;
+      });
     }
     const el = slidesPorChave[chave];
     return el ? [el] : [];
@@ -388,6 +427,67 @@ function SlideDuelo({ a, b }: { a: DueloExercito; b: DueloExercito }) {
               </div>
             );
           })}
+        </div>
+      </div>
+    </SlideShell>
+  );
+}
+
+// Pôster de duelo com foto GIGANTE ocupando cada metade da tela — pedido do
+// Diretor, 2026-09-22: "não quero as fotos na bolinha pequena, quero que
+// tomem a tela inteira praticamente". Usado na Guerra de Exércitos (sempre
+// 2 lados) e em campanhas de duelo de 2 participantes (Copa Sampel,
+// Tribal Wars/Balde War). Sem foto (Exército/pessoa sem brasão/avatar
+// cadastrado) cai no gradiente do tema, pra nunca ficar com buraco vazio.
+function SlideDuelPoster({
+  icon,
+  titulo,
+  tema,
+  esquerda,
+  direita,
+  formatoMoeda,
+}: {
+  icon: IconComp;
+  titulo: string;
+  tema: Tema;
+  esquerda: { nome: string; valor: number; foto: string | null };
+  direita: { nome: string; valor: number; foto: string | null };
+  formatoMoeda?: boolean;
+}) {
+  return (
+    <SlideShell icon={icon} titulo={titulo} tema={tema}>
+      <div className="relative flex h-full gap-[0.8vw]">
+        {[esquerda, direita].map((p, i) => (
+          <div key={p.nome} className="relative min-w-0 flex-1 overflow-hidden rounded-xl">
+            {p.foto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={p.foto} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            ) : (
+              <div className="absolute inset-0" style={{ background: tema.gradiente }} />
+            )}
+            <div
+              className="absolute inset-0"
+              style={{ background: "linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.25) 40%, rgba(0,0,0,0.05) 65%)" }}
+            />
+            <div className="absolute inset-x-0 bottom-0 p-[2.5vh] text-center">
+              <p
+                className="font-display leading-none text-white"
+                style={{ fontSize: "clamp(1.6rem, 4.4vh, 3rem)", textShadow: "0 4px 18px rgba(0,0,0,0.7)" }}
+              >
+                {p.nome}
+              </p>
+              <p className="mt-[1.2vh] font-display leading-none tabular-nums" style={{ color: tema.accent, fontSize: "clamp(2.2rem, 7vh, 4.5rem)" }}>
+                {formatoMoeda ? moeda(p.valor) : p.valor.toLocaleString("pt-BR")}
+              </p>
+            </div>
+            {i === 0 && <div className="absolute inset-y-0 right-0 w-px bg-white/10" />}
+          </div>
+        ))}
+        <div
+          className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 font-display text-white shadow-2xl"
+          style={{ height: "8vh", width: "8vh", fontSize: "1.8vh", borderColor: tema.accent, background: "rgba(10,8,6,0.75)" }}
+        >
+          VS
         </div>
       </div>
     </SlideShell>
