@@ -92,7 +92,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
       { href: "/pace", label: "Pace", roles: ["sdr", "closer", "lider", "diretor", "analista"] },
       { href: "/compromissos", label: "Compromissos", roles: ["diretor", "analista"] },
       { href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor", "investidor", "analista"] },
-      { href: "/fechamento-semanal", label: "Fechamento Semanal", roles: ["lider"] },
+      { href: "/fechamento-semanal", label: "Fechamento Semanal", roles: ["lider", "diretor"] },
       { href: "/visao-diaria", label: "Visão Diária", roles: ["lider", "diretor", "analista"] },
       { href: "/metas", label: "Metas Mensais", roles: ["diretor", "analista"] },
       { href: "/tv", label: "Painel TV (gestão à vista)", roles: ["diretor", "analista"] },

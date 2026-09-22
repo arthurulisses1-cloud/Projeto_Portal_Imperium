@@ -50,7 +50,7 @@ function mesDe(dataISO: string): { inicio: string; fimExclusivo: string } {
 export default async function FechamentoSemanalPage({
   searchParams,
 }: {
-  searchParams: { data?: string; visao?: string };
+  searchParams: { data?: string; visao?: string; exercito?: string };
 }) {
   const supabase = await createClient();
   const {
@@ -59,24 +59,40 @@ export default async function FechamentoSemanalPage({
   if (!user) return null;
 
   const { data: meProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (meProfile?.role !== "lider") {
+  const isDiretor = meProfile?.role === "diretor";
+  if (!isDiretor && meProfile?.role !== "lider") {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>
-        <p className="mt-2 text-sm text-stone-400">Fechamento Semanal é uma visão exclusiva dos líderes de Exército.</p>
+        <p className="mt-2 text-sm text-stone-400">Fechamento Semanal é uma visão exclusiva dos líderes de Exército (e da Diretoria).</p>
       </main>
     );
   }
 
-  const { data: exercitoLiderado } = await supabase.from("exercitos").select("id, nome").eq("legado_id", user.id).maybeSingle();
-  if (!exercitoLiderado) {
+  // Diretor não lidera um Exército só — escolhe qual ver por um seletor
+  // (pedido do Diretor, 2026-09-22: "está só para os líderes ou eu tb
+  // tenho visão?"). Líder sempre vê o próprio, sem seletor.
+  let todosExercitos: { id: string; nome: string }[] = [];
+  let exercitoAtual: { id: string; nome: string } | null = null;
+  if (isDiretor) {
+    const { data } = await supabase.from("exercitos").select("id, nome").order("nome");
+    todosExercitos = data ?? [];
+    exercitoAtual = todosExercitos.find((e) => e.id === searchParams.exercito) ?? todosExercitos[0] ?? null;
+  } else {
+    const { data } = await supabase.from("exercitos").select("id, nome").eq("legado_id", user.id).maybeSingle();
+    exercitoAtual = data;
+  }
+  if (!exercitoAtual) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Sem Exército vinculado</h1>
-        <p className="mt-2 text-sm text-stone-400">Seu usuário não está marcado como líder de nenhum Exército ainda — fala com o Diretor.</p>
+        <p className="mt-2 text-sm text-stone-400">
+          {isDiretor ? "Nenhum Exército cadastrado ainda." : "Seu usuário não está marcado como líder de nenhum Exército ainda — fala com o Diretor."}
+        </p>
       </main>
     );
   }
+  const exercitoLiderado = exercitoAtual;
 
   const visao = searchParams.visao === "mes" ? "mes" : "semana";
   const dataRef = searchParams.data && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.data) ? searchParams.data : hojeBR();
@@ -134,7 +150,8 @@ export default async function FechamentoSemanalPage({
   const valorAssinado = assinaturas.reduce((s, o) => s + Number(o.valor), 0);
   const valorPago = pagos.reduce((s, o) => s + Number(o.valor), 0);
 
-  const hrefPeriodo = (data: string, v: string) => `/fechamento-semanal?data=${data}&visao=${v}`;
+  const hrefPeriodo = (data: string, v: string) =>
+    `/fechamento-semanal?data=${data}&visao=${v}${isDiretor ? `&exercito=${exercitoLiderado.id}` : ""}`;
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
@@ -142,6 +159,20 @@ export default async function FechamentoSemanalPage({
         <h1 className="font-display text-2xl text-gold-bright">Fechamento Semanal</h1>
         <p className="text-xs text-stone-400">{exercitoLiderado.nome} — entrevistas, assinaturas e pagos do período.</p>
       </div>
+
+      {isDiretor && todosExercitos.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {todosExercitos.map((e) => (
+            <a
+              key={e.id}
+              href={`/fechamento-semanal?data=${dataRef}&visao=${visao}&exercito=${e.id}`}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium ${e.id === exercitoLiderado.id ? "btn-gold" : "btn-outline"}`}
+            >
+              {e.nome}
+            </a>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-2">
