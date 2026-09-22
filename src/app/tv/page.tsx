@@ -63,8 +63,15 @@ export default async function TvPage() {
     .slice(0, 10);
 
   const todasPessoasMes: PessoaVisao[] = visaoMes.exercitos.flatMap((e) => e.tribos.flatMap((t) => t.pessoas));
+  // Entrevistas do Closer é a MESMA operação já contada do lado do SDR dele
+  // (producao_funil credita os dois papéis pra cada entrevista) — sem esse
+  // filtro o Closer aparece no ranking com o que é, na prática, a soma do
+  // time, distorcendo o "melhor do mês" (achado do Diretor, 2026-09-22).
+  // Mesma regra que buscarFunilColetivo já aplica em src/lib/time.ts.
+  const { data: sdrsAtivos } = await supabase.from("profiles").select("id").eq("role", "sdr").eq("ativo", true);
+  const idsSdrsAtivos = new Set((sdrsAtivos ?? []).map((p) => p.id));
   const topEntrevistasMes = todasPessoasMes
-    .filter((p) => p.funil.entrevistas > 0)
+    .filter((p) => idsSdrsAtivos.has(p.id) && p.funil.entrevistas > 0)
     .sort((a, b) => b.funil.entrevistas - a.funil.entrevistas)
     .slice(0, 5);
 

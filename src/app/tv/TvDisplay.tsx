@@ -89,7 +89,8 @@ export default function TvDisplay(props: Props) {
 
   // Chaves batem com TV_SLIDES em src/lib/tv-config.ts (ordem editável em
   // /tv/config) — "duelo" só entra de fato quando existem 2 Exércitos pra
-  // comparar; as outras 9 sempre aparecem, sujeitas só à ordem escolhida.
+  // comparar; "campanhas" expande pra UMA tela por campanha ativa (ver
+  // abaixo); as outras 8 sempre aparecem, sujeitas só à ordem escolhida.
   const slidesPorChave: Record<string, React.ReactElement | null> = {
     ligacoes: <SlideLigacoesHoje key="ligacoes" funil={props.funilHoje} ranking={props.rankingLigacoesHoje} />,
     duelo: props.duelo.length === 2 ? <SlideDuelo key="duelo" a={props.duelo[0]} b={props.duelo[1]} /> : null,
@@ -135,7 +136,6 @@ export default function TvDisplay(props: Props) {
         formatoMoeda
       />
     ),
-    campanhas: <SlideCampanhas key="campanhas" campanhas={props.campanhasAtivas} />,
     "entrevistas-mes": (
       <SlideRanking
         key="entrevistas-mes"
@@ -148,7 +148,17 @@ export default function TvDisplay(props: Props) {
     lendas: <SlideLendas key="lendas" auto={props.recordesAuto} curados={props.recordesCurados} />,
   };
 
-  const slides = props.ordem.map((chave) => slidesPorChave[chave]).filter((s): s is React.ReactElement => s !== null && s !== undefined);
+  // "campanhas" é o único ponto de expansão 1-pra-N — cada campanha ativa
+  // ganha sua própria tela cheia (pedido do Diretor, 2026-09-22: mais
+  // espaço pras fotos de quem tá duelando), em vez de espremer 2 num card só.
+  const slides = props.ordem.flatMap((chave): React.ReactElement[] => {
+    if (chave === "campanhas") {
+      if (props.campanhasAtivas.length === 0) return [<SlideCampanhaVazia key="campanhas-vazia" />];
+      return props.campanhasAtivas.map((c) => <SlideCampanha key={`campanha-${c.id}`} campanha={c} />);
+    }
+    const el = slidesPorChave[chave];
+    return el ? [el] : [];
+  });
 
   useEffect(() => {
     const id = setInterval(() => setSlide((s) => (s + 1) % slides.length), INTERVALO_SLIDE_MS);
@@ -232,38 +242,44 @@ function SlideShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden px-20 py-14" style={{ background: tema.gradiente }}>
+    <div
+      className="relative flex h-full w-full flex-col overflow-hidden px-[3.5vw] py-[3vh]"
+      style={{ background: tema.gradiente }}
+    >
       <div
         className="pointer-events-none absolute inset-0"
         style={{ background: `radial-gradient(circle at 88% 8%, ${tema.accent}22, transparent 45%)` }}
       />
 
-      <div className="relative flex items-center justify-between text-sm uppercase tracking-[0.35em] text-white/35">
+      <div className="relative flex shrink-0 items-center justify-between text-[1.3vh] uppercase tracking-[0.35em] text-white/35">
         <span>Senatus · Gestão à Vista</span>
         <Relogio />
       </div>
 
-      <div className="relative mt-10 flex items-center gap-6">
+      <div className="relative mt-[2vh] flex shrink-0 items-center gap-[1.2vw]">
         <div
-          className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2"
+          className="flex h-[6.5vh] w-[6.5vh] shrink-0 items-center justify-center rounded-full border-2"
           style={{ borderColor: tema.accent, color: tema.accent }}
         >
-          <Icon className="h-8 w-8" />
+          <Icon className="h-[3vh] w-[3vh]" />
         </div>
         <div>
-          <h1 className="font-display text-5xl leading-none text-white" style={{ textShadow: "0 6px 28px rgba(0,0,0,0.45)" }}>
+          <h1
+            className="font-display leading-none text-white"
+            style={{ textShadow: "0 6px 28px rgba(0,0,0,0.45)", fontSize: "clamp(1.8rem, 4.4vh, 3.2rem)" }}
+          >
             {titulo}
           </h1>
           {aoVivo && (
-            <span className="mt-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.25em]" style={{ color: tema.accent }}>
+            <span className="mt-[0.8vh] flex items-center gap-2 text-[1.3vh] font-semibold uppercase tracking-[0.25em]" style={{ color: tema.accent }}>
               <span className="h-2 w-2 animate-pulse rounded-full bg-current" /> Ao vivo
             </span>
           )}
         </div>
       </div>
-      <div className="relative mt-8 h-px w-full" style={{ background: `linear-gradient(90deg, ${tema.accent}88, transparent)` }} />
+      <div className="relative mt-[1.8vh] h-px w-full shrink-0" style={{ background: `linear-gradient(90deg, ${tema.accent}88, transparent)` }} />
 
-      <div className="relative mt-12 min-h-0 flex-1">{children}</div>
+      <div className="relative mt-[2.2vh] min-h-0 flex-1">{children}</div>
     </div>
   );
 }
@@ -276,26 +292,37 @@ function SlideLigacoesHoje({ funil, ranking }: { funil: FunilContagem; ranking: 
     { label: "Entrevistas", valor: funil.entrevistas },
   ];
   const tema = TEMAS.ligacoes;
+  // Colunas na lista da direita crescem com o tamanho do time — pra 40+
+  // pessoas 3 colunas ainda ficariam apertadas na altura de uma TV.
+  const colunas = ranking.length > 24 ? 4 : ranking.length > 10 ? 3 : 2;
   return (
     <SlideShell icon={IconHorn} titulo="Ligações do dia" tema={tema} aoVivo>
-      <div className="flex h-full gap-16">
-        <div className="flex w-[32%] shrink-0 flex-col justify-center gap-8">
+      <div className="flex h-full gap-[2.5vw]">
+        <div className="grid h-full w-[30%] shrink-0" style={{ gridTemplateRows: `repeat(${metricas.length}, 1fr)` }}>
           {metricas.map((m, i) => (
-            <div key={m.label} className={i > 0 ? "border-t border-white/10 pt-8" : ""}>
-              <p className="font-display text-7xl leading-none tabular-nums text-white">{m.valor.toLocaleString("pt-BR")}</p>
-              <p className="mt-3 text-base uppercase tracking-[0.25em] text-white/45">{m.label}</p>
+            <div key={m.label} className={`flex flex-col justify-center ${i > 0 ? "border-t border-white/10" : ""}`}>
+              <p className="font-display leading-none tabular-nums text-white" style={{ fontSize: "clamp(2.5rem, 8vh, 5rem)" }}>
+                {m.valor.toLocaleString("pt-BR")}
+              </p>
+              <p className="mt-[0.8vh] text-[1.5vh] uppercase tracking-[0.25em] text-white/45">{m.label}</p>
             </div>
           ))}
         </div>
 
-        <div className="min-w-0 flex-1 border-l border-white/10 pl-16">
-          <p className="mb-5 text-sm uppercase tracking-[0.3em] text-white/40">Ranking individual — tentativas de hoje, do 1º ao último</p>
+        <div className="flex min-w-0 flex-1 flex-col border-l border-white/10 pl-[2.5vw]">
+          <p className="mb-[1.5vh] shrink-0 text-[1.3vh] uppercase tracking-[0.3em] text-white/40">
+            Ranking individual — tentativas de hoje, do 1º ao último
+          </p>
           {ranking.length === 0 ? (
             <p className="text-2xl text-white/40">Sem registros ainda hoje.</p>
           ) : (
-            <div className="[column-fill:balance] columns-2 gap-x-12 xl:columns-3" style={{ maxHeight: "58vh" }}>
+            <div className="min-h-0 flex-1" style={{ columns: colunas, columnGap: "2.5vw", columnFill: "balance" }}>
               {ranking.map((p, i) => (
-                <div key={p.id} className="mb-1.5 flex items-baseline gap-3 break-inside-avoid text-lg">
+                <div
+                  key={p.id}
+                  className="flex items-baseline gap-3 break-inside-avoid"
+                  style={{ paddingBlock: "0.35vh", fontSize: "clamp(0.85rem, 2vh, 1.25rem)" }}
+                >
                   <span className="w-6 shrink-0 text-right tabular-nums text-white/30">{i + 1}</span>
                   <span className="min-w-0 flex-1 truncate text-white/85">{p.nome}</span>
                   <span className="font-display tabular-nums" style={{ color: tema.accent }}>
@@ -325,26 +352,32 @@ function SlideDuelo({ a, b }: { a: DueloExercito; b: DueloExercito }) {
   return (
     <SlideShell icon={IconSwords} titulo="Duelo de Funis" tema={TEMAS.duelo}>
       <div className="flex h-full flex-col">
-        <div className="mb-10 flex items-center justify-center gap-8">
-          <span className="font-display text-4xl leading-none" style={{ color: corA }}>{a.nome}</span>
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-2 border-white/20 font-display text-lg leading-none text-white/60">
+        <div className="mb-[2vh] flex shrink-0 items-center justify-center gap-[2vw]">
+          <span className="font-display leading-none" style={{ color: corA, fontSize: "clamp(1.6rem, 4.2vh, 2.6rem)" }}>{a.nome}</span>
+          <span
+            className="flex shrink-0 items-center justify-center rounded-full border-2 border-white/20 font-display leading-none text-white/60"
+            style={{ height: "6vh", width: "6vh", fontSize: "1.6vh" }}
+          >
             VS
           </span>
-          <span className="font-display text-4xl leading-none" style={{ color: corB }}>{b.nome}</span>
+          <span className="font-display leading-none" style={{ color: corB, fontSize: "clamp(1.6rem, 4.2vh, 2.6rem)" }}>{b.nome}</span>
         </div>
 
-        <div className="flex-1 space-y-7">
+        <div className="grid min-h-0 flex-1 gap-[1.2vh]" style={{ gridTemplateRows: `repeat(${linhas.length}, 1fr)` }}>
           {linhas.map((l) => {
             const total = l.a + l.b || 1;
             const pctA = (l.a / total) * 100;
             return (
-              <div key={l.label}>
-                <div className="mb-1.5 flex items-center justify-between gap-6">
-                  <span className="w-40 font-display text-2xl leading-none tabular-nums" style={{ color: corA }}>
+              <div key={l.label} className="flex flex-col justify-center">
+                <div className="mb-[0.6vh] flex items-center justify-between gap-6">
+                  <span className="w-40 font-display leading-none tabular-nums" style={{ color: corA, fontSize: "clamp(1.1rem, 3vh, 1.7rem)" }}>
                     {l.moeda ? moeda(l.a) : l.a.toLocaleString("pt-BR")}
                   </span>
-                  <span className="text-sm uppercase tracking-[0.25em] text-white/40">{l.label}</span>
-                  <span className="w-40 text-right font-display text-2xl leading-none tabular-nums" style={{ color: corB }}>
+                  <span className="text-[1.4vh] uppercase tracking-[0.25em] text-white/40">{l.label}</span>
+                  <span
+                    className="w-40 text-right font-display leading-none tabular-nums"
+                    style={{ color: corB, fontSize: "clamp(1.1rem, 3vh, 1.7rem)" }}
+                  >
                     {l.moeda ? moeda(l.b) : l.b.toLocaleString("pt-BR")}
                   </span>
                 </div>
@@ -363,32 +396,35 @@ function SlideDuelo({ a, b }: { a: DueloExercito; b: DueloExercito }) {
 
 function SlideEntrevistasHoje({ entrevistas }: { entrevistas: EntrevistaHoje[] }) {
   const tema = TEMAS.entrevistasHoje;
+  const colunas = entrevistas.length > 16 ? 3 : entrevistas.length > 6 ? 2 : 1;
   return (
     <SlideShell icon={IconBallot} titulo="Entrevistas do Dia" tema={tema} aoVivo>
       {entrevistas.length === 0 ? (
         <p className="text-2xl text-white/40">Nenhuma entrevista registrada ainda hoje.</p>
       ) : (
         <div className="flex h-full flex-col">
-          <div className="grid grid-cols-[2fr_1.4fr_1.4fr_2fr] gap-6 border-b border-white/15 pb-3 text-sm uppercase tracking-[0.25em] text-white/40">
+          <div
+            className="grid shrink-0 grid-cols-[2fr_1.4fr_1.4fr_2fr] gap-6 border-b border-white/15 pb-[1vh] uppercase tracking-[0.25em] text-white/40"
+            style={{ fontSize: "1.3vh" }}
+          >
             <span>SDR</span>
             <span>Exército</span>
             <span>Tribo</span>
             <span>Cliente</span>
           </div>
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <div className="[column-fill:balance] columns-1 gap-x-14 py-2 xl:columns-2" style={{ maxHeight: "56vh" }}>
-              {entrevistas.map((e) => (
-                <div
-                  key={e.id}
-                  className="grid grid-cols-[2fr_1.4fr_1.4fr_2fr] items-baseline gap-6 break-inside-avoid border-b border-white/5 py-2.5 text-lg"
-                >
-                  <span className="truncate text-white/90">{e.sdrNome}</span>
-                  <span className="truncate text-white/60">{e.exercitoNome}</span>
-                  <span className="truncate text-white/60">{e.triboNome}</span>
-                  <span className="truncate font-medium" style={{ color: tema.accent }}>{e.clienteNome}</span>
-                </div>
-              ))}
-            </div>
+          <div className="min-h-0 flex-1" style={{ columns: colunas, columnGap: "3vw", columnFill: "balance" }}>
+            {entrevistas.map((e) => (
+              <div
+                key={e.id}
+                className="grid grid-cols-[2fr_1.4fr_1.4fr_2fr] items-baseline gap-6 break-inside-avoid border-b border-white/5"
+                style={{ paddingBlock: "0.9vh", fontSize: "clamp(0.9rem, 2.1vh, 1.3rem)" }}
+              >
+                <span className="truncate text-white/90">{e.sdrNome}</span>
+                <span className="truncate text-white/60">{e.exercitoNome}</span>
+                <span className="truncate text-white/60">{e.triboNome}</span>
+                <span className="truncate font-medium" style={{ color: tema.accent }}>{e.clienteNome}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -418,25 +454,38 @@ function SlideRanking({
       {linhas.length === 0 ? (
         <p className="text-2xl text-white/40">Sem dados registrados ainda.</p>
       ) : (
-        <div className="space-y-2">
+        // Grid com N linhas de fração igual — garante que TODAS as linhas
+        // (até 10) cabem na altura disponível, seja qual for a resolução
+        // real da tela (achado do Diretor, 2026-09-22: numa TV o Top 10 só
+        // mostrava até o 5º, porque as linhas tinham altura fixa em vez de
+        // dividir o espaço disponível).
+        <div className="grid h-full" style={{ gridTemplateRows: `repeat(${linhas.length}, 1fr)` }}>
           {linhas.map((l, i) => (
-            <div key={l.nome} className="relative flex items-center gap-5 py-2">
+            <div key={l.nome} className="relative flex items-center gap-5">
               <div
                 className="absolute inset-y-0 left-0 -z-10 rounded-r-md"
                 style={{ width: `${(l.valor / max) * 100}%`, background: `${tema.accent}17` }}
               />
               <span
-                className="w-10 shrink-0 text-right font-display text-2xl leading-none tabular-nums"
-                style={{ color: i < 3 ? medalhas[i] : "rgba(255,255,255,0.3)" }}
+                className="w-10 shrink-0 text-right font-display leading-none tabular-nums"
+                style={{ color: i < 3 ? medalhas[i] : "rgba(255,255,255,0.3)", fontSize: "clamp(1.1rem, 3vh, 1.7rem)" }}
               >
                 {i + 1}
               </span>
               {crests?.[l.nome] && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={crests[l.nome]} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                <img src={crests[l.nome]} alt="" className="shrink-0 rounded-full object-cover" style={{ height: "5vh", width: "5vh" }} />
               )}
-              <span className={`min-w-0 flex-1 truncate text-2xl ${i === 0 ? "font-display text-white" : "text-white/80"}`}>{l.nome}</span>
-              <span className="font-display text-3xl leading-none tabular-nums" style={{ color: i === 0 ? tema.accent : "rgba(255,255,255,0.65)" }}>
+              <span
+                className={`min-w-0 flex-1 truncate ${i === 0 ? "font-display text-white" : "text-white/80"}`}
+                style={{ fontSize: "clamp(1.1rem, 3vh, 1.7rem)" }}
+              >
+                {l.nome}
+              </span>
+              <span
+                className="font-display leading-none tabular-nums"
+                style={{ color: i === 0 ? tema.accent : "rgba(255,255,255,0.65)", fontSize: "clamp(1.3rem, 3.6vh, 2.1rem)" }}
+              >
                 {formatoMoeda ? moeda(l.valor) : l.valor.toLocaleString("pt-BR")}
               </span>
             </div>
@@ -447,46 +496,80 @@ function SlideRanking({
   );
 }
 
-function SlideCampanhas({ campanhas }: { campanhas: CampanhaComProgresso[] }) {
-  const visiveis = campanhas.slice(0, 2);
-  const tema = TEMAS.campanhas;
+function SlideCampanhaVazia() {
   return (
-    <SlideShell icon={IconTrophy} titulo="Campanhas do Senatus" tema={tema}>
-      {visiveis.length === 0 ? (
-        <p className="text-2xl text-white/40">Nenhuma campanha ativa no momento.</p>
-      ) : (
-        <div className="flex h-full flex-col gap-12">
-          {visiveis.map((c) => (
-            <div key={c.id} className="flex-1 border-l-2 pl-10" style={{ borderColor: tema.accent }}>
-              <h3 className="font-display text-3xl text-white">{c.titulo}</h3>
-              {c.descricao && <p className="mt-2 max-w-3xl text-xl text-white/60 line-clamp-2">{c.descricao}</p>}
-              {c.recompensa && (
-                <p className="mt-3 text-lg font-medium" style={{ color: tema.accent }}>
-                  {c.recompensa}
-                </p>
-              )}
-              {c.participantes.length > 0 && (
-                <div className="mt-5 flex flex-wrap gap-x-10 gap-y-3 text-xl text-white/70">
-                  {c.participantes.slice(0, 4).map((p) => {
-                    const foto = p.avatarUrl ?? p.triboCrestUrl ?? p.exercitoCrestUrl;
-                    return (
-                      <span key={p.refId} className="flex items-center gap-3">
-                        {foto && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={foto} alt="" className="h-12 w-12 rounded-full border-2 object-cover" style={{ borderColor: tema.accent }} />
-                        )}
-                        <span>
-                          {p.label} <b className="text-white">{p.valor.toLocaleString("pt-BR")}</b>
-                        </span>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ))}
+    <SlideShell icon={IconTrophy} titulo="Campanhas do Senatus" tema={TEMAS.campanhas}>
+      <p className="text-2xl text-white/40">Nenhuma campanha ativa no momento.</p>
+    </SlideShell>
+  );
+}
+
+// Uma tela CHEIA por campanha ativa — pedido do Diretor, 2026-09-22: antes
+// 2 campanhas dividiam a mesma tela e as fotos ficavam pequenas demais.
+// Fotos: avatarUrl é o duelo individual (ex: Copa Sampel, "foto dos
+// meninos"); triboCrestUrl/exercitoCrestUrl é o duelo de time (ex: Balde
+// War entre Tribos, Tribal Wars entre Exércitos) — campo já existia em
+// CampanhaParticipanteProgresso, só faltava exibir no painel.
+function SlideCampanha({ campanha: c }: { campanha: CampanhaComProgresso }) {
+  const tema = TEMAS.campanhas;
+  const max = Math.max(...c.participantes.map((p) => p.valor), 1);
+  return (
+    <SlideShell icon={IconTrophy} titulo={c.titulo} tema={tema}>
+      <div className="flex h-full gap-[3vw]">
+        <div className="flex w-[32%] shrink-0 flex-col justify-center gap-[2vh]">
+          {c.descricao && <p style={{ fontSize: "clamp(1rem, 2.4vh, 1.4rem)" }} className="text-white/70">{c.descricao}</p>}
+          {c.recompensa && (
+            <p className="font-medium" style={{ color: tema.accent, fontSize: "clamp(1.1rem, 2.6vh, 1.5rem)" }}>
+              🎁 {c.recompensa}
+            </p>
+          )}
         </div>
-      )}
+
+        <div className="min-w-0 flex-1 border-l border-white/10 pl-[3vw]">
+          {c.participantes.length === 0 ? (
+            <p className="text-2xl text-white/40">Sem participantes ainda.</p>
+          ) : (
+            <div className="grid h-full" style={{ gridTemplateRows: `repeat(${c.participantes.length}, 1fr)` }}>
+              {c.participantes.map((p, i) => {
+                const foto = p.avatarUrl ?? p.triboCrestUrl ?? p.exercitoCrestUrl;
+                return (
+                  <div key={p.refId} className="relative flex items-center gap-[1.2vw]">
+                    <div
+                      className="absolute inset-y-0 left-0 -z-10 rounded-r-md"
+                      style={{ width: `${(p.valor / max) * 100}%`, background: `${tema.accent}17` }}
+                    />
+                    {foto ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={foto}
+                        alt=""
+                        className="shrink-0 rounded-full border-2 object-cover"
+                        style={{ height: "7vh", width: "7vh", borderColor: i === 0 ? tema.accent : "rgba(255,255,255,0.2)" }}
+                      />
+                    ) : (
+                      <span
+                        className="flex shrink-0 items-center justify-center rounded-full border border-white/20 font-display text-white/40"
+                        style={{ height: "7vh", width: "7vh", fontSize: "2vh" }}
+                      >
+                        {i + 1}
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1 truncate text-white/85" style={{ fontSize: "clamp(1.1rem, 2.8vh, 1.6rem)" }}>
+                      {p.label}
+                    </span>
+                    <span
+                      className="font-display leading-none tabular-nums"
+                      style={{ color: i === 0 ? tema.accent : "rgba(255,255,255,0.7)", fontSize: "clamp(1.3rem, 3.4vh, 2.1rem)" }}
+                    >
+                      {p.valor.toLocaleString("pt-BR")}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </SlideShell>
   );
 }
