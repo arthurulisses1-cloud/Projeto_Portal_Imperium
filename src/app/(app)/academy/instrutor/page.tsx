@@ -5,8 +5,7 @@ import {
   buscarMateriaisPorAulas,
   resolverAudienciaDaAula,
   buscarPresencasPorAulas,
-  buscarTodasAulas,
-  buscarTrilhas,
+  buscarAulasCobranca,
   type AlunoAudiencia,
   type AulaComCobranca,
 } from "@/lib/academy";
@@ -41,30 +40,12 @@ export default async function AulasParaMinistrarPage() {
     })(),
   ]);
 
-  // Visão de cobrança — pedido do Diretor, 2026-09-22: "quero ver as aulas
+  // Visão de cobrança — pedido do Diretor, 2026-09-21: "quero ver as aulas
   // dos outros professores pra poder cobrar eles de fazer o fechamento".
   // Só monta pra quem administra a Academy (Diretor/Analista liberado) —
-  // instrutor comum continua vendo só as próprias aulas acima.
-  let aulasCobranca: AulaComCobranca[] | null = null;
-  if (isDiretor || analistaComAcademyAdmin) {
-    const [todasAulas, trilhas] = await Promise.all([buscarTodasAulas(supabase), buscarTrilhas(supabase)]);
-    const trilhaNomePorId = new Map(trilhas.map((t) => [t.id, t.nome]));
-    const hoje = new Date().toISOString().slice(0, 10);
-    const idsPendentes = todasAulas.filter((a) => !a.realizada && a.data !== null && a.data <= hoje).map((a) => a.id);
-    const [materiaisPendentes, presencasPendentes] = await Promise.all([
-      buscarMateriaisPorAulas(supabase, idsPendentes),
-      buscarPresencasPorAulas(supabase, idsPendentes),
-    ]);
-    aulasCobranca = todasAulas
-      .filter((a) => idsPendentes.includes(a.id))
-      .map((a) => ({
-        ...a,
-        trilhaNome: trilhaNomePorId.get(a.trilhaId) ?? "—",
-        temMaterial: (materiaisPendentes[a.id] ?? []).length > 0,
-        temPresenca: Object.keys(presencasPendentes[a.id] ?? {}).length > 0,
-      }))
-      .sort((a, b) => (a.data ?? "").localeCompare(b.data ?? ""));
-  }
+  // instrutor comum continua vendo só as próprias aulas acima. A mesma
+  // busca alimenta o widget do Mural do RH (ver src/app/(app)/page.tsx).
+  const aulasCobranca: AulaComCobranca[] | null = isDiretor || analistaComAcademyAdmin ? await buscarAulasCobranca(supabase) : null;
 
   return (
     <InstrutorView

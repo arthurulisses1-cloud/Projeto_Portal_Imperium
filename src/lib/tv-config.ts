@@ -2,14 +2,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Chaves fixas de cada tela do Painel TV — a tela "duelo" só entra de fato
 // no rodízio quando existem 2 Exércitos pra comparar (ver TvDisplay.tsx);
-// as outras 9 são sempre exibidas.
+// as outras 10 são sempre exibidas. Chave nova é auto-adicionada ao fim da
+// ordem salva por quem já configurou (ver buscarOrdemSlides abaixo).
 export const TV_SLIDES: { chave: string; label: string }[] = [
   { chave: "ligacoes", label: "Ligações do dia" },
   { chave: "duelo", label: "Duelo de Funis" },
   { chave: "entrevistas-hoje", label: "Entrevistas do Dia" },
   { chave: "conexoes", label: "Top 10 Conexões do dia" },
   { chave: "tribos", label: "Guerra de Tribos" },
-  { chave: "credito", label: "Top 10 Crédito do mês" },
+  { chave: "credito", label: "Top 10 Crédito do mês (SDR)" },
+  { chave: "credito-closer", label: "Top 10 Crédito do mês (Closer)" },
   { chave: "exercitos", label: "Guerra de Exércitos" },
   { chave: "campanhas", label: "Campanhas do Senatus" },
   { chave: "entrevistas-mes", label: "Top 5 Entrevistas do mês" },

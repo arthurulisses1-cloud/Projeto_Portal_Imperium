@@ -19,6 +19,9 @@ import { buscarComentarios, buscarReacoes } from "@/lib/social";
 import ComentariosReacoes from "@/components/ui/ComentariosReacoes";
 import { hojeBR } from "@/lib/data-br";
 import { podeVerArea } from "@/lib/permissoes-analista";
+import { ACADEMY_RH } from "@/lib/acessos-especiais";
+import { buscarAulasCobranca } from "@/lib/academy";
+import CobrancaFechamento from "@/components/academy/CobrancaFechamento";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -44,6 +47,13 @@ export default async function MuralPage({
   // Analista se a área "financeiro" estiver liberada (os outros widgets do
   // Mural, tipo Central de Notificações, são do "mural" mesmo, sempre on).
   const analistaFinanceiroLiberado = meRole === "analista" && (await podeVerArea(supabase, meId, meRole, "financeiro"));
+  // RH da Imperium Academy (Alana/Letícia) — pedido do Diretor, 2026-09-22:
+  // "gostei da visão de Cobrança de fechamento, coloque no Mural delas...
+  // pode tirar a Central de Notificações, esses números não são tão
+  // importantes pra elas". Recorte por pessoa (não por papel/área), então
+  // não interfere em nenhum outro Analista.
+  const isAcademyRh = ACADEMY_RH.some((p) => p.id === meId);
+  const aulasCobrancaRh = isAcademyRh ? await buscarAulasCobranca(supabase) : null;
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -309,9 +319,12 @@ export default async function MuralPage({
         <TarefasMuralWidget userId={meId} />
       )}
 
-      {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
-        <CentralNotificacoes escopo={escopoCentral} viewerId={meId} />
-      )}
+      {isAcademyRh && aulasCobrancaRh && <CobrancaFechamento aulas={aulasCobrancaRh} />}
+
+      {!isAcademyRh &&
+        (meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
+          <CentralNotificacoes escopo={escopoCentral} viewerId={meId} />
+        )}
 
       {meRole === "sdr" && metaIndividual > 0 && (
         <Card title={mesEhAtual ? "Meta do mês" : `Meta de ${MESES[mes - 1]}/${ano}`}>

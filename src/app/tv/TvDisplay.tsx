@@ -58,6 +58,7 @@ const TEMAS = {
   conexoes: { accent: "#7bb3d6", gradiente: "linear-gradient(160deg, #0f1a1f 0%, #0a1215 100%)" },
   guerraTribos: { accent: "#d16b62", gradiente: "linear-gradient(160deg, #211412 0%, #140d0c 100%)" },
   credito: { accent: "#e8c874", gradiente: "linear-gradient(160deg, #201808 0%, #130e06 100%)" },
+  creditoCloser: { accent: "#e0985a", gradiente: "linear-gradient(160deg, #1f1208 0%, #130b06 100%)" },
   guerraExercitos: { accent: "#b592e0", gradiente: "linear-gradient(160deg, #18121f 0%, #0e0b14 100%)" },
   campanhas: { accent: "#e0a94a", gradiente: "linear-gradient(160deg, #1e1609 0%, #120d06 100%)" },
   entrevistasHoje: { accent: "#6fc99a", gradiente: "linear-gradient(160deg, #0e1a12 0%, #0a100c 100%)" },
@@ -73,7 +74,8 @@ type Props = {
   entrevistasHoje: EntrevistaHoje[];
   topConexoesHoje: PessoaVisao[];
   topEntrevistasMes: PessoaVisao[];
-  topCreditoMes: Confronto[];
+  topCreditoSdrMes: Confronto[];
+  topCreditoCloserMes: Confronto[];
   confrontoExercitos: Confronto[];
   confrontoTribos: Confronto[];
   crestsTribos: Record<string, string>;
@@ -119,9 +121,19 @@ export default function TvDisplay(props: Props) {
       <SlideRanking
         key="credito"
         icon={IconCoin}
-        titulo="Top 10 Crédito do mês"
+        titulo="Top 10 Crédito do mês (SDR)"
         tema={TEMAS.credito}
-        linhas={props.topCreditoMes}
+        linhas={props.topCreditoSdrMes}
+        formatoMoeda
+      />
+    ),
+    "credito-closer": (
+      <SlideRanking
+        key="credito-closer"
+        icon={IconCoin}
+        titulo="Top 10 Crédito do mês (Closer)"
+        tema={TEMAS.creditoCloser}
+        linhas={props.topCreditoCloserMes}
         formatoMoeda
       />
     ),

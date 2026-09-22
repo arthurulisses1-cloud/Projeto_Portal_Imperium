@@ -133,6 +133,32 @@ export async function buscarTodasAulas(supabase: SupabaseClient): Promise<Aula[]
   return mapAulas(data);
 }
 
+// "Cobrança de fechamento" — aulas já vencidas (data <= hoje) e ainda sem
+// fechar (falta material e/ou presença), com o nome de quem tem que
+// fechar. Pedido do Diretor, 2026-09-22: usada tanto em Academy Geral
+// (Diretor cobra os professores) quanto no Mural do RH (Alana/Letícia
+// cobram os professores — não precisam de acesso à Academy inteira pra
+// isso, ver src/app/(app)/page.tsx).
+export async function buscarAulasCobranca(supabase: SupabaseClient): Promise<AulaComCobranca[]> {
+  const [todasAulas, trilhas] = await Promise.all([buscarTodasAulas(supabase), buscarTrilhas(supabase)]);
+  const trilhaNomePorId = new Map(trilhas.map((t) => [t.id, t.nome]));
+  const hoje = new Date().toISOString().slice(0, 10);
+  const idsPendentes = todasAulas.filter((a) => !a.realizada && a.data !== null && a.data <= hoje).map((a) => a.id);
+  const [materiaisPendentes, presencasPendentes] = await Promise.all([
+    buscarMateriaisPorAulas(supabase, idsPendentes),
+    buscarPresencasPorAulas(supabase, idsPendentes),
+  ]);
+  return todasAulas
+    .filter((a) => idsPendentes.includes(a.id))
+    .map((a) => ({
+      ...a,
+      trilhaNome: trilhaNomePorId.get(a.trilhaId) ?? "—",
+      temMaterial: (materiaisPendentes[a.id] ?? []).length > 0,
+      temPresenca: Object.keys(presencasPendentes[a.id] ?? {}).length > 0,
+    }))
+    .sort((a, b) => (a.data ?? "").localeCompare(b.data ?? ""));
+}
+
 export async function buscarAulasParaMinistrar(supabase: SupabaseClient, profileId: string): Promise<(Aula & { trilhaNome: string })[]> {
   const { data } = await supabase
     .from("academy_aulas")

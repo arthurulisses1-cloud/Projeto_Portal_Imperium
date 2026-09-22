@@ -28,7 +28,8 @@ export default async function TvPage() {
     confrontoExercitos,
     confrontoTribos,
     crestsTribos,
-    topCreditoMes,
+    topCreditoSdrMes,
+    topCreditoCloserMes,
     campanhasAtivas,
     recordesAuto,
     recordesCurados,
@@ -39,7 +40,12 @@ export default async function TvPage() {
     buscarConfrontoExercitos(supabase, inicioMesBR(), fimMesBR()),
     buscarConfrontoTribos(supabase, inicioMesBR(), fimMesBR()),
     buscarCrestsTribos(supabase),
-    buscarTopCredito(supabase, inicioMesBR(), fimMesBR(), 10),
+    // Pedido do Diretor, 2026-09-22: "Top crédito do mês" só como SDR;
+    // crédito como Closer vira uma tela própria (ver "credito-closer" em
+    // tv-config.ts) — sem separar, quem faz os 2 papéis inflava os dois
+    // rankings com o mesmo dinheiro contado 2x.
+    buscarTopCredito(supabase, inicioMesBR(), fimMesBR(), 10, "sdr"),
+    buscarTopCredito(supabase, inicioMesBR(), fimMesBR(), 10, "closer"),
     buscarCampanhasAtivas(supabase),
     buscarRecordesAuto(supabase),
     buscarRecordesCurados(supabase),
@@ -144,7 +150,8 @@ export default async function TvPage() {
       entrevistasHoje={entrevistasHoje}
       topConexoesHoje={topConexoesHoje}
       topEntrevistasMes={topEntrevistasMes}
-      topCreditoMes={topCreditoMes}
+      topCreditoSdrMes={topCreditoSdrMes}
+      topCreditoCloserMes={topCreditoCloserMes}
       confrontoExercitos={confrontoExercitos}
       confrontoTribos={confrontoTribos}
       crestsTribos={crestsTribos}

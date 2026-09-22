@@ -202,11 +202,19 @@ export async function buscarCrestsTribos(supabase: SupabaseClient): Promise<Reco
   return mapa;
 }
 
+// `papel` opcional filtra a produção só como SDR ou só como Closer (uma
+// linha de `vendas` com papel="ambos" conta nos dois lados quando a mesma
+// pessoa fechou nos dois papéis) — pedido do Diretor, 2026-09-22, pro
+// Painel TV não misturar os dois no mesmo "Top Crédito" (queria uma tela
+// separada pra cada papel). Sem `papel`, mantém o comportamento antigo
+// (soma tudo que a pessoa vendeu, sem distinguir o papel) — usado pelo
+// widget "Top Crédito" do Mural, que nunca fez essa distinção.
 export async function buscarTopCredito(
   supabase: SupabaseClient,
   inicioMes: string,
   fimMes: string,
-  limite = 5
+  limite = 5,
+  papel?: "sdr" | "closer"
 ): Promise<Confronto[]> {
   const { data: pessoas } = await supabase
     .from("profiles")
@@ -218,13 +226,14 @@ export async function buscarTopCredito(
 
   const { data: vendas } = await supabase
     .from("vendas")
-    .select("profile_id, valor")
+    .select("profile_id, valor, papel")
     .in("profile_id", ids)
     .gte("data", inicioMes)
     .lte("data", fimMes);
 
   const totais = new Map<string, number>();
   for (const v of vendas ?? []) {
+    if (papel && v.papel !== papel && v.papel !== "ambos") continue;
     totais.set(v.profile_id, (totais.get(v.profile_id) ?? 0) + Number(v.valor));
   }
 
