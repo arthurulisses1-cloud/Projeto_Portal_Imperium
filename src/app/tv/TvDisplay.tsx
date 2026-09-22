@@ -126,22 +126,17 @@ export default function TvDisplay(props: Props) {
       />
     ),
     exercitos:
-      props.confrontoExercitos.length >= 2 ? (
-        <SlideDuelPoster
+      props.confrontoExercitos.length >= 2 && props.confrontoExercitos.length <= 5 ? (
+        <SlidePosterMultiplo
           key="exercitos"
           icon={IconEagle}
           titulo="Guerra de Exércitos"
           tema={TEMAS.guerraExercitos}
-          esquerda={{
-            nome: props.confrontoExercitos[0].nome,
-            valor: props.confrontoExercitos[0].valor,
-            foto: props.crestsExercitos[props.confrontoExercitos[0].nome] ?? null,
-          }}
-          direita={{
-            nome: props.confrontoExercitos[1].nome,
-            valor: props.confrontoExercitos[1].valor,
-            foto: props.crestsExercitos[props.confrontoExercitos[1].nome] ?? null,
-          }}
+          participantes={props.confrontoExercitos.map((c) => ({
+            nome: c.nome,
+            valor: c.valor,
+            foto: props.crestsExercitos[c.nome] ?? null,
+          }))}
           formatoMoeda
         />
       ) : (
@@ -174,21 +169,23 @@ export default function TvDisplay(props: Props) {
     if (chave === "campanhas") {
       if (props.campanhasAtivas.length === 0) return [<SlideCampanhaVazia key="campanhas-vazia" />];
       return props.campanhasAtivas.map((c) => {
-        // Duelo de 2 (Copa Sampel, Tribal Wars/Balde War) vira o mesmo
-        // pôster de foto gigante da Guerra de Exércitos — pedido do
-        // Diretor, 2026-09-22: "quero que tomem a tela inteira". Campanha
-        // com mais de 2 participantes continua na lista (não cabe como
-        // duelo de 2 lados).
-        if (c.participantes.length === 2) {
-          const [p1, p2] = c.participantes;
+        // Copa Sampel (3), Balde War (2), Tribal Wars (4) etc. viram o
+        // mesmo pôster de foto gigante da Guerra de Exércitos — pedido do
+        // Diretor, 2026-09-22: "quero que tomem a tela inteira". Só cai na
+        // lista quando tem gente demais pra caber como pôster (ex: campanha
+        // "geral" com o time inteiro).
+        if (c.participantes.length >= 2 && c.participantes.length <= 5) {
           return (
-            <SlideDuelPoster
+            <SlidePosterMultiplo
               key={`campanha-${c.id}`}
               icon={IconTrophy}
               titulo={c.titulo}
               tema={TEMAS.campanhas}
-              esquerda={{ nome: p1.label, valor: p1.valor, foto: p1.avatarUrl ?? p1.triboCrestUrl ?? p1.exercitoCrestUrl ?? null }}
-              direita={{ nome: p2.label, valor: p2.valor, foto: p2.avatarUrl ?? p2.triboCrestUrl ?? p2.exercitoCrestUrl ?? null }}
+              participantes={c.participantes.map((p) => ({
+                nome: p.label,
+                valor: p.valor,
+                foto: p.avatarUrl ?? p.triboCrestUrl ?? p.exercitoCrestUrl ?? null,
+              }))}
             />
           );
         }
@@ -433,31 +430,37 @@ function SlideDuelo({ a, b }: { a: DueloExercito; b: DueloExercito }) {
   );
 }
 
-// Pôster de duelo com foto GIGANTE ocupando cada metade da tela — pedido do
-// Diretor, 2026-09-22: "não quero as fotos na bolinha pequena, quero que
-// tomem a tela inteira praticamente". Usado na Guerra de Exércitos (sempre
-// 2 lados) e em campanhas de duelo de 2 participantes (Copa Sampel,
-// Tribal Wars/Balde War). Sem foto (Exército/pessoa sem brasão/avatar
-// cadastrado) cai no gradiente do tema, pra nunca ficar com buraco vazio.
-function SlideDuelPoster({
+// Pôster com foto GIGANTE ocupando cada fatia da tela (2 a 5 lados) —
+// pedido do Diretor, 2026-09-22: "não quero as fotos na bolinha pequena,
+// quero que tomem a tela inteira praticamente". Serve tanto pro duelo de 2
+// (Guerra de Exércitos, Balde War) quanto pra disputa de 3+ lados (Copa
+// Sampel = 3 pessoas, Tribal Wars = 4 Tribos) — o "VS" no meio só faz
+// sentido visualmente com exatamente 2 fatias. Sem foto (Exército/pessoa
+// sem brasão/avatar cadastrado) cai no gradiente do tema, nunca fica com
+// buraco vazio. Ordenado por valor — quem lidera fica com a borda em
+// destaque, como nos outros rankings do painel.
+function SlidePosterMultiplo({
   icon,
   titulo,
   tema,
-  esquerda,
-  direita,
+  participantes,
   formatoMoeda,
 }: {
   icon: IconComp;
   titulo: string;
   tema: Tema;
-  esquerda: { nome: string; valor: number; foto: string | null };
-  direita: { nome: string; valor: number; foto: string | null };
+  participantes: { nome: string; valor: number; foto: string | null }[];
   formatoMoeda?: boolean;
 }) {
+  const ordenados = [...participantes].sort((a, b) => b.valor - a.valor);
+  const n = ordenados.length;
+  const nomeSize = n <= 2 ? "clamp(1.6rem, 4.4vh, 3rem)" : n === 3 ? "clamp(1.3rem, 3.6vh, 2.2rem)" : "clamp(1.05rem, 3vh, 1.7rem)";
+  const valorSize = n <= 2 ? "clamp(2.2rem, 7vh, 4.5rem)" : n === 3 ? "clamp(1.8rem, 5.4vh, 3.1rem)" : "clamp(1.5rem, 4.4vh, 2.5rem)";
+
   return (
     <SlideShell icon={icon} titulo={titulo} tema={tema}>
-      <div className="relative flex h-full gap-[0.8vw]">
-        {[esquerda, direita].map((p, i) => (
+      <div className="relative flex h-full gap-[0.6vw]">
+        {ordenados.map((p, i) => (
           <div key={p.nome} className="relative min-w-0 flex-1 overflow-hidden rounded-xl">
             {p.foto ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -469,26 +472,25 @@ function SlideDuelPoster({
               className="absolute inset-0"
               style={{ background: "linear-gradient(to top, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.25) 40%, rgba(0,0,0,0.05) 65%)" }}
             />
-            <div className="absolute inset-x-0 bottom-0 p-[2.5vh] text-center">
-              <p
-                className="font-display leading-none text-white"
-                style={{ fontSize: "clamp(1.6rem, 4.4vh, 3rem)", textShadow: "0 4px 18px rgba(0,0,0,0.7)" }}
-              >
+            {i === 0 && <div className="absolute inset-0 ring-inset" style={{ boxShadow: `inset 0 0 0 4px ${tema.accent}` }} />}
+            <div className="absolute inset-x-0 bottom-0 p-[2vh] text-center">
+              <p className="font-display leading-none text-white" style={{ fontSize: nomeSize, textShadow: "0 4px 18px rgba(0,0,0,0.7)" }}>
                 {p.nome}
               </p>
-              <p className="mt-[1.2vh] font-display leading-none tabular-nums" style={{ color: tema.accent, fontSize: "clamp(2.2rem, 7vh, 4.5rem)" }}>
+              <p className="mt-[1vh] font-display leading-none tabular-nums" style={{ color: tema.accent, fontSize: valorSize }}>
                 {formatoMoeda ? moeda(p.valor) : p.valor.toLocaleString("pt-BR")}
               </p>
             </div>
-            {i === 0 && <div className="absolute inset-y-0 right-0 w-px bg-white/10" />}
           </div>
         ))}
-        <div
-          className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 font-display text-white shadow-2xl"
-          style={{ height: "8vh", width: "8vh", fontSize: "1.8vh", borderColor: tema.accent, background: "rgba(10,8,6,0.75)" }}
-        >
-          VS
-        </div>
+        {n === 2 && (
+          <div
+            className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 font-display text-white shadow-2xl"
+            style={{ height: "8vh", width: "8vh", fontSize: "1.8vh", borderColor: tema.accent, background: "rgba(10,8,6,0.75)" }}
+          >
+            VS
+          </div>
+        )}
       </div>
     </SlideShell>
   );
