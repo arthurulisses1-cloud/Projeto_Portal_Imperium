@@ -34,6 +34,12 @@ export type Aula = {
   videoUrl: string | null;
 };
 
+// Visão de cobrança do Diretor em "Aulas para Ministrar" (2026-09-22): só
+// aulas já vencidas (data <= hoje) e ainda não fechadas, pra saber com quem
+// cobrar — a mesma regra de "pode fechar" (material + presença) usada no
+// card do próprio instrutor.
+export type AulaComCobranca = Aula & { trilhaNome: string; temMaterial: boolean; temPresenca: boolean };
+
 export type Material = {
   id: string;
   nome: string;

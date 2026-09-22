@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import type { Trilha, Aula, Modulo, ModuloItem } from "@/lib/academy";
 import { visualDaTrilha } from "@/lib/academy-visual";
 import MonthCalendar, { type EventoCalendario } from "@/components/academy/MonthCalendar";
@@ -12,6 +12,7 @@ import {
   excluirAula,
   moverAula,
   definirDatasEmLote,
+  ressincronizarTasksAcademy,
 } from "./actions";
 
 const DIAS_SEMANA = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
@@ -37,6 +38,8 @@ export default function AcademyGeralView({
   const [aba, setAba] = useState<"oficial" | "alternativas">("oficial");
   const [trilhaSelecionada, setTrilhaSelecionada] = useState<string>(trilhas[0]?.id ?? "");
   const [aulaAberta, setAulaAberta] = useState<string | null>(null);
+  const [ressincronizando, startRessincronizar] = useTransition();
+  const [ressincronizado, setRessincronizado] = useState(false);
 
   const trilhaPorId = useMemo(() => Object.fromEntries(trilhas.map((t) => [t.id, t])), [trilhas]);
 
@@ -72,9 +75,27 @@ export default function AcademyGeralView({
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-6 py-8">
-      <div>
-        <h1 className="font-display text-2xl text-gold-bright">Imperium Academy</h1>
-        <p className="text-xs text-stone-400">Academy Geral — calendário de todas as trilhas + edição de aulas.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl text-gold-bright">Imperium Academy</h1>
+          <p className="text-xs text-stone-400">Academy Geral — calendário de todas as trilhas + edição de aulas.</p>
+        </div>
+        <div className="text-right">
+          <button
+            onClick={() =>
+              startRessincronizar(async () => {
+                await ressincronizarTasksAcademy();
+                setRessincronizado(true);
+              })
+            }
+            disabled={ressincronizando}
+            className="btn-outline px-3 py-1.5 text-[10px]"
+            title="Refaz as tarefas de RH/instrutor de todas as aulas já agendadas — use depois de mudar o checklist do RH"
+          >
+            {ressincronizando ? "Ressincronizando…" : "↻ Ressincronizar tarefas"}
+          </button>
+          {ressincronizado && !ressincronizando && <p className="mt-1 text-[10px] text-success-bright">✓ Tarefas atualizadas</p>}
+        </div>
       </div>
 
       <div className="flex gap-2">

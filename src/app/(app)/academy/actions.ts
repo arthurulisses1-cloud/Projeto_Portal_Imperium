@@ -16,11 +16,23 @@ const RH_CHECKLIST: { chave: string; titulo: string; diasAntes: number }[] = [
   { chave: "enviar_arte", titulo: "Enviar arte com os dados da aula no Grupo do Imperium", diasAntes: 1 },
 ];
 
+// Checklist PÓS-aula — pedido do Diretor, 2026-09-22: "adicionar uma nova
+// tarefa pós aula que é garantir que o professor faça o fechamento da
+// aula". Prazo = data da aula MAIS N dias (folga pra o professor conseguir
+// subir material/marcar presença antes do RH cobrar).
+const RH_CHECKLIST_POS_AULA: { chave: string; titulo: string; diasDepois: number }[] = [
+  { chave: "cobrar_fechamento", titulo: "Cobrar do professor o fechamento da aula (material + lista de presença)", diasDepois: 1 },
+];
+
 function subtrairDias(dataISO: string, dias: number): string {
   const [y, m, d] = dataISO.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   dt.setUTCDate(dt.getUTCDate() - dias);
   return dt.toISOString().slice(0, 10);
+}
+
+function somarDias(dataISO: string, dias: number): string {
+  return subtrairDias(dataISO, -dias);
 }
 
 async function exigirDiretor() {
@@ -118,11 +130,40 @@ async function sincronizarTasksDaAula(supabase: SupabaseClient, aulaId: string) 
       });
     }
   }
+  for (const item of RH_CHECKLIST_POS_AULA) {
+    const dueDate = somarDias(aula.data, item.diasDepois);
+    for (const pessoa of ACADEMY_RH) {
+      linhas.push({
+        profile_id: pessoa.id,
+        titulo: `${item.titulo} — ${trilha.nome}: ${aula.tema}`,
+        due_date: dueDate,
+        due_time: null,
+        coluna: "afazer",
+        prioridade: "alta",
+        tags: [`academy_rh:${item.chave}`],
+        origem_academy_aula_id: aula.id,
+      });
+    }
+  }
 
   if (linhas.length > 0) {
     const { error } = await supabase.from("tasks").insert(linhas);
     if (error) throw new Error(error.message);
   }
+}
+
+// Refaz as tarefas de TODAS as aulas com data — pedido do Diretor,
+// 2026-09-22: usado uma vez pra aplicar o item novo do checklist (cobrar
+// fechamento pós-aula) nas ~50 aulas já agendadas antes dele existir, sem
+// precisar editar aula por aula só pra disparar sincronizarTasksDaAula.
+export async function ressincronizarTasksAcademy() {
+  const { supabase } = await exigirDiretor();
+  const { data: aulas, error } = await supabase.from("academy_aulas").select("id").not("data", "is", null);
+  if (error) throw new Error(error.message);
+  for (const a of aulas ?? []) {
+    await sincronizarTasksDaAula(supabase, a.id);
+  }
+  revalidar();
 }
 
 export async function atualizarTrilha(formData: FormData) {
