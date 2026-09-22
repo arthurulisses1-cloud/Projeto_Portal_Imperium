@@ -440,7 +440,7 @@ function SlideDuelo({ a, b }: { a: DueloExercito; b: DueloExercito }) {
 // buraco vazio. Ordenado por valor — quem lidera fica com a borda em
 // destaque, como nos outros rankings do painel.
 function SlidePosterMultiplo({
-  icon,
+  icon: Icon,
   titulo,
   tema,
   participantes,
@@ -458,7 +458,7 @@ function SlidePosterMultiplo({
   const valorSize = n <= 2 ? "clamp(2.2rem, 7vh, 4.5rem)" : n === 3 ? "clamp(1.8rem, 5.4vh, 3.1rem)" : "clamp(1.5rem, 4.4vh, 2.5rem)";
 
   return (
-    <SlideShell icon={icon} titulo={titulo} tema={tema}>
+    <SlideShell icon={Icon} titulo={titulo} tema={tema}>
       <div className="relative flex h-full gap-[0.6vw]">
         {ordenados.map((p, i) => (
           <div key={p.nome} className="relative min-w-0 flex-1 overflow-hidden rounded-xl">
@@ -466,7 +466,15 @@ function SlidePosterMultiplo({
               // eslint-disable-next-line @next/next/no-img-element
               <img src={p.foto} alt="" className="absolute inset-0 h-full w-full object-cover" />
             ) : (
-              <div className="absolute inset-0" style={{ background: tema.gradiente }} />
+              // Sem foto cadastrada — gradiente mais claro que o resto da
+              // tela de propósito, pra nunca parecer "tela preta quebrada"
+              // (achado do Diretor, 2026-09-22).
+              <div
+                className="absolute inset-0 flex items-center justify-center text-white/15"
+                style={{ background: `linear-gradient(160deg, ${tema.accent}33 0%, ${tema.accent}0d 100%)` }}
+              >
+                <Icon className="h-[10vh] w-[10vh]" />
+              </div>
             )}
             <div
               className="absolute inset-0"

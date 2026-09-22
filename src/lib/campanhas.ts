@@ -199,6 +199,13 @@ async function calcularProgresso(supabase: SupabaseClient, campanhas: CampanhaRo
       return [p.id, tribo?.logo_url ?? null];
     })
   );
+  // Pra campanha alvo="tribo"/"exercito" (Balde War, Tribal Wars...) o
+  // refId do participante já É o tribo_id/exercito_id direto — não precisa
+  // passar por um profile pra achar o brasão, diferente do duelo individual
+  // acima. Sem isso o card ficava sem imagem nenhuma (fundo quase preto do
+  // tema, achado do Diretor, 2026-09-22: "tela preta, não consigo ver").
+  const { data: triposComLogo } = await supabase.from("tribos").select("id, logo_url");
+  const triboLogoPorTriboId = new Map((triposComLogo ?? []).map((t) => [t.id, t.logo_url]));
 
   // Avatares dos duelos entre pessoas (pedido do Diretor: 2026-08-27 pra
   // duelo de 2, estendido 2026-08-28 pra 3+) — só busca pra participantes
@@ -349,6 +356,13 @@ async function calcularProgresso(supabase: SupabaseClient, campanhas: CampanhaRo
         avatarUrl: avatarPorProfileId.get(p.refId) ?? null,
         triboCrestUrl: triboLogoPorProfileId.get(p.refId) ?? null,
         exercitoCrestUrl: EXERCITO_CRESTS[exercitoNomePorId.get(exercitoIdPorProfileId.get(p.refId) ?? "") ?? ""] ?? null,
+      }));
+    } else if (alvo === "tribo") {
+      participantes = participantes.map((p) => ({ ...p, triboCrestUrl: triboLogoPorTriboId.get(p.refId) ?? null }));
+    } else if (alvo === "exercito") {
+      participantes = participantes.map((p) => ({
+        ...p,
+        exercitoCrestUrl: EXERCITO_CRESTS[exercitoNomePorId.get(p.refId) ?? ""] ?? null,
       }));
     }
 
