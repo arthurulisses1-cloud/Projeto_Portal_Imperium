@@ -248,8 +248,15 @@ export async function resolverAudienciaDaTrilha(
   supabase: SupabaseClient,
   trilha: { tipo: string; rank: string | null }
 ): Promise<AlunoAudiencia[]> {
+  // Restringe a role sdr/closer/lider mesmo na trilha normal — achado do
+  // Diretor, 2026-09-22: perfis de Analista/gestão (Alana, Procópio...)
+  // mantêm um `rank` de quando eram SDR/Closer antes de virar Analista, e
+  // sem esse filtro apareciam na lista de presença por engano.
   let query = supabase.from("profiles").select("id, full_name").eq("ativo", true);
-  query = trilha.tipo === "arena" ? query.in("role", ["sdr", "closer"]) : query.eq("rank", trilha.rank);
+  query =
+    trilha.tipo === "arena"
+      ? query.in("role", ["sdr", "closer"])
+      : query.in("role", ["sdr", "closer", "lider"]).eq("rank", trilha.rank);
   const { data } = await query.order("full_name");
   return (data ?? []).map((p) => ({ id: p.id, nome: p.full_name }));
 }
