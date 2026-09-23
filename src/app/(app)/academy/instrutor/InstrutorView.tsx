@@ -128,6 +128,7 @@ export default function InstrutorView({
                     <input name="nome" placeholder="Nome do material (opcional)" className="input-imp px-2 py-1 text-xs" />
                     <input type="file" name="arquivo" required className="text-xs text-stone-300" />
                     <button type="submit" className="btn-outline px-3 py-1 text-[10px]">Enviar</button>
+                    <span className="text-[10px] text-stone-600">máx. 50MB</span>
                   </form>
                 </div>
 
