@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buscarRemuneracaoMes } from "@/lib/remuneracao";
+import { buscarRemuneracaoMes, buscarRemuneracaoGrowth } from "@/lib/remuneracao";
 import { calcularRemuneracao, type Tier } from "@/lib/comissao";
 import { RANK_LABELS } from "@/lib/labels";
 import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
+import { ANALISTA_GROWTH_ID, ANALISTA_GROWTH_DESDE, CENTURIAO_FIXO_GARANTIDO } from "@/lib/acessos-especiais";
 
 // ATENÇÃO: este módulo é estritamente Diretor-only (RLS na migration 0037
 // já barra qualquer outro papel no banco, mas nunca importe isso fora de
@@ -194,6 +195,10 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
   // Cadastrar a admissão de gente nova em /legado (Meu Legado) é o que
   // faz esse corte funcionar certo pra ela.
   const pessoas = (pessoasRaw ?? []).filter((p) => {
+    // Analista não tem salário nenhum, exceto o Analista de Growth (Igor) —
+    // ele entra com o plano próprio (ANALISTA_GROWTH_ID), ver o branch
+    // abaixo. Pedido do Diretor, 2026-09-24.
+    if (p.role === "analista" && p.id !== ANALISTA_GROWTH_ID) return false;
     if (p.data_saida && p.data_saida < inicioMes) return false;
     if (p.data_admissao && p.data_admissao >= fimMesExclusivo) return false;
     return true;
@@ -220,14 +225,10 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
         .filter((v) => v.profile_id === p.id && (v.papel === "closer" || v.papel === "ambos"))
         .reduce((s, v) => s + Number(v.valor), 0);
 
-      const { tiers, remuneracao } = await buscarRemuneracaoMes(
-        supabase,
-        p.id,
-        p.role,
-        p.rank as Rank | "diretor",
-        inicioMes,
-        fimMesExclusivo
-      );
+      const { tiers, remuneracao } =
+        p.id === ANALISTA_GROWTH_ID
+          ? await buscarRemuneracaoGrowth(supabase, inicioMes, fimMesExclusivo)
+          : await buscarRemuneracaoMes(supabase, p.id, p.role, p.rank as Rank | "diretor", inicioMes, fimMesExclusivo);
 
       const tribo = p.tribo as unknown as { nome: string; exercito: { nome: string } | null } | null;
       const exercitoLiderado = p.exercito_liderado as unknown as { nome: string }[] | null;
@@ -235,6 +236,14 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
 
       let fixoBase = tiers.length > 0 ? tiers[0].fixo : 0;
       let fixoAtual = remuneracao?.fixo ?? 0;
+
+      // Fixo mínimo garantido por pessoa (Vinícius/Ryquelme/Nicolas) — nunca
+      // abaixa quem já ganha mais pelo tier normal, só levanta o piso.
+      const pisoGarantido = CENTURIAO_FIXO_GARANTIDO[p.id];
+      if (pisoGarantido !== undefined) {
+        fixoBase = Math.max(fixoBase, pisoGarantido);
+        fixoAtual = Math.max(fixoAtual, pisoGarantido);
+      }
 
       // Saiu DENTRO desse mês, ou entrou DENTRO desse mês (não antes/depois
       // — esses já foram filtrados acima): fixo proporcional aos dias
@@ -267,7 +276,7 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
         nome: p.full_name,
         vendidoSdr,
         vendidoCloser,
-        cargo: RANK_LABELS[p.rank as Rank | "diretor"] ?? p.rank,
+        cargo: p.id === ANALISTA_GROWTH_ID ? "Analista de Growth" : (RANK_LABELS[p.rank as Rank | "diretor"] ?? p.rank),
         time,
         tribo: tribo?.nome ?? null,
         fixo: fixoBase,
@@ -319,7 +328,7 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const fimMes = new Date(ano, mes, 0).toISOString().slice(0, 10);
 
-  const [{ data: pessoasRaw }, { data: opsRaw }, { data: tiersRaw }, despesas] = await Promise.all([
+  const [{ data: pessoasRaw }, { data: opsRaw }, { data: tiersRaw }, { data: growthTiersRaw }, despesas] = await Promise.all([
     supabase
       .from("profiles")
       .select(
@@ -329,23 +338,39 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
       .order("full_name"),
     supabase
       .from("weekly_operacoes")
-      .select("valor, status, status_manual, sdr_profile_id, closer_profile_id")
+      .select("valor, status, status_manual, origem, data, sdr_profile_id, closer_profile_id")
       .gte("data", inicioMes)
       .lte("data", fimMes),
     supabase.from("commission_tiers").select("rank, producao_min, fixo, pct_sdr, pct_closer, pct_gestao, ordem").order("ordem"),
+    supabase.from("growth_tiers").select("canal_min, fixo, pct_variavel").order("ordem"),
     buscarDespesasExtras(supabase, ano, mes),
   ]);
 
   const opsBase = (opsRaw ?? []).filter((o) => o.status === "PAGO" || o.status_manual === "aguardando_pagamento");
   // Mesmo corte de buscarFolha (ver comentário lá): quem saiu antes desse
   // mês começar, ou ainda nem tinha entrado, nem entra — só com
-  // `data_admissao` explícito, nunca `created_at`.
+  // `data_admissao` explícito, nunca `created_at`. Analista não tem
+  // salário nenhum, exceto o Analista de Growth (Igor) — plano próprio,
+  // ver bloco especial dentro do `pessoas.map` abaixo.
   const fimMesExclusivoForecast = fimMesExclusivoDe(ano, mes);
   const pessoas = (pessoasRaw ?? []).filter((p) => {
+    if (p.role === "analista" && p.id !== ANALISTA_GROWTH_ID) return false;
     if (p.data_saida && p.data_saida < inicioMes) return false;
     if (p.data_admissao && p.data_admissao >= fimMesExclusivoForecast) return false;
     return true;
   });
+
+  const desdeGrowth = inicioMes < ANALISTA_GROWTH_DESDE ? ANALISTA_GROWTH_DESDE : inicioMes;
+  const receitaInboundForecast = opsBase
+    .filter((o) => o.origem === "INBOUND" && o.data >= desdeGrowth)
+    .reduce((s, o) => s + Number(o.valor), 0);
+  const growthTiers: Tier[] = (growthTiersRaw ?? []).map((t) => ({
+    producao_min: Number(t.canal_min),
+    fixo: Number(t.fixo),
+    pct_sdr: 0,
+    pct_closer: 0,
+    pct_gestao: Number(t.pct_variavel),
+  }));
 
   const tiersPorRank = new Map<string, Tier[]>();
   for (const t of tiersRaw ?? []) {
@@ -369,6 +394,47 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
   }
 
   const linhas: LinhaFolha[] = pessoas.map((p) => {
+    // Analista de Growth (Igor) — plano próprio sobre a receita do canal
+    // Inbound, nada de producao_min de commission_tiers nem produção
+    // pessoal. Sai cedo do resto da função pra não herdar a lógica de
+    // SDR/Closer/Gestão, que não se aplica a ele.
+    if (p.id === ANALISTA_GROWTH_ID) {
+      const remuneracaoGrowth = growthTiers.length > 0 ? calcularRemuneracao(growthTiers, receitaInboundForecast, { sdr: 0, closer: 0, ambos: 0, gestao: receitaInboundForecast }) : null;
+      let fixoBaseGrowth = growthTiers.length > 0 ? growthTiers[0].fixo : 0;
+      let fixoAtualGrowth = remuneracaoGrowth?.fixo ?? 0;
+      const entradaP = p.data_admissao ?? null;
+      const saiuDentroDoMes = !!p.data_saida && p.data_saida <= fimMes;
+      const entrouDentroDoMes = !!entradaP && entradaP >= inicioMes && entradaP <= fimMes;
+      if (saiuDentroDoMes || entrouDentroDoMes) {
+        const diasNoMes = new Date(ano, mes, 0).getDate();
+        const inicioTrabalho = entrouDentroDoMes ? entradaP! : inicioMes;
+        const fimTrabalho = saiuDentroDoMes ? p.data_saida! : fimMes;
+        const diasTrabalhados = Math.max(0, Number(fimTrabalho.slice(8, 10)) - Number(inicioTrabalho.slice(8, 10)) + 1);
+        const proporcao = diasNoMes > 0 ? diasTrabalhados / diasNoMes : 0;
+        fixoBaseGrowth = Math.round(fixoBaseGrowth * proporcao);
+        fixoAtualGrowth = Math.round(fixoAtualGrowth * proporcao);
+      }
+      const variavelGrowth = remuneracaoGrowth?.gestao.variavel ?? 0;
+      const linhaGrowth: LinhaFolha = {
+        profileId: p.id,
+        nome: p.full_name,
+        vendidoSdr: 0,
+        vendidoCloser: 0,
+        cargo: "Analista de Growth",
+        time: null,
+        tribo: null,
+        fixo: fixoBaseGrowth,
+        bonus: Math.max(0, fixoAtualGrowth - fixoBaseGrowth),
+        fixoMaisBonus: fixoAtualGrowth,
+        variavelSdr: 0,
+        variavelCloser: 0,
+        variavelGestao: variavelGrowth,
+        campanhas: campanhaPorPessoa.get(p.id) ?? 0,
+        folhaTotal: fixoAtualGrowth + variavelGrowth + (campanhaPorPessoa.get(p.id) ?? 0),
+      };
+      return linhaGrowth;
+    }
+
     const rank = p.rank as Rank | "diretor";
     const tiers = tiersPorRank.get(p.rank) ?? [];
     const papelPrincipal = PAPEL_PRINCIPAL[rank] ?? "sdr";
@@ -431,6 +497,14 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
 
     let fixoBase = tiers.length > 0 ? tiers[0].fixo : 0;
     let fixoAtual = remuneracao?.fixo ?? 0;
+
+    // Fixo mínimo garantido por pessoa (Vinícius/Ryquelme/Nicolas) — nunca
+    // abaixa quem já ganha mais pelo tier normal, só levanta o piso.
+    const pisoGarantido = CENTURIAO_FIXO_GARANTIDO[p.id];
+    if (pisoGarantido !== undefined) {
+      fixoBase = Math.max(fixoBase, pisoGarantido);
+      fixoAtual = Math.max(fixoAtual, pisoGarantido);
+    }
 
     // Mesma proporcionalidade de buscarFolha — saiu dentro desse mês, ou
     // entrou dentro desse mês (quem saiu antes, ou ainda nem tinha entrado,

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcularRemuneracao, type Tier, type Remuneracao, type Papel } from "@/lib/comissao";
 import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
+import { ANALISTA_GROWTH_DESDE } from "@/lib/acessos-especiais";
 
 export type LinhaExtrato = {
   id: string;
@@ -41,6 +42,47 @@ const VAZIO = (tiers: Tier[], papelPrincipal: Papel): RemuneracaoMes => ({
   producaoPrincipal: 0,
   producaoTotal: 0,
 });
+
+// growth_tiers (migration 0088) usa o mesmo formato de commission_tiers, só
+// que a "produção" que escolhe o tier é a receita do CANAL Inbound, não de
+// uma pessoa/time — por isso o % único da tabela entra em pct_gestao
+// (arbitrário: é só o slot que calcularRemuneracao usa pra uma produção
+// "avulsa", sem SDR/Closer envolvidos) e é aplicado sobre `gestao` abaixo.
+function tiersGrowthDe(rows: { canal_min: number; fixo: number; pct_variavel: number }[]): Tier[] {
+  return rows.map((r) => ({ producao_min: Number(r.canal_min), fixo: Number(r.fixo), pct_sdr: 0, pct_closer: 0, pct_gestao: Number(r.pct_variavel) }));
+}
+
+// Remuneração do Analista de Growth (Igor Lobato, ver ANALISTA_GROWTH_ID em
+// acessos-especiais.ts) — pedido do Diretor, 2026-09-24: comissão sobre a
+// receita PAGA do canal Inbound (weekly_operacoes.origem = 'INBOUND') no
+// mês, contando só a partir de ANALISTA_GROWTH_DESDE (vendas de Inbound
+// anteriores a essa data nunca entram, nem olhando o mês inteiro depois).
+export async function buscarRemuneracaoGrowth(
+  supabase: SupabaseClient,
+  inicioMes: string,
+  fimMesExclusivo: string
+): Promise<{ tiers: Tier[]; remuneracao: Remuneracao | null }> {
+  const { data: tiersRaw, error } = await supabase.from("growth_tiers").select("canal_min, fixo, pct_variavel").order("ordem");
+  logErroSupabase("buscarRemuneracaoGrowth: growth_tiers", error);
+  const tiers = tiersGrowthDe(tiersRaw ?? []);
+  if (tiers.length === 0) return { tiers, remuneracao: null };
+
+  const desde = inicioMes < ANALISTA_GROWTH_DESDE ? ANALISTA_GROWTH_DESDE : inicioMes;
+  if (desde >= fimMesExclusivo) return { tiers, remuneracao: calcularRemuneracao(tiers, 0, { sdr: 0, closer: 0, ambos: 0, gestao: 0 }) };
+
+  const { data: opsInbound, error: opsError } = await supabase
+    .from("weekly_operacoes")
+    .select("valor")
+    .eq("status", "PAGO")
+    .eq("origem", "INBOUND")
+    .gte("data", desde)
+    .lt("data", fimMesExclusivo);
+  logErroSupabase("buscarRemuneracaoGrowth: weekly_operacoes INBOUND", opsError);
+  const receitaInbound = (opsInbound ?? []).reduce((s, o) => s + Number(o.valor), 0);
+
+  const remuneracao = calcularRemuneracao(tiers, receitaInbound, { sdr: 0, closer: 0, ambos: 0, gestao: receitaInbound });
+  return { tiers, remuneracao };
+}
 
 // Calcula a remuneração real do mês pra QUALQUER papel — substitui o hack de
 // "cargo equivalente" (Tribuno usando a tabela de Legionário pra contar

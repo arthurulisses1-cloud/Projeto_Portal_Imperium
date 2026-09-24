@@ -3,7 +3,8 @@ import SimuladorComissao from "./simulador";
 import SimuladorVendaRapida from "./simulador-rapido";
 import { abrirContestacao } from "./actions";
 import { proximoTier } from "@/lib/comissao";
-import { buscarRemuneracaoMes } from "@/lib/remuneracao";
+import { buscarRemuneracaoMes, buscarRemuneracaoGrowth } from "@/lib/remuneracao";
+import { ANALISTA_GROWTH_ID } from "@/lib/acessos-especiais";
 import { buscarProgressoMarcos } from "@/lib/marcos";
 import { getViewerContext } from "@/lib/preview";
 import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
@@ -51,8 +52,13 @@ export default async function ComissaoPage({
 
   const rank = (profile?.rank ?? "legionario") as Rank | "diretor";
   const role = profile?.role ?? "sdr";
-  const papelPrincipal = PAPEL_PRINCIPAL[rank] ?? "sdr";
-  const rankLabel = RANK_LABELS[rank] ?? rank;
+  const souAnalistaGrowth = meId === ANALISTA_GROWTH_ID;
+  // Analista de Growth (Igor) não tem cargo/rank de verdade — ganha sobre a
+  // receita do canal Inbound, não produção pessoal (ver ANALISTA_GROWTH_ID
+  // em acessos-especiais.ts). "Gestão" é só o slot que calcularRemuneracao
+  // usa pra produção sem SDR/Closer — igual em buscarRemuneracaoGrowth.
+  const papelPrincipal = souAnalistaGrowth ? "gestao" : (PAPEL_PRINCIPAL[rank] ?? "sdr");
+  const rankLabel = souAnalistaGrowth ? "Analista de Growth" : (RANK_LABELS[rank] ?? rank);
 
   // Mês visto pode ser diferente do mês corrente (ex: fechando a folha de
   // Agosto já em Setembro, o time precisa conseguir ver/contestar a
@@ -67,14 +73,15 @@ export default async function ComissaoPage({
   const mesAnterior = mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 };
   const mesSeguinte = mes === 12 ? { ano: ano + 1, mes: 1 } : { ano, mes: mes + 1 };
 
-  const { remuneracao, tiers, extrato, producaoPrincipal, producaoTotal } = await buscarRemuneracaoMes(
-    supabase,
-    meId,
-    role,
-    rank,
-    inicioMes,
-    fimMesExclusivo
-  );
+  const { remuneracao, tiers, extrato, producaoPrincipal, producaoTotal } = souAnalistaGrowth
+    ? await buscarRemuneracaoGrowth(supabase, inicioMes, fimMesExclusivo).then((g) => ({
+        remuneracao: g.remuneracao,
+        tiers: g.tiers,
+        extrato: [],
+        producaoPrincipal: g.remuneracao?.gestao.producao ?? 0,
+        producaoTotal: g.remuneracao?.gestao.producao ?? 0,
+      }))
+    : await buscarRemuneracaoMes(supabase, meId, role, rank, inicioMes, fimMesExclusivo);
 
   const proximo = remuneracao ? proximoTier(tiers, producaoPrincipal, papelPrincipal) : null;
 
@@ -168,7 +175,7 @@ export default async function ComissaoPage({
   const parcelas: { chave: "sdr" | "closer" | "gestao"; titulo: string }[] = [
     { chave: "sdr", titulo: "Comissão como SDR" },
     { chave: "closer", titulo: "Comissão como Closer" },
-    { chave: "gestao", titulo: role === "diretor" ? "Comissão de Gestão (firma)" : "Comissão de Gestão (time)" },
+    { chave: "gestao", titulo: souAnalistaGrowth ? "Comissão sobre o canal Inbound" : role === "diretor" ? "Comissão de Gestão (firma)" : "Comissão de Gestão (time)" },
   ];
 
   return (
