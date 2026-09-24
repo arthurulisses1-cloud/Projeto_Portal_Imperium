@@ -784,18 +784,21 @@ function SlideRecordHero({ icon: Icon, titulo, tema, ranking }: { icon: IconComp
   );
 }
 
-// Grid 2x2 com 4 recordes relacionados na mesma tela (pedido do Diretor:
+// Grade com N recordes relacionados na mesma tela (pedido do Diretor:
 // "Compilado de..."). Quando tem alguém perto de bater o recorde, aparece
-// como nota pequena embaixo do card daquele recorde específico.
+// como nota pequena embaixo do card daquele recorde específico. Colunas se
+// ajustam à quantidade — 4 itens vira 2×2, 5 vira 3+2 (grid-cols-3 com
+// auto-placement, a última linha fica com 2 células só).
 function SlideCompilado({ icon: Icon, titulo, tema, itens }: { icon: IconComp; titulo: string; tema: Tema; itens: RecordeCompilado[] }) {
   function fmt(v: number, formato: RecordeCompilado["formato"]) {
     if (formato === "moeda") return moeda(v);
     if (formato === "pct") return `${v}%`;
     return v.toLocaleString("pt-BR");
   }
+  const colunas = itens.length > 4 ? 3 : 2;
   return (
     <SlideShell icon={Icon} titulo={titulo} tema={tema}>
-      <div className="grid h-full grid-cols-2 gap-[2vh]">
+      <div className="grid h-full gap-[2vh]" style={{ gridTemplateColumns: `repeat(${colunas}, 1fr)`, gridAutoRows: "1fr" }}>
         {itens.map((r) => (
           <div key={r.titulo} className="flex flex-col justify-center rounded-xl border border-white/10 p-[2.5vh]" style={{ background: `${tema.accent}0d` }}>
             <p className="uppercase tracking-[0.2em] text-white/40" style={{ fontSize: "1.3vh" }}>{r.titulo}</p>

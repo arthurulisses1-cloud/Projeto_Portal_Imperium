@@ -471,7 +471,7 @@ export async function buscarLendasV2(supabase: SupabaseClient): Promise<LendasDa
     top5PorPapel(supabase, "sdr"),
     top5PorPapelFiltrado(supabase, "closer", { ranksPermitidos: ["tribuno"], dataInicio: "2026-01-01", dataFimExclusivo: "2027-01-01" }),
     top5PorPapelFiltrado(supabase, "sdr", { ranksPermitidos: ["centuriao", "legionario"], dataInicio: "2026-01-01", dataFimExclusivo: "2027-01-01" }),
-    supabase.from("profiles").select("id, full_name, avatar_url"),
+    supabase.from("profiles").select("id, full_name, avatar_url, role, rank, ativo"),
     buscarTudoPaginado<{ profile_id: string; data: string; etapa: string; realizado: number; papel: string }>((from, to) =>
       supabase.from("producao_funil").select("profile_id, data, etapa, realizado, papel").in("etapa", ["assinaturas", "entrevistas", "pagos"]).range(from, to)
     ),
@@ -480,6 +480,9 @@ export async function buscarLendasV2(supabase: SupabaseClient): Promise<LendasDa
 
   const nomePorId = new Map((todasPessoas ?? []).map((p) => [p.id, p.full_name]));
   const avatarPorId = new Map((todasPessoas ?? []).map((p) => [p.id, p.avatar_url as string | null]));
+  const rolePorId = new Map((todasPessoas ?? []).map((p) => [p.id, p.role as string | null]));
+  const rankPorId = new Map((todasPessoas ?? []).map((p) => [p.id, p.rank as string | null]));
+  const ativoPorId = new Map((todasPessoas ?? []).map((p) => [p.id, p.ativo as boolean]));
 
   const exercitos2026: DueloTime[] = confrontoExercitos2026
     .filter((c) => c.nome === "Maximus" || c.nome === "Templários")
@@ -519,28 +522,44 @@ export async function buscarLendasV2(supabase: SupabaseClient): Promise<LendasDa
     registro("SDR com mais assinaturas num mês", totalPorPessoaMes("assinaturas", "sdr"), (c) => c.split("|")[0]),
   ];
 
-  // Taxa de conversão Entrevista → Assinatura, só entre quem já fez pelo
-  // menos MINIMO_ENTREVISTAS entrevistas como Closer — sem esse piso, quem
-  // tem 1 entrevista e 1 assinatura aparece com "100%" e distorce o recorde.
+  // Taxa de conversão Entrevista → Assinatura — pedido do Diretor,
+  // 2026-09-24: dividida em 2 recordes em vez de 1 "geral" misturando
+  // todo mundo. Só entre quem já fez pelo menos MINIMO_ENTREVISTAS
+  // entrevistas como Closer — sem esse piso, quem tem 1 entrevista e 1
+  // assinatura aparece com "100%" e distorce o recorde.
   const MINIMO_ENTREVISTAS_TAXA = 10;
   const entrevistasPorCloser = totalPorPessoa("entrevistas", "closer");
   const assinaturasPorCloser = totalPorPessoa("assinaturas", "closer");
-  const taxas = Array.from(entrevistasPorCloser.entries())
-    .filter(([, ent]) => ent >= MINIMO_ENTREVISTAS_TAXA)
-    .map(([id, ent]) => ({ id, taxa: Math.round(((assinaturasPorCloser.get(id) ?? 0) / ent) * 1000) / 10 }))
-    .sort((a, b) => b.taxa - a.taxa)
-    .slice(0, 2);
-  const recordeTaxa: RecordeCompilado =
-    taxas.length > 0
-      ? {
-          titulo: "Closer com maior taxa de conversão (Entrevista → Assinatura)",
-          nome: nomePorId.get(taxas[0].id) ?? "—",
-          valor: taxas[0].taxa,
-          formato: "pct",
-          avatarUrl: avatarPorId.get(taxas[0].id) ?? null,
-          segundo: taxas[1] ? { nome: nomePorId.get(taxas[1].id) ?? "—", valor: taxas[1].taxa } : null,
-        }
-      : { titulo: "Closer com maior taxa de conversão (Entrevista → Assinatura)", nome: "—", valor: 0, formato: "pct", avatarUrl: null, segundo: null };
+
+  function taxaConversao(titulo: string, elegivel: (id: string) => boolean): RecordeCompilado {
+    const taxas = Array.from(entrevistasPorCloser.entries())
+      .filter(([id, ent]) => ent >= MINIMO_ENTREVISTAS_TAXA && elegivel(id))
+      .map(([id, ent]) => ({ id, taxa: Math.round(((assinaturasPorCloser.get(id) ?? 0) / ent) * 1000) / 10 }))
+      .sort((a, b) => b.taxa - a.taxa)
+      .slice(0, 2);
+    if (taxas.length === 0) return { titulo, nome: "—", valor: 0, formato: "pct", avatarUrl: null, segundo: null };
+    return {
+      titulo,
+      nome: nomePorId.get(taxas[0].id) ?? "—",
+      valor: taxas[0].taxa,
+      formato: "pct",
+      avatarUrl: avatarPorId.get(taxas[0].id) ?? null,
+      segundo: taxas[1] ? { nome: nomePorId.get(taxas[1].id) ?? "—", valor: taxas[1].taxa } : null,
+    };
+  }
+
+  // "Tribunos ativos" — rank/status ATUAIS (não de quando a entrevista/
+  // assinatura aconteceu, mesmo critério de top5PorPapelFiltrado acima).
+  const recordeTaxaTribunos = taxaConversao(
+    "Tribuno ativo com maior taxa de conversão (Entrevista → Assinatura)",
+    (id) => rankPorId.get(id) === "tribuno" && ativoPorId.get(id) === true
+  );
+  // "Geral histórico" — todo mundo, qualquer rank/status, exceto o Diretor
+  // ("não me coloque", pedido explícito — ele às vezes fecha venda também).
+  const recordeTaxaGeral = taxaConversao(
+    "Geral (histórico) — maior taxa de conversão (Entrevista → Assinatura)",
+    (id) => rolePorId.get(id) !== "diretor"
+  );
 
   const maiorVenda = (maioresVendas.data ?? [])[0];
   const segundaMaiorVenda = (maioresVendas.data ?? [])[1];
@@ -559,7 +578,8 @@ export async function buscarLendasV2(supabase: SupabaseClient): Promise<LendasDa
   };
 
   const compiladoCloser: RecordeCompilado[] = [
-    recordeTaxa,
+    recordeTaxaTribunos,
+    recordeTaxaGeral,
     registro("Closer com mais assinaturas num mês", totalPorPessoaMes("assinaturas", "closer"), (c) => c.split("|")[0]),
     registro("Closer com mais pagos num mês", totalPorPessoaMes("pagos", "closer"), (c) => c.split("|")[0]),
     recordeMaiorVenda,
