@@ -204,8 +204,9 @@ async function calcularProgresso(supabase: SupabaseClient, campanhas: CampanhaRo
   // passar por um profile pra achar o brasão, diferente do duelo individual
   // acima. Sem isso o card ficava sem imagem nenhuma (fundo quase preto do
   // tema, achado do Diretor, 2026-09-22: "tela preta, não consigo ver").
-  const { data: triposComLogo } = await supabase.from("tribos").select("id, logo_url");
+  const { data: triposComLogo } = await supabase.from("tribos").select("id, nome, logo_url");
   const triboLogoPorTriboId = new Map((triposComLogo ?? []).map((t) => [t.id, t.logo_url]));
+  const triboNomePorId = new Map((triposComLogo ?? []).map((t) => [t.id, t.nome]));
 
   // Avatares dos duelos entre pessoas (pedido do Diretor: 2026-08-27 pra
   // duelo de 2, estendido 2026-08-28 pra 3+) — só busca pra participantes
@@ -249,10 +250,9 @@ async function calcularProgresso(supabase: SupabaseClient, campanhas: CampanhaRo
   }
 
   // Time DONO da operação = time do Closer, com o SDR como fallback só
-  // quando o Closer não resolve pra time nenhum — mesma convenção usada em
-  // toda atribuição de time do sistema (Weekly, Guerra Civil, Forecast).
-  // Evita contar a mesma venda duas vezes quando SDR e Closer são do
-  // mesmo Tribo/Exército (quase sempre).
+  // quando o Closer não resolve pra time nenhum — convenção de EXÉRCITO
+  // (mesma usada em Weekly/Guerra Civil/Forecast pra esse nível). NÃO vale
+  // pra Tribo — ver creditoPorTriboMesmaRegra logo abaixo.
   function creditoPorTimeDono(dataInicio: string, dataFim: string, timePorProfileId: Map<string, string | null>) {
     const totais = new Map<string, number>();
     for (const o of creditoNoPeriodo(dataInicio, dataFim)) {
@@ -262,6 +262,33 @@ async function calcularProgresso(supabase: SupabaseClient, campanhas: CampanhaRo
         null;
       if (!dono) continue;
       totais.set(dono, (totais.get(dono) ?? 0) + Number(o.valor));
+    }
+    return totais;
+  }
+
+  // Crédito por TRIBO — mesma regra da Guerra de Tribos no Mural
+  // (resolverOperacoesPagasPorGrupo em src/lib/guerra.ts): só credita
+  // quando SDR e Closer são da MESMA Tribo (Inbound é exceção, o SDR
+  // sozinho decide); quando são de Tribos diferentes, a venda não conta
+  // pra nenhum dos dois. Corrigido 2026-09-24 — antes usava a regra de
+  // Exército (dono = Closer, fallback SDR) e a campanha "Tribal Wars"
+  // mostrava números diferentes da Guerra de Tribos pro mesmo mês
+  // (achado do Diretor: 7 de 13 vendas de setembro tinham SDR e Closer de
+  // Tribos diferentes, contadas de um jeito lá e de outro aqui).
+  function creditoPorTriboMesmaRegra(dataInicio: string, dataFim: string) {
+    const totais = new Map<string, number>();
+    for (const o of creditoNoPeriodo(dataInicio, dataFim)) {
+      const sdrTriboId = o.sdr_profile_id ? (triboIdPorProfileId.get(o.sdr_profile_id) ?? null) : null;
+      const closerTriboId = o.closer_profile_id ? (triboIdPorProfileId.get(o.closer_profile_id) ?? null) : null;
+      const sdrTriboNome = sdrTriboId ? triboNomePorId.get(sdrTriboId) : null;
+      if (sdrTriboId && sdrTriboNome?.startsWith("Inbound")) {
+        totais.set(sdrTriboId, (totais.get(sdrTriboId) ?? 0) + Number(o.valor));
+        continue;
+      }
+      if (sdrTriboId && closerTriboId && sdrTriboId === closerTriboId) {
+        totais.set(sdrTriboId, (totais.get(sdrTriboId) ?? 0) + Number(o.valor));
+      }
+      // Tribos diferentes (e não-Inbound) = "Fora das Tribos", não credita.
     }
     return totais;
   }
@@ -332,7 +359,7 @@ async function calcularProgresso(supabase: SupabaseClient, campanhas: CampanhaRo
       const total = creditoNoPeriodo(c.data_inicio, c.data_fim).reduce((s, o) => s + Number(o.valor), 0);
       participantes = [{ refId: "geral", label: c.titulo, valor: total }];
     } else if (alvo === "tribo") {
-      const totais = creditoPorTimeDono(c.data_inicio, c.data_fim, triboIdPorProfileId);
+      const totais = creditoPorTriboMesmaRegra(c.data_inicio, c.data_fim);
       participantes = participantesDaCampanha
         .map((p) => ({ refId: p.ref_id, label: p.label, valor: totais.get(p.ref_id) ?? 0 }))
         .sort((a, b) => b.valor - a.valor);
