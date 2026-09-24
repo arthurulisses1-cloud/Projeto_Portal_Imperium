@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { FunilContagem, PessoaVisao } from "@/lib/visao-diaria";
 import type { Confronto } from "@/lib/guerra";
 import type { CampanhaComProgresso } from "@/lib/campanhas";
-import type { RecordeAuto, RecordeCurado } from "@/lib/recordes";
+import type { LendasData, RankingHistorico, RecordeCompilado } from "@/lib/recordes";
 import {
   IconHorn,
   IconSwords,
@@ -15,8 +15,9 @@ import {
   IconEagle,
   IconTrophy,
   IconScroll,
-  IconLaurel,
   IconBallot,
+  IconMedal,
+  IconCrown,
 } from "@/components/ui/icons";
 
 const INTERVALO_SLIDE_MS = 15_000;
@@ -64,6 +65,7 @@ const TEMAS = {
   entrevistasHoje: { accent: "#6fc99a", gradiente: "linear-gradient(160deg, #0e1a12 0%, #0a100c 100%)" },
   entrevistas: { accent: "#8fc19e", gradiente: "linear-gradient(160deg, #10190f 0%, #0a100a 100%)" },
   lendas: { accent: "#cbb26a", gradiente: "linear-gradient(160deg, #191320 0%, #0f0c14 100%)" },
+  lendasTime: { accent: "#e8c874", gradiente: "linear-gradient(160deg, #1c1508 0%, #100c05 100%)" },
 } as const;
 
 type Props = {
@@ -81,8 +83,7 @@ type Props = {
   crestsTribos: Record<string, string>;
   crestsExercitos: Record<string, string>;
   campanhasAtivas: CampanhaComProgresso[];
-  recordesAuto: RecordeAuto[];
-  recordesCurados: RecordeCurado[];
+  lendas: LendasData;
 };
 
 export default function TvDisplay(props: Props) {
@@ -171,13 +172,14 @@ export default function TvDisplay(props: Props) {
         linhas={props.topEntrevistasMes.map((p) => ({ nome: p.nome, valor: p.funil.entrevistas }))}
       />
     ),
-    lendas: <SlideLendas key="lendas" auto={props.recordesAuto} curados={props.recordesCurados} />,
   };
 
-  // "campanhas" é o único ponto de expansão 1-pra-N — cada campanha ativa
-  // ganha sua própria tela cheia (pedido do Diretor, 2026-09-22: mais
-  // espaço pras fotos de quem tá duelando), em vez de espremer 2 num card só.
+  // "campanhas" e "lendas" são os pontos de expansão 1-pra-N — cada
+  // campanha ativa (ou, pra lendas, cada uma das 8 telas fixas pedidas
+  // pelo Diretor em 2026-09-24) ganha sua própria tela cheia, em vez de
+  // espremer tudo num card só.
   const slides = props.ordem.flatMap((chave): React.ReactElement[] => {
+    if (chave === "lendas") return slidesLendas(props.lendas);
     if (chave === "campanhas") {
       if (props.campanhasAtivas.length === 0) return [<SlideCampanhaVazia key="campanhas-vazia" />];
       return props.campanhasAtivas.map((c) => {
@@ -696,33 +698,134 @@ function SlideCampanha({ campanha: c }: { campanha: CampanhaComProgresso }) {
   );
 }
 
-function SlideLendas({ auto, curados }: { auto: RecordeAuto[]; curados: RecordeCurado[] }) {
-  function fmt(r: RecordeAuto) {
-    if (r.formato === "moeda") return moeda(r.valor);
-    if (r.formato === "dias") return `${r.valor} dias`;
-    return r.valor.toLocaleString("pt-BR");
-  }
-  const destaques = auto.slice(0, 4);
-  const curado = curados[0];
-  const tema = TEMAS.lendas;
+// As 8 telas de "Lendas do Império" — pedido do Diretor, 2026-09-24,
+// substituindo o compilado genérico de antes. Cada uma é sua própria tela
+// cheia; a ordem aqui é fixa (não editável em /tv/config, só a posição do
+// bloco "lendas" inteiro dentro do rodízio).
+function slidesLendas(l: LendasData): React.ReactElement[] {
+  return [
+    <SlidePosterMultiplo
+      key="lendas-exercitos-2026"
+      icon={IconCrown}
+      titulo="Maximus × Templários — Crédito pago em 2026"
+      tema={TEMAS.lendasTime}
+      participantes={l.exercitos2026}
+      formatoMoeda
+    />,
+    <SlidePosterMultiplo
+      key="lendas-tribos-2026"
+      icon={IconCrown}
+      titulo="Xotec × Mirmidões × Falcons × Prometheus — Crédito pago em 2026"
+      tema={TEMAS.lendasTime}
+      participantes={l.tribos2026}
+      formatoMoeda
+    />,
+    <SlideRecordHero key="lendas-closer" icon={IconMedal} titulo="Maior Closer da História" tema={TEMAS.lendas} ranking={l.maiorCloserHistorico.slice(0, 3)} />,
+    <SlideRecordHero key="lendas-sdr" icon={IconMedal} titulo="Maior SDR da História" tema={TEMAS.lendas} ranking={l.maiorSdrHistorico.slice(0, 3)} />,
+    <SlideRecordHero key="lendas-tribuno" icon={IconMedal} titulo="Maior Tribuno (como Closer, 2026)" tema={TEMAS.lendas} ranking={l.maiorTribunoCloser2026.slice(0, 3)} />,
+    <SlideRecordHero key="lendas-sdr-2026" icon={IconMedal} titulo="Maior SDR 2026 (Legionário/Centurião)" tema={TEMAS.lendas} ranking={l.maiorSdr2026} />,
+    <SlideCompilado key="lendas-compilado-sdr" icon={IconScroll} titulo="Recordes de SDR" tema={TEMAS.lendas} itens={l.compiladoSdr} />,
+    <SlideCompilado key="lendas-compilado-closer" icon={IconScroll} titulo="Recordes de Closer" tema={TEMAS.lendas} itens={l.compiladoCloser} />,
+  ];
+}
 
+// Card cheio pro recorde individual — a foto de quem detém o recorde
+// ocupa a tela inteira, valor gigante embaixo; quem vem logo atrás
+// (2º/3º, ou até 5º na tela de SDR 2026) fica num cantinho discreto no
+// rodapé direito, sem disputar espaço com o destaque principal.
+function SlideRecordHero({ icon: Icon, titulo, tema, ranking }: { icon: IconComp; titulo: string; tema: Tema; ranking: RankingHistorico[] }) {
+  const vencedor = ranking[0];
+  const resto = ranking.slice(1);
   return (
-    <SlideShell icon={IconLaurel} titulo="Lendas do Império" tema={tema}>
-      <div className="grid h-full content-center gap-x-16 gap-y-10 sm:grid-cols-2">
-        {destaques.map((r) => (
-          <div key={r.titulo} className="border-l-2 pl-7" style={{ borderColor: tema.accent }}>
-            <p className="text-sm uppercase tracking-[0.25em] text-white/40">{r.titulo}</p>
-            <p className="mt-2 font-display text-3xl leading-none text-white">{r.nome}</p>
-            <p className="mt-2 font-display text-2xl leading-none" style={{ color: tema.accent }}>{fmt(r)}</p>
+    <SlideShell icon={Icon} titulo={titulo} tema={tema}>
+      <div className="relative h-full overflow-hidden rounded-xl">
+        {!vencedor ? (
+          <p className="text-2xl text-white/40">Sem dados ainda.</p>
+        ) : (
+          <>
+            {vencedor.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={vencedor.avatarUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center text-white/15" style={{ background: tema.gradiente }}>
+                <Icon className="h-[14vh] w-[14vh]" />
+              </div>
+            )}
+            <div
+              className="absolute inset-0"
+              style={{ background: "linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.2) 45%, rgba(0,0,0,0.05) 70%)" }}
+            />
+            <div className="absolute inset-x-0 bottom-0 p-[3vh] text-center">
+              <p className="font-display leading-none text-white" style={{ fontSize: "clamp(2rem, 6vh, 4rem)", textShadow: "0 4px 20px rgba(0,0,0,0.7)" }}>
+                {vencedor.nome}
+              </p>
+              <p className="mt-[1.5vh] font-display leading-none tabular-nums" style={{ color: tema.accent, fontSize: "clamp(2.6rem, 8vh, 5.5rem)" }}>
+                {moeda(vencedor.valor)}
+              </p>
+            </div>
+            {resto.length > 0 && (
+              <div
+                className="absolute bottom-[2.5vh] right-[2.5vh] w-[27vw] max-w-sm rounded-lg p-[1.5vh]"
+                style={{ background: "rgba(10,8,6,0.72)" }}
+              >
+                {resto.map((r) => (
+                  <div key={r.posicao} className="flex items-center gap-2" style={{ fontSize: "clamp(0.85rem, 1.8vh, 1.1rem)", paddingBlock: "0.3vh" }}>
+                    <span className="w-6 shrink-0 text-white/40">{r.posicao}º</span>
+                    <span className="min-w-0 flex-1 truncate text-white/85">{r.nome}</span>
+                    <span className="shrink-0 font-display tabular-nums" style={{ color: tema.accent }}>{moeda(r.valor)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </SlideShell>
+  );
+}
+
+// Grid 2x2 com 4 recordes relacionados na mesma tela (pedido do Diretor:
+// "Compilado de..."). Quando tem alguém perto de bater o recorde, aparece
+// como nota pequena embaixo do card daquele recorde específico.
+function SlideCompilado({ icon: Icon, titulo, tema, itens }: { icon: IconComp; titulo: string; tema: Tema; itens: RecordeCompilado[] }) {
+  function fmt(v: number, formato: RecordeCompilado["formato"]) {
+    if (formato === "moeda") return moeda(v);
+    if (formato === "pct") return `${v}%`;
+    return v.toLocaleString("pt-BR");
+  }
+  return (
+    <SlideShell icon={Icon} titulo={titulo} tema={tema}>
+      <div className="grid h-full grid-cols-2 gap-[2vh]">
+        {itens.map((r) => (
+          <div key={r.titulo} className="flex flex-col justify-center rounded-xl border border-white/10 p-[2.5vh]" style={{ background: `${tema.accent}0d` }}>
+            <p className="uppercase tracking-[0.2em] text-white/40" style={{ fontSize: "1.3vh" }}>{r.titulo}</p>
+            <div className="mt-[1.5vh] flex items-center gap-[1.2vw]">
+              {r.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={r.avatarUrl} alt="" className="shrink-0 rounded-full object-cover" style={{ height: "7vh", width: "7vh" }} />
+              ) : (
+                <span
+                  className="flex shrink-0 items-center justify-center rounded-full border border-white/20 text-white/30"
+                  style={{ height: "7vh", width: "7vh", fontSize: "1.6vh" }}
+                >
+                  —
+                </span>
+              )}
+              <div className="min-w-0">
+                <p className="truncate font-display text-white" style={{ fontSize: "clamp(1.1rem, 2.8vh, 1.7rem)" }}>{r.nome}</p>
+                <p className="font-display leading-none tabular-nums" style={{ color: tema.accent, fontSize: "clamp(1.3rem, 3.4vh, 2.1rem)" }}>
+                  {fmt(r.valor, r.formato)}
+                </p>
+              </div>
+            </div>
+            {r.segundo && (
+              <p className="mt-[1vh] truncate text-white/40" style={{ fontSize: "1.2vh" }}>
+                Perto do recorde: {r.segundo.nome} — {fmt(r.segundo.valor, r.formato)}
+              </p>
+            )}
           </div>
         ))}
       </div>
-      {curado && (
-        <div className="relative mt-10 border-t border-white/10 pt-6">
-          <p className="text-sm uppercase tracking-[0.25em]" style={{ color: tema.accent }}>{curado.titulo}</p>
-          {curado.descricao && <p className="mt-1.5 text-xl text-white/70">{curado.descricao}</p>}
-        </div>
-      )}
     </SlideShell>
   );
 }

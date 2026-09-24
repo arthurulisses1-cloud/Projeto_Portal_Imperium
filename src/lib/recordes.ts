@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
-import { buscarOperacoesPagasPorGrupoHistorico, agregarPorGrupo, buscarCrestsTribos } from "@/lib/guerra";
+import { buscarOperacoesPagasPorGrupoHistorico, agregarPorGrupo, buscarCrestsTribos, buscarConfrontoExercitos, buscarConfrontoTribos } from "@/lib/guerra";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 
@@ -380,6 +380,202 @@ export type RecordeCurado = {
   categoria: string | null;
   ordem: number;
 };
+
+// ---------------------------------------------------------------------
+// "Lendas do Império" v2 — pedido do Diretor, 2026-09-24: 8 telas
+// dedicadas no Painel TV em vez do compilado genérico acima. Não mexe em
+// nada do que já existe (buscarRecordesAuto/buscarRecordesCurados
+// continuam alimentando /recordes normalmente).
+// ---------------------------------------------------------------------
+
+export type DueloTime = { nome: string; valor: number; foto: string | null };
+
+export type RecordeCompilado = {
+  titulo: string;
+  nome: string;
+  valor: number;
+  formato: "num" | "moeda" | "pct";
+  avatarUrl: string | null;
+  segundo: { nome: string; valor: number } | null;
+};
+
+export type LendasData = {
+  exercitos2026: DueloTime[];
+  tribos2026: DueloTime[];
+  maiorCloserHistorico: RankingHistorico[];
+  maiorSdrHistorico: RankingHistorico[];
+  maiorTribunoCloser2026: RankingHistorico[];
+  maiorSdr2026: RankingHistorico[];
+  compiladoSdr: RecordeCompilado[];
+  compiladoCloser: RecordeCompilado[];
+};
+
+// Mesmo formato de top5PorPapel (produção por `vendas`, "ambos" conta pros
+// 2 lados), só que com filtro extra de rank ATUAL (não o rank de quando a
+// venda aconteceu — mesmo critério "quem é hoje" já usado em
+// buscarTopSdrsAtivosHistorico) e de janela de data.
+async function top5PorPapelFiltrado(
+  supabase: SupabaseClient,
+  papel: "sdr" | "closer",
+  opts: { ranksPermitidos?: string[]; dataInicio?: string; dataFimExclusivo?: string } = {}
+): Promise<RankingHistorico[]> {
+  const vendas = await buscarTudoPaginado<{ profile_id: string; valor: number; papel: string; data: string }>((from, to) => {
+    let q = supabase.from("vendas").select("profile_id, valor, papel, data").range(from, to);
+    if (opts.dataInicio) q = q.gte("data", opts.dataInicio);
+    if (opts.dataFimExclusivo) q = q.lt("data", opts.dataFimExclusivo);
+    return q;
+  });
+  const relevantes = vendas.filter((v) => v.papel === papel || v.papel === "ambos");
+  const totais = new Map<string, number>();
+  for (const v of relevantes) totais.set(v.profile_id, (totais.get(v.profile_id) ?? 0) + Number(v.valor));
+
+  const ids = Array.from(totais.keys());
+  if (ids.length === 0) return [];
+  const { data: pessoas } = await supabase.from("profiles").select("id, full_name, avatar_url, rank").in("id", ids);
+  const nomePorId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name]));
+  const avatarPorId = new Map((pessoas ?? []).map((p) => [p.id, p.avatar_url as string | null]));
+  const rankPorId = new Map((pessoas ?? []).map((p) => [p.id, p.rank as string | null]));
+
+  return Array.from(totais.entries())
+    .filter(([id]) => !opts.ranksPermitidos || opts.ranksPermitidos.includes(rankPorId.get(id) ?? ""))
+    .map(([id, valor]) => ({ nome: nomePorId.get(id) ?? "—", valor, avatarUrl: avatarPorId.get(id) ?? null }))
+    .sort((a, b) => b.valor - a.valor)
+    .slice(0, 5)
+    .map((r, i) => ({ posicao: i + 1, ...r }));
+}
+
+function top2DeMapa(mapa: Map<string, number>): { chave: string; valor: number }[] {
+  return Array.from(mapa.entries())
+    .map(([chave, valor]) => ({ chave, valor }))
+    .sort((a, b) => b.valor - a.valor)
+    .slice(0, 2);
+}
+
+export async function buscarLendasV2(supabase: SupabaseClient): Promise<LendasData> {
+  const [
+    crestsTribos,
+    confrontoExercitos2026,
+    confrontoTribos2026,
+    maiorCloserHistorico,
+    maiorSdrHistorico,
+    maiorTribunoCloser2026,
+    maiorSdr2026,
+    { data: todasPessoas },
+    funilRows,
+    maioresVendas,
+  ] = await Promise.all([
+    buscarCrestsTribos(supabase),
+    buscarConfrontoExercitos(supabase, "2026-01-01", "2026-12-31"),
+    buscarConfrontoTribos(supabase, "2026-01-01", "2026-12-31"),
+    top5PorPapel(supabase, "closer"),
+    top5PorPapel(supabase, "sdr"),
+    top5PorPapelFiltrado(supabase, "closer", { ranksPermitidos: ["tribuno"], dataInicio: "2026-01-01", dataFimExclusivo: "2027-01-01" }),
+    top5PorPapelFiltrado(supabase, "sdr", { ranksPermitidos: ["centuriao", "legionario"], dataInicio: "2026-01-01", dataFimExclusivo: "2027-01-01" }),
+    supabase.from("profiles").select("id, full_name, avatar_url"),
+    buscarTudoPaginado<{ profile_id: string; data: string; etapa: string; realizado: number; papel: string }>((from, to) =>
+      supabase.from("producao_funil").select("profile_id, data, etapa, realizado, papel").in("etapa", ["assinaturas", "entrevistas", "pagos"]).range(from, to)
+    ),
+    supabase.from("weekly_operacoes").select("valor, sdr_profile_id, closer_profile_id").eq("status", "PAGO").order("valor", { ascending: false }).limit(2),
+  ]);
+
+  const nomePorId = new Map((todasPessoas ?? []).map((p) => [p.id, p.full_name]));
+  const avatarPorId = new Map((todasPessoas ?? []).map((p) => [p.id, p.avatar_url as string | null]));
+
+  const exercitos2026: DueloTime[] = confrontoExercitos2026
+    .filter((c) => c.nome === "Maximus" || c.nome === "Templários")
+    .map((c) => ({ nome: c.nome, valor: c.valor, foto: EXERCITO_CREST[c.nome] ?? null }));
+
+  const TRIBOS_TELA2 = ["Xotec", "Mirmidões", "Falcons", "Prometheus"];
+  const tribos2026: DueloTime[] = confrontoTribos2026
+    .filter((c) => TRIBOS_TELA2.includes(c.nome))
+    .map((c) => ({ nome: c.nome, valor: c.valor, foto: crestsTribos[c.nome] ?? null }));
+
+  function totalPorPessoa(etapa: string, papel: "sdr" | "closer") {
+    const relevantes = funilRows.filter((r) => r.etapa === etapa && (r.papel === papel || r.papel === "ambos"));
+    return melhorPorChave(relevantes, (r) => r.profile_id, (r) => r.realizado);
+  }
+  function totalPorPessoaMes(etapa: string, papel: "sdr" | "closer") {
+    const relevantes = funilRows.filter((r) => r.etapa === etapa && (r.papel === papel || r.papel === "ambos"));
+    return melhorPorChave(relevantes, (r) => `${r.profile_id}|${r.data.slice(0, 7)}`, (r) => r.realizado);
+  }
+
+  function registro(
+    titulo: string,
+    mapa: Map<string, number>,
+    extrairId: (chave: string) => string,
+    formato: "num" | "moeda" | "pct" = "num"
+  ): RecordeCompilado {
+    const top2 = top2DeMapa(mapa);
+    if (top2.length === 0) return { titulo, nome: "—", valor: 0, formato, avatarUrl: null, segundo: null };
+    const id0 = extrairId(top2[0].chave);
+    const segundo = top2[1] ? { nome: nomePorId.get(extrairId(top2[1].chave)) ?? "—", valor: top2[1].valor } : null;
+    return { titulo, nome: nomePorId.get(id0) ?? "—", valor: top2[0].valor, formato, avatarUrl: avatarPorId.get(id0) ?? null, segundo };
+  }
+
+  const compiladoSdr: RecordeCompilado[] = [
+    registro("SDR com mais entrevistas (histórico)", totalPorPessoa("entrevistas", "sdr"), (c) => c),
+    registro("SDR com mais assinaturas (histórico)", totalPorPessoa("assinaturas", "sdr"), (c) => c),
+    registro("SDR com mais entrevistas num mês", totalPorPessoaMes("entrevistas", "sdr"), (c) => c.split("|")[0]),
+    registro("SDR com mais assinaturas num mês", totalPorPessoaMes("assinaturas", "sdr"), (c) => c.split("|")[0]),
+  ];
+
+  // Taxa de conversão Entrevista → Assinatura, só entre quem já fez pelo
+  // menos MINIMO_ENTREVISTAS entrevistas como Closer — sem esse piso, quem
+  // tem 1 entrevista e 1 assinatura aparece com "100%" e distorce o recorde.
+  const MINIMO_ENTREVISTAS_TAXA = 10;
+  const entrevistasPorCloser = totalPorPessoa("entrevistas", "closer");
+  const assinaturasPorCloser = totalPorPessoa("assinaturas", "closer");
+  const taxas = Array.from(entrevistasPorCloser.entries())
+    .filter(([, ent]) => ent >= MINIMO_ENTREVISTAS_TAXA)
+    .map(([id, ent]) => ({ id, taxa: Math.round(((assinaturasPorCloser.get(id) ?? 0) / ent) * 1000) / 10 }))
+    .sort((a, b) => b.taxa - a.taxa)
+    .slice(0, 2);
+  const recordeTaxa: RecordeCompilado =
+    taxas.length > 0
+      ? {
+          titulo: "Closer com maior taxa de conversão (Entrevista → Assinatura)",
+          nome: nomePorId.get(taxas[0].id) ?? "—",
+          valor: taxas[0].taxa,
+          formato: "pct",
+          avatarUrl: avatarPorId.get(taxas[0].id) ?? null,
+          segundo: taxas[1] ? { nome: nomePorId.get(taxas[1].id) ?? "—", valor: taxas[1].taxa } : null,
+        }
+      : { titulo: "Closer com maior taxa de conversão (Entrevista → Assinatura)", nome: "—", valor: 0, formato: "pct", avatarUrl: null, segundo: null };
+
+  const maiorVenda = (maioresVendas.data ?? [])[0];
+  const segundaMaiorVenda = (maioresVendas.data ?? [])[1];
+  function nomeDaVenda(v: { sdr_profile_id: string | null; closer_profile_id: string | null } | undefined) {
+    if (!v) return "—";
+    const id = v.closer_profile_id ?? v.sdr_profile_id;
+    return id ? (nomePorId.get(id) ?? "—") : "—";
+  }
+  const recordeMaiorVenda: RecordeCompilado = {
+    titulo: "Maior venda já fechada",
+    nome: nomeDaVenda(maiorVenda),
+    valor: maiorVenda ? Number(maiorVenda.valor) : 0,
+    formato: "moeda",
+    avatarUrl: maiorVenda ? (avatarPorId.get(maiorVenda.closer_profile_id ?? maiorVenda.sdr_profile_id ?? "") ?? null) : null,
+    segundo: segundaMaiorVenda ? { nome: nomeDaVenda(segundaMaiorVenda), valor: Number(segundaMaiorVenda.valor) } : null,
+  };
+
+  const compiladoCloser: RecordeCompilado[] = [
+    recordeTaxa,
+    registro("Closer com mais assinaturas num mês", totalPorPessoaMes("assinaturas", "closer"), (c) => c.split("|")[0]),
+    registro("Closer com mais pagos num mês", totalPorPessoaMes("pagos", "closer"), (c) => c.split("|")[0]),
+    recordeMaiorVenda,
+  ];
+
+  return {
+    exercitos2026,
+    tribos2026,
+    maiorCloserHistorico,
+    maiorSdrHistorico,
+    maiorTribunoCloser2026,
+    maiorSdr2026,
+    compiladoSdr,
+    compiladoCloser,
+  };
+}
 
 export async function buscarRecordesCurados(supabase: SupabaseClient): Promise<RecordeCurado[]> {
   const { data, error } = await supabase

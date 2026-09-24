@@ -4,7 +4,7 @@ import { hojeBR, amanhaBR, inicioMesBR, fimMesBR, fimMesExclusivoBR } from "@/li
 import { buscarVisaoDiaria, type PessoaVisao } from "@/lib/visao-diaria";
 import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
 import { buscarCampanhasAtivas } from "@/lib/campanhas";
-import { buscarRecordesAuto, buscarRecordesCurados } from "@/lib/recordes";
+import { buscarLendasV2 } from "@/lib/recordes";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
 import { buscarOrdemSlides } from "@/lib/tv-config";
 import TvDisplay, { type DueloExercito, type EntrevistaHoje } from "./TvDisplay";
@@ -31,8 +31,7 @@ export default async function TvPage() {
     topCreditoSdrMes,
     topCreditoCloserMes,
     campanhasAtivas,
-    recordesAuto,
-    recordesCurados,
+    lendas,
     { data: entrevistasHojeRaw },
   ] = await Promise.all([
     buscarVisaoDiaria(supabase, hojeBR(), amanhaBR()),
@@ -47,8 +46,7 @@ export default async function TvPage() {
     buscarTopCredito(supabase, inicioMesBR(), fimMesBR(), 10, "sdr"),
     buscarTopCredito(supabase, inicioMesBR(), fimMesBR(), 10, "closer"),
     buscarCampanhasAtivas(supabase),
-    buscarRecordesAuto(supabase),
-    buscarRecordesCurados(supabase),
+    buscarLendasV2(supabase),
     supabase
       .from("entrevistas_leads")
       .select("id, lead_nome, sdr_profile_id")
@@ -157,8 +155,7 @@ export default async function TvPage() {
       crestsTribos={crestsTribos}
       crestsExercitos={EXERCITO_CREST}
       campanhasAtivas={campanhasAtivas}
-      recordesAuto={recordesAuto}
-      recordesCurados={recordesCurados}
+      lendas={lendas}
     />
   );
 }
