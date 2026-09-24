@@ -52,7 +52,11 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
   { type: "link", href: "/minha-producao", label: "Minha Produção", roles: ["lider"] },
   { type: "link", href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
-  { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider"] },
+  // "analista" liberado aqui pro Igor Lobato (Analista de Growth) ver a
+  // própria comissão — pedido do Diretor, 2026-09-24. Os outros Analistas
+  // também ganham o link (é por papel, não por pessoa), mas a página fica
+  // vazia pra eles (sem plano de comissão cadastrado), sem problema.
+  { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider", "analista"] },
   {
     type: "group",
     label: "Legado",
