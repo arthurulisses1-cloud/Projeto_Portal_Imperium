@@ -1,13 +1,29 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { hojeBR, amanhaBR, inicioMesBR, fimMesBR, fimMesExclusivoBR } from "@/lib/data-br";
+import { hojeBR, amanhaBR, inicioMesBR, fimMesBR, fimMesExclusivoBR, paraDataUTC, ehFimDeSemana } from "@/lib/data-br";
 import { buscarVisaoDiaria, type PessoaVisao } from "@/lib/visao-diaria";
 import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
 import { buscarCampanhasAtivas } from "@/lib/campanhas";
 import { buscarLendasV2 } from "@/lib/recordes";
 import { EXERCITO_CREST } from "@/lib/exercito-crests";
 import { buscarOrdemSlides } from "@/lib/tv-config";
-import TvDisplay, { type DueloExercito, type EntrevistaHoje } from "./TvDisplay";
+import TvDisplay, { type DueloExercito, type EntrevistaHoje, type EntrevistaRankingLinha } from "./TvDisplay";
+
+// Dias úteis (sem sáb/dom) num intervalo [inicio, fim] — mesmo cálculo
+// pequeno duplicado em outras páginas (pace.ts, compromissos/page.tsx);
+// pequeno o bastante pra não valer a pena um módulo compartilhado só por
+// isso.
+function diasUteisEmIntervalo(inicio: string, fim: string): number {
+  let n = 0;
+  let cursor = inicio;
+  while (cursor <= fim) {
+    if (!ehFimDeSemana(cursor)) n++;
+    const d = paraDataUTC(cursor);
+    d.setUTCDate(d.getUTCDate() + 1);
+    cursor = d.toISOString().slice(0, 10);
+  }
+  return n;
+}
 
 // Gestão à vista — pedido do Diretor, 2026-09-21: uma TV na sala rodando os
 // indicadores em looping, trocando de tela a cada 15s. Fica fora do grupo
@@ -74,10 +90,23 @@ export default async function TvPage() {
   // Mesma regra que buscarFunilColetivo já aplica em src/lib/time.ts.
   const { data: sdrsAtivos } = await supabase.from("profiles").select("id").eq("role", "sdr").eq("ativo", true);
   const idsSdrsAtivos = new Set((sdrsAtivos ?? []).map((p) => p.id));
-  const topEntrevistasMes = todasPessoasMes
+  const entrevistasMesOrdenado = todasPessoasMes
     .filter((p) => idsSdrsAtivos.has(p.id) && p.funil.entrevistas > 0)
-    .sort((a, b) => b.funil.entrevistas - a.funil.entrevistas)
-    .slice(0, 5);
+    .sort((a, b) => b.funil.entrevistas - a.funil.entrevistas);
+  const topEntrevistasMes = entrevistasMesOrdenado.slice(0, 5);
+  // Pedido do Diretor, 2026-09-29: "acrescente um ranking do primeiro ao
+  // último em entrevistas no mês" — mesma ideia do ranking completo de
+  // Ligações do dia, só que mensal. Mesmo filtro SDR-ativo do Top 5 acima
+  // (Closer não entra: é a mesma entrevista já contada do lado do SDR).
+  // Média/dia = total ÷ dias úteis já passados no mês (não o mês inteiro —
+  // dia 5 do mês não pode ser dividido por 22 dias úteis do mês inteiro).
+  const diasUteisNoMesAteHoje = diasUteisEmIntervalo(inicioMesBR(), hojeBR()) || 1;
+  const rankingEntrevistasMes: EntrevistaRankingLinha[] = entrevistasMesOrdenado.map((p) => ({
+    id: p.id,
+    nome: p.nome,
+    total: p.funil.entrevistas,
+    media: Math.round((p.funil.entrevistas / diasUteisNoMesAteHoje) * 10) / 10,
+  }));
 
   // Duelo de Funis — pedido do Diretor, 2026-09-21: funil completo dos 2
   // Exércitos na ponta da Guerra Civil (por R$ pago no mês, já ordenado por
@@ -148,6 +177,7 @@ export default async function TvPage() {
       entrevistasHoje={entrevistasHoje}
       topConexoesHoje={topConexoesHoje}
       topEntrevistasMes={topEntrevistasMes}
+      rankingEntrevistasMes={rankingEntrevistasMes}
       topCreditoSdrMes={topCreditoSdrMes}
       topCreditoCloserMes={topCreditoCloserMes}
       confrontoExercitos={confrontoExercitos}

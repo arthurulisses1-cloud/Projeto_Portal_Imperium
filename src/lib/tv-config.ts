@@ -15,6 +15,7 @@ export const TV_SLIDES: { chave: string; label: string }[] = [
   { chave: "exercitos", label: "Guerra de Exércitos" },
   { chave: "campanhas", label: "Campanhas do Senatus" },
   { chave: "entrevistas-mes", label: "Top 5 Entrevistas do mês" },
+  { chave: "entrevistas-mes-ranking", label: "Ranking completo de Entrevistas do mês" },
   { chave: "lendas", label: "Lendas do Império" },
 ];
 

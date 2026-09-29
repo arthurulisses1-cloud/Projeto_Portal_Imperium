@@ -45,6 +45,8 @@ export type EntrevistaHoje = {
   triboNome: string;
 };
 
+export type EntrevistaRankingLinha = { id: string; nome: string; total: number; media: number };
+
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
@@ -64,6 +66,7 @@ const TEMAS = {
   campanhas: { accent: "#e0a94a", gradiente: "linear-gradient(160deg, #1e1609 0%, #120d06 100%)" },
   entrevistasHoje: { accent: "#6fc99a", gradiente: "linear-gradient(160deg, #0e1a12 0%, #0a100c 100%)" },
   entrevistas: { accent: "#8fc19e", gradiente: "linear-gradient(160deg, #10190f 0%, #0a100a 100%)" },
+  entrevistasRanking: { accent: "#b39ddb", gradiente: "linear-gradient(160deg, #150f1c 0%, #0c0a12 100%)" },
   lendas: { accent: "#cbb26a", gradiente: "linear-gradient(160deg, #191320 0%, #0f0c14 100%)" },
   lendasTime: { accent: "#e8c874", gradiente: "linear-gradient(160deg, #1c1508 0%, #100c05 100%)" },
 } as const;
@@ -76,6 +79,7 @@ type Props = {
   entrevistasHoje: EntrevistaHoje[];
   topConexoesHoje: PessoaVisao[];
   topEntrevistasMes: PessoaVisao[];
+  rankingEntrevistasMes: EntrevistaRankingLinha[];
   topCreditoSdrMes: Confronto[];
   topCreditoCloserMes: Confronto[];
   confrontoExercitos: Confronto[];
@@ -171,6 +175,9 @@ export default function TvDisplay(props: Props) {
         tema={TEMAS.entrevistas}
         linhas={props.topEntrevistasMes.map((p) => ({ nome: p.nome, valor: p.funil.entrevistas }))}
       />
+    ),
+    "entrevistas-mes-ranking": (
+      <SlideRankingEntrevistasMes key="entrevistas-mes-ranking" ranking={props.rankingEntrevistasMes} />
     ),
   };
 
@@ -384,6 +391,37 @@ function SlideLigacoesHoje({ funil, ranking }: { funil: FunilContagem; ranking: 
           )}
         </div>
       </div>
+    </SlideShell>
+  );
+}
+
+// Ranking completo (não só Top 5) de entrevistas no mês, com a média por
+// dia útil já passado — pedido do Diretor, 2026-09-29. Mesmo padrão de
+// colunas do ranking de Ligações do dia: cresce com o tamanho da lista pra
+// sempre caber na tela.
+function SlideRankingEntrevistasMes({ ranking }: { ranking: EntrevistaRankingLinha[] }) {
+  const tema = TEMAS.entrevistasRanking;
+  const colunas = ranking.length > 30 ? 4 : ranking.length > 14 ? 3 : ranking.length > 6 ? 2 : 1;
+  return (
+    <SlideShell icon={IconScroll} titulo="Entrevistas do mês — ranking completo" tema={tema}>
+      {ranking.length === 0 ? (
+        <p className="text-2xl text-white/40">Sem dados ainda.</p>
+      ) : (
+        <div className="h-full" style={{ columns: colunas, columnGap: "3vw", columnFill: "balance" }}>
+          {ranking.map((p, i) => (
+            <div
+              key={p.id}
+              className="flex items-baseline gap-2 break-inside-avoid"
+              style={{ paddingBlock: "0.5vh", fontSize: "clamp(0.9rem, 2.1vh, 1.3rem)" }}
+            >
+              <span className="w-7 shrink-0 text-right tabular-nums text-white/30">{i + 1}</span>
+              <span className="min-w-0 flex-1 truncate text-white/85">{p.nome}</span>
+              <span className="font-display tabular-nums" style={{ color: tema.accent }}>{p.total}</span>
+              <span className="shrink-0 text-white/40" style={{ fontSize: "0.75em" }}>({p.media}/dia)</span>
+            </div>
+          ))}
+        </div>
+      )}
     </SlideShell>
   );
 }
