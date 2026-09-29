@@ -33,36 +33,35 @@ export default async function GestaoPage() {
   const { data: meuPerfil } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (meuPerfil?.role !== "diretor") redirect("/");
 
-  const { data: pessoas } = await supabase
-    .from("profiles")
-    .select("id, full_name, role, rank, tribo_id, nomes_planilha")
-    .order("full_name");
-
-  const { data: tribos } = await supabase
-    .from("tribos")
-    .select("id, nome, exercito:exercitos(nome)")
-    .order("nome");
-
-  const { data: exercitos } = await supabase
-    .from("exercitos")
-    .select("id, nome, legado_id")
-    .order("nome");
-
-  const lideres = (pessoas ?? []).filter((p) => p.role === "lider");
-  const nomesPlanilha = await listarNomesPlanilha();
-  const ultimaSync = await buscarUltimaSyncOk(supabase);
-
-  // Permissão customizada por Analista (pedido do Diretor, 2026-09-21) —
-  // busca de todo mundo de uma vez, só quem é Analista precisa disso.
-  const idsAnalistas = (pessoas ?? []).filter((p) => p.role === "analista").map((p) => p.id);
-  const permissoesPorAnalista = await buscarPermissoesAnalistaEmLote(supabase, idsAnalistas);
-
   // Email mora só em auth.users (profiles não tem essa coluna) — só o
   // service role enxerga essa tabela, daí o client admin. listUsers pagina
   // de 50 em 50; a equipe toda cabe numa página só (revisar se crescer).
   const admin = createAdminClient();
-  const { data: usersData } = await admin.auth.admin.listUsers({ perPage: 200 });
+
+  // Tudo isso é independente — rodar em paralelo em vez de um `await` atrás
+  // do outro. `listarNomesPlanilha()` faz um fetch EXTERNO pro Google
+  // Sheets (sem cache), sozinho já custa 1-3s; encadeado depois de 3
+  // queries a página demorava tanto que parecia travada, e o Diretor
+  // clicava várias vezes achando que o clique não tinha registrado (achado
+  // 2026-09-29).
+  const [{ data: pessoas }, { data: tribos }, { data: exercitos }, nomesPlanilha, ultimaSync, { data: usersData }] = await Promise.all([
+    supabase.from("profiles").select("id, full_name, role, rank, tribo_id, nomes_planilha").order("full_name"),
+    supabase.from("tribos").select("id, nome, exercito:exercitos(nome)").order("nome"),
+    supabase.from("exercitos").select("id, nome, legado_id").order("nome"),
+    listarNomesPlanilha(),
+    buscarUltimaSyncOk(supabase),
+    admin.auth.admin.listUsers({ perPage: 200 }),
+  ]);
+
+  const lideres = (pessoas ?? []).filter((p) => p.role === "lider");
   const emailPorId = new Map((usersData?.users ?? []).map((u) => [u.id, u.email ?? null]));
+
+  // Permissão customizada por Analista (pedido do Diretor, 2026-09-21) —
+  // busca de todo mundo de uma vez, só quem é Analista precisa disso.
+  // Depende de `pessoas` acima, então continua sequencial (é uma query
+  // rápida no próprio banco, não o gargalo).
+  const idsAnalistas = (pessoas ?? []).filter((p) => p.role === "analista").map((p) => p.id);
+  const permissoesPorAnalista = await buscarPermissoesAnalistaEmLote(supabase, idsAnalistas);
 
   return (
     <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">

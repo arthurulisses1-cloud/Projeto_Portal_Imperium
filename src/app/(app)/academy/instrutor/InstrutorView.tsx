@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import type { Aula, Material, AlunoAudiencia, AulaComCobranca } from "@/lib/academy";
 import { visualDaTrilha } from "@/lib/academy-visual";
 import CobrancaFechamento from "@/components/academy/CobrancaFechamento";
-import { marcarRealizada, enviarMaterial, excluirMaterial, salvarPresencas, salvarResumoAula } from "../actions";
+import { createClient } from "@/lib/supabase/client";
+import { marcarRealizada, registrarMaterial, excluirMaterial, salvarPresencas, salvarResumoAula } from "../actions";
 
 function fmtData(iso: string | null) {
   if (!iso) return "sem data";
@@ -123,13 +125,7 @@ export default function InstrutorView({
                   ) : (
                     <p className="mb-3 text-xs text-stone-600">Nenhum material enviado ainda.</p>
                   )}
-                  <form action={enviarMaterial} className="flex flex-wrap items-center gap-2" encType="multipart/form-data">
-                    <input type="hidden" name="aula_id" value={aula.id} />
-                    <input name="nome" placeholder="Nome do material (opcional)" className="input-imp px-2 py-1 text-xs" />
-                    <input type="file" name="arquivo" required className="text-xs text-stone-300" />
-                    <button type="submit" className="btn-outline px-3 py-1 text-[10px]">Enviar</button>
-                    <span className="text-[10px] text-stone-600">máx. 50MB</span>
-                  </form>
+                  <FormMaterial aulaId={aula.id} />
                 </div>
 
                 <ResumoAula aula={aula} />
@@ -140,6 +136,73 @@ export default function InstrutorView({
         </div>
       )}
     </main>
+  );
+}
+
+// Upload DIRETO do navegador pro Supabase Storage (não passa pela Server
+// Action) — achado 2026-09-29: professor clicava em "Enviar" e nada
+// acontecia, sem erro nenhum na tela. Causa: Server Action no Vercel tem
+// teto físico de 4.5MB por requisição (não dá pra mudar via
+// next.config.js, aquele limite é de outra camada, o Next só controla o
+// próprio teto interno) — slide/PDF de aula passa disso na moral. Fazendo
+// o upload aqui, o arquivo vai direto pro Storage; só a URL (texto
+// pequeno) chega na Server Action `registrarMaterial`, que nunca teve
+// esse problema de tamanho.
+function FormMaterial({ aulaId }: { aulaId: string }) {
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const arquivoInput = form.elements.namedItem("arquivo") as HTMLInputElement;
+    const nomeInput = form.elements.namedItem("nome") as HTMLInputElement;
+    const file = arquivoInput.files?.[0];
+    if (!file) {
+      setErro("Selecione um arquivo.");
+      return;
+    }
+
+    setErro(null);
+    setEnviando(true);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Não autenticado.");
+
+      const ext = file.name.split(".").pop() || "bin";
+      const path = `${user.id}/${Date.now()}-${aulaId}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("academy-materiais")
+        .upload(path, file, { upsert: true, contentType: file.type || undefined });
+      if (uploadError) throw uploadError;
+
+      const { data: pub } = supabase.storage.from("academy-materiais").getPublicUrl(path);
+
+      const fd = new FormData();
+      fd.set("aula_id", aulaId);
+      fd.set("nome", nomeInput.value.trim() || file.name);
+      fd.set("url", pub.publicUrl);
+      await registrarMaterial(fd);
+      form.reset();
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Erro ao enviar o material.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-2">
+      <input name="nome" placeholder="Nome do material (opcional)" className="input-imp px-2 py-1 text-xs" />
+      <input type="file" name="arquivo" required className="text-xs text-stone-300" />
+      <button type="submit" disabled={enviando} className="btn-outline px-3 py-1 text-[10px] disabled:opacity-50">
+        {enviando ? "Enviando…" : "Enviar"}
+      </button>
+      {erro && <span className="w-full text-[10px] text-wine-bright">{erro}</span>}
+    </form>
   );
 }
 

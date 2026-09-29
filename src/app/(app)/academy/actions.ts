@@ -390,7 +390,16 @@ export async function salvarPresencas(formData: FormData) {
   revalidatePath("/carreira");
 }
 
-export async function enviarMaterial(formData: FormData) {
+// Só grava a LINHA do material (aula_id/nome/url) — o arquivo em si já foi
+// upado direto do navegador pro Storage ANTES de chamar isso (ver
+// FormMaterial em InstrutorView.tsx). Trocado de "enviarMaterial" (que
+// recebia o arquivo inteiro pela Server Action) pra esse formato 2026-09-29:
+// Server Action no Vercel tem limite físico de 4.5MB de payload por
+// requisição — sem jeito de contornar via next.config.js (aquilo só muda o
+// teto do PRÓPRIO Next, não o do Vercel por baixo) — e slide/PDF de aula
+// passa disso o tempo todo. Upload direto (browser → Supabase Storage)
+// nunca passa pela função serverless, então não tem esse teto.
+export async function registrarMaterial(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -398,24 +407,14 @@ export async function enviarMaterial(formData: FormData) {
   if (!user) throw new Error("Não autenticado.");
 
   const aulaId = String(formData.get("aula_id"));
-  const file = formData.get("arquivo") as File | null;
-  if (!file || file.size === 0) throw new Error("Selecione um arquivo.");
-  const nome = String(formData.get("nome") ?? "").trim() || file.name;
-
-  const ext = file.name.split(".").pop() || "bin";
-  const path = `${user.id}/${Date.now()}-${aulaId}.${ext}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from("academy-materiais")
-    .upload(path, file, { upsert: true, contentType: file.type });
-  if (uploadError) throw new Error(uploadError.message);
-
-  const { data: pub } = supabase.storage.from("academy-materiais").getPublicUrl(path);
+  const nome = String(formData.get("nome") ?? "").trim();
+  const url = String(formData.get("url") ?? "").trim();
+  if (!nome || !url) throw new Error("Faltou nome ou URL do material.");
 
   const { error } = await supabase.from("academy_materiais").insert({
     aula_id: aulaId,
     nome,
-    url: pub.publicUrl,
+    url,
     enviado_por: user.id,
   });
   if (error) throw new Error(error.message);
