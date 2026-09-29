@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { calcularFunilMeta, buscarMetaComTaxas, type AnoMes, type EscopoTime } from "@/lib/metas";
-import { ehFimDeSemana, paraDataUTC } from "@/lib/data-br";
+import { ehFimDeSemana, paraDataUTC, hojeBR } from "@/lib/data-br";
 
 export type ParDia<T = number> = { realizado: T; meta: T };
 
@@ -467,6 +467,119 @@ export async function buscarComparativoPorCabeca(
       pagosValor: (l.metaCredito * proporcao) / numPessoas,
     };
     resultado.push({ label: l.label, numPessoas: l.ids.length, porCabeca: totais, ideal });
+  }
+  return resultado;
+}
+
+const DIAS_UTEIS_POR_SEMANA = 5;
+
+function dividirTotais(t: TotaisSimples, divisor: number): TotaisSimples {
+  if (divisor <= 0) return { tentativas: 0, alos: 0, conexoes: 0, entrevistas: 0, assinados: 0, pagos: 0, pagosValor: 0 };
+  return {
+    tentativas: t.tentativas / divisor,
+    alos: t.alos / divisor,
+    conexoes: t.conexoes / divisor,
+    entrevistas: t.entrevistas / divisor,
+    assinados: t.assinados / divisor,
+    pagos: t.pagos / divisor,
+    pagosValor: t.pagosValor / divisor,
+  };
+}
+
+function multiplicarTotais(t: TotaisSimples, fator: number): TotaisSimples {
+  return {
+    tentativas: t.tentativas * fator,
+    alos: t.alos * fator,
+    conexoes: t.conexoes * fator,
+    entrevistas: t.entrevistas * fator,
+    assinados: t.assinados * fator,
+    pagos: t.pagos * fator,
+    pagosValor: t.pagosValor * fator,
+  };
+}
+
+export type LinhaMedia = {
+  label: string;
+  numPessoas: number;
+  diasUteisCompletos: number;
+  dia: { real: TotaisSimples; ideal: TotaisSimples };
+  semana: { real: TotaisSimples; ideal: TotaisSimples };
+  mes: { real: TotaisSimples; ideal: TotaisSimples };
+};
+
+// "Média por cabeça" CONSOLIDADA — pedido do Diretor, 2026-09-29: o quadro
+// original (buscarComparativoPorCabeca) mostra o realizado de HOJE/desta
+// semana, que de manhã cedo aparenta um número baixo mesmo num ritmo normal
+// (o dia ainda não terminou) — "eu quero a média que meu time tá fazendo
+// por dia passando a régua no dia anterior pro indicador ficar concreto".
+// Aqui a régua é sempre o MÊS INTEIRO até o último dia útil já FECHADO
+// (ontem, se o mês pedido for o corrente; o mês inteiro, se for um mês
+// passado) — nunca o dia de hoje, que ainda está em andamento. A partir
+// desse total consolidado, deriva 3 médias por cabeça: por Dia (÷ dias
+// úteis fechados), por Semana (dia × 5) e por Mês (o próprio total do
+// período fechado) — e o "Ideal" equivalente, usando a meta do mês inteiro
+// (não prorateada pelos dias que já passaram, já que aqui o objetivo é um
+// número "de regime", não um acompanhamento de progresso).
+export async function buscarMediaConsolidadaPorCabeca(
+  supabase: SupabaseClient,
+  linhasEscopo: LinhaEscopo[],
+  anoMes: AnoMes
+): Promise<LinhaMedia[]> {
+  const { ano, mes } = anoMes;
+  const { metaTicketMedio, taxas } = await buscarMetaComTaxas(supabase, null, { ano, mes });
+  const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
+  const ultimoDiaMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const fimMes = `${ano}-${String(mes).padStart(2, "0")}-${String(ultimoDiaMes).padStart(2, "0")}`;
+  const diasUteisTotalMes = diasUteisEmIntervalo(inicioMes, fimMes) || 1;
+
+  const hoje = hojeBR();
+  const ehMesCorrente = hoje.slice(0, 7) === inicioMes.slice(0, 7);
+  const ontem = (() => {
+    const d = paraDataUTC(hoje);
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  })();
+  // Mês corrente: fecha em ontem (pode cair no mês anterior, dia 1 do
+  // mês — nesse caso não há dia fechado ainda). Mês já encerrado: o mês
+  // inteiro já é "fechado". Mês futuro: nenhum dia fechado.
+  const fimRegua = ehMesCorrente ? ontem : fimMes;
+  const temDiasFechados = fimRegua >= inicioMes && inicioMes <= hoje;
+  const diasUteisCompletos = temDiasFechados ? diasUteisEmIntervalo(inicioMes, fimRegua < fimMes ? fimRegua : fimMes) : 0;
+
+  const resultado: LinhaMedia[] = [];
+  for (const l of linhasEscopo) {
+    const totaisFechados: TotaisSimples =
+      diasUteisCompletos > 0
+        ? await buscarTotaisPeriodo(supabase, l.ids, inicioMes, fimRegua)
+        : { tentativas: 0, alos: 0, conexoes: 0, entrevistas: 0, assinados: 0, pagos: 0, pagosValor: 0 };
+    const cascataMes = calcularFunilMeta(l.metaCredito, metaTicketMedio, taxas);
+    const metaMesTotal: TotaisSimples = {
+      tentativas: cascataMes.tentativas ?? 0,
+      alos: cascataMes.alos ?? 0,
+      conexoes: cascataMes.conexoes ?? 0,
+      entrevistas: cascataMes.entrevistas ?? 0,
+      assinados: cascataMes.assinaturas ?? 0,
+      pagos: cascataMes.pagos ?? 0,
+      pagosValor: l.metaCredito,
+    };
+    const numPessoas = l.ids.length || 1;
+
+    const mesReal = dividirTotais(totaisFechados, numPessoas);
+    const diaReal = dividirTotais(totaisFechados, diasUteisCompletos * numPessoas);
+    const semanaReal = multiplicarTotais(diaReal, DIAS_UTEIS_POR_SEMANA);
+
+    const mesIdeal = dividirTotais(metaMesTotal, numPessoas);
+    const diaIdeal = dividirTotais(metaMesTotal, diasUteisTotalMes * numPessoas);
+    const semanaIdeal = multiplicarTotais(diaIdeal, DIAS_UTEIS_POR_SEMANA);
+
+    resultado.push({
+      label: l.label,
+      numPessoas: l.ids.length,
+      diasUteisCompletos,
+      dia: { real: diaReal, ideal: diaIdeal },
+      semana: { real: semanaReal, ideal: semanaIdeal },
+      mes: { real: mesReal, ideal: mesIdeal },
+    });
   }
   return resultado;
 }

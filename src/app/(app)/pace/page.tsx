@@ -1,7 +1,15 @@
 import { Fragment } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { buscarPaceMes, resolverLinhasComparativo, buscarComparativoPorCabeca, type PaceDia, type LinhaComparativo } from "@/lib/pace";
+import {
+  buscarPaceMes,
+  resolverLinhasComparativo,
+  buscarComparativoPorCabeca,
+  buscarMediaConsolidadaPorCabeca,
+  type PaceDia,
+  type LinhaComparativo,
+  type LinhaMedia,
+} from "@/lib/pace";
 import type { EscopoTime } from "@/lib/metas";
 import { hojeBR, paraDataUTC } from "@/lib/data-br";
 import { podeVerArea } from "@/lib/permissoes-analista";
@@ -244,10 +252,11 @@ export default async function PacePage({
     buscarPaceMes(supabase, escopo, { ano, mes }),
     resolverLinhasComparativo(supabase, escopo, tribos ?? [], { ano, mes }),
   ]);
-  const [comparativoMes, comparativoSemana, comparativoDia] = await Promise.all([
+  const [comparativoMes, comparativoSemana, comparativoDia, mediaConsolidada] = await Promise.all([
     buscarComparativoPorCabeca(supabase, linhasEscopo, inicioMesStr, fimPeriodoMes),
     ehMesAtual ? buscarComparativoPorCabeca(supabase, linhasEscopo, inicioSemana, hoje) : Promise.resolve([]),
     ehMesAtual ? buscarComparativoPorCabeca(supabase, linhasEscopo, hoje, hoje) : Promise.resolve([]),
+    buscarMediaConsolidadaPorCabeca(supabase, linhasEscopo, { ano, mes }),
   ]);
 
   // Acumulado = soma corrida de (realizado - meta) dia a dia, mesma
@@ -317,19 +326,42 @@ export default async function PacePage({
         </div>
       )}
 
-      {comparativoMes.length > 0 && (
-        <Card title="Média por cabeça">
-          <div className={`grid gap-4 ${ehMesAtual ? "lg:grid-cols-3" : ""}`}>
-            <TabelaComparativo titulo="Mês" comparativo={comparativoMes} />
-            {ehMesAtual && (
-              <>
-                <TabelaComparativo titulo="Semana" comparativo={comparativoSemana} />
-                <TabelaComparativo titulo="Dia" comparativo={comparativoDia} />
-              </>
-            )}
+      {mediaConsolidada.length > 0 && (
+        <Card title="Média por cabeça — ritmo do mês">
+          <p className="mb-3 text-[11px] text-stone-600">
+            Régua no último dia útil já fechado (ontem, se o mês for o corrente) — não mistura o dia de hoje ainda
+            em andamento, pra dar um número concreto do ritmo real do time. Dia = média por dia útil fechado; Semana
+            = Dia × 5; Mês = total já realizado nos dias fechados, por cabeça.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <TabelaMedia titulo="Dia" linhas={mediaConsolidada} periodo="dia" />
+            <TabelaMedia titulo="Semana" linhas={mediaConsolidada} periodo="semana" />
+            <TabelaMedia titulo="Mês" linhas={mediaConsolidada} periodo="mes" />
           </div>
-          {!ehMesAtual && <p className="mt-2 text-[11px] text-stone-600">Semana e Dia só aparecem pro mês corrente.</p>}
+          {mediaConsolidada[0]?.diasUteisCompletos === 0 && (
+            <p className="mt-2 text-[11px] text-stone-600">Ainda não há dia útil fechado neste mês.</p>
+          )}
         </Card>
+      )}
+
+      {comparativoMes.length > 0 && (
+        <details className="rounded border border-imperium-line">
+          <summary className="cursor-pointer px-4 py-3 text-sm text-stone-300">
+            Ver tempo real (realizado de hoje / desta semana, ainda em andamento)
+          </summary>
+          <div className="border-t border-imperium-line px-4 py-4">
+            <div className={`grid gap-4 ${ehMesAtual ? "lg:grid-cols-3" : ""}`}>
+              <TabelaComparativo titulo="Mês" comparativo={comparativoMes} />
+              {ehMesAtual && (
+                <>
+                  <TabelaComparativo titulo="Semana" comparativo={comparativoSemana} />
+                  <TabelaComparativo titulo="Dia" comparativo={comparativoDia} />
+                </>
+              )}
+            </div>
+            {!ehMesAtual && <p className="mt-2 text-[11px] text-stone-600">Semana e Dia só aparecem pro mês corrente.</p>}
+          </div>
+        </details>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -468,6 +500,74 @@ function TabelaComparativo({ titulo, comparativo }: { titulo: string; comparativ
                   return (
                     <Fragment key={c.label}>
                       <td className={`px-2 py-1.5 text-right ${corRealVsIdeal(real, ideal)}`}>{c.numPessoas > 0 ? fmt(real) : "—"}</td>
+                      <td className="px-2 py-1.5 text-right text-stone-500">{fmt(ideal)}</td>
+                    </Fragment>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Mesma tabela visual de TabelaComparativo, mas pra buscarMediaConsolidadaPorCabeca
+// — aqui real/ideal já vêm por cabeça (régua no dia anterior), sem dividir
+// de novo por numPessoas.
+function TabelaMedia({ titulo, linhas, periodo }: { titulo: string; linhas: LinhaMedia[]; periodo: "dia" | "semana" | "mes" }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-[11px] uppercase tracking-wide text-stone-500">{titulo}</p>
+      <div className="overflow-x-auto">
+        <table className="min-w-full border-collapse text-sm">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-wide text-stone-500">
+              <th className="py-1 pr-4" rowSpan={2}>
+                Etapa
+              </th>
+              {linhas.map((l) => (
+                <th key={l.label} colSpan={2} className="border-b border-imperium-line px-3 py-1 text-center">
+                  {l.label}
+                  <span className="block text-[10px] normal-case text-stone-600">
+                    {l.numPessoas} pessoa{l.numPessoas === 1 ? "" : "s"}
+                  </span>
+                </th>
+              ))}
+            </tr>
+            <tr className="text-left text-[10px] uppercase tracking-wide text-stone-600">
+              {linhas.map((l) => (
+                <Fragment key={l.label}>
+                  <th className="px-2 py-0.5 text-right font-normal">Real</th>
+                  <th className="px-2 py-0.5 text-right font-normal">Ideal</th>
+                </Fragment>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(
+              [
+                { campo: "tentativas", label: "Tentativas", moedaFmt: false },
+                { campo: "alos", label: "Alôs", moedaFmt: false },
+                { campo: "conexoes", label: "Conexões", moedaFmt: false },
+                { campo: "entrevistas", label: "Entrevistas", moedaFmt: false },
+                { campo: "assinados", label: "Assinados", moedaFmt: false },
+                { campo: "pagos", label: "Pagos", moedaFmt: false },
+                { campo: "pagosValor", label: "Pagos R$", moedaFmt: true },
+              ] as const
+            ).map(({ campo, label, moedaFmt }) => (
+              <tr key={campo} className="border-t border-imperium-line/50">
+                <td className="py-1.5 pr-4 text-stone-300">{label}</td>
+                {linhas.map((l) => {
+                  const real = l[periodo].real[campo];
+                  const ideal = l[periodo].ideal[campo];
+                  const fmt = (v: number) => (moedaFmt ? moeda(v) : v.toFixed(1));
+                  return (
+                    <Fragment key={l.label}>
+                      <td className={`px-2 py-1.5 text-right ${corRealVsIdeal(real, ideal)}`}>
+                        {l.numPessoas > 0 ? fmt(real) : "—"}
+                      </td>
                       <td className="px-2 py-1.5 text-right text-stone-500">{fmt(ideal)}</td>
                     </Fragment>
                   );
