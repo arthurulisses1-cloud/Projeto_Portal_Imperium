@@ -4,7 +4,7 @@ import Card from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { cumpriuCompromisso, type StreakRow } from "@/lib/streak";
 import { marcarFaltaTime, desmarcarFaltaTime } from "@/app/(app)/exercito/actions";
-import { hojeBR, ehFimDeSemana } from "@/lib/data-br";
+import { hojeBR, ehFimDeSemana, paraDataUTC } from "@/lib/data-br";
 import { podeVerArea } from "@/lib/permissoes-analista";
 
 type Totais = {
@@ -44,6 +44,22 @@ function somar(a: Totais, b: Totais): Totais {
   };
 }
 
+// Dias úteis (sem sáb/dom) num intervalo [inicio, fim], os 2 inclusive —
+// mesmo raciocínio de diasUteisEmIntervalo em src/lib/pace.ts, mas essa
+// função é privada lá; pequena o bastante pra duplicar em vez de exportar
+// cross-module só por isso.
+function diasUteisEmIntervalo(inicio: string, fim: string): number {
+  let n = 0;
+  let cursor = inicio;
+  while (cursor <= fim) {
+    if (!ehFimDeSemana(cursor)) n++;
+    const d = paraDataUTC(cursor);
+    d.setUTCDate(d.getUTCDate() + 1);
+    cursor = d.toISOString().slice(0, 10);
+  }
+  return n;
+}
+
 function TotaisResumo({ t }: { t: Totais }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-400">
@@ -60,7 +76,11 @@ function TotaisResumo({ t }: { t: Totais }) {
   );
 }
 
-export default async function CompromissosPage() {
+export default async function CompromissosPage({
+  searchParams,
+}: {
+  searchParams: { inicio?: string; fim?: string };
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -68,10 +88,27 @@ export default async function CompromissosPage() {
   if (!user) redirect("/login");
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   const analistaLiberado = profile?.role === "analista" && (await podeVerArea(supabase, user.id, profile.role, "dados"));
-  if (profile?.role !== "diretor" && !analistaLiberado) redirect("/");
+  const isLider = profile?.role === "lider";
+  if (profile?.role !== "diretor" && !analistaLiberado && !isLider) redirect("/");
 
   const hoje = hojeBR();
-  const finalDeSemana = ehFimDeSemana(hoje);
+  // Período personalizado — pedido do Diretor, 2026-09-29: "quero a opção
+  // de ver período personalizado também, pra ver quanto se comprometeram x
+  // quanto entregaram". Sem parâmetro na URL, comportamento de sempre (só
+  // hoje, com os botões de marcar falta); com `inicio`/`fim`, agrega todos
+  // os dias do intervalo por pessoa em vez de mostrar só um dia.
+  const inicioParam = searchParams.inicio && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.inicio) ? searchParams.inicio : null;
+  const fimParam = searchParams.fim && /^\d{4}-\d{2}-\d{2}$/.test(searchParams.fim) ? searchParams.fim : hoje;
+  const modoPeriodo = inicioParam !== null;
+  const inicio = inicioParam ?? hoje;
+  const fim = fimParam;
+  const finalDeSemana = !modoPeriodo && ehFimDeSemana(hoje);
+
+  // Líder só vê o próprio Exército (mesmo recorte de sempre — CentralNotificacoes,
+  // Fechamento Semanal etc.); Diretor/Analista veem a firma inteira.
+  const meuExercitoId = isLider
+    ? (await supabase.from("exercitos").select("id").eq("legado_id", user.id).maybeSingle()).data?.id ?? null
+    : null;
 
   const [{ data: pessoas }, { data: tribosRaw }, { data: exercitosRaw }] = await Promise.all([
     supabase
@@ -84,17 +121,29 @@ export default async function CompromissosPage() {
     supabase.from("exercitos").select("id, nome").order("nome"),
   ]);
 
-  const idsPessoas = (pessoas ?? []).map((p) => p.id);
-  const { data: compromissosHoje } = idsPessoas.length
+  const tribosVisiveis = isLider ? (tribosRaw ?? []).filter((t) => t.exercito_id === meuExercitoId) : (tribosRaw ?? []);
+  const idsTribosVisiveis = new Set(tribosVisiveis.map((t) => t.id));
+  const pessoasVisiveis = isLider ? (pessoas ?? []).filter((p) => p.tribo_id && idsTribosVisiveis.has(p.tribo_id)) : (pessoas ?? []);
+  const exercitosVisiveis = isLider ? (exercitosRaw ?? []).filter((e) => e.id === meuExercitoId) : (exercitosRaw ?? []);
+
+  const idsPessoas = pessoasVisiveis.map((p) => p.id);
+  const { data: compromissosPeriodo } = idsPessoas.length
     ? await supabase
         .from("compromissos")
         .select(
           "profile_id, data, entrevistas_comp, entrevistas_real, assinaturas_comp, assinaturas_real, pagos_comp, pagos_real, falta, lancado"
         )
-        .eq("data", hoje)
+        .gte("data", inicio)
+        .lte("data", fim)
         .in("profile_id", idsPessoas)
     : { data: [] };
-  const compromissoPorPessoa = new Map((compromissosHoje ?? []).map((c) => [c.profile_id, c as StreakRow]));
+
+  // Modo "hoje": mantém o StreakRow de sempre (1 linha = 1 dia), usado pros
+  // estados "ausente"/"não lançou"/cor da borda. Modo período: agrega todas
+  // as linhas do intervalo por pessoa — não existe "a falta de hoje" pra um
+  // intervalo de várias semanas, então os botões de falta somem nesse modo.
+  const linhasHoje = new Map((compromissosPeriodo ?? []).filter((c) => c.data === hoje).map((c) => [c.profile_id, c as StreakRow]));
+  const diasUteisNoPeriodo = diasUteisEmIntervalo(inicio, fim) || 1;
 
   type PessoaComCompromisso = {
     id: string;
@@ -106,8 +155,27 @@ export default async function CompromissosPage() {
     totais: Totais;
   };
 
-  const pessoasComCompromisso: PessoaComCompromisso[] = (pessoas ?? []).map((p) => {
-    const row = compromissoPorPessoa.get(p.id) ?? null;
+  const pessoasComCompromisso: PessoaComCompromisso[] = pessoasVisiveis.map((p) => {
+    if (modoPeriodo) {
+      const linhasPessoa = (compromissosPeriodo ?? []).filter((c) => c.profile_id === p.id);
+      const totais = linhasPessoa.reduce(
+        (acc, c) =>
+          somar(acc, {
+            ...totaisVazios(),
+            entrevistasComp: c.entrevistas_comp,
+            entrevistasReal: c.entrevistas_real,
+            assinaturasComp: c.assinaturas_comp,
+            assinaturasReal: c.assinaturas_real,
+            pagosComp: c.pagos_comp,
+            pagosReal: c.pagos_real,
+            lancaram: c.lancado && !c.falta ? 1 : 0,
+          }),
+        totaisVazios()
+      );
+      totais.total = diasUteisNoPeriodo;
+      return { id: p.id, nome: p.full_name, avatarUrl: p.avatar_url, role: p.role, triboId: p.tribo_id, row: null, totais };
+    }
+    const row = linhasHoje.get(p.id) ?? null;
     const totais: Totais = {
       ...totaisVazios(),
       entrevistasComp: row?.entrevistas_comp ?? 0,
@@ -129,13 +197,13 @@ export default async function CompromissosPage() {
     pessoasPorTribo.get(p.triboId)!.push(p);
   }
 
-  const tribosComPessoas = (tribosRaw ?? []).map((t) => {
+  const tribosComPessoas = tribosVisiveis.map((t) => {
     const membros = pessoasPorTribo.get(t.id) ?? [];
     const totais = membros.reduce((acc, m) => somar(acc, m.totais), totaisVazios());
     return { id: t.id, nome: t.nome, exercitoId: t.exercito_id, membros, totais };
   });
 
-  const exercitosComTribos = (exercitosRaw ?? []).map((e) => {
+  const exercitosComTribos = exercitosVisiveis.map((e) => {
     const tribos = tribosComPessoas.filter((t) => t.exercitoId === e.id);
     const totais = tribos.reduce((acc, t) => somar(acc, t.totais), totaisVazios());
     return { id: e.id, nome: e.nome, tribos, totais };
@@ -145,15 +213,38 @@ export default async function CompromissosPage() {
 
   const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
   const dataFmt = new Date(hoje + "T00:00:00");
+  const fmtCurta = (iso: string) => {
+    const d = new Date(iso + "T00:00:00");
+    return `${d.getDate()} de ${MESES[d.getMonth()]}`;
+  };
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 px-6 py-8">
       <div>
         <h1 className="font-display text-2xl text-gold-bright">Compromissos</h1>
         <p className="kicker mt-1">
-          {dataFmt.getDate()} de {MESES[dataFmt.getMonth()]} · compromisso do dia, de cada pessoa até o Império inteiro
+          {modoPeriodo
+            ? `${fmtCurta(inicio)} — ${fmtCurta(fim)} · comprometido × entregue no período`
+            : `${dataFmt.getDate()} de ${MESES[dataFmt.getMonth()]} · compromisso do dia, de cada pessoa até ${isLider ? "o Exército inteiro" : "o Império inteiro"}`}
         </p>
       </div>
+
+      <form className="flex flex-wrap items-end gap-3 rounded border border-imperium-line bg-imperium-bg/40 p-3 text-xs">
+        <div>
+          <label className="mb-1 block text-[10px] uppercase text-stone-500">De</label>
+          <input type="date" name="inicio" defaultValue={inicio} max={hoje} className="input-imp px-2 py-1 text-xs" />
+        </div>
+        <div>
+          <label className="mb-1 block text-[10px] uppercase text-stone-500">Até</label>
+          <input type="date" name="fim" defaultValue={fim} max={hoje} className="input-imp px-2 py-1 text-xs" />
+        </div>
+        <button type="submit" className="btn-gold px-3 py-1.5 text-xs">Ver período</button>
+        {modoPeriodo && (
+          <a href="/compromissos" className="btn-outline px-3 py-1.5 text-xs">
+            ← Voltar pra hoje
+          </a>
+        )}
+      </form>
 
       {finalDeSemana && (
         <p className="rounded border border-imperium-line bg-imperium-bg/40 px-4 py-2 text-xs text-stone-500">
@@ -162,10 +253,10 @@ export default async function CompromissosPage() {
       )}
 
       <Card
-        title="Compromisso do dia · Império inteiro"
+        title={modoPeriodo ? "Comprometido × entregue no período · toda a visão" : "Compromisso do dia · toda a visão"}
         right={
           <Badge tone={finalDeSemana || totalFirma.lancaram === totalFirma.total ? "success" : "warning"} variant="solid">
-            {totalFirma.lancaram}/{totalFirma.total} lançaram
+            {totalFirma.lancaram}/{totalFirma.total} {modoPeriodo ? "dias com lançamento" : "lançaram"}
           </Badge>
         }
       >
@@ -178,7 +269,7 @@ export default async function CompromissosPage() {
             <div className="flex items-center gap-3">
               <h2 className="font-display text-lg text-gold-bright">{exercito.nome}</h2>
               <Badge tone={finalDeSemana || exercito.totais.lancaram === exercito.totais.total ? "success" : "warning"} variant="tag">
-                {exercito.totais.lancaram}/{exercito.totais.total} lançaram
+                {exercito.totais.lancaram}/{exercito.totais.total} {modoPeriodo ? "dias" : "lançaram"}
               </Badge>
             </div>
             <span className="text-[10px] text-stone-500 transition group-open:rotate-180">▾</span>
@@ -203,6 +294,37 @@ export default async function CompromissosPage() {
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   {tribo.membros.map((m) => {
+                    if (modoPeriodo) {
+                      const t = m.totais;
+                      return (
+                        <div key={m.id} className="rounded border border-imperium-line bg-imperium-surface p-2.5">
+                          <div className="mb-1.5 flex items-center gap-2">
+                            {m.avatarUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={m.avatarUrl} alt={m.nome} className="h-6 w-6 shrink-0 rounded-full border border-imperium-line-strong object-cover" />
+                            ) : (
+                              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-[9px] text-stone-500">
+                                {m.nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase()}
+                              </div>
+                            )}
+                            <p className="min-w-0 flex-1 truncate text-xs text-stone-200">{m.nome}</p>
+                            <span className="shrink-0 text-[9px] text-stone-500">{t.lancaram}/{t.total} dias</span>
+                          </div>
+                          <div className="space-y-0.5 text-[11px] text-stone-400">
+                            <p>
+                              Entr. <span className={t.entrevistasReal >= t.entrevistasComp ? "text-success-bright" : "text-stone-300"}>{t.entrevistasReal}/{t.entrevistasComp}</span>
+                            </p>
+                            <p>
+                              Assin. <span className={t.assinaturasReal >= t.assinaturasComp ? "text-success-bright" : "text-stone-300"}>{t.assinaturasReal}/{t.assinaturasComp}</span>
+                            </p>
+                            <p>
+                              Pagos <span className={t.pagosReal >= t.pagosComp ? "text-success-bright" : "text-stone-300"}>{t.pagosReal}/{t.pagosComp}</span>
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+
                     const cumpriu = m.row && !m.row.falta && m.row.lancado && cumpriuCompromisso(m.row);
                     const ausente = m.row?.falta;
                     const naoLancou = !finalDeSemana && (!m.row || !m.row.lancado);
