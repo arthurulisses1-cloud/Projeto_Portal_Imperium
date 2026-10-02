@@ -262,8 +262,8 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
         const diaFim = Number(fimTrabalho.slice(8, 10));
         const diasTrabalhados = Math.max(0, diaFim - diaInicio + 1);
         const proporcao = diasNoMes > 0 ? diasTrabalhados / diasNoMes : 0;
-        fixoBase = Math.round(fixoBase * proporcao);
-        fixoAtual = Math.round(fixoAtual * proporcao);
+        fixoBase = Math.round(fixoBase * proporcao * 100) / 100;
+        fixoAtual = Math.round(fixoAtual * proporcao * 100) / 100;
       }
 
       const bonus = Math.max(0, fixoAtual - fixoBase);
@@ -412,8 +412,8 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
         const fimTrabalho = saiuDentroDoMes ? p.data_saida! : fimMes;
         const diasTrabalhados = Math.max(0, Number(fimTrabalho.slice(8, 10)) - Number(inicioTrabalho.slice(8, 10)) + 1);
         const proporcao = diasNoMes > 0 ? diasTrabalhados / diasNoMes : 0;
-        fixoBaseGrowth = Math.round(fixoBaseGrowth * proporcao);
-        fixoAtualGrowth = Math.round(fixoAtualGrowth * proporcao);
+        fixoBaseGrowth = Math.round(fixoBaseGrowth * proporcao * 100) / 100;
+        fixoAtualGrowth = Math.round(fixoAtualGrowth * proporcao * 100) / 100;
       }
       const variavelGrowth = remuneracaoGrowth?.gestao.variavel ?? 0;
       const linhaGrowth: LinhaFolha = {
@@ -523,8 +523,8 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
         const diaFim = Number(fimTrabalho.slice(8, 10));
         const diasTrabalhados = Math.max(0, diaFim - diaInicio + 1);
         const proporcao = diasNoMes > 0 ? diasTrabalhados / diasNoMes : 0;
-        fixoBase = Math.round(fixoBase * proporcao);
-        fixoAtual = Math.round(fixoAtual * proporcao);
+        fixoBase = Math.round(fixoBase * proporcao * 100) / 100;
+        fixoAtual = Math.round(fixoAtual * proporcao * 100) / 100;
       }
     }
 
