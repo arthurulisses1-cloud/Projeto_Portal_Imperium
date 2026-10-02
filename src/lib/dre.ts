@@ -3,7 +3,7 @@ import { buscarRemuneracaoMes, buscarRemuneracaoGrowth } from "@/lib/remuneracao
 import { calcularRemuneracao, type Tier } from "@/lib/comissao";
 import { RANK_LABELS } from "@/lib/labels";
 import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
-import { ANALISTA_GROWTH_ID, ANALISTA_GROWTH_DESDE, CENTURIAO_FIXO_GARANTIDO } from "@/lib/acessos-especiais";
+import { ANALISTA_GROWTH_ID, ANALISTA_GROWTH_DESDE, CENTURIAO_FIXO_GARANTIDO, FIXO_CHEIO_NO_MES } from "@/lib/acessos-especiais";
 
 // ATENÇÃO: este módulo é estritamente Diretor-only (RLS na migration 0037
 // já barra qualquer outro papel no banco, mas nunca importe isso fora de
@@ -252,7 +252,8 @@ export async function buscarFolha(supabase: SupabaseClient, ano: number, mes: nu
       const entrada = p.data_admissao ?? null;
       const saiuDentroDoMes = !!p.data_saida && p.data_saida < fimMesExclusivo;
       const entrouDentroDoMes = !!entrada && entrada >= inicioMes && entrada < fimMesExclusivo;
-      if (saiuDentroDoMes || entrouDentroDoMes) {
+      const fixoCheio = !!FIXO_CHEIO_NO_MES[p.id]?.includes(inicioMes.slice(0, 7));
+      if (!fixoCheio && (saiuDentroDoMes || entrouDentroDoMes)) {
         const diasNoMes = new Date(ano, mes, 0).getDate();
         const inicioTrabalho = entrouDentroDoMes ? entrada! : inicioMes;
         const fimMesInclusivo = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
@@ -513,7 +514,8 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
       const entradaP = p.data_admissao ?? null;
       const saiuDentroDoMes = !!p.data_saida && p.data_saida <= fimMes;
       const entrouDentroDoMes = !!entradaP && entradaP >= inicioMes && entradaP <= fimMes;
-      if (saiuDentroDoMes || entrouDentroDoMes) {
+      const fixoCheio = !!FIXO_CHEIO_NO_MES[p.id]?.includes(inicioMes.slice(0, 7));
+      if (!fixoCheio && (saiuDentroDoMes || entrouDentroDoMes)) {
         const diasNoMes = new Date(ano, mes, 0).getDate();
         const inicioTrabalho = entrouDentroDoMes ? entradaP! : inicioMes;
         const fimTrabalho = saiuDentroDoMes ? p.data_saida! : fimMes;

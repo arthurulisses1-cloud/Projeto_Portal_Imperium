@@ -43,3 +43,11 @@ export const CENTURIAO_FIXO_GARANTIDO: Record<string, number> = {
   "74658908-c885-4dd1-bcd4-f44b03011f8f": 2300, // Marcus Ryquelme
   "a49f5082-5209-4ade-9f66-2c59bb7e8267": 2700, // Nicolas Roberto
 };
+
+// Exceção pontual de fixo CHEIO (sem proporcional aos dias) por pessoa+mês —
+// pedido do Diretor, 2026-10-02: Cristina Santos saiu em 28/09, mas o fixo
+// de setembro sai cheio, sem descontar os 2 dias finais. Chave = profile_id,
+// valor = meses ("YYYY-MM") em que o proporcional não se aplica.
+export const FIXO_CHEIO_NO_MES: Record<string, string[]> = {
+  "b5a30ced-7309-4629-8d91-c8d1274cfc23": ["2026-09"], // Cristina Santos
+};
