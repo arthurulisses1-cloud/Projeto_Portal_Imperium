@@ -91,9 +91,9 @@ export default async function TvPage() {
   const { data: sdrsAtivos } = await supabase.from("profiles").select("id").eq("role", "sdr").eq("ativo", true);
   const idsSdrsAtivos = new Set((sdrsAtivos ?? []).map((p) => p.id));
   const entrevistasMesOrdenado = todasPessoasMes
-    .filter((p) => idsSdrsAtivos.has(p.id) && p.funil.entrevistas > 0)
+    .filter((p) => idsSdrsAtivos.has(p.id))
     .sort((a, b) => b.funil.entrevistas - a.funil.entrevistas);
-  const topEntrevistasMes = entrevistasMesOrdenado.slice(0, 5);
+  const topEntrevistasMes = entrevistasMesOrdenado.filter((p) => p.funil.entrevistas > 0).slice(0, 5);
   // Pedido do Diretor, 2026-09-29: "acrescente um ranking do primeiro ao
   // último em entrevistas no mês" — mesma ideia do ranking completo de
   // Ligações do dia, só que mensal. Mesmo filtro SDR-ativo do Top 5 acima

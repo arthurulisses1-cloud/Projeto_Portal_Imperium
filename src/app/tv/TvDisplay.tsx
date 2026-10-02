@@ -415,9 +415,15 @@ function SlideRankingEntrevistasMes({ ranking }: { ranking: EntrevistaRankingLin
               style={{ paddingBlock: "0.5vh", fontSize: "clamp(0.9rem, 2.1vh, 1.3rem)" }}
             >
               <span className="w-7 shrink-0 text-right tabular-nums text-white/30">{i + 1}</span>
-              <span className="min-w-0 flex-1 truncate text-white/85">{p.nome}</span>
-              <span className="font-display tabular-nums" style={{ color: tema.accent }}>{p.total}</span>
-              <span className="shrink-0 text-white/40" style={{ fontSize: "0.75em" }}>({p.media}/dia)</span>
+              <span className={`min-w-0 flex-1 truncate ${p.total === 0 ? "text-white/40" : "text-white/85"}`}>{p.nome}</span>
+              {p.total === 0 ? (
+                <span className="shrink-0 text-red-300/70" style={{ fontSize: "0.85em" }}>zerado</span>
+              ) : (
+                <>
+                  <span className="font-display tabular-nums" style={{ color: tema.accent }}>{p.total}</span>
+                  <span className="shrink-0 text-white/40" style={{ fontSize: "0.75em" }}>({p.media}/dia)</span>
+                </>
+              )}
             </div>
           ))}
         </div>
