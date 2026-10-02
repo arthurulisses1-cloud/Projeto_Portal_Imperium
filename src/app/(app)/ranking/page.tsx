@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server";
 import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 import { IconMedal } from "@/components/ui/icons";
 import { inicioMesBR } from "@/lib/data-br";
+import { fimExclusivoDoMes } from "@/lib/mes-param";
+
+const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
 type Linha = { nome: string; tribo: string; valor: number };
 
@@ -79,7 +82,7 @@ function Tabela({ titulo, formato, linhas }: { titulo: string; formato: "num" | 
   );
 }
 
-export default async function RankingPage() {
+export default async function RankingPage({ searchParams }: { searchParams: { ano?: string; mes?: string } }) {
   const supabase = await createClient();
 
   // Sem filtro por role do perfil: líderes que entram como SDR ou Closer numa
@@ -93,7 +96,16 @@ export default async function RankingPage() {
 
   const todosIds = (pessoas ?? []).map((p) => p.id);
 
-  const inicioMes = inicioMesBR();
+  const mesAtualStr = inicioMesBR();
+  const anoP = Number(searchParams.ano);
+  const mesP = Number(searchParams.mes);
+  const inicioMes = anoP && mesP >= 1 && mesP <= 12 && `${anoP}-${String(mesP).padStart(2, "0")}-01` <= mesAtualStr ? `${anoP}-${String(mesP).padStart(2, "0")}-01` : mesAtualStr;
+  const fimMes = fimExclusivoDoMes(inicioMes);
+  const [ano, mes] = inicioMes.split("-").map(Number);
+  const ehMesAtual = inicioMes === mesAtualStr;
+  const hrefMes = (a: number, m: number) => (`${a}-${String(m).padStart(2, "0")}-01` === mesAtualStr ? "/ranking" : `/ranking?ano=${a}&mes=${m}`);
+  const anterior = mes === 1 ? { a: ano - 1, m: 12 } : { a: ano, m: mes - 1 };
+  const seguinte = mes === 12 ? { a: ano + 1, m: 1 } : { a: ano, m: mes + 1 };
 
   // Paginado — essa query (todo mundo x todas as etapas no mês) já passa de
   // 700 linhas e cresce todo dia; sem isso o Supabase corta em 1000 sem erro.
@@ -106,6 +118,7 @@ export default async function RankingPage() {
               .select("profile_id, etapa, realizado, papel")
               .in("profile_id", todosIds)
               .gte("data", inicioMes)
+              .lt("data", fimMes)
               .range(from, to)
         )
       : [];
@@ -117,6 +130,7 @@ export default async function RankingPage() {
           .select("profile_id, valor, papel")
           .in("profile_id", todosIds)
           .gte("data", inicioMes)
+          .lt("data", fimMes)
       : { data: [] };
 
   // "ambos" (a pessoa foi SDR e Closer na mesma venda/entrevista) conta cheio
@@ -199,9 +213,18 @@ export default async function RankingPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-display text-2xl text-gold-bright">Ranking</h1>
-          <p className="kicker mt-1">Mês corrente · corte geral do Império</p>
+          <p className="kicker mt-1">{MESES[mes]} de {ano}{ehMesAtual ? " (mês corrente)" : ""} · corte geral do Império</p>
+          <div className="mt-2 flex items-center gap-2 text-xs">
+            <a href={hrefMes(anterior.a, anterior.m)} className="btn-outline px-2 py-1">← {MESES[anterior.m]}</a>
+            {!ehMesAtual && (
+              <>
+                <a href={hrefMes(seguinte.a, seguinte.m)} className="btn-outline px-2 py-1">{MESES[seguinte.m]} →</a>
+                <a href="/ranking" className="text-stone-500 underline">mês atual</a>
+              </>
+            )}
+          </div>
         </div>
-        <a href="/api/export/ranking" className="btn-outline text-xs">
+        <a href={ehMesAtual ? "/api/export/ranking" : `/api/export/ranking?ano=${ano}&mes=${mes}`} className="btn-outline text-xs">
           Exportar CSV
         </a>
       </div>

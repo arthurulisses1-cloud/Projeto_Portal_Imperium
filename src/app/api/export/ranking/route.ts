@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { inicioMesBR } from "@/lib/data-br";
+import { fimExclusivoDoMes } from "@/lib/mes-param";
 
 function csvEscape(v: string | number) {
   const s = String(v);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -20,14 +21,18 @@ export async function GET() {
     .in("role", ["sdr", "closer"]);
 
   const ids = (pessoas ?? []).map((p) => p.id);
-  const inicioMes = inicioMesBR();
+  const params = new URL(request.url).searchParams;
+  const ano = Number(params.get("ano")) || 0;
+  const mesNum = Number(params.get("mes")) || 0;
+  const inicioMes = ano && mesNum >= 1 && mesNum <= 12 ? `${ano}-${String(mesNum).padStart(2, "0")}-01` : inicioMesBR();
+  const fimMes = fimExclusivoDoMes(inicioMes);
 
   const [{ data: funilRows }, { data: vendasRows }] = await Promise.all([
     ids.length
-      ? supabase.from("producao_funil").select("profile_id, etapa, realizado").in("profile_id", ids).gte("data", inicioMes)
+      ? supabase.from("producao_funil").select("profile_id, etapa, realizado").in("profile_id", ids).gte("data", inicioMes).lt("data", fimMes)
       : Promise.resolve({ data: [] }),
     ids.length
-      ? supabase.from("vendas").select("profile_id, valor").in("profile_id", ids).gte("data", inicioMes)
+      ? supabase.from("vendas").select("profile_id, valor").in("profile_id", ids).gte("data", inicioMes).lt("data", fimMes)
       : Promise.resolve({ data: [] }),
   ]);
 
