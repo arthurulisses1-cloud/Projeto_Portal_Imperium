@@ -263,6 +263,29 @@ export default function WeeklyDashboard({
 
 /* ---------------- Filter bar ---------------- */
 
+// <input type="date"> dispara onChange a cada dígito do ano com uma data
+// "válida" (ex: 0002-10-06), o que recalculava o dashboard inteiro a cada
+// tecla e travava a aba. Aqui o valor digitado fica local e só vira filtro
+// quando a data está completa e plausível (ano 2000-2100).
+function DataPersonalizada({ value, onCommit }: { value: string; onCommit: (v: string) => void }) {
+  const [rascunho, setRascunho] = useState(value);
+  useEffect(() => setRascunho(value), [value]);
+  return (
+    <input
+      type="date"
+      value={rascunho}
+      min="2000-01-01"
+      max="2100-12-31"
+      onChange={(e) => {
+        const v = e.target.value;
+        setRascunho(v);
+        const ano = Number(v.slice(0, 4));
+        if (v === "" || (/^d{4}-d{2}-d{2}$/.test(v) && ano >= 2000 && ano <= 2100)) onCommit(v);
+      }}
+    />
+  );
+}
+
 function FiltroBar({
   presets, periodKey, setPeriodKey, customFrom, customTo, setCustomFrom, setCustomTo,
   teams, team, setTeam, status, setStatus, rotuloEquipe,
@@ -297,8 +320,8 @@ function FiltroBar({
         </div>
         {periodKey === "custom" && (
           <div className="wd-dates">
-            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+            <DataPersonalizada value={customFrom} onCommit={setCustomFrom} />
+            <DataPersonalizada value={customTo} onCommit={setCustomTo} />
           </div>
         )}
       </div>
