@@ -163,9 +163,9 @@ export default async function LeadsPage({ searchParams }: { searchParams: { visa
         modo={ehSdr ? "sdr" : "completo"}
         verRepasseSdr={ehSdr || meRole === "diretor" || analistaLiberado}
         visaoInicial={searchParams.visao}
+        adminSubidos={meRole === "diretor" ? <ComplianceResultadosForm resultados={resultadosTodos} /> : undefined}
       />
 
-      {meRole === "diretor" && <ComplianceResultadosForm resultados={resultadosTodos} />}
       {meRole === "diretor" && <MotivosPerdaForm motivos={motivosTodos} />}
     </main>
   );

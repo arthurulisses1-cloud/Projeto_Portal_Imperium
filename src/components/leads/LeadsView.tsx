@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   salvarStatusLead,
@@ -169,6 +169,7 @@ export default function LeadsView({
   modo = "completo",
   verRepasseSdr = false,
   visaoInicial,
+  adminSubidos,
 }: {
   leads: Lead[];
   nomePorId: Map<string, string>;
@@ -181,6 +182,8 @@ export default function LeadsView({
   modo?: "completo" | "sdr";
   verRepasseSdr?: boolean;
   visaoInicial?: string;
+  // Catálogo de resultados do compliance (só Diretor) — aparece dentro da visão Subidos.
+  adminSubidos?: ReactNode;
 }) {
   const [leadsState, setLeadsState] = useState(leads);
   const [arrastando, setArrastando] = useState<string | null>(null);
@@ -371,6 +374,7 @@ export default function LeadsView({
           onAbrirLead={setLeadAberto}
         />
       )}
+      {visao === "subidos" && adminSubidos}
       {visao === "recuperacao" && (
         <RecuperacaoView leads={leadsRecuperacao} nomePorId={nomePorId} hoje={hoje} viewerId={viewerId} onAbrirLead={setLeadAberto} />
       )}
