@@ -694,7 +694,6 @@ export async function moverRepasse(formData: FormData) {
     detalhe: { de: atual.repasse_etapa, para: etapa },
   });
 
-  revalidatePath("/repasse");
   revalidatePath("/leads");
   revalidatePath("/");
 }

@@ -55,7 +55,7 @@ export async function buscarPendencias(
         .select("id", { count: "exact", head: true })
         .eq("repasse_sdr_id", userId)
         .eq("repasse_etapa", "base_repasses");
-      if (repasseCount) pend["/repasse"] = repasseCount;
+      if (repasseCount) pend["/leads"] = repasseCount;
     }
 
     // Tarefas atrasadas — vale pra SDR e Closer (antes só contava pro

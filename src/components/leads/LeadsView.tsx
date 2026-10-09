@@ -18,6 +18,7 @@ import { cobrancaDoLead, responsavelDoLead, diasEntre, type Cobranca } from "@/l
 import { ETAPAS_REPASSE, dataDoRepasse } from "@/lib/leads-repasse";
 import SubidosView from "./SubidosView";
 import RecuperacaoView from "./RecuperacaoView";
+import RepasseSdrView from "./RepasseSdrView";
 
 export type Lead = {
   id: string;
@@ -77,6 +78,7 @@ export type Lead = {
   recusa_motivo: string | null;
   repasse_sdr_id: string | null;
   repasse_etapa: string | null;
+  repasse_desde: string | null;
   repasse_nota: string | null;
 };
 export type ComplianceResultado = { id: string; nome: string; comportamento: string; ativo: boolean };
@@ -164,6 +166,9 @@ export default function LeadsView({
   resultadosCompliance,
   viewerId,
   hoje,
+  modo = "completo",
+  verRepasseSdr = false,
+  visaoInicial,
 }: {
   leads: Lead[];
   nomePorId: Map<string, string>;
@@ -172,6 +177,10 @@ export default function LeadsView({
   resultadosCompliance: ComplianceResultado[];
   viewerId: string;
   hoje: string;
+  // "sdr": só o funil de Repasse de Entrevistas (SDR não vê o resto).
+  modo?: "completo" | "sdr";
+  verRepasseSdr?: boolean;
+  visaoInicial?: string;
 }) {
   const [leadsState, setLeadsState] = useState(leads);
   const [arrastando, setArrastando] = useState<string | null>(null);
@@ -182,7 +191,12 @@ export default function LeadsView({
   // crie outra aba, basta em Meus Leads termos a opção de ver esse segundo
   // funil") — toggle simples em vez de rota nova, reaproveita o board
   // inteiro (colunas, filtros, modal), só troca qual recorte de leads entra.
-  const [visao, setVisao] = useState<"principal" | "subidos" | "recuperacao" | "reanalise">("principal");
+  type Visao = "principal" | "subidos" | "recuperacao" | "reanalise" | "repasse";
+  const visoesPermitidas: Visao[] =
+    modo === "sdr" ? ["repasse"] : ["principal", "subidos", "recuperacao", "reanalise", ...(verRepasseSdr ? (["repasse"] as Visao[]) : [])];
+  const [visao, setVisao] = useState<Visao>(
+    visoesPermitidas.includes(visaoInicial as Visao) ? (visaoInicial as Visao) : visoesPermitidas[0]
+  );
   // Multi-seleção (pedido do Diretor, 2026-08-27: "tire da forma de filtro
   // único, coloque de forma que eu possa selecionar vários") — vazio = sem
   // filtro (mostra tudo), cada Set guarda os valores marcados.
@@ -207,6 +221,8 @@ export default function LeadsView({
     () => leadsState.filter((l) => l.status_followup === "subido" && !l.em_reanalise),
     [leadsState]
   );
+  const leadsRepasseSdr = useMemo(() => leadsState.filter((l) => !!l.repasse_etapa), [leadsState]);
+  const totalRepasseSdrAtivo = leadsRepasseSdr.filter((l) => l.repasse_etapa === "base_repasses" || l.repasse_etapa === "tentando_reativacao").length;
   const leadsRecuperacao = useMemo(() => leadsState.filter((l) => !!l.rot_etapa && !l.em_reanalise), [leadsState]);
 
   // Cobranças pendentes (selo vermelho nas abas) — só do que está sob
@@ -321,8 +337,11 @@ export default function LeadsView({
             ["subidos", `📤 Subidos (${leadsSubidos.length})`, pendSubidos],
             ["recuperacao", `🔁 Repasse Closers (${totalRecuperacaoAtiva})`, pendRecuperacao],
             ["reanalise", `⚖️ Funil de Reanálise (${totalReanalise})`, 0],
+            ["repasse", `📨 Repasse Entrevistas (${totalRepasseSdrAtivo})`, 0],
           ] as const
-        ).map(([valor, label, pend]) => (
+        )
+          .filter(([valor]) => visoesPermitidas.includes(valor))
+          .map(([valor, label, pend]) => (
           <button
             key={valor}
             type="button"
@@ -341,6 +360,7 @@ export default function LeadsView({
         ))}
       </div>
 
+      {visao === "repasse" && <RepasseSdrView leads={leadsRepasseSdr} nomePorId={nomePorId} hoje={hoje} viewerId={viewerId} />}
       {visao === "subidos" && (
         <SubidosView
           leads={leadsSubidos}

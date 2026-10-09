@@ -10,14 +10,19 @@ import { inicioMesBR, hojeBR } from "@/lib/data-br";
 import { ETAPAS_ABERTAS } from "@/lib/leads-cobranca";
 import { podeVerArea } from "@/lib/permissoes-analista";
 
-export default async function LeadsPage() {
+export default async function LeadsPage({ searchParams }: { searchParams: { visao?: string } }) {
   const supabase = await createClient();
   const viewer = await getViewerContext(supabase);
   if (!viewer) return null;
   const meRole = viewer.effectiveRole;
   const analistaLiberado = meRole === "analista" && (await podeVerArea(supabase, viewer.effectiveId, meRole, "leads"));
 
-  if (!["closer", "lider", "diretor"].includes(meRole) && !analistaLiberado) {
+  // SDR entra só pro funil de Repasse de Entrevistas (pedido do Diretor,
+  // 2026-10-09: é um funil dentro de Meus Leads, não uma aba separada) — e só
+  // enxerga o que está no nome dele.
+  const ehSdr = meRole === "sdr";
+
+  if (!["closer", "lider", "diretor"].includes(meRole) && !analistaLiberado && !ehSdr) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>
@@ -42,15 +47,24 @@ export default async function LeadsPage() {
   // Exército, closer da Tribo, Diretor) — um select liso já vem certo,
   // sem precisar montar a lógica de escopo na mão como o Forecast faz
   // (lá a RLS de weekly_operacoes é aberta de propósito, ver Forecast).
+  const colunasLead =
+    "id, data, lead_nome, lead_telefone, sdr_profile_id, closer_profile_id, canal, origem, entrevistado, estado_civil, decisor, dores, documentacao_ciente, valores_apresentados, status_followup, observacao, motivo_perda_id, motivo_perda_obs, motivo_perda_etapa, temperatura, valor_credito, em_reanalise, reanalise_data, status_em, subido_em, subido_obs, compliance_resultado_id, compliance_comportamento, compliance_obs, compliance_atualizado_em, pendencia_prazo, ultima_atualizacao_em, ultimo_movimento_em, rot_responsavel_id, rot_fase, rot_etapa, rot_nota, rot_desde, rot_primeiro_toque_em, rot_ciclos, recusada_em, recusa_motivo, repasse_sdr_id, repasse_etapa, repasse_desde, repasse_nota";
+  const consultaLeads = ehSdr
+    ? supabase
+        .from("entrevistas_leads")
+        .select(colunasLead)
+        .eq("repasse_sdr_id", viewer.effectiveId)
+        .not("repasse_etapa", "is", null)
+        .order("data", { ascending: false })
+        .limit(1000)
+    : supabase
+        .from("entrevistas_leads")
+        .select(colunasLead)
+        .or(`data.gte.${inicioMes},status_followup.in.(${Array.from(ETAPAS_ABERTAS).join(",")})`)
+        .order("data", { ascending: false })
+        .limit(3000);
   const [{ data: leadsRaw, error }, { data: motivosRaw }, { data: resultadosRaw }] = await Promise.all([
-    supabase
-      .from("entrevistas_leads")
-      .select(
-        "id, data, lead_nome, lead_telefone, sdr_profile_id, closer_profile_id, canal, origem, entrevistado, estado_civil, decisor, dores, documentacao_ciente, valores_apresentados, status_followup, observacao, motivo_perda_id, motivo_perda_obs, motivo_perda_etapa, temperatura, valor_credito, em_reanalise, reanalise_data, status_em, subido_em, subido_obs, compliance_resultado_id, compliance_comportamento, compliance_obs, compliance_atualizado_em, pendencia_prazo, ultima_atualizacao_em, ultimo_movimento_em, rot_responsavel_id, rot_fase, rot_etapa, rot_nota, rot_desde, rot_primeiro_toque_em, rot_ciclos, recusada_em, recusa_motivo, repasse_sdr_id, repasse_etapa, repasse_nota"
-      )
-      .or(`data.gte.${inicioMes},status_followup.in.(${Array.from(ETAPAS_ABERTAS).join(",")})`)
-      .order("data", { ascending: false })
-      .limit(3000),
+    consultaLeads,
     supabase.from("motivos_perda_lead").select("id, nome, ativo, etapa").order("ordem"),
     supabase.from("compliance_resultados").select("id, nome, comportamento, ativo").order("ordem"),
   ]);
@@ -130,8 +144,12 @@ export default async function LeadsPage() {
   return (
     <main className="mx-auto max-w-[1600px] space-y-6 px-6 py-8">
       <div>
-        <h1 className="font-display text-2xl text-gold-bright">Meus Leads</h1>
-        <p className="kicker mt-1">Entrevistas recebidas este mês — acompanhe, envie proposta, faça follow-up</p>
+        <h1 className="font-display text-2xl text-gold-bright">{ehSdr ? "Repasse de Entrevistas" : "Meus Leads"}</h1>
+        <p className="kicker mt-1">
+          {ehSdr
+            ? "Entrevistas recusadas por closers de outros Exércitos — sua missão é gerar uma nova entrevista com cada cliente"
+            : "Entrevistas recebidas este mês — acompanhe, envie proposta, faça follow-up"}
+        </p>
       </div>
 
       <LeadsView
@@ -142,6 +160,9 @@ export default async function LeadsPage() {
         resultadosCompliance={resultadosAtivos}
         viewerId={viewer.effectiveId}
         hoje={hoje}
+        modo={ehSdr ? "sdr" : "completo"}
+        verRepasseSdr={ehSdr || meRole === "diretor" || analistaLiberado}
+        visaoInicial={searchParams.visao}
       />
 
       {meRole === "diretor" && <ComplianceResultadosForm resultados={resultadosTodos} />}

@@ -47,7 +47,10 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer"] },
   { type: "link", href: "/tarefas", label: "Tarefas", roles: ["sdr", "closer", "lider", "diretor", "analista"], area: "tarefas" },
   { type: "link", href: "/leads", label: "Meus Leads", roles: ["closer", "lider", "diretor", "analista"], area: "leads" },
-  { type: "link", href: "/repasse", label: "Repasse de Entrevistas", roles: ["sdr", "diretor"] },
+  // Atalho direto pra visão Subidos (resultado do compliance) dentro de Meus Leads.
+  { type: "link", href: "/leads?visao=subidos", label: "Subidos", roles: ["closer", "lider", "diretor"] },
+  // SDR só vê o funil de Repasse de Entrevistas (mesma rota, visão restrita).
+  { type: "link", href: "/leads", label: "Repasse de Entrevistas", roles: ["sdr"] },
   { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
   { type: "link", href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
   { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
