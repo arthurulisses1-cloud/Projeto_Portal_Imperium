@@ -536,7 +536,16 @@ export default function LeadsView({
 
                       <div className="mt-2.5 space-y-1 text-xs text-stone-400">
                         {l.lead_telefone && <p>📞 {l.lead_telefone}</p>}
-                        {l.closer_profile_id && <p>👤 {nomePorId.get(l.closer_profile_id) ?? "—"}</p>}
+                        {l.sdr_profile_id && (
+                          <p>
+                            <span className="text-stone-600">SDR</span> {nomePorId.get(l.sdr_profile_id) ?? "—"}
+                          </p>
+                        )}
+                        {l.closer_profile_id && (
+                          <p>
+                            <span className="text-stone-600">Closer</span> {nomePorId.get(l.closer_profile_id) ?? "—"}
+                          </p>
+                        )}
                         <p className={aberto && dias >= 14 ? "text-wine-bright" : ""}>🕒 {quando}</p>
                       </div>
 
