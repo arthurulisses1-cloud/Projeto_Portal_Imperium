@@ -8,6 +8,9 @@ import { logErroSupabase } from "@/lib/log-erro-supabase";
 // que tenta gerar uma nova entrevista com o cliente.
 
 export const DIAS_ATE_REPASSE = 15;
+// Sem recuperar em 30 dias no repasse, o lead passa pro próximo SDR (outro
+// Exército) — mesmo ciclo dos closers (pedido do Diretor, 2026-10-09).
+export const DIAS_REPASSE_SDR = 30;
 
 export const ETAPAS_REPASSE = [
   { valor: "base_repasses", label: "Base de Repasses" },
@@ -25,6 +28,7 @@ export type LeadParaRepasse = {
   repasse_etapa: string | null;
   sdr_profile_id: string | null;
   repasse_tentaram: string[];
+  repasse_desde?: string | null;
 };
 
 function somarDias(data: string, dias: number): string {
@@ -42,6 +46,14 @@ export function deveAtribuirRepasse(l: LeadParaRepasse, hoje: string): boolean {
   if (!l.recusada_em) return false;
   if (l.repasse_sdr_id || l.repasse_etapa) return false; // já atribuído (ou travado em "não faz sentido")
   return dataDoRepasse(l.recusada_em) <= hoje;
+}
+
+export function deveRepassarDeNovo(l: LeadParaRepasse, hoje: string): boolean {
+  if (l.status_followup !== "entrevista_recusada") return false;
+  if (!l.repasse_sdr_id || !l.repasse_desde) return false;
+  if (l.repasse_etapa !== "base_repasses" && l.repasse_etapa !== "tentando_reativacao") return false;
+  const dias = Math.round((paraDataUTC(hoje).getTime() - paraDataUTC(l.repasse_desde).getTime()) / 86400000);
+  return dias >= DIAS_REPASSE_SDR;
 }
 
 export type SdrDaFila = { id: string; exercitoId: string | null };
@@ -65,21 +77,22 @@ export function escolherSdrRepasse(
 }
 
 // Roda no fim de cada sync (idempotente): atribui os leads que completaram
-// D+15 da recusa.
+// D+15 da recusa e repassa pro próximo SDR os que passaram 30 dias sem
+// recuperação.
 export async function atribuirRepassesDeEntrevista(supabase: SupabaseClient): Promise<{ atribuidos: number }> {
   const hoje = hojeBR();
 
   const { data: recusadasRaw, error } = await supabase
     .from("entrevistas_leads")
-    .select("id, lead_nome, status_followup, recusada_em, repasse_sdr_id, repasse_etapa, sdr_profile_id, repasse_tentaram")
-    .eq("status_followup", "entrevista_recusada")
-    .is("repasse_sdr_id", null)
-    .is("repasse_etapa", null);
+    .select("id, lead_nome, status_followup, recusada_em, repasse_sdr_id, repasse_etapa, repasse_desde, sdr_profile_id, repasse_tentaram")
+    .eq("status_followup", "entrevista_recusada");
   logErroSupabase("atribuirRepassesDeEntrevista: recusadas", error);
 
-  const pendentes = ((recusadasRaw ?? []) as (LeadParaRepasse & { id: string; lead_nome: string })[]).filter((l) =>
-    deveAtribuirRepasse(l, hoje)
-  );
+  type Linha = LeadParaRepasse & { id: string; lead_nome: string };
+  const todas = (recusadasRaw ?? []) as Linha[];
+  const novos = todas.filter((l) => deveAtribuirRepasse(l, hoje));
+  const vencidos = todas.filter((l) => deveRepassarDeNovo(l, hoje));
+  const pendentes = [...novos, ...vencidos];
   if (pendentes.length === 0) return { atribuidos: 0 };
 
   const [{ data: sdrsRaw }, { data: emAndamento }] = await Promise.all([
@@ -116,7 +129,13 @@ export async function atribuirRepassesDeEntrevista(supabase: SupabaseClient): Pr
   let atribuidos = 0;
   for (const l of pendentes) {
     const exercitoOriginal = l.sdr_profile_id ? exercitoPorSdr.get(l.sdr_profile_id) ?? null : null;
-    const sdrId = escolherSdrRepasse(l, exercitoOriginal, sdrs, carga);
+    let tentaram = l.repasse_tentaram;
+    let sdrId = escolherSdrRepasse(l, exercitoOriginal, sdrs, carga);
+    if (!sdrId && l.repasse_sdr_id) {
+      // Todos os elegíveis já tentaram: reinicia o ciclo (só o SDR atual fica de fora).
+      tentaram = [l.repasse_sdr_id];
+      sdrId = escolherSdrRepasse({ ...l, repasse_tentaram: tentaram }, exercitoOriginal, sdrs, carga);
+    }
     if (!sdrId) continue;
 
     const { error: updError } = await supabase
@@ -125,20 +144,23 @@ export async function atribuirRepassesDeEntrevista(supabase: SupabaseClient): Pr
         repasse_sdr_id: sdrId,
         repasse_etapa: "base_repasses",
         repasse_desde: hoje,
-        repasse_tentaram: [...l.repasse_tentaram, sdrId],
+        repasse_tentaram: [...tentaram, sdrId],
       })
       .eq("id", l.id);
     if (updError) {
       logErroSupabase(`atribuirRepassesDeEntrevista: update ${l.id}`, updError);
       continue;
     }
+    if (l.repasse_sdr_id) carga.set(l.repasse_sdr_id, Math.max(0, (carga.get(l.repasse_sdr_id) ?? 1) - 1));
     carga.set(sdrId, (carga.get(sdrId) ?? 0) + 1);
     await supabase.from("lead_atualizacoes").insert({
       lead_id: l.id,
       autor_id: null,
       tipo: "repasse",
-      nota: "D+15 da recusa — lead enviado pra um SDR de outro Exército tentar reativar",
-      detalhe: { sdr: sdrId },
+      nota: l.repasse_sdr_id
+        ? "30 dias sem recuperação — lead passou pro próximo SDR (outro Exército)"
+        : "D+15 da recusa — lead enviado pra um SDR de outro Exército tentar reativar",
+      detalhe: { de: l.repasse_sdr_id, sdr: sdrId },
     });
     atribuidos++;
   }

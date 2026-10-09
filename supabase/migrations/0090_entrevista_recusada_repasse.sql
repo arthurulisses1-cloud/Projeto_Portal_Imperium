@@ -42,4 +42,7 @@ create index if not exists entrevistas_leads_repasse_sdr_idx on entrevistas_lead
 create policy entrevistas_leads_select_repasse on entrevistas_leads for select using (repasse_sdr_id = auth.uid());
 create policy entrevistas_leads_update_repasse on entrevistas_leads for update using (repasse_sdr_id = auth.uid());
 
+-- Tarefa gerada quando a entrevista cai: só conclui se o lead for movimentado.
+alter table tasks add column if not exists exige_lead_movido boolean not null default false;
+
 insert into schema_migrations (filename) values ('0090_entrevista_recusada_repasse.sql') on conflict do nothing;

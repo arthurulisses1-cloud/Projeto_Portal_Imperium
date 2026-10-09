@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { hojeBR } from "@/lib/data-br";
 import { DIAS_PRAZO_PENDENCIA } from "@/lib/leads-cobranca";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // RLS de entrevistas_leads (migration 0053) já restringe update ao mesmo
 // recorte de sempre (dono SDR/Closer, líder do Exército, closer da Tribo,
@@ -182,6 +183,19 @@ export async function salvarStatusLead(formData: FormData) {
 
   const { error } = await supabase.from("entrevistas_leads").update(update).eq("id", leadId);
   if (error) throw new Error(error.message);
+
+  if (mudouEtapa && atual.status_followup === "validacao_entrevista") {
+    // Decisão tomada: fecha a tarefa de validação do closer dono do lead.
+    // Service role porque quem move o card pode ser outro (ex: líder) e a RLS
+    // de tasks só deixa o dono atualizar; o filtro é só por lead + flag.
+    await createAdminClient()
+      .from("tasks")
+      .update({ coluna: "concluido" })
+      .eq("lead_id", leadId)
+      .eq("exige_lead_movido", true)
+      .neq("coluna", "concluido");
+    revalidatePath("/tarefas");
+  }
 
   if (mudouEtapa) {
     await registrarLog(supabase, leadId, user.id, registrandoSubido ? "subido" : statusRaw === "entrevista_recusada" ? "recusa" : "etapa", observacao || subidoObs || recusaMotivo || null, {

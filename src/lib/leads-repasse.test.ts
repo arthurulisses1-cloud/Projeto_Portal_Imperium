@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dataDoRepasse, deveAtribuirRepasse, escolherSdrRepasse, type LeadParaRepasse } from "./leads-repasse";
+import { dataDoRepasse, deveAtribuirRepasse, deveRepassarDeNovo, escolherSdrRepasse, type LeadParaRepasse } from "./leads-repasse";
 
 const base: LeadParaRepasse = {
   status_followup: "entrevista_recusada",
@@ -48,5 +48,20 @@ describe("escolherSdrRepasse", () => {
 
   it("sem Exército de origem conhecido, só exclui o original", () => {
     expect(escolherSdrRepasse(base, null, sdrs, new Map())).toBe("s2");
+  });
+});
+
+describe("deveRepassarDeNovo", () => {
+  const atribuido: LeadParaRepasse = { ...base, repasse_sdr_id: "s2", repasse_etapa: "tentando_reativacao", repasse_desde: "2026-10-16" };
+
+  it("repassa pro próximo SDR depois de 30 dias sem recuperar", () => {
+    expect(deveRepassarDeNovo(atribuido, "2026-11-14")).toBe(false);
+    expect(deveRepassarDeNovo(atribuido, "2026-11-15")).toBe(true);
+  });
+
+  it("não repassa recuperada, travada nem lead ainda não atribuído", () => {
+    expect(deveRepassarDeNovo({ ...atribuido, repasse_etapa: "entrevista_recuperada" }, "2027-01-01")).toBe(false);
+    expect(deveRepassarDeNovo({ ...atribuido, repasse_etapa: "nao_faz_sentido" }, "2027-01-01")).toBe(false);
+    expect(deveRepassarDeNovo({ ...atribuido, repasse_sdr_id: null }, "2027-01-01")).toBe(false);
   });
 });

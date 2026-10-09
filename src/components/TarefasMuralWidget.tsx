@@ -17,7 +17,7 @@ export default async function TarefasMuralWidget({ userId }: { userId: string })
 
   const { data: tarefasRaw } = await supabase
     .from("tasks")
-    .select("id, titulo, due_date, prioridade")
+    .select("id, titulo, due_date, prioridade, exige_lead_movido")
     .eq("profile_id", userId)
     .neq("coluna", "concluido")
     .lte("due_date", hoje)
@@ -47,11 +47,12 @@ export default async function TarefasMuralWidget({ userId }: { userId: string })
               titulo={t.titulo}
               prioridade={t.prioridade}
               situacao="atrasada"
+              bloqueada={!!t.exige_lead_movido}
               prazoLabel={`Atrasada — ${new Date(t.due_date! + "T00:00:00").toLocaleDateString("pt-BR")}`}
             />
           ))}
           {deHoje.map((t) => (
-            <TarefasMuralItem key={t.id} id={t.id} titulo={t.titulo} prioridade={t.prioridade} situacao="hoje" prazoLabel="Hoje" />
+            <TarefasMuralItem key={t.id} id={t.id} titulo={t.titulo} prioridade={t.prioridade} situacao="hoje" prazoLabel="Hoje" bloqueada={!!t.exige_lead_movido} />
           ))}
         </ul>
       ) : (

@@ -9,6 +9,7 @@ import { csvUrl, SHEET_GIDS } from "./config";
 import { hojeBR, inicioMesBR } from "@/lib/data-br";
 import { rotacionarLeadsParados } from "@/lib/leads-rotacao";
 import { atribuirRepassesDeEntrevista } from "@/lib/leads-repasse";
+import { gerarTarefasDeValidacao } from "@/lib/leads-tarefas";
 import { ETAPAS_ABERTAS } from "@/lib/leads-cobranca";
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -611,6 +612,11 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     await rotacionarLeadsParados(supabase);
   } catch (e) {
     console.error("rotacionarLeadsParados falhou:", e);
+  }
+  try {
+    await gerarTarefasDeValidacao(supabase);
+  } catch (e) {
+    console.error("gerarTarefasDeValidacao falhou:", e);
   }
   try {
     await atribuirRepassesDeEntrevista(supabase);

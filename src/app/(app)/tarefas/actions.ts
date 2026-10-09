@@ -113,6 +113,18 @@ export async function moverTarefa(formData: FormData) {
   const coluna = String(formData.get("coluna") ?? "");
   if (!id || !coluna) throw new Error("Tarefa ou coluna inválida.");
 
+  // Tarefa de validação de entrevista (pedido do Diretor, 2026-10-09): só
+  // conclui se o lead tiver sido movimentado em Meus Leads.
+  if (coluna === "concluido") {
+    const { data: previa } = await supabase.from("tasks").select("exige_lead_movido, lead_id").eq("id", id).maybeSingle();
+    if (previa?.exige_lead_movido && previa.lead_id) {
+      const { data: lead } = await supabase.from("entrevistas_leads").select("status_followup").eq("id", previa.lead_id).maybeSingle();
+      if (!lead || lead.status_followup === "validacao_entrevista") {
+        throw new Error("Essa tarefa só conclui depois que o lead for movimentado em Meus Leads (validar ou recusar a entrevista).");
+      }
+    }
+  }
+
   const { data: tarefa, error } = await supabase
     .from("tasks")
     .update({ coluna })

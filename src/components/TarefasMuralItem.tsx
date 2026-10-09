@@ -16,12 +16,15 @@ export default function TarefasMuralItem({
   prioridade,
   situacao,
   prazoLabel,
+  bloqueada = false,
 }: {
   id: string;
   titulo: string;
   prioridade: string;
   situacao: "atrasada" | "hoje";
   prazoLabel: string;
+  // Tarefa de validação de entrevista: só conclui quando o lead for movimentado.
+  bloqueada?: boolean;
 }) {
   const router = useRouter();
   const [concluida, setConcluida] = useState(false);
@@ -35,9 +38,26 @@ export default function TarefasMuralItem({
     fd.set("id", id);
     fd.set("coluna", "concluido");
     startTransition(async () => {
-      await moverTarefa(fd);
+      try {
+        await moverTarefa(fd);
+      } catch {
+        setConcluida(false);
+        return;
+      }
       router.refresh();
     });
+  }
+
+  if (bloqueada) {
+    return (
+      <li className="flex items-center justify-between gap-2 text-sm">
+        <a href="/leads" className="flex min-w-0 items-center gap-2 text-stone-200 hover:text-gold-bright" title="Só conclui quando o lead for movimentado em Meus Leads">
+          <span className="text-xs">🔒</span>
+          <span className="truncate">{titulo}</span>
+        </a>
+        <span className={`shrink-0 ${situacao === "atrasada" ? "text-wine-bright" : "text-gold"}`}>{prazoLabel}</span>
+      </li>
+    );
   }
 
   return (
