@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   salvarStatusLead,
   salvarPerdaLead,
@@ -200,9 +200,22 @@ export default function LeadsView({
   type Visao = "principal" | "subidos" | "recuperacao" | "reanalise" | "repasse";
   const visoesPermitidas: Visao[] =
     modo === "sdr" ? ["repasse"] : ["principal", "subidos", "recuperacao", "reanalise", ...(verRepasseSdr ? (["repasse"] as Visao[]) : [])];
-  const [visao, setVisao] = useState<Visao>(
-    visoesPermitidas.includes(visaoInicial as Visao) ? (visaoInicial as Visao) : visoesPermitidas[0]
-  );
+  // A aba ativa vive na URL (?visao=): assim o atalho "Subidos" do menu troca de
+  // aba mesmo quando você já está em /leads, e "Meus Leads" volta pro funil
+  // principal. Trocar de aba só atualiza a URL no navegador (sem recarregar).
+  const searchParams = useSearchParams();
+  const visaoDaUrl = (searchParams.get("visao") ?? visaoInicial) as Visao;
+  const visaoDaUrlValida: Visao = visoesPermitidas.includes(visaoDaUrl) ? visaoDaUrl : visoesPermitidas[0];
+  const [visao, setVisaoLocal] = useState<Visao>(visaoDaUrlValida);
+  useEffect(() => setVisaoLocal(visaoDaUrlValida), [visaoDaUrlValida]);
+  function setVisao(v: Visao) {
+    setVisaoLocal(v);
+    const params = new URLSearchParams(window.location.search);
+    if (v === visoesPermitidas[0]) params.delete("visao");
+    else params.set("visao", v);
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }
   // Multi-seleção (pedido do Diretor, 2026-08-27: "tire da forma de filtro
   // único, coloque de forma que eu possa selecionar vários") — vazio = sem
   // filtro (mostra tudo), cada Set guarda os valores marcados.
