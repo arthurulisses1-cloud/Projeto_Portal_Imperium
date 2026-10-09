@@ -45,4 +45,8 @@ create policy entrevistas_leads_update_repasse on entrevistas_leads for update u
 -- Tarefa gerada quando a entrevista cai: só conclui se o lead for movimentado.
 alter table tasks add column if not exists exige_lead_movido boolean not null default false;
 
+-- Meta de subidos no compromisso do dia (closers). O realizado é calculado ao
+-- vivo a partir dos subidos registrados em Meus Leads.
+alter table compromissos add column if not exists subidos_comp integer not null default 0;
+
 insert into schema_migrations (filename) values ('0090_entrevista_recusada_repasse.sql') on conflict do nothing;

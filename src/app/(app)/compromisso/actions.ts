@@ -14,6 +14,7 @@ export async function registrarCompromisso(formData: FormData) {
   const entrevistas = Number(formData.get("entrevistas_comp") ?? 0);
   const assinaturas = Number(formData.get("assinaturas_comp") ?? 0);
   const pagos = Number(formData.get("pagos_comp") ?? 0);
+  const subidos = Math.max(0, Number(formData.get("subidos_comp") ?? 0) || 0);
   const hoje = hojeBR();
 
   const { error } = await supabase.from("compromissos").insert({
@@ -22,6 +23,7 @@ export async function registrarCompromisso(formData: FormData) {
     entrevistas_comp: entrevistas,
     assinaturas_comp: assinaturas,
     pagos_comp: pagos,
+    subidos_comp: subidos,
     lancado: true,
     status: "andamento",
   });

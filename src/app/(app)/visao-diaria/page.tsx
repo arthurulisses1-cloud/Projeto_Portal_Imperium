@@ -18,6 +18,7 @@ import { hojeBR, paraDataUTC, ultimoDiaUtilAntes } from "@/lib/data-br";
 import { podeVerArea } from "@/lib/permissoes-analista";
 import Card from "@/components/ui/Card";
 import BarraMeta from "@/components/ui/BarraMeta";
+import { buscarSubidos, contarPorPessoa } from "@/lib/subidos";
 
 type Periodo = "hoje" | "semana" | "mes";
 
@@ -140,6 +141,17 @@ function PipelineFunil({
   );
 }
 
+// Volume de subidos — fora do funil de propósito (pedido do Diretor, 2026-10-09).
+function SubidosChip({ atual, ontem }: { atual: number; ontem?: number }) {
+  return (
+    <p className="mt-2 flex items-center gap-2 text-xs text-stone-400">
+      <span>📤 Subidos</span>
+      <span className="font-display text-base text-gold-bright">{atual}</span>
+      {ontem !== undefined && <span className="text-stone-600">ontem: {ontem}</span>}
+    </p>
+  );
+}
+
 function Crest({ url, nome, corFallback }: { url?: string; nome: string; corFallback: string }) {
   if (url) {
     // eslint-disable-next-line @next/next/no-img-element
@@ -206,6 +218,19 @@ export default async function VisaoDiariaPage({ searchParams }: { searchParams: 
     visaoMes = await buscarVisaoDiaria(supabase, inicioMes, hojeFimExclusivo);
   }
   const visaoAtual = (visaoHoje ?? visaoSemana ?? visaoMes)!;
+
+  // Subidos do período (e de ontem no modo Hoje), por pessoa — o resto é
+  // somado pela árvore Exército > Tribo > Pessoa.
+  const inicioPeriodo = periodo === "hoje" ? hoje : periodo === "semana" ? inicioSemana : inicioMes;
+  const ontemStrSubidos = periodo === "hoje" ? ultimoDiaUtilAntes(paraDataUTC(hoje)).toISOString().slice(0, 10) : null;
+  const [subidosAtualReg, subidosOntemReg] = await Promise.all([
+    buscarSubidos(supabase, inicioPeriodo, hojeFimExclusivo),
+    ontemStrSubidos ? buscarSubidos(supabase, ontemStrSubidos, somarDia(ontemStrSubidos)) : Promise.resolve([]),
+  ]);
+  const subidosAtual = contarPorPessoa(subidosAtualReg);
+  const subidosOntem = ontemStrSubidos ? contarPorPessoa(subidosOntemReg) : null;
+  const somaSubidos = (mapa: Map<string, number> | null, ids: string[]) => (mapa ? ids.reduce((s, id) => s + (mapa.get(id) ?? 0), 0) : undefined);
+  const idsDaTribo = (t: { pessoas: { id: string }[] }) => t.pessoas.map((p) => p.id);
 
   // ---------- crédito: SEMPRE mostra o mês (pedido explícito do Diretor), e
   // no modo Semana mostra também a semana, empilhada ----------
@@ -324,6 +349,12 @@ export default async function VisaoDiariaPage({ searchParams }: { searchParams: 
             metaEtapas={metaEtapasDe(metaMensalFirma)}
           />
         )}
+        {(profile.role === "diretor" || profile.role === "analista") && (
+          <SubidosChip
+            atual={Array.from(subidosAtual.values()).reduce((a, b) => a + b, 0)}
+            ontem={subidosOntem ? Array.from(subidosOntem.values()).reduce((a, b) => a + b, 0) : undefined}
+          />
+        )}
       </Card>
 
       {/* ---------- por Exército ---------- */}
@@ -354,6 +385,10 @@ export default async function VisaoDiariaPage({ searchParams }: { searchParams: 
               atual={funilDe(exercito.id)}
               ontem={ontemDe(exercito.id)}
               metaEtapas={metaEtapasDe(metaMes)}
+            />
+            <SubidosChip
+              atual={somaSubidos(subidosAtual, exercito.tribos.flatMap(idsDaTribo)) ?? 0}
+              ontem={somaSubidos(subidosOntem, exercito.tribos.flatMap(idsDaTribo))}
             />
 
             {/* ---------- por Tribo ---------- */}
@@ -391,6 +426,7 @@ export default async function VisaoDiariaPage({ searchParams }: { searchParams: 
                         ontem={ontemDe(exercito.id, tribo.id)}
                         metaEtapas={metaEtapasDe(metaMesT)}
                       />
+                      <SubidosChip atual={somaSubidos(subidosAtual, idsDaTribo(tribo)) ?? 0} ontem={somaSubidos(subidosOntem, idsDaTribo(tribo))} />
 
                       <div className="space-y-2 border-t border-imperium-line pt-3">
                         <p className="kicker">Por pessoa</p>
@@ -407,6 +443,9 @@ export default async function VisaoDiariaPage({ searchParams }: { searchParams: 
                               atual={funilDe(exercito.id, tribo.id, pessoa.id)}
                               ontem={ontemDe(exercito.id, tribo.id, pessoa.id)}
                             />
+                            {(subidosAtual.get(pessoa.id) ?? 0) > 0 && (
+                              <SubidosChip atual={subidosAtual.get(pessoa.id) ?? 0} ontem={subidosOntem?.get(pessoa.id) ?? undefined} />
+                            )}
                           </div>
                         ))}
                         {tribo.pessoas.length === 0 && <p className="text-xs text-stone-600">Sem membros nessa Tribo.</p>}

@@ -5,7 +5,8 @@ import { calcularThreshold, buscarProducaoMesParaMarcos } from "@/lib/marcos";
 import { buscarMetaComTaxas, calcularFunilMeta, buscarRealizadoDia, type EscopoTime } from "@/lib/metas";
 import { resolverIdsDoEscopo } from "@/lib/pace";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
-import { hojeBR, paraDataUTC, ehFimDeSemana, ultimoDiaUtilAntes } from "@/lib/data-br";
+import { hojeBR, amanhaBR, paraDataUTC, ehFimDeSemana, ultimoDiaUtilAntes } from "@/lib/data-br";
+import { buscarSubidos, contarPorPessoa } from "@/lib/subidos";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function moeda(v: number) {
@@ -96,11 +97,21 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
     ? await supabase
         .from("compromissos")
         .select(
-          "profile_id, lancado, falta, entrevistas_comp, entrevistas_real, assinaturas_comp, assinaturas_real, pagos_comp, pagos_real"
+          "profile_id, lancado, falta, entrevistas_comp, entrevistas_real, assinaturas_comp, assinaturas_real, pagos_comp, pagos_real, subidos_comp"
         )
         .eq("data", hoje)
         .in("profile_id", ids)
     : { data: [] };
+  // Subidos (registrados em Meus Leads) — fora do funil de propósito, só no
+  // compromisso e neste report (pedido do Diretor, 2026-10-09).
+  const idsComSubido = pessoas.filter((p) => p.role === "closer").map((p) => p.id);
+  const subidosMesRegistros = await buscarSubidos(supabase, hoje.slice(0, 7) + "-01", amanhaBR(), idsComSubido);
+  const subidosHojeQtd = subidosMesRegistros.filter((r) => r.data === hoje).length;
+  const subidosMesQtd = subidosMesRegistros.length;
+  const subidosHojePorPessoa = contarPorPessoa(subidosMesRegistros.filter((r) => r.data === hoje));
+  const souCloser = !!viewerId && idsComSubido.includes(viewerId);
+  const mostrarSubidos = idsComSubido.length > 0 && (!pessoal || souCloser);
+
   const lancouHoje = new Set((compromissosHoje ?? []).filter((c) => c.lancado).map((c) => c.profile_id));
   // Quem já foi marcado como falta hoje não "esqueceu" de lançar — não faz
   // sentido cobrar compromisso de quem tá ausente.
@@ -126,8 +137,9 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
           assinaturasReal: acc.assinaturasReal + c.assinaturas_real,
           pagosComp: acc.pagosComp + c.pagos_comp,
           pagosReal: acc.pagosReal + c.pagos_real,
+          subidosComp: acc.subidosComp + (c.subidos_comp ?? 0),
         }),
-        { entrevistasComp: 0, entrevistasReal: 0, assinaturasComp: 0, assinaturasReal: 0, pagosComp: 0, pagosReal: 0 }
+        { entrevistasComp: 0, entrevistasReal: 0, assinaturasComp: 0, assinaturasReal: 0, pagosComp: 0, pagosReal: 0, subidosComp: 0 }
       )
     : null;
 
@@ -325,7 +337,7 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
                   {mostrarCompromissoTime && (
                     <p className="mb-1.5 text-[11px] uppercase tracking-wide text-stone-500">Seu compromisso</p>
                   )}
-                  <ul className="grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
+                  <ul className={`grid gap-x-4 gap-y-1 text-sm ${souCloser ? "grid-cols-4" : "grid-cols-3"}`}>
                     {(["entrevistas", "assinaturas", "pagos"] as const).map((etapa) => (
                       <li key={etapa} className="flex items-center justify-between">
                         <span className="text-stone-400">{FUNNEL_LABELS[etapa]}</span>
@@ -334,6 +346,14 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
                         </span>
                       </li>
                     ))}
+                    {souCloser && (
+                      <li className="flex items-center justify-between">
+                        <span className="text-stone-400">Subidos</span>
+                        <span className="text-stone-200">
+                          {viewerId ? subidosHojePorPessoa.get(viewerId) ?? 0 : 0}/{(meuCompromisso as { subidos_comp?: number }).subidos_comp ?? 0}
+                        </span>
+                      </li>
+                    )}
                   </ul>
                 </div>
               ) : (
@@ -353,7 +373,7 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
                   <p className="mb-1.5 text-[11px] uppercase tracking-wide text-stone-500">
                     {escopo?.tipo === "exercito" ? "Compromisso do Exército" : "Compromisso da Tribo"}
                   </p>
-                  <ul className="grid grid-cols-3 gap-x-4 gap-y-1 text-sm">
+                  <ul className={`grid gap-x-4 gap-y-1 text-sm ${mostrarSubidos ? "grid-cols-4" : "grid-cols-3"}`}>
                     <li className="flex items-center justify-between">
                       <span className="text-stone-400">Entrevistas</span>
                       <span className="text-stone-200">
@@ -372,9 +392,31 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
                         {agregadoCompromissoTime.pagosReal}/{agregadoCompromissoTime.pagosComp}
                       </span>
                     </li>
+                    {mostrarSubidos && (
+                      <li className="flex items-center justify-between">
+                        <span className="text-stone-400">Subidos</span>
+                        <span className="text-stone-200">
+                          {subidosHojeQtd}/{agregadoCompromissoTime.subidosComp}
+                        </span>
+                      </li>
+                    )}
                   </ul>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {mostrarSubidos && (
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Subidos pro compliance</p>
+            <div className="flex gap-6 rounded border border-imperium-line bg-imperium-bg/40 p-3 text-sm">
+              <p className="text-stone-400">
+                Hoje <span className="font-display text-lg text-gold-bright">{subidosHojeQtd}</span>
+              </p>
+              <p className="text-stone-400">
+                No mês <span className="font-display text-lg text-gold-bright">{subidosMesQtd}</span>
+              </p>
             </div>
           </div>
         )}

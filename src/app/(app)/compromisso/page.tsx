@@ -6,7 +6,8 @@ import { buscarMetaIndividual, calcularFunilMeta } from "@/lib/metas";
 import { calcularStreak, cumpriuCompromisso, type StreakRow } from "@/lib/streak";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { getViewerContext } from "@/lib/preview";
-import { hojeBR, paraDataUTC } from "@/lib/data-br";
+import { hojeBR, amanhaBR, paraDataUTC } from "@/lib/data-br";
+import { buscarSubidos } from "@/lib/subidos";
 import { IconFlame, IconCheck, IconAlert } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
 
@@ -77,6 +78,14 @@ export default async function CompromissoPage() {
     .lt("data", hoje)
     .order("data", { ascending: false });
   const streak = calcularStreak(historicoStreak ?? []);
+
+  // Subidos (só closer): realizado ao vivo, a partir de Meus Leads. Fica fora
+  // do funil e do streak de propósito (pedido do Diretor, 2026-10-09).
+  const ehCloser = profile?.role === "closer";
+  const subidosMes = ehCloser ? await buscarSubidos(supabase, primeiroDiaMes, amanhaBR(), [meId]) : [];
+  const subidosPorDia = new Map<string, number>();
+  for (const r of subidosMes) subidosPorDia.set(r.data, (subidosPorDia.get(r.data) ?? 0) + 1);
+  const subidosHoje = subidosPorDia.get(hoje) ?? 0;
 
   const diasComRegistro = (historico ?? []).filter((r) => r.lancado && !r.falta);
   const diasCumpridos = diasComRegistro.filter((r) => cumpriuCompromisso(r));
@@ -305,7 +314,7 @@ export default async function CompromissoPage() {
                 quiser.
               </p>
             )}
-            <div className="grid grid-cols-3 gap-4">
+            <div className={`grid gap-4 ${ehCloser ? "grid-cols-4" : "grid-cols-3"}`}>
               <div>
                 <label className="mb-1 block text-xs text-stone-400">Entrevistas</label>
                 <input
@@ -336,6 +345,12 @@ export default async function CompromissoPage() {
                   className="input-imp"
                 />
               </div>
+              {ehCloser && (
+                <div>
+                  <label className="mb-1 block text-xs text-stone-400">Subidos</label>
+                  <input name="subidos_comp" type="number" min={0} defaultValue={0} className="input-imp" />
+                </div>
+              )}
             </div>
             <button type="submit" className="btn-gold">
               Registrar compromisso do dia
@@ -348,7 +363,7 @@ export default async function CompromissoPage() {
                 {statusLabel(hojeRow, true).texto}
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-4 text-sm">
+            <div className={`grid gap-4 text-sm ${ehCloser ? "grid-cols-4" : "grid-cols-3"}`}>
               <div>
                 <p className="text-stone-500">Entrevistas</p>
                 <p className="text-stone-100">
@@ -367,6 +382,14 @@ export default async function CompromissoPage() {
                   {hojeRow.pagos_real}/{hojeRow.pagos_comp}
                 </p>
               </div>
+              {ehCloser && (
+                <div>
+                  <p className="text-stone-500">Subidos</p>
+                  <p className="text-stone-100">
+                    {subidosHoje}/{(hojeRow as { subidos_comp?: number }).subidos_comp ?? 0}
+                  </p>
+                </div>
+              )}
             </div>
             <p className="mt-4 text-xs text-stone-600">
               O &quot;realizado&quot; atualiza automaticamente quando a integração com a
@@ -472,6 +495,14 @@ export default async function CompromissoPage() {
                           {row.pagos_real}/{row.pagos_comp}
                         </span>
                       </span>
+                      {ehCloser && (
+                        <span>
+                          Subidos{" "}
+                          <span className={(subidosPorDia.get(row.data) ?? 0) >= ((row as { subidos_comp?: number }).subidos_comp ?? 0) ? "text-success-bright" : "text-stone-400"}>
+                            {subidosPorDia.get(row.data) ?? 0}/{(row as { subidos_comp?: number }).subidos_comp ?? 0}
+                          </span>
+                        </span>
+                      )}
                     </div>
                   )}
                 </li>
