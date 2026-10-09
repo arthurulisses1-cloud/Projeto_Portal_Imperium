@@ -170,6 +170,7 @@ export default function LeadsView({
   verRepasseSdr = false,
   visaoInicial,
   adminSubidos,
+  adminPerdas,
 }: {
   leads: Lead[];
   nomePorId: Map<string, string>;
@@ -184,6 +185,8 @@ export default function LeadsView({
   visaoInicial?: string;
   // Catálogo de resultados do compliance (só Diretor) — aparece dentro da visão Subidos.
   adminSubidos?: ReactNode;
+  // Catálogo de motivos de perda (só Diretor) — aparece dentro do Funil Principal.
+  adminPerdas?: ReactNode;
 }) {
   const [leadsState, setLeadsState] = useState(leads);
   const [arrastando, setArrastando] = useState<string | null>(null);
@@ -611,6 +614,7 @@ export default function LeadsView({
       </div>
       </>
       )}
+      {visao === "principal" && adminPerdas}
 
       {leadAberto && (
         <LeadModal
