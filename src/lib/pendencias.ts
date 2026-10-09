@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { avaliarProntidaoPromocao, type Rank } from "./carreira";
 import { hojeBR, ehFimDeSemana } from "@/lib/data-br";
+import { buscarCobrancasLeads } from "@/lib/leads-cobranca-db";
 
 // Contagem de pendências por aba, pra sinalizar no menu lateral que tem
 // algo a fazer (ex: compromisso do dia ainda não lançado). Sempre baseado
@@ -119,6 +120,13 @@ export async function buscarPendencias(
     if (c1) pend["/validacao"] = c1;
     if (c2) pend["/aprovacoes"] = c2;
     if (c3) pend["/contestacoes"] = c3;
+  }
+
+  // Leads que precisam de atualização de status (subidos, fechamento, leads
+  // novos em recuperação) — pedido do Diretor, 2026-10-09.
+  if (role === "closer" || role === "lider") {
+    const cobrancas = await buscarCobrancasLeads(supabase, userId, role);
+    if (cobrancas.length > 0) pend["/leads"] = cobrancas.length;
   }
 
   return pend;

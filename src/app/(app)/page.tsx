@@ -8,6 +8,7 @@ import BarraMetaToggle from "@/components/ui/BarraMetaToggle";
 import ConfrontoWidget from "@/components/ui/Confronto";
 import EnquetePoll, { type EnqueteData } from "@/components/ui/EnquetePoll";
 import CentralNotificacoes from "@/components/CentralNotificacoes";
+import LeadsCobrancaMural from "@/components/LeadsCobrancaMural";
 import TarefasMuralWidget from "@/components/TarefasMuralWidget";
 import CampanhasFeed from "@/components/CampanhasFeed";
 import { IconSwords, IconShield, IconCoin, IconHorn, IconBallot, IconMedal, IconScroll } from "@/components/ui/icons";
@@ -318,6 +319,8 @@ export default async function MuralPage({
       {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
         <TarefasMuralWidget userId={meId} />
       )}
+
+      {(meRole === "closer" || meRole === "lider") && <LeadsCobrancaMural userId={meId} role={meRole} />}
 
       {isAcademyRh && aulasCobrancaRh && <CobrancaFechamento aulas={aulasCobrancaRh} />}
 

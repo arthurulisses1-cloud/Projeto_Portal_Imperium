@@ -7,6 +7,8 @@ import { buscarOperacoes } from "./weekly";
 import { normalizarNome } from "./parse";
 import { csvUrl, SHEET_GIDS } from "./config";
 import { hojeBR, inicioMesBR } from "@/lib/data-br";
+import { rotacionarLeadsParados } from "@/lib/leads-rotacao";
+import { ETAPAS_ABERTAS } from "@/lib/leads-cobranca";
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -207,9 +209,18 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // conforme o calendário — sem essa limpeza, lead de julho ficaria
   // preso pra sempre assim que agosto virasse).
   const inicioMesLeads = inicioMesBR();
-  const entrevistasLeads = (await buscarEntrevistasLeads(entrevistasText)).filter((l) => l.data >= inicioMesLeads);
+  const todasEntrevistasLeads = await buscarEntrevistasLeads(entrevistasText);
+  const entrevistasLeads = todasEntrevistasLeads.filter((l) => l.data >= inicioMesLeads);
 
-  const { error: limpezaLeadsError } = await supabase.from("entrevistas_leads").delete().lt("data", inicioMesLeads);
+  // Desde 2026-10-09 (ciclo de recuperação de leads) lead de mês anterior
+  // que AINDA está em aberto NÃO é apagado: é justamente o lead esquecido que
+  // a rotação de 30 dias precisa resgatar. Só sai o que já acabou (assinado,
+  // pago, perdido ou queda no compliance).
+  const { error: limpezaLeadsError } = await supabase
+    .from("entrevistas_leads")
+    .delete()
+    .lt("data", inicioMesLeads)
+    .or("status_followup.in.(assinado,pago,perdido),compliance_comportamento.eq.queda");
   if (limpezaLeadsError) throw new Error("Erro limpando entrevistas_leads de meses anteriores: " + limpezaLeadsError.message);
 
   const leadRows = entrevistasLeads.map((l) => ({
@@ -317,7 +328,20 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
       assinadoPorPessoaCliente.set(chave, { valor: l.valor, data: l.data, pago: l.status === "PAGO" });
     }
   }
-  const leadsParaAssinar = entrevistasLeads
+  // Além dos leads do mês corrente, entram os de meses anteriores que ainda
+  // estão em aberto no banco (uma entrevista de setembro pode assinar em
+  // outubro) — só as chaves que existem lá, pra não varrer a planilha toda.
+  const { data: abertasAntigas } = await supabase
+    .from("entrevistas_leads")
+    .select("chave_natural")
+    .lt("data", inicioMesLeads)
+    .in("status_followup", Array.from(ETAPAS_ABERTAS));
+  const chavesAbertasAntigas = new Set((abertasAntigas ?? []).map((l) => l.chave_natural as string));
+  const candidatosAssinatura = [
+    ...entrevistasLeads,
+    ...todasEntrevistasLeads.filter((l) => chavesAbertasAntigas.has(l.chaveNatural)),
+  ];
+  const leadsParaAssinar = candidatosAssinatura
     .map((l) => {
       const chave = `${l.sdrNormalizado ?? ""}|${l.closerNormalizado ?? ""}|${normalizarNome(l.leadNome)}`;
       const match = assinadoPorPessoaCliente.get(chave);
@@ -579,6 +603,14 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     status: "ok",
     detalhe,
   });
+
+  // Rotação de leads parados (30 dias sem movimento). Falha aqui não pode
+  // derrubar a sync inteira — já gravou tudo acima.
+  try {
+    await rotacionarLeadsParados(supabase);
+  } catch (e) {
+    console.error("rotacionarLeadsParados falhou:", e);
+  }
 
   return { funilLinhasGravadas, vendasInseridas, naoEncontrados: Array.from(unmatched) };
 }

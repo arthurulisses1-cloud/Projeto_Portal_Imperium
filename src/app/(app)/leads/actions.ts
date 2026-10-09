@@ -3,6 +3,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { hojeBR } from "@/lib/data-br";
+import { DIAS_PRAZO_PENDENCIA } from "@/lib/leads-cobranca";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // RLS de entrevistas_leads (migration 0053) já restringe update ao mesmo
 // recorte de sempre (dono SDR/Closer, líder do Exército, closer da Tribo,
@@ -50,6 +52,17 @@ const ETAPAS_DE_PERDA_VALIDAS = new Set([
 // usado pra duplicar os motivos de perda de Subido em CCB Enviada/Assinado.
 const ETAPAS_QUE_PODEM_IR_PARA_REANALISE = new Set(["subido", "ccb_enviada", "assinado"]);
 
+async function registrarLog(
+  supabase: SupabaseClient,
+  leadId: string,
+  autorId: string | null,
+  tipo: string,
+  nota: string | null,
+  detalhe?: Record<string, unknown>
+) {
+  await supabase.from("lead_atualizacoes").insert({ lead_id: leadId, autor_id: autorId, tipo, nota, detalhe: detalhe ?? null });
+}
+
 export async function salvarStatusLead(formData: FormData) {
   const supabase = await createClient();
   const {
@@ -62,6 +75,8 @@ export async function salvarStatusLead(formData: FormData) {
   const observacao = String(formData.get("observacao") ?? "").trim();
   const temperaturaRaw = String(formData.get("temperatura") ?? "").trim();
   const valorCreditoRaw = String(formData.get("valor_credito") ?? "").trim();
+  const subidoData = String(formData.get("subido_data") ?? "").trim();
+  const subidoObs = String(formData.get("subido_obs") ?? "").trim();
   if (!leadId) throw new Error("Lead inválido.");
   if (!STATUS_VALIDOS.has(statusRaw)) throw new Error("Status inválido.");
 
@@ -69,32 +84,84 @@ export async function salvarStatusLead(formData: FormData) {
   const valorCredito = valorCreditoRaw ? Number(valorCreditoRaw.replace(",", ".")) : null;
   const valorCreditoValido = valorCredito !== null && Number.isFinite(valorCredito) && valorCredito > 0;
 
+  const { data: atual } = await supabase
+    .from("entrevistas_leads")
+    .select("status_followup, temperatura, valor_credito, subido_em, rot_fase, rot_responsavel_id, closer_profile_id")
+    .eq("id", leadId)
+    .maybeSingle();
+  if (!atual) throw new Error("Lead não encontrado.");
+
+  const agora = new Date().toISOString();
+  const mudouEtapa = atual.status_followup !== statusRaw;
+
   const update: Record<string, unknown> = {
     status_followup: statusRaw,
     observacao: observacao || null,
     status_por: user.id,
-    status_em: new Date().toISOString(),
+    status_em: agora,
+    // Salvar o card conta como "atualização de status" pra cobrança de 2 dias.
+    ultima_atualizacao_em: agora,
   };
   if (temperatura) update.temperatura = temperatura;
   if (valorCreditoValido) update.valor_credito = valorCredito;
 
   if (ETAPAS_QUE_EXIGEM_QUALIFICACAO.has(statusRaw)) {
-    const { data: atual } = await supabase
-      .from("entrevistas_leads")
-      .select("temperatura, valor_credito")
-      .eq("id", leadId)
-      .maybeSingle();
-    const temperaturaFinal = temperatura ?? atual?.temperatura ?? null;
-    const valorFinal = valorCreditoValido ? valorCredito : atual?.valor_credito ?? null;
+    const temperaturaFinal = temperatura ?? atual.temperatura ?? null;
+    const valorFinal = valorCreditoValido ? valorCredito : atual.valor_credito ?? null;
     if (!temperaturaFinal || !valorFinal) {
       throw new Error("Pra entrar em Fechamento (ou etapas depois), preencha o Forecast (Frio/Morno/Quente) e o Valor do Crédito.");
+    }
+  }
+
+  // Subido passa a ser registrado de verdade (pedido do Diretor, 2026-10-09):
+  // ao entrar nessa etapa pede a data em que a documentação subiu pro
+  // compliance — o resultado da análise é lançado depois, na visão "Subidos".
+  const registrandoSubido = statusRaw === "subido" && !atual.subido_em;
+  if (registrandoSubido) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(subidoData)) throw new Error("Informe a data em que o subido foi realizado.");
+    if (subidoData > hojeBR()) throw new Error("A data do subido não pode ser no futuro.");
+    const { data: padrao } = await supabase
+      .from("compliance_resultados")
+      .select("id")
+      .eq("comportamento", "aguardando")
+      .eq("ativo", true)
+      .order("ordem")
+      .limit(1)
+      .maybeSingle();
+    update.subido_em = subidoData;
+    update.subido_obs = subidoObs || null;
+    update.subido_por = user.id;
+    update.compliance_resultado_id = padrao?.id ?? null;
+    update.compliance_comportamento = "aguardando";
+    update.compliance_atualizado_em = agora;
+    update.compliance_atualizado_por = user.id;
+  }
+
+  if (mudouEtapa) {
+    // Troca de etapa é "movimento" de verdade: zera o relógio de 30 dias da
+    // rotação e, se o lead estava com outro closer pra recuperação, ele
+    // volta a ser um lead ativo normal (quem avançou fica com ele).
+    update.ultimo_movimento_em = agora;
+    if (atual.rot_fase) {
+      update.rot_fase = null;
+      update.rot_desde = null;
+      update.rot_primeiro_toque_em = null;
+      if (atual.rot_responsavel_id && atual.rot_responsavel_id === atual.closer_profile_id) update.rot_responsavel_id = null;
     }
   }
 
   const { error } = await supabase.from("entrevistas_leads").update(update).eq("id", leadId);
   if (error) throw new Error(error.message);
 
+  if (mudouEtapa) {
+    await registrarLog(supabase, leadId, user.id, registrandoSubido ? "subido" : "etapa", observacao || subidoObs || null, {
+      de: atual.status_followup,
+      para: statusRaw,
+    });
+  }
+
   revalidatePath("/leads");
+  revalidatePath("/");
 }
 
 // Cadastrar perda — igual ao "motivo de queda" que weekly_operacoes já
@@ -124,6 +191,7 @@ export async function salvarPerdaLead(formData: FormData) {
       motivo_perda_etapa: etapaRaw,
       status_por: user.id,
       status_em: new Date().toISOString(),
+      ultimo_movimento_em: new Date().toISOString(),
     })
     .eq("id", leadId);
   if (error) throw new Error(error.message);
@@ -348,4 +416,181 @@ export async function resolverReanalise(formData: FormData) {
   revalidatePath("/leads");
   revalidatePath("/tarefas");
   revalidatePath("/");
+}
+
+// ---------- Subidos: resultado do compliance (migration 0089) ----------
+// O resultado sai de um sistema próprio da empresa, sem integração — o
+// consultor lança aqui. Os resultados possíveis são um catálogo editável
+// (compliance_resultados); o que o código entende é o "comportamento".
+
+function somarDias(data: string, dias: number): string {
+  const [y, m, d] = data.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + dias);
+  return dt.toISOString().slice(0, 10);
+}
+
+export async function atualizarComplianceLead(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const leadId = String(formData.get("lead_id") ?? "");
+  const leadNome = String(formData.get("lead_nome") ?? "").trim();
+  const resultadoId = String(formData.get("resultado_id") ?? "");
+  const obs = String(formData.get("obs") ?? "").trim();
+  const prazoRaw = String(formData.get("pendencia_prazo") ?? "").trim();
+  const reanaliseData = String(formData.get("reanalise_data") ?? "").trim();
+  if (!leadId) throw new Error("Lead inválido.");
+  if (!resultadoId) throw new Error("Escolha o resultado da análise.");
+
+  const { data: resultado } = await supabase
+    .from("compliance_resultados")
+    .select("id, nome, comportamento")
+    .eq("id", resultadoId)
+    .maybeSingle();
+  if (!resultado) throw new Error("Resultado inválido.");
+
+  const { data: atual } = await supabase.from("entrevistas_leads").select("status_followup, em_reanalise").eq("id", leadId).maybeSingle();
+  if (!atual) throw new Error("Lead não encontrado.");
+  if (resultado.comportamento === "reanalise" && !atual.em_reanalise && !reanaliseData) {
+    throw new Error("Informe a data que o Jurídico deu pra reanálise.");
+  }
+
+  const agora = new Date().toISOString();
+  const update: Record<string, unknown> = {
+    compliance_resultado_id: resultado.id,
+    compliance_comportamento: resultado.comportamento,
+    compliance_obs: obs || null,
+    compliance_atualizado_em: agora,
+    compliance_atualizado_por: user.id,
+    ultima_atualizacao_em: agora,
+    ultimo_movimento_em: agora,
+    pendencia_prazo: null,
+  };
+  if (resultado.comportamento === "pendencia") {
+    update.pendencia_prazo = /^\d{4}-\d{2}-\d{2}$/.test(prazoRaw) ? prazoRaw : somarDias(hojeBR(), DIAS_PRAZO_PENDENCIA);
+  }
+  if (resultado.comportamento === "queda") {
+    // Queda no compliance é saída do funil: vira Perdido, de onde caiu.
+    update.status_followup = "perdido";
+    update.motivo_perda_etapa = "subido";
+    update.motivo_perda_obs = obs ? `Queda no compliance: ${obs}` : "Queda no compliance";
+    update.status_por = user.id;
+    update.status_em = agora;
+  }
+
+  const { error } = await supabase.from("entrevistas_leads").update(update).eq("id", leadId);
+  if (error) throw new Error(error.message);
+
+  await registrarLog(supabase, leadId, user.id, "compliance", obs || null, {
+    resultado: resultado.nome,
+    comportamento: resultado.comportamento,
+  });
+
+  if (resultado.comportamento === "reanalise" && !atual.em_reanalise) {
+    const fd = new FormData();
+    fd.set("lead_id", leadId);
+    fd.set("lead_nome", leadNome);
+    fd.set("reanalise_data", reanaliseData);
+    await enviarParaReanalise(fd);
+  }
+
+  revalidatePath("/leads");
+  revalidatePath("/");
+}
+
+// "Sem novidade" / anotação rápida: zera a cobrança de 2 dias sem mexer em
+// etapa nem em resultado do compliance.
+export async function registrarAtualizacaoLead(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const leadId = String(formData.get("lead_id") ?? "");
+  const nota = String(formData.get("nota") ?? "").trim();
+  if (!leadId) throw new Error("Lead inválido.");
+
+  const { error } = await supabase.from("entrevistas_leads").update({ ultima_atualizacao_em: new Date().toISOString() }).eq("id", leadId);
+  if (error) throw new Error(error.message);
+  await registrarLog(supabase, leadId, user.id, "atualizacao", nota || "Status conferido, sem novidade");
+
+  revalidatePath("/leads");
+  revalidatePath("/");
+}
+
+// Toque de quem recebeu o lead pra recuperação: o primeiro registro é o
+// diagnóstico ("por que a venda não fechou?") e apaga a cobrança de
+// "lead novo na sua carteira". NÃO reinicia o relógio de 30 dias.
+export async function registrarToqueRecuperacao(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const leadId = String(formData.get("lead_id") ?? "");
+  const nota = String(formData.get("nota") ?? "").trim();
+  if (!leadId) throw new Error("Lead inválido.");
+  if (!nota) throw new Error("Registre o que você apurou com o lead.");
+
+  const { data: atual } = await supabase.from("entrevistas_leads").select("rot_primeiro_toque_em").eq("id", leadId).maybeSingle();
+  if (!atual) throw new Error("Lead não encontrado.");
+
+  const agora = new Date().toISOString();
+  const update: Record<string, unknown> = { ultima_atualizacao_em: agora };
+  if (!atual.rot_primeiro_toque_em) update.rot_primeiro_toque_em = agora;
+  const { error } = await supabase.from("entrevistas_leads").update(update).eq("id", leadId);
+  if (error) throw new Error(error.message);
+  await registrarLog(supabase, leadId, user.id, "diagnostico", nota);
+
+  revalidatePath("/leads");
+  revalidatePath("/");
+}
+
+// ---------- Catálogo de resultados do compliance (Diretor) ----------
+const COMPORTAMENTOS_VALIDOS = new Set(["aguardando", "pendencia", "reanalise", "queda", "aprovado"]);
+
+export async function criarResultadoCompliance(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const nome = String(formData.get("nome") ?? "").trim();
+  const comportamento = String(formData.get("comportamento") ?? "");
+  if (!nome) throw new Error("Dê um nome ao resultado.");
+  if (!COMPORTAMENTOS_VALIDOS.has(comportamento)) throw new Error("Escolha o comportamento.");
+
+  const { error } = await supabase.from("compliance_resultados").insert({ nome, comportamento, created_by: user.id, ordem: 99 });
+  if (error) throw new Error(error.message);
+  revalidatePath("/leads");
+}
+
+export async function alternarResultadoComplianceAtivo(formData: FormData) {
+  const supabase = await createClient();
+  const id = String(formData.get("id") ?? "");
+  const ativoAtual = String(formData.get("ativo") ?? "") === "true";
+  if (!id) throw new Error("Resultado inválido.");
+  const { error } = await supabase.from("compliance_resultados").update({ ativo: !ativoAtual }).eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/leads");
+}
+
+export async function editarResultadoCompliance(formData: FormData) {
+  const supabase = await createClient();
+  const id = String(formData.get("id") ?? "");
+  const nome = String(formData.get("nome") ?? "").trim();
+  const comportamento = String(formData.get("comportamento") ?? "");
+  if (!id) throw new Error("Resultado inválido.");
+  if (!nome) throw new Error("Dê um nome ao resultado.");
+  if (!COMPORTAMENTOS_VALIDOS.has(comportamento)) throw new Error("Escolha o comportamento.");
+  const { error } = await supabase.from("compliance_resultados").update({ nome, comportamento }).eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/leads");
 }

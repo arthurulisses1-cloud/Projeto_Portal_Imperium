@@ -1,11 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
-import LeadsView, { type Lead, type MotivoPerda } from "@/components/leads/LeadsView";
+import LeadsView, { type Lead, type MotivoPerda, type ComplianceResultado } from "@/components/leads/LeadsView";
+import ComplianceResultadosForm from "@/components/leads/ComplianceResultadosForm";
 import MotivosPerdaForm from "@/components/leads/MotivosPerdaForm";
 import { getViewerContext } from "@/lib/preview";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { normalizarNome } from "@/lib/sync/parse";
 import { classificarBalde, type StatusManual } from "@/lib/forecast";
-import { inicioMesBR } from "@/lib/data-br";
+import { inicioMesBR, hojeBR } from "@/lib/data-br";
+import { ETAPAS_ABERTAS } from "@/lib/leads-cobranca";
 import { podeVerArea } from "@/lib/permissoes-analista";
 
 export default async function LeadsPage() {
@@ -28,34 +30,40 @@ export default async function LeadsPage() {
   // src/lib/pendencias.ts). Melhor-esforço: não bloqueia a página se falhar.
   await supabase.from("profiles").update({ leads_visto_em: new Date().toISOString() }).eq("id", viewer.authUserId);
 
-  // Mini-CRM de fluxo de trabalho, não histórico — só mês corrente (pedido
-  // do Diretor, 2026-08-27). O sync já limpa mês anterior a cada rodada
-  // (run.ts), esse filtro aqui é defesa extra pro intervalo entre um mês
-  // virar e o próximo sync rodar.
+  // Mini-CRM de fluxo de trabalho — mês corrente MAIS qualquer lead de mês
+  // anterior que ainda esteja em aberto (pedido do Diretor, 2026-10-09: o
+  // lead esquecido é justamente o que o ciclo de recuperação precisa
+  // resgatar; o sync só apaga o que já terminou). Lead terminado
+  // (assinado/pago/perdido) de mês passado não aparece.
   const inicioMes = inicioMesBR();
+  const hoje = hojeBR();
 
   // RLS de entrevistas_leads já filtra pro recorte certo (dono, líder do
   // Exército, closer da Tribo, Diretor) — um select liso já vem certo,
   // sem precisar montar a lógica de escopo na mão como o Forecast faz
   // (lá a RLS de weekly_operacoes é aberta de propósito, ver Forecast).
-  const [{ data: leadsRaw, error }, { data: motivosRaw }] = await Promise.all([
+  const [{ data: leadsRaw, error }, { data: motivosRaw }, { data: resultadosRaw }] = await Promise.all([
     supabase
       .from("entrevistas_leads")
       .select(
-        "id, data, lead_nome, lead_telefone, sdr_profile_id, closer_profile_id, canal, origem, entrevistado, estado_civil, decisor, dores, documentacao_ciente, valores_apresentados, status_followup, observacao, motivo_perda_id, motivo_perda_obs, motivo_perda_etapa, temperatura, valor_credito, em_reanalise, reanalise_data"
+        "id, data, lead_nome, lead_telefone, sdr_profile_id, closer_profile_id, canal, origem, entrevistado, estado_civil, decisor, dores, documentacao_ciente, valores_apresentados, status_followup, observacao, motivo_perda_id, motivo_perda_obs, motivo_perda_etapa, temperatura, valor_credito, em_reanalise, reanalise_data, status_em, subido_em, subido_obs, compliance_resultado_id, compliance_comportamento, compliance_obs, compliance_atualizado_em, pendencia_prazo, ultima_atualizacao_em, ultimo_movimento_em, rot_responsavel_id, rot_fase, rot_desde, rot_primeiro_toque_em, rot_ciclos"
       )
-      .gte("data", inicioMes)
-      .order("data", { ascending: false }),
+      .or(`data.gte.${inicioMes},status_followup.in.(${Array.from(ETAPAS_ABERTAS).join(",")})`)
+      .order("data", { ascending: false })
+      .limit(3000),
     supabase.from("motivos_perda_lead").select("id, nome, ativo, etapa").order("ordem"),
+    supabase.from("compliance_resultados").select("id, nome, comportamento, ativo").order("ordem"),
   ]);
   logErroSupabase("LeadsPage: entrevistas_leads", error);
 
   const leads = (leadsRaw ?? []) as Omit<Lead, "classificacao">[];
   const motivosTodos = (motivosRaw ?? []) as MotivoPerda[];
   const motivosAtivos = motivosTodos.filter((m) => m.ativo);
+  const resultadosTodos = (resultadosRaw ?? []) as ComplianceResultado[];
+  const resultadosAtivos = resultadosTodos.filter((r) => r.ativo);
 
   const idsPessoas = Array.from(
-    new Set(leads.flatMap((l) => [l.sdr_profile_id, l.closer_profile_id]).filter((x): x is string => !!x))
+    new Set(leads.flatMap((l) => [l.sdr_profile_id, l.closer_profile_id, l.rot_responsavel_id]).filter((x): x is string => !!x))
   );
   const [{ data: pessoas }, { data: exercitosRaw }] = await Promise.all([
     idsPessoas.length > 0
@@ -126,8 +134,17 @@ export default async function LeadsPage() {
         <p className="kicker mt-1">Entrevistas recebidas este mês — acompanhe, envie proposta, faça follow-up</p>
       </div>
 
-      <LeadsView leads={leadsComClassificacao} nomePorId={nomePorId} motivosPerda={motivosAtivos} exercitoPorProfileId={exercitoPorProfileId} />
+      <LeadsView
+        leads={leadsComClassificacao}
+        nomePorId={nomePorId}
+        motivosPerda={motivosAtivos}
+        exercitoPorProfileId={exercitoPorProfileId}
+        resultadosCompliance={resultadosAtivos}
+        viewerId={viewer.effectiveId}
+        hoje={hoje}
+      />
 
+      {meRole === "diretor" && <ComplianceResultadosForm resultados={resultadosTodos} />}
       {meRole === "diretor" && <MotivosPerdaForm motivos={motivosTodos} />}
     </main>
   );

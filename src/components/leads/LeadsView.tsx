@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   salvarStatusLead,
@@ -8,10 +8,15 @@ import {
   criarLembreteDeLead,
   enviarParaReanalise,
   resolverReanalise,
+  registrarAtualizacaoLead,
 } from "@/app/(app)/leads/actions";
 import { IconCheck } from "@/components/ui/icons";
 import { BALDE_LABELS, type Balde } from "@/lib/forecast";
 import { hojeBR } from "@/lib/data-br";
+import { createClient } from "@/lib/supabase/client";
+import { cobrancaDoLead, responsavelDoLead, diasEntre, type Cobranca } from "@/lib/leads-cobranca";
+import SubidosView from "./SubidosView";
+import RecuperacaoView from "./RecuperacaoView";
 
 export type Lead = {
   id: string;
@@ -48,7 +53,24 @@ export type Lead = {
   // (mesma tela, um toggle). status_followup nunca muda por causa disso.
   em_reanalise: boolean;
   reanalise_data: string | null;
+  // Subidos + compliance + cobrança + rotação (migration 0089).
+  status_em: string | null;
+  subido_em: string | null;
+  subido_obs: string | null;
+  compliance_resultado_id: string | null;
+  compliance_comportamento: string | null;
+  compliance_obs: string | null;
+  compliance_atualizado_em: string | null;
+  pendencia_prazo: string | null;
+  ultima_atualizacao_em: string | null;
+  ultimo_movimento_em: string | null;
+  rot_responsavel_id: string | null;
+  rot_fase: string | null;
+  rot_desde: string | null;
+  rot_primeiro_toque_em: string | null;
+  rot_ciclos: number;
 };
+export type ComplianceResultado = { id: string; nome: string; comportamento: string; ativo: boolean };
 // etapa null = motivo universal, aparece em qualquer etapa (migration 0059).
 export type MotivoPerda = { id: string; nome: string; ativo: boolean; etapa: string | null };
 
@@ -125,11 +147,17 @@ export default function LeadsView({
   nomePorId,
   motivosPerda,
   exercitoPorProfileId,
+  resultadosCompliance,
+  viewerId,
+  hoje,
 }: {
   leads: Lead[];
   nomePorId: Map<string, string>;
   motivosPerda: MotivoPerda[];
   exercitoPorProfileId: Map<string, string | null>;
+  resultadosCompliance: ComplianceResultado[];
+  viewerId: string;
+  hoje: string;
 }) {
   const [leadsState, setLeadsState] = useState(leads);
   const [arrastando, setArrastando] = useState<string | null>(null);
@@ -140,7 +168,7 @@ export default function LeadsView({
   // crie outra aba, basta em Meus Leads termos a opção de ver esse segundo
   // funil") — toggle simples em vez de rota nova, reaproveita o board
   // inteiro (colunas, filtros, modal), só troca qual recorte de leads entra.
-  const [visao, setVisao] = useState<"principal" | "reanalise">("principal");
+  const [visao, setVisao] = useState<"principal" | "subidos" | "recuperacao" | "reanalise">("principal");
   // Multi-seleção (pedido do Diretor, 2026-08-27: "tire da forma de filtro
   // único, coloque de forma que eu possa selecionar vários") — vazio = sem
   // filtro (mostra tudo), cada Set guarda os valores marcados.
@@ -155,11 +183,32 @@ export default function LeadsView({
   // roda em cima disso. status_followup nunca muda por causa da reanálise,
   // então "voltar pro funil" é literalmente só trocar em_reanalise de volta.
   const leadsDaVisao = useMemo(
-    () => leadsState.filter((l) => (visao === "reanalise" ? l.em_reanalise : !l.em_reanalise)),
+    () => leadsState.filter((l) => (visao === "reanalise" ? l.em_reanalise : !l.em_reanalise && !l.rot_fase)),
     [leadsState, visao]
   );
   const totalReanalise = useMemo(() => leadsState.filter((l) => l.em_reanalise).length, [leadsState]);
-  const totalPrincipal = leadsState.length - totalReanalise;
+  const totalPrincipal = useMemo(() => leadsState.filter((l) => !l.em_reanalise && !l.rot_fase).length, [leadsState]);
+  const leadsSubidos = useMemo(
+    () => leadsState.filter((l) => l.status_followup === "subido" && !l.em_reanalise),
+    [leadsState]
+  );
+  const leadsRecuperacao = useMemo(() => leadsState.filter((l) => !!l.rot_fase && !l.em_reanalise), [leadsState]);
+
+  // Cobranças pendentes (selo vermelho nas abas) — só do que está sob
+  // responsabilidade de quem está olhando.
+  const cobrancaPorLead = useMemo(() => {
+    const mapa = new Map<string, Cobranca>();
+    for (const l of leadsState) {
+      const c = cobrancaDoLead(l, hoje);
+      if (c) mapa.set(l.id, c);
+    }
+    return mapa;
+  }, [leadsState, hoje]);
+  const minhasPendentes = (lista: Lead[]) =>
+    lista.filter((l) => cobrancaPorLead.has(l.id) && responsavelDoLead(l) === viewerId).length;
+  const pendSubidos = minhasPendentes(leadsSubidos);
+  const pendRecuperacao = minhasPendentes(leadsRecuperacao);
+  const pendPrincipal = minhasPendentes(leadsState.filter((l) => !l.rot_fase && l.status_followup !== "subido"));
 
   const exercitos = useMemo(
     () => Array.from(new Set(leadsDaVisao.map((l) => (l.closer_profile_id ? exercitoPorProfileId.get(l.closer_profile_id) : null)).filter((x): x is string => !!x))).sort(),
@@ -206,7 +255,10 @@ export default function LeadsView({
       setLeadAberto(leadId);
       return;
     }
-    if (ETAPAS_QUE_EXIGEM_QUALIFICACAO.has(novoStatus) && !(lead.temperatura && lead.valor_credito)) {
+    if (
+      (ETAPAS_QUE_EXIGEM_QUALIFICACAO.has(novoStatus) && !(lead.temperatura && lead.valor_credito)) ||
+      (novoStatus === "subido" && !lead.subido_em)
+    ) {
       // Mesma lógica: sem Forecast (temperatura) + Valor do Crédito
       // preenchidos, não move sozinho — abre o card já com a etapa alvo
       // selecionada, só falta a pessoa completar e salvar.
@@ -231,27 +283,49 @@ export default function LeadsView({
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => setVisao("principal")}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-            visao === "principal" ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-400 hover:border-gold/40"
-          }`}
-        >
-          Funil Principal ({totalPrincipal})
-        </button>
-        <button
-          type="button"
-          onClick={() => setVisao("reanalise")}
-          className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-            visao === "reanalise" ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-400 hover:border-gold/40"
-          }`}
-        >
-          ⚖️ Funil de Reanálise ({totalReanalise})
-        </button>
+      <div className="flex flex-wrap gap-2">
+        {(
+          [
+            ["principal", `Funil Principal (${totalPrincipal})`, pendPrincipal],
+            ["subidos", `📤 Subidos (${leadsSubidos.length})`, pendSubidos],
+            ["recuperacao", `🔁 Recuperação (${leadsRecuperacao.length})`, pendRecuperacao],
+            ["reanalise", `⚖️ Funil de Reanálise (${totalReanalise})`, 0],
+          ] as const
+        ).map(([valor, label, pend]) => (
+          <button
+            key={valor}
+            type="button"
+            onClick={() => setVisao(valor)}
+            className={`relative rounded-md px-3 py-1.5 text-sm font-medium transition ${
+              visao === valor ? "bg-gold text-imperium-bg" : "border border-imperium-line text-stone-400 hover:border-gold/40"
+            }`}
+          >
+            {label}
+            {pend > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-wine px-1 text-[10px] font-bold text-white">
+                {pend}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
+      {visao === "subidos" && (
+        <SubidosView
+          leads={leadsSubidos}
+          resultados={resultadosCompliance}
+          nomePorId={nomePorId}
+          hoje={hoje}
+          viewerId={viewerId}
+          onAbrirLead={setLeadAberto}
+        />
+      )}
+      {visao === "recuperacao" && (
+        <RecuperacaoView leads={leadsRecuperacao} nomePorId={nomePorId} hoje={hoje} viewerId={viewerId} onAbrirLead={setLeadAberto} />
+      )}
+
+      {(visao === "principal" || visao === "reanalise") && (
+      <>
       <div className="flex flex-wrap items-center gap-3">
         <input
           type="text"
@@ -371,7 +445,15 @@ export default function LeadsView({
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-stone-100">{l.lead_nome}</p>
+                        <p className="truncate text-stone-100">
+                          {cobrancaPorLead.has(l.id) && (
+                            <span
+                              className="mr-1.5 inline-block h-2 w-2 rounded-full bg-wine align-middle"
+                              title={cobrancaPorLead.get(l.id)!.tipo === "pendencia_vencida" ? "Pendência vencida" : "Precisa de atualização de status"}
+                            />
+                          )}
+                          {l.lead_nome}
+                        </p>
                         {/* No funil de Reanálise a tag vira a data que o
                             Jurídico deu, no lugar de temperatura/classificação
                             — é a informação que importa nessa visão. */}
@@ -409,6 +491,12 @@ export default function LeadsView({
                         {l.valor_credito != null && ` · ${formatarMoeda(l.valor_credito)}`}
                         {l.closer_profile_id && ` · ${nomePorId.get(l.closer_profile_id) ?? "—"}`}
                       </p>
+                      {l.status_followup === "subido" && l.subido_em && (
+                        <p className="truncate text-[10px] text-stone-500">
+                          subido há {diasEntre(l.subido_em, hoje)}d
+                          {l.compliance_comportamento && l.compliance_comportamento !== "aguardando" && ` · ${resultadosCompliance.find((r) => r.id === l.compliance_resultado_id)?.nome ?? l.compliance_comportamento}`}
+                        </p>
+                      )}
                       {extras && <p className="truncate text-[10px] text-stone-600">{extras}</p>}
                     </div>
                   );
@@ -418,6 +506,8 @@ export default function LeadsView({
           );
         })}
       </div>
+      </>
+      )}
 
       {leadAberto && (
         <LeadModal
@@ -425,6 +515,8 @@ export default function LeadsView({
           statusPretendido={statusPretendido}
           nomePorId={nomePorId}
           motivosPerda={motivosPerda}
+          hoje={hoje}
+          cobranca={cobrancaPorLead.get(leadAberto) ?? null}
           onFechar={() => {
             setLeadAberto(null);
             setStatusPretendido(null);
@@ -483,6 +575,8 @@ function LeadModal({
   statusPretendido,
   nomePorId,
   motivosPerda,
+  hoje,
+  cobranca,
   onFechar,
   onAtualizarLocal,
 }: {
@@ -490,6 +584,8 @@ function LeadModal({
   statusPretendido: string | null;
   nomePorId: Map<string, string>;
   motivosPerda: MotivoPerda[];
+  hoje: string;
+  cobranca: Cobranca | null;
   onFechar: () => void;
   onAtualizarLocal: (l: Lead) => void;
 }) {
@@ -519,8 +615,31 @@ function LeadModal({
   const [decisaoReanalise, setDecisaoReanalise] = useState<"resolvida" | "nova_data" | null>(null);
   const [novaDataReanalise, setNovaDataReanalise] = useState("");
 
+  // Subido (migration 0089): ao entrar nessa etapa pela primeira vez pede a
+  // data em que a documentação subiu pro compliance.
+  const [subidoData, setSubidoData] = useState(lead.subido_em ?? hoje);
+  const [subidoObs, setSubidoObs] = useState(lead.subido_obs ?? "");
+  const precisaRegistrarSubido = status === "subido" && !lead.subido_em;
+  const [historico, setHistorico] = useState<{ id: string; tipo: string; nota: string | null; criado_em: string; autor_id: string | null }[]>([]);
+  useEffect(() => {
+    let ativo = true;
+    createClient()
+      .from("lead_atualizacoes")
+      .select("id, tipo, nota, criado_em, autor_id")
+      .eq("lead_id", lead.id)
+      .order("criado_em", { ascending: false })
+      .limit(15)
+      .then(({ data }) => {
+        if (ativo) setHistorico(data ?? []);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [lead.id]);
+
   const precisaQualificar = ETAPAS_QUE_EXIGEM_QUALIFICACAO.has(status);
-  const qualificacaoIncompleta = precisaQualificar && !(temperatura && Number(valorCredito) > 0);
+  const qualificacaoIncompleta =
+    (precisaQualificar && !(temperatura && Number(valorCredito) > 0)) || (precisaRegistrarSubido && !subidoData);
 
   function salvarStatus() {
     if (status === "perdido") {
@@ -552,10 +671,18 @@ function LeadModal({
     fd.set("observacao", observacao);
     if (temperatura) fd.set("temperatura", temperatura);
     if (valorCredito) fd.set("valor_credito", valorCredito);
+    if (precisaRegistrarSubido) {
+      fd.set("subido_data", subidoData);
+      fd.set("subido_obs", subidoObs);
+    }
     startTransition(async () => {
       await salvarStatusLead(fd);
       onAtualizarLocal({
         ...lead,
+        subido_em: precisaRegistrarSubido ? subidoData : lead.subido_em,
+        subido_obs: precisaRegistrarSubido ? subidoObs || null : lead.subido_obs,
+        compliance_comportamento: precisaRegistrarSubido ? "aguardando" : lead.compliance_comportamento,
+        ultima_atualizacao_em: new Date().toISOString(),
         status_followup: status,
         observacao: observacao || null,
         temperatura: (temperatura || lead.temperatura) as Lead["temperatura"],
@@ -653,6 +780,36 @@ function LeadModal({
           {lead.documentacao_ciente && <p>Documentação ciente: {lead.documentacao_ciente}</p>}
           {lead.valores_apresentados && <p>Valores apresentados: {lead.valores_apresentados}</p>}
         </div>
+
+        {cobranca && !lead.em_reanalise && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-wine/50 bg-wine/10 px-3 py-2">
+            <p className="text-xs text-wine-bright">
+              {cobranca.tipo === "pendencia_vencida"
+                ? `Pendência do compliance vencida há ${cobranca.dias}d — resolva ou atualize o resultado.`
+                : cobranca.tipo === "recuperacao_nova"
+                  ? "Lead novo na sua carteira — registre o primeiro contato na aba Recuperação."
+                  : "Esse lead precisa de atualização de status."}
+            </p>
+            {cobranca.tipo === "atualizar_status" && (
+              <button
+                type="button"
+                disabled={isPending}
+                className="rounded border border-wine/50 px-2.5 py-1 text-[11px] text-stone-200 hover:border-wine"
+                onClick={() => {
+                  const fd = new FormData();
+                  fd.set("lead_id", lead.id);
+                  startTransition(async () => {
+                    await registrarAtualizacaoLead(fd);
+                    onAtualizarLocal({ ...lead, ultima_atualizacao_em: new Date().toISOString() });
+                    router.refresh();
+                  });
+                }}
+              >
+                Conferi, sem novidade
+              </button>
+            )}
+          </div>
+        )}
 
         {lead.em_reanalise ? (
           // Em reanálise: essa é a ÚNICA ação disponível até resolver — não
@@ -812,6 +969,28 @@ function LeadModal({
                   )}
                 </div>
               )}
+              {precisaRegistrarSubido && (
+                <div className="space-y-2 rounded-md border border-gold/30 bg-gold/5 p-2.5">
+                  <p className="text-[10px] uppercase tracking-wide text-gold-bright">Registrar subido pro compliance</p>
+                  <div>
+                    <label className="mb-1 block text-[10px] uppercase tracking-wide text-stone-500">Data em que foi subido</label>
+                    <input
+                      type="date"
+                      value={subidoData}
+                      max={hoje}
+                      onChange={(e) => setSubidoData(e.target.value)}
+                      className="input-imp w-full text-sm"
+                    />
+                  </div>
+                  <textarea
+                    value={subidoObs}
+                    onChange={(e) => setSubidoObs(e.target.value)}
+                    placeholder="O que foi enviado / já assinou junto? (opcional)"
+                    rows={2}
+                    className="input-imp w-full text-sm"
+                  />
+                </div>
+              )}
               <textarea
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
@@ -820,6 +999,24 @@ function LeadModal({
                 className="input-imp w-full text-sm"
               />
             </>
+          )}
+
+          {historico.length > 0 && (
+            <details className="rounded-md border border-imperium-line p-2.5 text-xs">
+              <summary className="cursor-pointer text-[10px] uppercase tracking-wide text-stone-500">
+                Histórico ({historico.length})
+              </summary>
+              <ul className="mt-2 space-y-1.5">
+                {historico.map((h) => (
+                  <li key={h.id} className="text-stone-400">
+                    <span className="text-stone-600">{new Date(h.criado_em).toLocaleDateString("pt-BR")}</span>{" "}
+                    <span className="uppercase text-stone-500">{h.tipo}</span>
+                    {h.autor_id && ` · ${nomePorId.get(h.autor_id) ?? ""}`}
+                    {h.nota && <span className="block text-stone-300">{h.nota}</span>}
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
 
           {ETAPAS_QUE_PODEM_IR_PARA_REANALISE.has(lead.status_followup) &&
