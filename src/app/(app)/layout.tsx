@@ -47,6 +47,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer"] },
   { type: "link", href: "/tarefas", label: "Tarefas", roles: ["sdr", "closer", "lider", "diretor", "analista"], area: "tarefas" },
   { type: "link", href: "/leads", label: "Meus Leads", roles: ["closer", "lider", "diretor", "analista"], area: "leads" },
+  { type: "link", href: "/repasse", label: "Repasse de Entrevistas", roles: ["sdr", "diretor"] },
   { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
   { type: "link", href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
   { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },

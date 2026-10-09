@@ -7,14 +7,21 @@ import { ehFimDeSemana, paraDataUTC } from "@/lib/data-br";
 // Etapas em que o closer é cobrado a atualizar o status do lead.
 export const ETAPAS_COBRADAS = new Set(["fechamento", "subido", "ccb_enviada"]);
 
-// Etapas "abertas": o lead ainda pode virar venda e portanto pode estagnar.
+// Etapas "abertas": o lead ainda pode virar venda.
 export const ETAPAS_ABERTAS = new Set([
   "validacao_entrevista",
+  "entrevista_recusada",
   "entrevista_validada",
   "fechamento",
   "subido",
   "ccb_enviada",
 ]);
+
+// Etapas que entram na rotação de 30 dias entre closers. Entrevista ainda
+// não validada NÃO entra: se o closer recusa, o lead segue o repasse de SDR
+// (leads-repasse.ts); só entrevista VALIDADA em diante segue o repasse
+// padrão de closer (pedido do Diretor, 2026-10-09).
+export const ETAPAS_ROTACAO_CLOSER = new Set(["entrevista_validada", "fechamento", "subido", "ccb_enviada"]);
 
 export const DIAS_ATE_ROTACIONAR = 30;
 export const DIAS_PRIMEIRA_COBRANCA_SUBIDO = 1; // compliance responde em ~24h
@@ -29,6 +36,7 @@ export type LeadCobravel = {
   closer_profile_id: string | null;
   rot_responsavel_id: string | null;
   rot_fase: string | null;
+  rot_etapa: string | null;
   rot_desde: string | null;
   rot_primeiro_toque_em: string | null;
   subido_em: string | null;
@@ -63,6 +71,7 @@ export function cobrancaDoLead(l: LeadCobravel, hoje: string): Cobranca | null {
   if (ehFimDeSemana(hoje)) return null;
   if (l.em_reanalise) return null; // reanálise tem o próprio lembrete (data do Jurídico)
   if (l.compliance_comportamento === "queda") return null;
+  if (l.rot_etapa === "nao_faz_sentido") return null;
   if (!ETAPAS_ABERTAS.has(l.status_followup)) return null;
 
   // Lead que acabou de chegar pra recuperação: cobra o primeiro contato de
@@ -102,13 +111,15 @@ export type LeadRotacionavel = {
   ultimo_movimento_em: string | null;
   rot_desde: string | null;
   rot_fase: string | null;
+  rot_etapa: string | null;
   rot_tentaram: string[];
 };
 
 export function deveRotacionar(l: LeadRotacionavel, hoje: string): boolean {
-  if (!ETAPAS_ABERTAS.has(l.status_followup)) return false;
+  if (!ETAPAS_ROTACAO_CLOSER.has(l.status_followup)) return false;
   if (l.em_reanalise) return false;
   if (l.compliance_comportamento === "queda") return false;
+  if (l.rot_etapa === "nao_faz_sentido") return false; // travado: nunca mais é repassado
   if (!l.closer_profile_id) return false;
 
   const refs = [l.ultimo_movimento_em ? dataBR(l.ultimo_movimento_em) : null, l.rot_desde].filter((x): x is string => !!x);

@@ -16,6 +16,7 @@ const base: LeadCobravel = {
   closer_profile_id: "c1",
   rot_responsavel_id: null,
   rot_fase: null,
+  rot_etapa: null,
   rot_desde: null,
   rot_primeiro_toque_em: null,
   subido_em: "2026-10-05",
@@ -69,6 +70,7 @@ const rot: LeadRotacionavel = {
   ultimo_movimento_em: "2026-09-01T12:00:00Z",
   rot_desde: null,
   rot_fase: null,
+  rot_etapa: null,
   rot_tentaram: [],
 };
 
@@ -81,6 +83,10 @@ describe("deveRotacionar", () => {
   it("o relógio reinicia quando a fase da rotação muda", () => {
     expect(deveRotacionar({ ...rot, rot_desde: "2026-09-25" }, "2026-10-10")).toBe(false);
     expect(deveRotacionar({ ...rot, rot_desde: "2026-09-25" }, "2026-10-25")).toBe(true);
+  });
+
+  it("lead travado em não faz sentido nunca mais rotaciona", () => {
+    expect(deveRotacionar({ ...rot, rot_etapa: "nao_faz_sentido" }, "2027-01-01")).toBe(false);
   });
 
   it("não rotaciona terminal, reanálise nem queda", () => {

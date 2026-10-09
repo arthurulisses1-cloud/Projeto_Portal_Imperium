@@ -47,6 +47,17 @@ export async function buscarPendencias(
       if (countCompromisso > 0) pend["/compromisso"] = countCompromisso;
     }
 
+    // Entrevistas recusadas que chegaram no repasse do SDR e ainda não foram
+    // trabalhadas (Base de Repasses) — pedido do Diretor, 2026-10-09.
+    if (role === "sdr") {
+      const { count: repasseCount } = await supabase
+        .from("entrevistas_leads")
+        .select("id", { count: "exact", head: true })
+        .eq("repasse_sdr_id", userId)
+        .eq("repasse_etapa", "base_repasses");
+      if (repasseCount) pend["/repasse"] = repasseCount;
+    }
+
     // Tarefas atrasadas — vale pra SDR e Closer (antes só contava pro
     // Closer, achado 2026-08-27 ao terminar o Kanban de Tarefas).
     const { count: tarefasCount } = await supabase

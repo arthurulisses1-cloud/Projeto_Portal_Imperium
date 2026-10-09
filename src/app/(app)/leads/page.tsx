@@ -46,7 +46,7 @@ export default async function LeadsPage() {
     supabase
       .from("entrevistas_leads")
       .select(
-        "id, data, lead_nome, lead_telefone, sdr_profile_id, closer_profile_id, canal, origem, entrevistado, estado_civil, decisor, dores, documentacao_ciente, valores_apresentados, status_followup, observacao, motivo_perda_id, motivo_perda_obs, motivo_perda_etapa, temperatura, valor_credito, em_reanalise, reanalise_data, status_em, subido_em, subido_obs, compliance_resultado_id, compliance_comportamento, compliance_obs, compliance_atualizado_em, pendencia_prazo, ultima_atualizacao_em, ultimo_movimento_em, rot_responsavel_id, rot_fase, rot_desde, rot_primeiro_toque_em, rot_ciclos"
+        "id, data, lead_nome, lead_telefone, sdr_profile_id, closer_profile_id, canal, origem, entrevistado, estado_civil, decisor, dores, documentacao_ciente, valores_apresentados, status_followup, observacao, motivo_perda_id, motivo_perda_obs, motivo_perda_etapa, temperatura, valor_credito, em_reanalise, reanalise_data, status_em, subido_em, subido_obs, compliance_resultado_id, compliance_comportamento, compliance_obs, compliance_atualizado_em, pendencia_prazo, ultima_atualizacao_em, ultimo_movimento_em, rot_responsavel_id, rot_fase, rot_etapa, rot_nota, rot_desde, rot_primeiro_toque_em, rot_ciclos, recusada_em, recusa_motivo, repasse_sdr_id, repasse_etapa, repasse_nota"
       )
       .or(`data.gte.${inicioMes},status_followup.in.(${Array.from(ETAPAS_ABERTAS).join(",")})`)
       .order("data", { ascending: false })
@@ -63,7 +63,7 @@ export default async function LeadsPage() {
   const resultadosAtivos = resultadosTodos.filter((r) => r.ativo);
 
   const idsPessoas = Array.from(
-    new Set(leads.flatMap((l) => [l.sdr_profile_id, l.closer_profile_id, l.rot_responsavel_id]).filter((x): x is string => !!x))
+    new Set(leads.flatMap((l) => [l.sdr_profile_id, l.closer_profile_id, l.rot_responsavel_id, l.repasse_sdr_id]).filter((x): x is string => !!x))
   );
   const [{ data: pessoas }, { data: exercitosRaw }] = await Promise.all([
     idsPessoas.length > 0

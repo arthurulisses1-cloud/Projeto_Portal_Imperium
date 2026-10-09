@@ -15,6 +15,7 @@ import { BALDE_LABELS, type Balde } from "@/lib/forecast";
 import { hojeBR } from "@/lib/data-br";
 import { createClient } from "@/lib/supabase/client";
 import { cobrancaDoLead, responsavelDoLead, diasEntre, type Cobranca } from "@/lib/leads-cobranca";
+import { ETAPAS_REPASSE, dataDoRepasse } from "@/lib/leads-repasse";
 import SubidosView from "./SubidosView";
 import RecuperacaoView from "./RecuperacaoView";
 
@@ -66,9 +67,17 @@ export type Lead = {
   ultimo_movimento_em: string | null;
   rot_responsavel_id: string | null;
   rot_fase: string | null;
+  rot_etapa: string | null;
+  rot_nota: string | null;
   rot_desde: string | null;
   rot_primeiro_toque_em: string | null;
   rot_ciclos: number;
+  // Entrevista recusada + repasse pra SDR (migration 0090).
+  recusada_em: string | null;
+  recusa_motivo: string | null;
+  repasse_sdr_id: string | null;
+  repasse_etapa: string | null;
+  repasse_nota: string | null;
 };
 export type ComplianceResultado = { id: string; nome: string; comportamento: string; ativo: boolean };
 // etapa null = motivo universal, aparece em qualquer etapa (migration 0059).
@@ -119,15 +128,20 @@ function formatarMoeda(v: number) {
 // 0058) vem depois de Assinado: o sync distingue sozinho, pela aba
 // Assinado, entre operação só assinada e já paga.
 const COLUNAS = [
-  { valor: "validacao_entrevista", label: "Validação de Entrevista", cor: "bg-warning" },
-  { valor: "entrevista_validada", label: "Entrevista Validada", cor: "bg-gold" },
-  { valor: "fechamento", label: "Fechamento", cor: "bg-purpura" },
-  { valor: "subido", label: "Subido", cor: "bg-stone-400" },
-  { valor: "ccb_enviada", label: "CCB Enviada", cor: "bg-gold-bright" },
-  { valor: "assinado", label: "Assinado", cor: "bg-success" },
-  { valor: "pago", label: "Pago", cor: "bg-success-bright" },
-  { valor: "perdido", label: "Perdido", cor: "bg-wine" },
+  { valor: "validacao_entrevista", label: "Validação de Entrevista", cor: "bg-warning", hex: "#f59e0b" },
+  { valor: "entrevista_recusada", label: "Entrevista Recusada", cor: "bg-wine", hex: "#fb7185" },
+  { valor: "entrevista_validada", label: "Entrevista Validada", cor: "bg-gold", hex: "#d4af37" },
+  { valor: "fechamento", label: "Fechamento", cor: "bg-purpura", hex: "#a78bfa" },
+  { valor: "subido", label: "Subido", cor: "bg-stone-400", hex: "#38bdf8" },
+  { valor: "ccb_enviada", label: "CCB Enviada", cor: "bg-gold-bright", hex: "#f4d77a" },
+  { valor: "assinado", label: "Assinado", cor: "bg-success", hex: "#34d399" },
+  { valor: "pago", label: "Pago", cor: "bg-success-bright", hex: "#10b981" },
+  { valor: "perdido", label: "Perdido", cor: "bg-wine", hex: "#be123c" },
 ] as const;
+
+function iniciais(nome: string) {
+  return nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+}
 
 function dbr(s: string) {
   return new Date(s + "T00:00:00").toLocaleDateString("pt-BR");
@@ -178,6 +192,7 @@ export default function LeadsView({
   const [filtroClassificacoes, setFiltroClassificacoes] = useState<Set<string>>(new Set());
   const [busca, setBusca] = useState("");
   const [, startTransition] = useTransition();
+  const [aviso, setAviso] = useState<string | null>(null);
 
   // Recorte da visão atual — o board inteiro (colunas, filtros, contagens)
   // roda em cima disso. status_followup nunca muda por causa da reanálise,
@@ -192,7 +207,7 @@ export default function LeadsView({
     () => leadsState.filter((l) => l.status_followup === "subido" && !l.em_reanalise),
     [leadsState]
   );
-  const leadsRecuperacao = useMemo(() => leadsState.filter((l) => !!l.rot_fase && !l.em_reanalise), [leadsState]);
+  const leadsRecuperacao = useMemo(() => leadsState.filter((l) => !!l.rot_etapa && !l.em_reanalise), [leadsState]);
 
   // Cobranças pendentes (selo vermelho nas abas) — só do que está sob
   // responsabilidade de quem está olhando.
@@ -207,7 +222,8 @@ export default function LeadsView({
   const minhasPendentes = (lista: Lead[]) =>
     lista.filter((l) => cobrancaPorLead.has(l.id) && responsavelDoLead(l) === viewerId).length;
   const pendSubidos = minhasPendentes(leadsSubidos);
-  const pendRecuperacao = minhasPendentes(leadsRecuperacao);
+  const pendRecuperacao = minhasPendentes(leadsRecuperacao.filter((l) => !!l.rot_fase));
+  const totalRecuperacaoAtiva = leadsRecuperacao.filter((l) => !!l.rot_fase && l.rot_etapa !== "nao_faz_sentido").length;
   const pendPrincipal = minhasPendentes(leadsState.filter((l) => !l.rot_fase && l.status_followup !== "subido"));
 
   const exercitos = useMemo(
@@ -248,6 +264,21 @@ export default function LeadsView({
   function moverStatus(leadId: string, novoStatus: string) {
     const lead = leadsState.find((l) => l.id === leadId);
     if (!lead || lead.status_followup === novoStatus) return;
+    setAviso(null);
+    if (lead.status_followup === "entrevista_recusada" && (lead.repasse_sdr_id || lead.repasse_etapa)) {
+      setAviso("Esse lead já está em repasse com um SDR — ele volta pra você quando a entrevista for recuperada.");
+      return;
+    }
+    if (novoStatus === "entrevista_recusada") {
+      if (lead.status_followup !== "validacao_entrevista") {
+        setAviso("Só dá pra recusar uma entrevista que ainda está em Validação de Entrevista.");
+        return;
+      }
+      // Poka-yoke: abre o card pra confirmar a recusa e informar o motivo.
+      setStatusPretendido(novoStatus);
+      setLeadAberto(leadId);
+      return;
+    }
     if (novoStatus === "perdido") {
       // Perda precisa de motivo — não move sozinho, abre o card pra
       // preencher o motivo em vez de silenciosamente marcar como perdido
@@ -288,7 +319,7 @@ export default function LeadsView({
           [
             ["principal", `Funil Principal (${totalPrincipal})`, pendPrincipal],
             ["subidos", `📤 Subidos (${leadsSubidos.length})`, pendSubidos],
-            ["recuperacao", `🔁 Recuperação (${leadsRecuperacao.length})`, pendRecuperacao],
+            ["recuperacao", `🔁 Repasse Closers (${totalRecuperacaoAtiva})`, pendRecuperacao],
             ["reanalise", `⚖️ Funil de Reanálise (${totalReanalise})`, 0],
           ] as const
         ).map(([valor, label, pend]) => (
@@ -383,7 +414,16 @@ export default function LeadsView({
         )}
       </div>
 
-      <div className="flex gap-4">
+      {aviso && (
+        <div className="flex items-center justify-between rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-bright">
+          <span>{aviso}</span>
+          <button type="button" onClick={() => setAviso(null)} className="text-stone-400 hover:text-stone-200">
+            ✕
+          </button>
+        </div>
+      )}
+
+      <div className="flex gap-4 overflow-x-auto pb-4">
         {COLUNAS.map((c) => {
           const itens = porColuna.get(c.valor) ?? [];
           const totalValor = itens.reduce((soma, l) => soma + (l.valor_credito ?? 0), 0);
@@ -403,30 +443,25 @@ export default function LeadsView({
                 setArrastando(null);
                 if (id) moverStatus(id, c.valor);
               }}
-              className={`flex min-w-0 flex-1 flex-col rounded-lg border bg-imperium-surface/60 transition ${
+              style={{ borderTop: `3px solid ${c.hex}` }}
+              className={`flex w-80 shrink-0 flex-col rounded-xl border bg-imperium-surface/50 transition ${
                 emDrop ? "border-gold/60 bg-gold/5" : "border-imperium-line"
               }`}
             >
-              <div className="flex items-center justify-between gap-2 border-b border-imperium-line px-3 py-2.5">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${c.cor}`} />
-                  <h2 className="truncate text-xs font-medium text-stone-200">{c.label}</h2>
-                </div>
-                <span className="shrink-0 rounded-full bg-imperium-bg/60 px-2 py-0.5 text-[11px] text-stone-500">{itens.length}</span>
+              <div className="flex items-center justify-between gap-2 px-4 pt-3">
+                <h2 className="truncate text-sm font-semibold text-stone-100">{c.label}</h2>
+                <span className="shrink-0 rounded-full bg-imperium-bg/70 px-2 py-0.5 text-xs text-stone-400">{itens.length}</span>
               </div>
-              {totalValor > 0 && (
-                <p className="border-b border-imperium-line px-3 py-1.5 text-[11px] font-medium text-gold-bright">{formatarMoeda(totalValor)}</p>
-              )}
+              <p className="px-4 pb-2 text-xs text-stone-500">{totalValor > 0 ? formatarMoeda(totalValor) : "R$ 0"}</p>
 
-              <div className="flex-1 space-y-1.5 p-2">
-                {itens.length === 0 && <p className="text-center text-xs text-stone-600">Vazio.</p>}
+              <div className="max-h-[75vh] flex-1 space-y-2.5 overflow-y-auto px-3 pb-3">
+                {itens.length === 0 && <p className="py-4 text-center text-xs text-stone-600">Vazio.</p>}
                 {itens.map((l) => {
-                  // Card compacto (pedido do Diretor, 2026-08-27: "diminui o
-                  // tamanho dos cards... visualização tá muito limitada") —
-                  // dores/entrevistado/canal só aparecem no modal de detalhe
-                  // (clicar pra abrir), aqui vira só uma linha resumida com
-                  // o resto, truncada em vez de uma lista de parágrafos.
-                  const extras = [l.lead_telefone, l.origem, l.estado_civil, l.decisor].filter(Boolean).join(" · ");
+                  const dias = diasEntre(l.data, hoje);
+                  const aberto = !["assinado", "pago", "perdido"].includes(l.status_followup);
+                  const quando = dias <= 0 ? "hoje" : dias === 1 ? "há 1 dia" : `há ${dias} dias`;
+                  const chips = [l.origem, l.canal, l.estado_civil, l.decisor].filter((x): x is string => !!x).slice(0, 4);
+                  const pend = cobrancaPorLead.get(l.id);
                   return (
                     <div
                       key={l.id}
@@ -440,64 +475,99 @@ export default function LeadsView({
                         setColunaAlvo(null);
                       }}
                       onClick={() => setLeadAberto(l.id)}
-                      className={`cursor-grab rounded-md border border-imperium-line bg-imperium-bg/70 px-2 py-1.5 text-sm shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:cursor-grabbing ${
+                      style={{ borderLeft: `4px solid ${c.hex}` }}
+                      className={`cursor-grab rounded-lg border border-imperium-line bg-imperium-bg/80 p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md active:cursor-grabbing ${
                         arrastando === l.id ? "opacity-40" : ""
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-stone-100">
-                          {cobrancaPorLead.has(l.id) && (
+                      <div className="flex items-start gap-2.5">
+                        <span
+                          className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+                          style={{ background: `${c.hex}33`, color: c.hex }}
+                        >
+                          {iniciais(l.lead_nome)}
+                          {pend && (
                             <span
-                              className="mr-1.5 inline-block h-2 w-2 rounded-full bg-wine align-middle"
-                              title={cobrancaPorLead.get(l.id)!.tipo === "pendencia_vencida" ? "Pendência vencida" : "Precisa de atualização de status"}
+                              className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-imperium-bg bg-wine"
+                              title={pend.tipo === "pendencia_vencida" ? "Pendência vencida" : "Precisa de atualização de status"}
                             />
                           )}
-                          {l.lead_nome}
-                        </p>
-                        {/* No funil de Reanálise a tag vira a data que o
-                            Jurídico deu, no lugar de temperatura/classificação
-                            — é a informação que importa nessa visão. */}
-                        {visao === "reanalise" && l.reanalise_data ? (
-                          <span
-                            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${corReanalise(l.reanalise_data)}`}
-                          >
-                            {dbr(l.reanalise_data)}
-                          </span>
-                        ) : l.status_followup === "assinado" || l.status_followup === "pago" ? (
-                          // Já deu certo (Assinado/Pago) — mostra a classificação
-                          // do Forecast em vez do Forecast (temperatura), que
-                          // deixou de fazer sentido (pedido do Diretor, 2026-08-27).
-                          l.classificacao && (
-                            <span
-                              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${BALDE_CORES[l.classificacao]}`}
-                            >
-                              {BALDE_LABELS[l.classificacao]}
-                            </span>
-                          )
-                        ) : (
-                          l.temperatura && (
-                            <span
-                              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${
-                                TEMPERATURAS.find((t) => t.valor === l.temperatura)?.cor ?? ""
-                              }`}
-                            >
-                              {TEMPERATURAS.find((t) => t.valor === l.temperatura)?.label}
-                            </span>
-                          )
-                        )}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="truncate text-sm font-medium text-stone-100">{l.lead_nome}</p>
+                            {l.valor_credito != null && <span className="shrink-0 text-xs font-medium text-gold-bright">{formatarMoeda(l.valor_credito)}</span>}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {/* No funil de Reanálise a tag vira a data que o
+                                Jurídico deu — é a informação que importa lá. */}
+                            {visao === "reanalise" && l.reanalise_data ? (
+                              <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${corReanalise(l.reanalise_data)}`}>
+                                {dbr(l.reanalise_data)}
+                              </span>
+                            ) : l.status_followup === "assinado" || l.status_followup === "pago" ? (
+                              l.classificacao && (
+                                <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${BALDE_CORES[l.classificacao]}`}>
+                                  {BALDE_LABELS[l.classificacao]}
+                                </span>
+                              )
+                            ) : (
+                              l.temperatura && (
+                                <span
+                                  className={`rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white ${
+                                    TEMPERATURAS.find((t) => t.valor === l.temperatura)?.cor ?? ""
+                                  }`}
+                                >
+                                  {TEMPERATURAS.find((t) => t.valor === l.temperatura)?.label}
+                                </span>
+                              )
+                            )}
+                            {l.rot_etapa === "recuperado" && (
+                              <span className="rounded-full bg-success/80 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white">Recuperado</span>
+                            )}
+                            {l.repasse_etapa === "entrevista_recuperada" && (
+                              <span className="rounded-full bg-success/80 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-white">
+                                Recuperada por {l.repasse_sdr_id ? (nomePorId.get(l.repasse_sdr_id) ?? "SDR").split(" ")[0] : "SDR"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <p className="truncate text-[10px] text-stone-500">
-                        {dbr(l.data)}
-                        {l.valor_credito != null && ` · ${formatarMoeda(l.valor_credito)}`}
-                        {l.closer_profile_id && ` · ${nomePorId.get(l.closer_profile_id) ?? "—"}`}
-                      </p>
+
+                      <div className="mt-2.5 space-y-1 text-xs text-stone-400">
+                        {l.lead_telefone && <p>📞 {l.lead_telefone}</p>}
+                        {l.closer_profile_id && <p>👤 {nomePorId.get(l.closer_profile_id) ?? "—"}</p>}
+                        <p className={aberto && dias >= 14 ? "text-wine-bright" : ""}>🕒 {quando}</p>
+                      </div>
+
                       {l.status_followup === "subido" && l.subido_em && (
-                        <p className="truncate text-[10px] text-stone-500">
-                          subido há {diasEntre(l.subido_em, hoje)}d
+                        <p className="mt-1.5 text-xs text-sky-300">
+                          Subido há {diasEntre(l.subido_em, hoje)}d
                           {l.compliance_comportamento && l.compliance_comportamento !== "aguardando" && ` · ${resultadosCompliance.find((r) => r.id === l.compliance_resultado_id)?.nome ?? l.compliance_comportamento}`}
                         </p>
                       )}
-                      {extras && <p className="truncate text-[10px] text-stone-600">{extras}</p>}
+                      {l.status_followup === "entrevista_recusada" && (
+                        <div className="mt-1.5 space-y-0.5 text-xs">
+                          {l.recusa_motivo && <p className="line-clamp-2 text-wine-bright">Recusa: {l.recusa_motivo}</p>}
+                          <p className="text-stone-500">
+                            {l.repasse_sdr_id
+                              ? `Em repasse com ${nomePorId.get(l.repasse_sdr_id) ?? "SDR"} · ${ETAPAS_REPASSE.find((e) => e.valor === l.repasse_etapa)?.label ?? ""}`
+                              : l.recusada_em
+                                ? `Vai pra um SDR em ${dbr(dataDoRepasse(l.recusada_em))}`
+                                : ""}
+                          </p>
+                        </div>
+                      )}
+
+                      {chips.length > 0 && (
+                        <div className="mt-2.5 flex flex-wrap gap-1 border-t border-imperium-line pt-2">
+                          {chips.map((chip) => (
+                            <span key={chip} className="rounded bg-imperium-surface px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-stone-400">
+                              {chip}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -606,6 +676,7 @@ function LeadModal({
   const [valorCredito, setValorCredito] = useState(lead.valor_credito != null ? String(lead.valor_credito) : "");
   const [isPending, startTransition] = useTransition();
   const [salvo, setSalvo] = useState(false);
+  const [erroSalvar, setErroSalvar] = useState<string | null>(null);
   const [lembreteCriado, setLembreteCriado] = useState(false);
   // Segundo funil de Reanálise (migration 0062) — enviar pede a data que o
   // Jurídico deu; resolver pergunta se liberou (volta pro funil) ou segue
@@ -620,6 +691,12 @@ function LeadModal({
   const [subidoData, setSubidoData] = useState(lead.subido_em ?? hoje);
   const [subidoObs, setSubidoObs] = useState(lead.subido_obs ?? "");
   const precisaRegistrarSubido = status === "subido" && !lead.subido_em;
+  // Entrevista Recusada (migration 0090): poka-yoke — confirmar que o lead
+  // realmente está negando + motivo. Em D+15 o lead vai pra um SDR de outro
+  // Exército tentar recuperar.
+  const registrandoRecusa = status === "entrevista_recusada" && lead.status_followup !== "entrevista_recusada";
+  const [recusaConfirmada, setRecusaConfirmada] = useState(false);
+  const [recusaMotivo, setRecusaMotivo] = useState(lead.recusa_motivo ?? "");
   const [historico, setHistorico] = useState<{ id: string; tipo: string; nota: string | null; criado_em: string; autor_id: string | null }[]>([]);
   useEffect(() => {
     let ativo = true;
@@ -639,7 +716,9 @@ function LeadModal({
 
   const precisaQualificar = ETAPAS_QUE_EXIGEM_QUALIFICACAO.has(status);
   const qualificacaoIncompleta =
-    (precisaQualificar && !(temperatura && Number(valorCredito) > 0)) || (precisaRegistrarSubido && !subidoData);
+    (precisaQualificar && !(temperatura && Number(valorCredito) > 0)) ||
+    (precisaRegistrarSubido && !subidoData) ||
+    (registrandoRecusa && !(recusaConfirmada && recusaMotivo.trim().length >= 3));
 
   function salvarStatus() {
     if (status === "perdido") {
@@ -675,10 +754,22 @@ function LeadModal({
       fd.set("subido_data", subidoData);
       fd.set("subido_obs", subidoObs);
     }
+    if (registrandoRecusa) {
+      fd.set("recusa_confirmada", String(recusaConfirmada));
+      fd.set("recusa_motivo", recusaMotivo);
+    }
+    setErroSalvar(null);
     startTransition(async () => {
-      await salvarStatusLead(fd);
+      try {
+        await salvarStatusLead(fd);
+      } catch (e) {
+        setErroSalvar(e instanceof Error ? e.message : "Erro ao salvar.");
+        return;
+      }
       onAtualizarLocal({
         ...lead,
+        recusada_em: registrandoRecusa ? hoje : lead.recusada_em,
+        recusa_motivo: registrandoRecusa ? recusaMotivo : lead.recusa_motivo,
         subido_em: precisaRegistrarSubido ? subidoData : lead.subido_em,
         subido_obs: precisaRegistrarSubido ? subidoObs || null : lead.subido_obs,
         compliance_comportamento: precisaRegistrarSubido ? "aguardando" : lead.compliance_comportamento,
@@ -969,6 +1060,25 @@ function LeadModal({
                   )}
                 </div>
               )}
+              {registrandoRecusa && (
+                <div className="space-y-2 rounded-md border border-wine/50 bg-wine/10 p-2.5">
+                  <p className="text-[10px] uppercase tracking-wide text-wine-bright">Recusar entrevista</p>
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-stone-200">
+                    <input type="checkbox" checked={recusaConfirmada} onChange={(e) => setRecusaConfirmada(e.target.checked)} className="mt-1" />
+                    <span>Confirmo: o lead realmente está negando a entrevista?</span>
+                  </label>
+                  <textarea
+                    value={recusaMotivo}
+                    onChange={(e) => setRecusaMotivo(e.target.value)}
+                    placeholder="Motivo da recusa (obrigatório)"
+                    rows={2}
+                    className="input-imp w-full text-sm"
+                  />
+                  <p className="text-[11px] text-stone-500">
+                    Em D+15 o lead é enviado pra um SDR de outro Exército tentar gerar uma nova entrevista.
+                  </p>
+                </div>
+              )}
               {precisaRegistrarSubido && (
                 <div className="space-y-2 rounded-md border border-gold/30 bg-gold/5 p-2.5">
                   <p className="text-[10px] uppercase tracking-wide text-gold-bright">Registrar subido pro compliance</p>
@@ -1048,6 +1158,7 @@ function LeadModal({
               </button>
             ))}
 
+          {erroSalvar && <p className="text-xs text-wine-bright">{erroSalvar}</p>}
           <div className="flex items-center justify-between gap-2">
             <button type="button" onClick={criarLembrete} disabled={isPending} className="text-[11px] text-stone-500 hover:text-gold-bright">
               {lembreteCriado ? "✓ Lembrete criado" : "🔔 Criar lembrete"}

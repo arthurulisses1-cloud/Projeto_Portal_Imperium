@@ -19,7 +19,7 @@ export async function buscarCobrancasLeads(supabase: SupabaseClient, userId: str
   const { data } = await supabase
     .from("entrevistas_leads")
     .select(
-      "id, lead_nome, status_followup, em_reanalise, closer_profile_id, rot_responsavel_id, rot_fase, rot_desde, rot_primeiro_toque_em, subido_em, status_em, ultima_atualizacao_em, ultimo_movimento_em, compliance_comportamento, pendencia_prazo, valor_credito"
+      "id, lead_nome, status_followup, em_reanalise, closer_profile_id, rot_responsavel_id, rot_fase, rot_etapa, rot_desde, rot_primeiro_toque_em, subido_em, status_em, ultima_atualizacao_em, ultimo_movimento_em, compliance_comportamento, pendencia_prazo, valor_credito"
     )
     .in("status_followup", Array.from(ETAPAS_ABERTAS))
     .eq("em_reanalise", false)

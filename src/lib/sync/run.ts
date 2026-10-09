@@ -8,6 +8,7 @@ import { normalizarNome } from "./parse";
 import { csvUrl, SHEET_GIDS } from "./config";
 import { hojeBR, inicioMesBR } from "@/lib/data-br";
 import { rotacionarLeadsParados } from "@/lib/leads-rotacao";
+import { atribuirRepassesDeEntrevista } from "@/lib/leads-repasse";
 import { ETAPAS_ABERTAS } from "@/lib/leads-cobranca";
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -220,7 +221,7 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     .from("entrevistas_leads")
     .delete()
     .lt("data", inicioMesLeads)
-    .or("status_followup.in.(assinado,pago,perdido),compliance_comportamento.eq.queda");
+    .or("status_followup.in.(assinado,pago,perdido),compliance_comportamento.eq.queda,repasse_etapa.eq.nao_faz_sentido,rot_etapa.eq.nao_faz_sentido");
   if (limpezaLeadsError) throw new Error("Erro limpando entrevistas_leads de meses anteriores: " + limpezaLeadsError.message);
 
   const leadRows = entrevistasLeads.map((l) => ({
@@ -610,6 +611,11 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     await rotacionarLeadsParados(supabase);
   } catch (e) {
     console.error("rotacionarLeadsParados falhou:", e);
+  }
+  try {
+    await atribuirRepassesDeEntrevista(supabase);
+  } catch (e) {
+    console.error("atribuirRepassesDeEntrevista falhou:", e);
   }
 
   return { funilLinhasGravadas, vendasInseridas, naoEncontrados: Array.from(unmatched) };

@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { hojeBR } from "@/lib/data-br";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
-import { ETAPAS_ABERTAS, deveRotacionar, escolherProximoCloser, type LeadRotacionavel } from "@/lib/leads-cobranca";
+import { ETAPAS_ROTACAO_CLOSER, deveRotacionar, escolherProximoCloser, type LeadRotacionavel } from "@/lib/leads-cobranca";
 
 type LinhaLead = LeadRotacionavel & {
   id: string;
@@ -27,9 +27,9 @@ export async function rotacionarLeadsParados(supabase: SupabaseClient): Promise<
     supabase
       .from("entrevistas_leads")
       .select(
-        "id, lead_nome, status_followup, em_reanalise, compliance_comportamento, closer_profile_id, ultimo_movimento_em, rot_desde, rot_fase, rot_tentaram, rot_responsavel_id, rot_ciclos"
+        "id, lead_nome, status_followup, em_reanalise, compliance_comportamento, closer_profile_id, ultimo_movimento_em, rot_desde, rot_fase, rot_etapa, rot_tentaram, rot_responsavel_id, rot_ciclos"
       )
-      .in("status_followup", Array.from(ETAPAS_ABERTAS))
+      .in("status_followup", Array.from(ETAPAS_ROTACAO_CLOSER))
       .eq("em_reanalise", false),
     supabase.from("profiles").select("id").eq("role", "closer").eq("ativo", true),
   ]);
@@ -58,6 +58,7 @@ export async function rotacionarLeadsParados(supabase: SupabaseClient): Promise<
       update = {
         rot_responsavel_id: l.closer_profile_id,
         rot_fase: "retorno_original",
+        rot_etapa: "base_repasses",
         rot_desde: hoje,
         rot_primeiro_toque_em: null,
       };
@@ -72,6 +73,7 @@ export async function rotacionarLeadsParados(supabase: SupabaseClient): Promise<
       update = {
         rot_responsavel_id: proximo.id,
         rot_fase: "diagnostico",
+        rot_etapa: "base_repasses",
         rot_desde: hoje,
         rot_primeiro_toque_em: null,
         rot_tentaram: proximo.zerouTentativas ? [proximo.id] : [...l.rot_tentaram, proximo.id],

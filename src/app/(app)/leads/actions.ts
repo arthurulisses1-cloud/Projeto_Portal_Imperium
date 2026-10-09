@@ -16,6 +16,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // equivalente) e não é mais usado por aqui de propósito.
 const STATUS_VALIDOS = new Set([
   "validacao_entrevista",
+  "entrevista_recusada",
   "entrevista_validada",
   "fechamento",
   "subido",
@@ -77,6 +78,8 @@ export async function salvarStatusLead(formData: FormData) {
   const valorCreditoRaw = String(formData.get("valor_credito") ?? "").trim();
   const subidoData = String(formData.get("subido_data") ?? "").trim();
   const subidoObs = String(formData.get("subido_obs") ?? "").trim();
+  const recusaConfirmada = String(formData.get("recusa_confirmada") ?? "") === "true";
+  const recusaMotivo = String(formData.get("recusa_motivo") ?? "").trim();
   if (!leadId) throw new Error("Lead inválido.");
   if (!STATUS_VALIDOS.has(statusRaw)) throw new Error("Status inválido.");
 
@@ -86,13 +89,19 @@ export async function salvarStatusLead(formData: FormData) {
 
   const { data: atual } = await supabase
     .from("entrevistas_leads")
-    .select("status_followup, temperatura, valor_credito, subido_em, rot_fase, rot_responsavel_id, closer_profile_id")
+    .select("status_followup, temperatura, valor_credito, subido_em, rot_fase, rot_responsavel_id, closer_profile_id, repasse_sdr_id, repasse_etapa")
     .eq("id", leadId)
     .maybeSingle();
   if (!atual) throw new Error("Lead não encontrado.");
 
   const agora = new Date().toISOString();
   const mudouEtapa = atual.status_followup !== statusRaw;
+
+  // Lead que já foi repassado pra um SDR fica sob o funil de Repasse: o
+  // closer não mexe até o SDR devolver (entrevista recuperada).
+  if (mudouEtapa && atual.status_followup === "entrevista_recusada" && (atual.repasse_sdr_id || atual.repasse_etapa)) {
+    throw new Error("Esse lead já está em repasse com um SDR — ele volta pra você quando a entrevista for recuperada.");
+  }
 
   const update: Record<string, unknown> = {
     status_followup: statusRaw,
@@ -137,6 +146,26 @@ export async function salvarStatusLead(formData: FormData) {
     update.compliance_atualizado_por = user.id;
   }
 
+  // Entrevista Recusada (pedido do Diretor, 2026-10-09): só sai de Validação
+  // de Entrevista, e com poka-yoke — confirmar que o lead realmente está
+  // negando + motivo obrigatório. Em D+15 o lead vai pro funil de repasse.
+  if (statusRaw === "entrevista_recusada" && mudouEtapa) {
+    if (atual.status_followup !== "validacao_entrevista") {
+      throw new Error("Só dá pra recusar uma entrevista que ainda está em Validação de Entrevista.");
+    }
+    if (!recusaConfirmada) throw new Error("Confirme que o lead realmente está negando a entrevista.");
+    if (recusaMotivo.length < 3) throw new Error("Informe o motivo da recusa.");
+    update.recusada_em = hojeBR();
+    update.recusa_motivo = recusaMotivo;
+    update.recusada_por = user.id;
+  }
+  if (mudouEtapa && atual.status_followup === "entrevista_recusada" && statusRaw !== "entrevista_recusada") {
+    // Closer voltou atrás antes do repasse: limpa a recusa.
+    update.recusada_em = null;
+    update.recusa_motivo = null;
+    update.recusada_por = null;
+  }
+
   if (mudouEtapa) {
     // Troca de etapa é "movimento" de verdade: zera o relógio de 30 dias da
     // rotação e, se o lead estava com outro closer pra recuperação, ele
@@ -144,6 +173,7 @@ export async function salvarStatusLead(formData: FormData) {
     update.ultimo_movimento_em = agora;
     if (atual.rot_fase) {
       update.rot_fase = null;
+      update.rot_etapa = "recuperado";
       update.rot_desde = null;
       update.rot_primeiro_toque_em = null;
       if (atual.rot_responsavel_id && atual.rot_responsavel_id === atual.closer_profile_id) update.rot_responsavel_id = null;
@@ -154,7 +184,7 @@ export async function salvarStatusLead(formData: FormData) {
   if (error) throw new Error(error.message);
 
   if (mudouEtapa) {
-    await registrarLog(supabase, leadId, user.id, registrandoSubido ? "subido" : "etapa", observacao || subidoObs || null, {
+    await registrarLog(supabase, leadId, user.id, registrandoSubido ? "subido" : statusRaw === "entrevista_recusada" ? "recusa" : "etapa", observacao || subidoObs || recusaMotivo || null, {
       de: atual.status_followup,
       para: statusRaw,
     });
@@ -538,12 +568,13 @@ export async function registrarToqueRecuperacao(formData: FormData) {
   if (!leadId) throw new Error("Lead inválido.");
   if (!nota) throw new Error("Registre o que você apurou com o lead.");
 
-  const { data: atual } = await supabase.from("entrevistas_leads").select("rot_primeiro_toque_em").eq("id", leadId).maybeSingle();
+  const { data: atual } = await supabase.from("entrevistas_leads").select("rot_primeiro_toque_em, rot_etapa").eq("id", leadId).maybeSingle();
   if (!atual) throw new Error("Lead não encontrado.");
 
   const agora = new Date().toISOString();
   const update: Record<string, unknown> = { ultima_atualizacao_em: agora };
   if (!atual.rot_primeiro_toque_em) update.rot_primeiro_toque_em = agora;
+  if (atual.rot_etapa === "base_repasses") update.rot_etapa = "diagnostico";
   const { error } = await supabase.from("entrevistas_leads").update(update).eq("id", leadId);
   if (error) throw new Error(error.message);
   await registrarLog(supabase, leadId, user.id, "diagnostico", nota);
@@ -593,4 +624,128 @@ export async function editarResultadoCompliance(formData: FormData) {
   const { error } = await supabase.from("compliance_resultados").update({ nome, comportamento }).eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/leads");
+}
+
+// ---------- Funil "Repasse Entrevistas" (migration 0090) ----------
+// Cada SDR só enxerga/edita o que está no nome dele (RLS repasse_sdr_id).
+const ETAPAS_REPASSE_VALIDAS = new Set(["base_repasses", "tentando_reativacao", "entrevista_recuperada", "nao_faz_sentido"]);
+
+export async function moverRepasse(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const leadId = String(formData.get("lead_id") ?? "");
+  const etapa = String(formData.get("etapa") ?? "");
+  const nota = String(formData.get("nota") ?? "").trim();
+  if (!leadId) throw new Error("Lead inválido.");
+  if (!ETAPAS_REPASSE_VALIDAS.has(etapa)) throw new Error("Etapa inválida.");
+
+  const { data: atual } = await supabase
+    .from("entrevistas_leads")
+    .select("repasse_etapa, repasse_sdr_id")
+    .eq("id", leadId)
+    .maybeSingle();
+  if (!atual || !atual.repasse_etapa) throw new Error("Esse lead não está no funil de repasse.");
+  if (atual.repasse_etapa === "nao_faz_sentido") throw new Error("Lead travado em \"Não faz sentido recuperar\" — não volta pro repasse.");
+  if (atual.repasse_etapa === "entrevista_recuperada") throw new Error("Essa entrevista já foi recuperada e voltou pro closer.");
+
+  const agora = new Date().toISOString();
+  const update: Record<string, unknown> = { repasse_etapa: etapa };
+
+  if (etapa === "nao_faz_sentido") {
+    if (nota.length < 5) throw new Error("Escreva por que não faz sentido recuperar esse lead.");
+    update.repasse_nota = nota;
+  }
+  if (etapa === "entrevista_recuperada") {
+    // Volta pro funil principal: o closer original valida a nova entrevista e
+    // segue o fluxo normal. Fica registrado quem recuperou (repasse_sdr_id).
+    update.status_followup = "validacao_entrevista";
+    update.status_por = user.id;
+    update.status_em = agora;
+    update.ultimo_movimento_em = agora;
+    update.recusada_em = null;
+  }
+
+  const { error } = await supabase.from("entrevistas_leads").update(update).eq("id", leadId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("lead_atualizacoes").insert({
+    lead_id: leadId,
+    autor_id: user.id,
+    tipo: "repasse",
+    nota: nota || null,
+    detalhe: { de: atual.repasse_etapa, para: etapa },
+  });
+
+  revalidatePath("/repasse");
+  revalidatePath("/leads");
+  revalidatePath("/");
+}
+
+// ---------- Funil "Repasse Closers" (rotação de 30 dias, migration 0090) ----------
+// Mesma estrutura do repasse de entrevistas dos SDRs: Base de Repasses →
+// Diagnóstico → Tentando Recuperar → Recuperado | Não faz sentido recuperar.
+const ETAPAS_REPASSE_CLOSER_VALIDAS = new Set(["base_repasses", "diagnostico", "tentando_recuperar", "recuperado", "nao_faz_sentido"]);
+
+export async function moverRepasseCloser(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const leadId = String(formData.get("lead_id") ?? "");
+  const etapa = String(formData.get("etapa") ?? "");
+  const nota = String(formData.get("nota") ?? "").trim();
+  if (!leadId) throw new Error("Lead inválido.");
+  if (!ETAPAS_REPASSE_CLOSER_VALIDAS.has(etapa)) throw new Error("Etapa inválida.");
+
+  const { data: atual } = await supabase
+    .from("entrevistas_leads")
+    .select("rot_etapa, rot_fase, rot_primeiro_toque_em, rot_responsavel_id, closer_profile_id")
+    .eq("id", leadId)
+    .maybeSingle();
+  if (!atual || !atual.rot_etapa) throw new Error("Esse lead não está no funil de repasse.");
+  if (atual.rot_etapa === "nao_faz_sentido") throw new Error('Lead travado em "Não faz sentido recuperar" — não volta pro repasse.');
+  if (atual.rot_etapa === "recuperado") throw new Error("Esse lead já foi recuperado e voltou pro funil principal.");
+
+  const agora = new Date().toISOString();
+  const update: Record<string, unknown> = { rot_etapa: etapa, ultima_atualizacao_em: agora };
+
+  if (etapa === "diagnostico" || etapa === "tentando_recuperar") {
+    if (!atual.rot_primeiro_toque_em) update.rot_primeiro_toque_em = agora;
+  }
+  if (etapa === "diagnostico" && nota.length < 3) {
+    throw new Error("Registre o que o lead disse sobre por que não fechou.");
+  }
+  if (etapa === "nao_faz_sentido") {
+    if (nota.length < 5) throw new Error("Escreva por que não faz sentido recuperar esse lead.");
+    update.rot_nota = nota;
+    update.rot_primeiro_toque_em = atual.rot_primeiro_toque_em ?? agora;
+  }
+  if (etapa === "recuperado") {
+    // Sai da rotação e volta pro fluxo normal; quem recuperou fica com o lead.
+    update.rot_fase = null;
+    update.rot_desde = null;
+    update.rot_primeiro_toque_em = null;
+    update.ultimo_movimento_em = agora;
+    if (atual.rot_responsavel_id && atual.rot_responsavel_id === atual.closer_profile_id) update.rot_responsavel_id = null;
+  }
+
+  const { error } = await supabase.from("entrevistas_leads").update(update).eq("id", leadId);
+  if (error) throw new Error(error.message);
+
+  await supabase.from("lead_atualizacoes").insert({
+    lead_id: leadId,
+    autor_id: user.id,
+    tipo: "diagnostico",
+    nota: nota || null,
+    detalhe: { de: atual.rot_etapa, para: etapa },
+  });
+
+  revalidatePath("/leads");
+  revalidatePath("/");
 }
