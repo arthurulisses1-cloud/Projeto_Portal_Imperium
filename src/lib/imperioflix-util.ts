@@ -29,6 +29,9 @@ export type Serie = {
   categoria: string | null;
   destaque: boolean;
   bloqueado: boolean;
+  // Só módulo: visível pro time e quais ranks liberam (vazio = todos).
+  ativo: boolean;
+  ranksLiberados: string[];
   episodios: Episodio[];
 };
 

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { carregarCatalogo } from "@/lib/imperioflix";
 import { progressoDaSerie, proximoEpisodio, urlDoEpisodio, type Episodio } from "@/lib/imperioflix-util";
 import { BarraProgresso, Destaque, Poster } from "@/components/imperioflix/ImperioflixUi";
+import { GerenciarModulo } from "@/components/imperioflix/GerenciarImperioflix";
 
 function dataBr(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("pt-BR");
@@ -41,6 +42,17 @@ export default async function SeriePage({ params }: { params: { serieId: string 
       </nav>
 
       <Destaque serie={serie} vistos={vistos} modo="serie" />
+
+      {catalogo.isDiretor && serie.tipo === "modulo" && <GerenciarModulo modulo={serie} categorias={catalogo.categorias} />}
+      {catalogo.isDiretor && serie.tipo === "trilha" && (
+        <p className="rounded-xl border border-gold/40 bg-imperium-surface/80 px-5 py-4 text-sm text-stone-300">
+          As aulas das trilhas oficiais são criadas e agendadas em{" "}
+          <Link href="/academy" className="text-gold underline">
+            Academy Geral
+          </Link>
+          . O vídeo e o resumo de cada aula você edita dentro da própria aula, aqui na Imperioflix.
+        </p>
+      )}
 
       {serie.bloqueado ? (
         <p className="rounded-xl border border-imperium-line px-6 py-12 text-center text-sm text-stone-400">

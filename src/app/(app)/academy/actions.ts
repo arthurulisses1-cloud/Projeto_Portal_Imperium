@@ -596,6 +596,90 @@ export async function excluirModuloItem(formData: FormData) {
   revalidarModulos();
 }
 
+// Versões usadas DENTRO da Imperioflix (pedido do Diretor, 2026-10-13): o
+// arquivo já foi enviado direto do navegador pro Storage (sem passar pela
+// Server Action, que na Vercel tem teto de 4.5MB) e aqui só chega a URL.
+export async function registrarModuloItem(formData: FormData) {
+  const { supabase, userId } = await exigirDiretor();
+  const moduloId = String(formData.get("modulo_id") ?? "");
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  const resumo = String(formData.get("resumo") ?? "").trim();
+  const tipo = String(formData.get("tipo") ?? "video") === "arquivo" ? "arquivo" : "video";
+  let videoUrl = String(formData.get("video_url") ?? "").trim();
+  const arquivoUrl = String(formData.get("arquivo_url") ?? "").trim();
+  if (!moduloId) throw new Error("Módulo inválido.");
+  if (!titulo) throw new Error("Dê um título à aula.");
+  if (tipo === "video") {
+    if (!videoUrl) throw new Error("Cole o link do vídeo (YouTube, Vimeo ou Loom).");
+    if (!/^https?:\/\//i.test(videoUrl)) videoUrl = "https://" + videoUrl;
+  } else if (!arquivoUrl) {
+    throw new Error("Selecione o arquivo.");
+  }
+
+  const { data: ultimo } = await supabase
+    .from("academy_modulo_itens")
+    .select("ordem")
+    .eq("modulo_id", moduloId)
+    .order("ordem", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { error } = await supabase.from("academy_modulo_itens").insert({
+    modulo_id: moduloId,
+    titulo,
+    resumo: resumo || null,
+    tipo,
+    video_url: tipo === "video" ? videoUrl : null,
+    arquivo_url: tipo === "arquivo" ? arquivoUrl : null,
+    ordem: (ultimo?.ordem ?? 0) + 1,
+    created_by: userId,
+  });
+  if (error) throw new Error(error.message);
+  revalidarModulos();
+}
+
+export async function atualizarModuloItem(formData: FormData) {
+  const { supabase } = await exigirDiretor();
+  const id = String(formData.get("id") ?? "");
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  const resumo = String(formData.get("resumo") ?? "").trim();
+  let videoUrl = String(formData.get("video_url") ?? "").trim();
+  if (!id) throw new Error("Item inválido.");
+  if (!titulo) throw new Error("Dê um título à aula.");
+
+  const payload: Record<string, unknown> = { titulo, resumo: resumo || null };
+  if (formData.has("video_url")) {
+    if (videoUrl && !/^https?:\/\//i.test(videoUrl)) videoUrl = "https://" + videoUrl;
+    payload.video_url = videoUrl || null;
+  }
+  const { error } = await supabase.from("academy_modulo_itens").update(payload).eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidarModulos();
+}
+
+// Troca a ordem do item com o vizinho (pra cima ou pra baixo) dentro do módulo.
+export async function moverModuloItem(formData: FormData) {
+  const { supabase } = await exigirDiretor();
+  const id = String(formData.get("id") ?? "");
+  const direcao = String(formData.get("direcao") ?? "");
+  if (!id || (direcao !== "cima" && direcao !== "baixo")) throw new Error("Movimento inválido.");
+
+  const { data: item } = await supabase.from("academy_modulo_itens").select("id, modulo_id, ordem").eq("id", id).maybeSingle();
+  if (!item) throw new Error("Item não encontrado.");
+  const consulta = supabase.from("academy_modulo_itens").select("id, ordem").eq("modulo_id", item.modulo_id);
+  const { data: vizinho } =
+    direcao === "cima"
+      ? await consulta.lt("ordem", item.ordem).order("ordem", { ascending: false }).limit(1).maybeSingle()
+      : await consulta.gt("ordem", item.ordem).order("ordem", { ascending: true }).limit(1).maybeSingle();
+  if (!vizinho) return;
+
+  const [a, b] = await Promise.all([
+    supabase.from("academy_modulo_itens").update({ ordem: vizinho.ordem }).eq("id", item.id),
+    supabase.from("academy_modulo_itens").update({ ordem: item.ordem }).eq("id", vizinho.id),
+  ]);
+  if (a.error || b.error) throw new Error((a.error ?? b.error)!.message);
+  revalidarModulos();
+}
+
 // "Já assisti" no Imperioflix — cada aluno marca pra si mesmo, sem gate de
 // Diretor (é progresso pessoal, não uma validação de carreira).
 export async function marcarAssistido(formData: FormData) {

@@ -9,6 +9,7 @@ import type { Comentario, ReacaoResumo } from "@/lib/social";
 import { embedUrl, progressoDaSerie, urlDoEpisodio, type Episodio, type Serie } from "@/lib/imperioflix-util";
 import { BarraProgresso } from "./ImperioflixUi";
 import MateriaisPainel, { type Recurso } from "./MateriaisPainel";
+import { EditarAula } from "./GerenciarImperioflix";
 
 type Aba = "geral" | "materiais" | "complementares" | "comentarios";
 
@@ -205,6 +206,8 @@ export default function PlayerView({
             </div>
             {erro && <p className="text-xs text-wine-bright">{erro}</p>}
           </div>
+
+          {podeGerenciar && <EditarAula key={episodio.id} episodio={episodio} ehModulo={serie.tipo === "modulo"} />}
 
           <div className="border-b border-imperium-line">
             <div className="flex gap-1" role="tablist">

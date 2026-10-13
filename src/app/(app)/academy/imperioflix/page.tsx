@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { carregarCatalogo } from "@/lib/imperioflix";
 import ImperioflixHome from "@/components/imperioflix/ImperioflixHome";
+import { NovoModulo } from "@/components/imperioflix/GerenciarImperioflix";
 import ImperioflixLogo from "../ImperioflixLogo";
 
 // Imperioflix — home no formato Netflix (pedido do Diretor, 2026-10-13):
@@ -19,6 +20,7 @@ export default async function ImperioflixPage() {
   return (
     <main className="mx-auto max-w-[1400px] space-y-8 px-4 py-8 sm:px-6">
       <ImperioflixLogo />
+      {catalogo.isDiretor && <NovoModulo categorias={catalogo.categorias} />}
       <ImperioflixHome series={catalogo.series} assistidos={Array.from(catalogo.assistidos)} categorias={catalogo.categorias} />
     </main>
   );

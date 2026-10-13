@@ -64,6 +64,8 @@ export async function carregarCatalogo(supabase: SupabaseClient, userId: string)
       categoria: null,
       destaque: false,
       bloqueado: false,
+      ativo: true,
+      ranksLiberados: [],
       episodios: (aulasPorTrilha[t.id] ?? [])
         .filter((a) => a.realizada)
         .sort((a, b) => a.ordem - b.ordem)
@@ -99,6 +101,8 @@ export async function carregarCatalogo(supabase: SupabaseClient, userId: string)
       categoria: m.categoria,
       destaque: m.destaque,
       bloqueado: !isDiretor && !moduloLiberadoPara(m, meuRank),
+      ativo: m.ativo,
+      ranksLiberados: m.ranksLiberados,
       episodios: (itensPorModulo[m.id] ?? []).map((i) => ({
         id: i.id,
         tipo: "item" as const,
