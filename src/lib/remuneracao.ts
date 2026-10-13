@@ -3,6 +3,7 @@ import { calcularRemuneracao, type Tier, type Remuneracao, type Papel } from "@/
 import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { ANALISTA_GROWTH_DESDE } from "@/lib/acessos-especiais";
+import { buscarHistoricoTribos, triboNaData } from "@/lib/tribo-historico";
 
 export type LinhaExtrato = {
   id: string;
@@ -142,24 +143,29 @@ export async function buscarRemuneracaoMes(
       const idsEnvolvidos = Array.from(
         new Set(opsDoEscopo.flatMap((o) => [o.sdr_profile_id, o.closer_profile_id]).filter((x): x is string => !!x))
       );
-      const [{ data: pessoas }, { data: exercitos }] = await Promise.all([
+      const [{ data: pessoas }, { data: exercitos }, { data: tribos }, historico] = await Promise.all([
         idsEnvolvidos.length > 0
-          ? supabase.from("profiles").select("id, tribo:tribos!profiles_tribo_id_fkey(exercito_id)").in("id", idsEnvolvidos)
+          ? supabase.from("profiles").select("id, tribo_id").in("id", idsEnvolvidos)
           : Promise.resolve({ data: [] }),
         supabase.from("exercitos").select("id, legado_id"),
+        supabase.from("tribos").select("id, exercito_id"),
+        buscarHistoricoTribos(supabase),
       ]);
       const exercitoIdPorLegadoId = new Map((exercitos ?? []).map((e) => [e.legado_id, e.id]));
-      const exercitoPorProfileId = new Map(
-        (pessoas ?? []).map((p) => [
-          p.id,
-          (p.tribo as unknown as { exercito_id: string } | null)?.exercito_id ?? exercitoIdPorLegadoId.get(p.id) ?? null,
-        ])
-      );
+      const exercitoIdPorTriboId = new Map((tribos ?? []).map((t) => [t.id, t.exercito_id as string]));
+      const triboAtualPorProfileId = new Map((pessoas ?? []).map((p) => [p.id, p.tribo_id as string | null]));
+
+      // Time pela data da operação: quem trocou de tribo mantém o que fez
+      // antes na tribo/exército antigo (histórico, 2026-10-13).
+      const exercitoDe = (profileId: string, data: string) => {
+        const tribo = triboNaData(historico, profileId, data, triboAtualPorProfileId.get(profileId) ?? null);
+        return (tribo ? exercitoIdPorTriboId.get(tribo) : null) ?? exercitoIdPorLegadoId.get(profileId) ?? null;
+      };
 
       opsDoEscopo = opsDoEscopo.filter((o) => {
         const timeDaOperacao =
-          (o.closer_profile_id && exercitoPorProfileId.get(o.closer_profile_id)) ||
-          (o.sdr_profile_id && exercitoPorProfileId.get(o.sdr_profile_id));
+          (o.closer_profile_id && exercitoDe(o.closer_profile_id, o.data)) ||
+          (o.sdr_profile_id && exercitoDe(o.sdr_profile_id, o.data));
         return timeDaOperacao === exercitoLiderado.id;
       });
     }

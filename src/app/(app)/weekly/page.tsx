@@ -6,6 +6,7 @@ import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 import { mapaMetaCreditoPorTribo } from "@/lib/metas";
 import { hojeBR } from "@/lib/data-br";
 import { podeVerArea } from "@/lib/permissoes-analista";
+import { buscarHistoricoTribos, triboNaData } from "@/lib/tribo-historico";
 
 export default async function WeeklyPage() {
   const supabase = await createClient();
@@ -169,9 +170,17 @@ export default async function WeeklyPage() {
   );
 
   const nomePorId = new Map((pessoas ?? []).map((p) => [p.id, p.full_name]));
+  // Time da operação pela tribo da pessoa NA DATA (histórico de tribo,
+  // 2026-10-13): quem trocou de equipe mantém o passado no time antigo.
+  const historicoTribos = await buscarHistoricoTribos(supabase);
+  const triboAtualPorId = new Map((pessoas ?? []).map((p) => [p.id, p.tribo_id as string | null]));
+  const timeNaData = (profileId: string, data: string): string | null => {
+    const triboId = triboNaData(historicoTribos, profileId, data, triboAtualPorId.get(profileId) ?? null);
+    return (triboId ? nomeExercitoPorTriboId.get(triboId) ?? null : null) ?? people[profileId]?.time ?? null;
+  };
   const ops: WeeklyOp[] = opRows.map((o) => {
-    const sdrTime = o.sdr_profile_id ? people[o.sdr_profile_id]?.time ?? null : null;
-    const closerTime = o.closer_profile_id ? people[o.closer_profile_id]?.time ?? null : null;
+    const sdrTime = o.sdr_profile_id ? timeNaData(o.sdr_profile_id, o.data) : null;
+    const closerTime = o.closer_profile_id ? timeNaData(o.closer_profile_id, o.data) : null;
     return {
       id: o.id,
       data: o.data,

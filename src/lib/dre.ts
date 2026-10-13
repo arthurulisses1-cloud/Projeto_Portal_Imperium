@@ -3,6 +3,7 @@ import { buscarRemuneracaoMes, buscarRemuneracaoGrowth } from "@/lib/remuneracao
 import { calcularRemuneracao, type Tier } from "@/lib/comissao";
 import { RANK_LABELS } from "@/lib/labels";
 import { PAPEL_PRINCIPAL, type Rank } from "@/lib/carreira";
+import { buscarHistoricoTribos, triboNaData } from "@/lib/tribo-historico";
 import { ANALISTA_GROWTH_ID, ANALISTA_GROWTH_DESDE, CENTURIAO_FIXO_GARANTIDO, FIXO_CHEIO_NO_MES } from "@/lib/acessos-especiais";
 
 // ATENÇÃO: este módulo é estritamente Diretor-only (RLS na migration 0037
@@ -329,11 +330,11 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const fimMes = new Date(ano, mes, 0).toISOString().slice(0, 10);
 
-  const [{ data: pessoasRaw }, { data: opsRaw }, { data: tiersRaw }, { data: growthTiersRaw }, despesas] = await Promise.all([
+  const [{ data: pessoasRaw }, { data: opsRaw }, { data: tiersRaw }, { data: growthTiersRaw }, despesas, historicoTribos, { data: tribosRaw }] = await Promise.all([
     supabase
       .from("profiles")
       .select(
-        "id, full_name, role, rank, data_admissao, data_saida, tribo:tribos!profiles_tribo_id_fkey(nome, exercito_id, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(id, nome)"
+        "id, full_name, role, rank, data_admissao, data_saida, tribo_id, tribo:tribos!profiles_tribo_id_fkey(nome, exercito_id, exercito:exercitos(nome)), exercito_liderado:exercitos!exercitos_legado_id_fkey(id, nome)"
       )
       .neq("role", "investidor")
       .order("full_name"),
@@ -345,6 +346,8 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
     supabase.from("commission_tiers").select("rank, producao_min, fixo, pct_sdr, pct_closer, pct_gestao, ordem").order("ordem"),
     supabase.from("growth_tiers").select("canal_min, fixo, pct_variavel").order("ordem"),
     buscarDespesasExtras(supabase, ano, mes),
+    buscarHistoricoTribos(supabase),
+    supabase.from("tribos").select("id, exercito_id"),
   ]);
 
   const opsBase = (opsRaw ?? []).filter((o) => o.status === "PAGO" || o.status_manual === "aguardando_pagamento");
@@ -381,6 +384,17 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
   }
   Array.from(tiersPorRank.values()).forEach((arr) => arr.sort((a, b) => a.producao_min - b.producao_min));
 
+  // Exército da pessoa NA DATA da operação (histórico de tribo, 2026-10-13):
+  // quem trocou de equipe mantém o que fez antes no exército antigo.
+  const exercitoIdPorTriboId = new Map((tribosRaw ?? []).map((t) => [t.id, t.exercito_id as string]));
+  const pessoaPorId = new Map(pessoas.map((p) => [p.id, p]));
+  const exercitoIdNaData = (profileId: string, data: string): string | null => {
+    const p = pessoaPorId.get(profileId);
+    if (!p) return null;
+    const exercitoLiderado = p.exercito_liderado as unknown as { id: string }[] | null;
+    const triboId = triboNaData(historicoTribos, profileId, data, (p.tribo_id as string | null) ?? null);
+    return (triboId ? exercitoIdPorTriboId.get(triboId) : null) ?? exercitoLiderado?.[0]?.id ?? null;
+  };
   const exercitoIdPorProfileId = new Map<string, string | null>();
   for (const p of pessoas) {
     const tribo = p.tribo as unknown as { exercito_id: string } | null;
@@ -448,8 +462,8 @@ export async function buscarFolhaForecast(supabase: SupabaseClient, ano: number,
         opsDoEscopo = meuExercitoId
           ? opsBase.filter((o) => {
               const timeDaOperacao =
-                (o.closer_profile_id && exercitoIdPorProfileId.get(o.closer_profile_id)) ||
-                (o.sdr_profile_id && exercitoIdPorProfileId.get(o.sdr_profile_id));
+                (o.closer_profile_id && exercitoIdNaData(o.closer_profile_id, o.data)) ||
+                (o.sdr_profile_id && exercitoIdNaData(o.sdr_profile_id, o.data));
               return timeDaOperacao === meuExercitoId;
             })
           : [];

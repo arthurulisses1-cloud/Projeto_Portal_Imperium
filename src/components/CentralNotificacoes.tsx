@@ -7,6 +7,8 @@ import { resolverIdsDoEscopo } from "@/lib/pace";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 import { hojeBR, amanhaBR, paraDataUTC, ehFimDeSemana, ultimoDiaUtilAntes } from "@/lib/data-br";
 import { buscarSubidos, contarPorPessoa } from "@/lib/subidos";
+import { buscarFeedbacksMes, type AlvoFeedback } from "@/lib/feedback-mes";
+import FeedbackMes, { type ItemFeedback } from "@/components/FeedbackMes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function moeda(v: number) {
@@ -76,22 +78,64 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
 
   const { data: pessoasRaw } = await supabase
     .from("profiles")
-    .select("id, full_name, role, data_admissao, tribo:tribos!profiles_tribo_id_fkey(id, exercito_id)")
+    .select("id, full_name, role, data_admissao, tribo:tribos!profiles_tribo_id_fkey(id, nome, exercito_id)")
     .in("role", ["sdr", "closer"])
     .eq("ativo", true);
 
-  const pessoas = (pessoasRaw ?? [])
-    .filter((p) => {
-      if (!escopo) return true;
-      const tribo = p.tribo as unknown as { id: string; exercito_id: string } | null;
-      if (escopo.tipo === "individual") return p.id === escopo.profileId;
-      if (escopo.tipo === "tribo") return tribo?.id === escopo.triboId;
-      return tribo?.exercito_id === escopo.exercitoId;
-    })
-    .map((p) => ({ id: p.id, full_name: p.full_name, role: p.role, data_admissao: p.data_admissao }));
+  type TriboRef = { id: string; nome: string; exercito_id: string };
+  const pessoasEscopo = (pessoasRaw ?? []).filter((p) => {
+    if (!escopo) return true;
+    const tribo = p.tribo as unknown as TriboRef | null;
+    if (escopo.tipo === "individual") return p.id === escopo.profileId;
+    if (escopo.tipo === "tribo") return tribo?.id === escopo.triboId;
+    return tribo?.exercito_id === escopo.exercitoId;
+  });
+  const pessoas = pessoasEscopo.map((p) => ({ id: p.id, full_name: p.full_name, role: p.role, data_admissao: p.data_admissao }));
   const ids = pessoas.map((p) => p.id);
 
   const hoje = hojeBR();
+
+  // "Como está no mês" — SDR vê o próprio; Closer vê cada membro da Tribo;
+  // Líder vê um por Tribo do Exército (pedido do Diretor, 2026-10-13). O
+  // Diretor (sem escopo) já tem o "Por time" abaixo.
+  let itensFeedback: ItemFeedback[] = [];
+  let tituloFeedback = "";
+  if (escopo) {
+    const alvos: AlvoFeedback[] = [];
+    const nomes = new Map<string, string>();
+    if (escopo.tipo === "exercito") {
+      const porTribo = new Map<string, { nome: string; ids: string[] }>();
+      for (const p of pessoasEscopo) {
+        const t = p.tribo as unknown as TriboRef | null;
+        if (!t) continue;
+        const atual = porTribo.get(t.id) ?? { nome: t.nome, ids: [] };
+        atual.ids.push(p.id);
+        porTribo.set(t.id, atual);
+      }
+      for (const [triboId, t] of Array.from(porTribo)) {
+        alvos.push({ chave: triboId, tipo: "time", profileIds: t.ids, papel: "sdr", triboId });
+        nomes.set(triboId, t.nome);
+      }
+      tituloFeedback = "Como cada Tribo está no mês";
+    } else {
+      for (const p of pessoasEscopo) {
+        const t = p.tribo as unknown as TriboRef | null;
+        alvos.push({ chave: p.id, tipo: "pessoa", profileIds: [p.id], papel: p.role === "closer" ? "closer" : "sdr", triboId: t?.id ?? null });
+        nomes.set(p.id, p.full_name);
+      }
+      tituloFeedback = escopo.tipo === "individual" ? "Como você está no mês" : "Como cada membro da Tribo está no mês";
+    }
+    try {
+      const feedbacks = await buscarFeedbacksMes(supabase, hoje, alvos);
+      itensFeedback = alvos.flatMap((a) => {
+        const f = feedbacks.get(a.chave);
+        return f ? [{ chave: a.chave, nome: nomes.get(a.chave) ?? "", feedback: f }] : [];
+      });
+    } catch (e) {
+      // Feedback é um extra: se falhar, a Central continua inteira.
+      console.error("CentralNotificacoes: feedback do mês falhou", e);
+    }
+  }
 
   const { data: compromissosHoje } = ids.length
     ? await supabase
@@ -306,7 +350,8 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
     pertoDeMarco.length === 0 &&
     aniversarios.length === 0 &&
     !temAlgumaMeta &&
-    !temCompromissoPraMostrar
+    !temCompromissoPraMostrar &&
+    itensFeedback.length === 0
   )
     return null;
 
@@ -328,6 +373,8 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
         </a>
       </div>
       <div className="space-y-5">
+        <FeedbackMes titulo={tituloFeedback} itens={itensFeedback} />
+
         {temCompromissoPraMostrar && (
           <div>
             <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Compromisso de hoje</p>
