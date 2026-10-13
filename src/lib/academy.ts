@@ -45,8 +45,50 @@ export type Material = {
   nome: string;
   url: string;
   enviadoPorNome: string | null;
+  enviadoPorId?: string | null;
   createdAt: string;
 };
+
+// Material complementar (link de artigo/vídeo/PDF ou arquivo) de uma aula ou
+// de um item de módulo — pedido do Diretor, 2026-10-13.
+export type Complemento = {
+  id: string;
+  titulo: string;
+  url: string;
+  tipo: "artigo" | "video" | "pdf" | "outro";
+  enviadoPorId: string | null;
+  createdAt: string;
+};
+
+export async function buscarComplementos(
+  supabase: SupabaseClient,
+  alvoTipo: "academy_aula" | "academy_modulo_item",
+  alvoId: string
+): Promise<Complemento[]> {
+  const { data } = await supabase
+    .from("academy_complementos")
+    .select("id, titulo, url, tipo, enviado_por, created_at")
+    .eq("alvo_tipo", alvoTipo)
+    .eq("alvo_id", alvoId)
+    .order("created_at", { ascending: true });
+  return (data ?? []).map((c) => ({
+    id: c.id,
+    titulo: c.titulo,
+    url: c.url,
+    tipo: c.tipo,
+    enviadoPorId: c.enviado_por ?? null,
+    createdAt: c.created_at,
+  }));
+}
+
+export async function buscarMateriaisDoItem(supabase: SupabaseClient, itemId: string): Promise<Material[]> {
+  const { data } = await supabase
+    .from("academy_materiais")
+    .select("id, nome, url, created_at, enviado_por, enviado:profiles(full_name)")
+    .eq("modulo_item_id", itemId)
+    .order("created_at", { ascending: true });
+  return (data ?? []).map(mapMaterial);
+}
 
 // "Prateleira" alternativa (Netflix) — conteúdo solto, sem agenda,
 // criado livremente pelo Diretor (2026-09-21). `ranksLiberados` vazio =
@@ -174,7 +216,7 @@ export async function buscarAulasParaMinistrar(supabase: SupabaseClient, profile
 export async function buscarMateriais(supabase: SupabaseClient, aulaId: string): Promise<Material[]> {
   const { data } = await supabase
     .from("academy_materiais")
-    .select("id, nome, url, created_at, enviado:profiles(full_name)")
+    .select("id, nome, url, created_at, enviado_por, enviado:profiles(full_name)")
     .eq("aula_id", aulaId)
     .order("created_at", { ascending: false });
   return (data ?? []).map(mapMaterial);
@@ -206,6 +248,7 @@ function mapMaterial(m: any): Material {
     nome: m.nome,
     url: m.url,
     enviadoPorNome: (m.enviado as { full_name: string } | null)?.full_name ?? null,
+    enviadoPorId: m.enviado_por ?? null,
     createdAt: m.created_at,
   };
 }

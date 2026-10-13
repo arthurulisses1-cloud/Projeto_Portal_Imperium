@@ -8,9 +8,9 @@ import ComentariosReacoes from "@/components/ui/ComentariosReacoes";
 import type { Comentario, ReacaoResumo } from "@/lib/social";
 import { embedUrl, progressoDaSerie, urlDoEpisodio, type Episodio, type Serie } from "@/lib/imperioflix-util";
 import { BarraProgresso } from "./ImperioflixUi";
+import MateriaisPainel, { type Recurso } from "./MateriaisPainel";
 
-export type MaterialAula = { id: string; nome: string; url: string; enviadoPorNome: string | null };
-type Aba = "geral" | "materiais" | "comentarios";
+type Aba = "geral" | "materiais" | "complementares" | "comentarios";
 
 function dataBr(d: string) {
   return new Date(d + "T00:00:00").toLocaleDateString("pt-BR");
@@ -22,6 +22,9 @@ export default function PlayerView({
   indice,
   vistos: vistosIniciais,
   materiais,
+  complementos,
+  recursosVistos,
+  podeGerenciar,
   comentarios,
   reacoes,
   meId,
@@ -32,7 +35,10 @@ export default function PlayerView({
   episodio: Episodio;
   indice: number;
   vistos: string[];
-  materiais: MaterialAula[];
+  materiais: Recurso[];
+  complementos: Recurso[];
+  recursosVistos: string[];
+  podeGerenciar: boolean;
   comentarios: Comentario[];
   reacoes: ReacaoResumo;
   meId: string;
@@ -49,10 +55,12 @@ export default function PlayerView({
 
   // Ao trocar de aula (mesma tela), o servidor manda os dados novos.
   useEffect(() => {
-    setVistos(new Set(vistosIniciais));
     setAba("geral");
     setErro(null);
-  }, [episodio.id, vistosIniciais]);
+  }, [episodio.id]);
+  useEffect(() => {
+    setVistos(new Set(vistosIniciais));
+  }, [vistosIniciais]);
 
   useEffect(() => {
     atualRef.current?.scrollIntoView({ block: "nearest" });
@@ -101,6 +109,7 @@ export default function PlayerView({
   const abas: { id: Aba; label: string; contagem?: number }[] = [
     { id: "geral", label: "Visão geral" },
     { id: "materiais", label: "Materiais", contagem: materiais.length },
+    { id: "complementares", label: "Materiais complementares", contagem: complementos.length },
     { id: "comentarios", label: "Comentários", contagem: comentarios.length },
   ];
 
@@ -252,31 +261,17 @@ export default function PlayerView({
               </div>
             )}
 
-            {aba === "materiais" && (
-              <div className="max-w-3xl space-y-2.5">
-                {materiais.length === 0 ? (
-                  <p className="rounded-xl border border-imperium-line px-5 py-8 text-center text-sm text-stone-500">
-                    Esta aula não tem materiais para baixar.
-                  </p>
-                ) : (
-                  materiais.map((m) => (
-                    <a
-                      key={m.id}
-                      href={m.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-3 rounded-xl border border-imperium-line bg-imperium-surface/50 px-4 py-3 transition hover:border-gold/50"
-                    >
-                      <span className="text-2xl">📎</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-stone-100">{m.nome}</span>
-                        {m.enviadoPorNome && <span className="text-xs text-stone-500">enviado por {m.enviadoPorNome}</span>}
-                      </span>
-                      <span className="shrink-0 text-xs text-gold">Abrir ↗</span>
-                    </a>
-                  ))
-                )}
-              </div>
+            {(aba === "materiais" || aba === "complementares") && (
+              <MateriaisPainel
+                key={`${episodio.id}-${aba}`}
+                modo={aba}
+                itens={aba === "materiais" ? materiais : complementos}
+                vistosIniciais={recursosVistos}
+                alvo={{ tipo: episodio.tipo, id: episodio.id }}
+                podeGerenciar={podeGerenciar}
+                meId={meId}
+                isDiretor={isDiretor}
+              />
             )}
 
             {aba === "comentarios" && (

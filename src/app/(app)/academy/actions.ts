@@ -50,7 +50,7 @@ function revalidar() {
   revalidatePath("/academy");
   revalidatePath("/academy/instrutor");
   revalidatePath("/academy/trilha");
-  revalidatePath("/academy/imperioflix");
+  revalidatePath("/academy/imperioflix", "layout");
   revalidatePath("/tarefas");
   revalidatePath("/");
 }
@@ -406,17 +406,19 @@ export async function registrarMaterial(formData: FormData) {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Não autenticado.");
 
-  const aulaId = String(formData.get("aula_id"));
+  // Material de uma aula (aula_id) ou de um item de módulo (item_id).
+  const aulaId = String(formData.get("aula_id") ?? "");
+  const itemId = String(formData.get("item_id") ?? "");
   const nome = String(formData.get("nome") ?? "").trim();
   const url = String(formData.get("url") ?? "").trim();
+  if (!aulaId && !itemId) throw new Error("Aula ou item inválido.");
   if (!nome || !url) throw new Error("Faltou nome ou URL do material.");
 
-  const { error } = await supabase.from("academy_materiais").insert({
-    aula_id: aulaId,
-    nome,
-    url,
-    enviado_por: user.id,
-  });
+  // modulo_item_id só entra quando é material de módulo — o envio de materiais
+  // de aula (instrutores) continua igual ao de antes da migration 0091.
+  const { error } = await supabase
+    .from("academy_materiais")
+    .insert(aulaId ? { aula_id: aulaId, nome, url, enviado_por: user.id } : { modulo_item_id: itemId, nome, url, enviado_por: user.id });
   if (error) throw new Error(error.message);
   revalidar();
 }
@@ -622,4 +624,47 @@ export async function marcarAssistido(formData: FormData) {
     if (error) throw new Error(error.message);
   }
   revalidatePath("/academy/imperioflix");
+}
+
+// ---------- Materiais complementares (migration 0091) ----------
+const TIPOS_COMPLEMENTO = new Set(["artigo", "video", "pdf", "outro"]);
+
+export async function criarComplemento(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+
+  const alvoTipo = String(formData.get("alvo_tipo") ?? "");
+  const alvoId = String(formData.get("alvo_id") ?? "");
+  const titulo = String(formData.get("titulo") ?? "").trim();
+  let url = String(formData.get("url") ?? "").trim();
+  const tipoRaw = String(formData.get("tipo") ?? "outro");
+  if (alvoTipo !== "academy_aula" && alvoTipo !== "academy_modulo_item") throw new Error("Alvo inválido.");
+  if (!alvoId) throw new Error("Alvo inválido.");
+  if (!titulo) throw new Error("Dê um título ao material.");
+  if (!url) throw new Error("Informe o link do material.");
+  if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+  try {
+    new URL(url);
+  } catch {
+    throw new Error("Esse link não parece válido.");
+  }
+  const tipo = TIPOS_COMPLEMENTO.has(tipoRaw) ? tipoRaw : "outro";
+
+  const { error } = await supabase
+    .from("academy_complementos")
+    .insert({ alvo_tipo: alvoTipo, alvo_id: alvoId, titulo, url, tipo, enviado_por: user.id });
+  if (error) throw new Error(error.message);
+  revalidatePath("/academy/imperioflix", "layout");
+}
+
+export async function excluirComplemento(formData: FormData) {
+  const supabase = await createClient();
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("Material inválido.");
+  const { error } = await supabase.from("academy_complementos").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/academy/imperioflix", "layout");
 }

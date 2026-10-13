@@ -10,6 +10,7 @@ export type Episodio = {
   videoUrl: string | null;
   arquivoUrl: string | null;
   instrutorNome: string | null;
+  instrutorId: string | null;
   data: string | null;
   marco: boolean;
 };
