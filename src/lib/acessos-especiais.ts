@@ -51,3 +51,12 @@ export const CENTURIAO_FIXO_GARANTIDO: Record<string, number> = {
 export const FIXO_CHEIO_NO_MES: Record<string, string[]> = {
   "b5a30ced-7309-4629-8d91-c8d1274cfc23": ["2026-09"], // Cristina Santos
 };
+
+// Dispensados de lançar o compromisso do dia (pedido do Diretor, 2026-10-13):
+// não aparecem como pendência no menu, na Central de Notificações nem nas
+// contagens de quem lançou em /compromissos e /compromisso. Continuam podendo
+// lançar se quiserem — só deixa de ser cobrado.
+export const DISPENSADOS_COMPROMISSO = new Set<string>([
+  "7357b459-96fe-4de1-bed6-6e441b46135b", // Arthur Barbosa
+  "cc480a06-434e-4000-88e4-5aa928c8d8a8", // Stefani Viana
+]);

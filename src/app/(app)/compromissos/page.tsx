@@ -6,6 +6,7 @@ import { cumpriuCompromisso, type StreakRow } from "@/lib/streak";
 import { marcarFaltaTime, desmarcarFaltaTime } from "@/app/(app)/exercito/actions";
 import { hojeBR, ehFimDeSemana, paraDataUTC } from "@/lib/data-br";
 import { podeVerArea } from "@/lib/permissoes-analista";
+import { DISPENSADOS_COMPROMISSO } from "@/lib/acessos-especiais";
 
 type Totais = {
   entrevistasComp: number;
@@ -172,7 +173,8 @@ export default async function CompromissosPage({
           }),
         totaisVazios()
       );
-      totais.total = diasUteisNoPeriodo;
+      totais.total = DISPENSADOS_COMPROMISSO.has(p.id) ? 0 : diasUteisNoPeriodo;
+      if (DISPENSADOS_COMPROMISSO.has(p.id)) totais.lancaram = 0;
       return { id: p.id, nome: p.full_name, avatarUrl: p.avatar_url, role: p.role, triboId: p.tribo_id, row: null, totais };
     }
     const row = linhasHoje.get(p.id) ?? null;
@@ -184,8 +186,8 @@ export default async function CompromissosPage({
       assinaturasReal: row?.assinaturas_real ?? 0,
       pagosComp: row?.pagos_comp ?? 0,
       pagosReal: row?.pagos_real ?? 0,
-      lancaram: row?.lancado && !row.falta ? 1 : 0,
-      total: 1,
+      lancaram: !DISPENSADOS_COMPROMISSO.has(p.id) && row?.lancado && !row.falta ? 1 : 0,
+      total: DISPENSADOS_COMPROMISSO.has(p.id) ? 0 : 1,
     };
     return { id: p.id, nome: p.full_name, avatarUrl: p.avatar_url, role: p.role, triboId: p.tribo_id, row, totais };
   });
@@ -327,7 +329,7 @@ export default async function CompromissosPage({
 
                     const cumpriu = m.row && !m.row.falta && m.row.lancado && cumpriuCompromisso(m.row);
                     const ausente = m.row?.falta;
-                    const naoLancou = !finalDeSemana && (!m.row || !m.row.lancado);
+                    const naoLancou = !finalDeSemana && !DISPENSADOS_COMPROMISSO.has(m.id) && (!m.row || !m.row.lancado);
                     const corBorda = ausente
                       ? "border-imperium-line-strong"
                       : naoLancou

@@ -1,3 +1,4 @@
+import { DISPENSADOS_COMPROMISSO } from "@/lib/acessos-especiais";
 import { createClient } from "@/lib/supabase/server";
 import { registrarCompromisso, atualizarCompromisso } from "./actions";
 import { marcarFaltaTime } from "@/app/(app)/exercito/actions";
@@ -213,7 +214,7 @@ export default async function CompromissoPage() {
           title="Compromisso da Tribo (hoje)"
           right={
             (() => {
-              const pendentes = membrosTribo.filter((m) => !m.row).length;
+              const pendentes = membrosTribo.filter((m) => !m.row && !DISPENSADOS_COMPROMISSO.has(m.id)).length;
               return pendentes > 0 ? (
                 <Badge tone="warning" variant="solid">
                   {pendentes} {pendentes === 1 ? "ainda não lançou" : "ainda não lançaram"}

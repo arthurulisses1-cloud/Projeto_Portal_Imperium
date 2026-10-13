@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { avaliarProntidaoPromocao, type Rank } from "./carreira";
 import { hojeBR, ehFimDeSemana } from "@/lib/data-br";
 import { buscarCobrancasLeads } from "@/lib/leads-cobranca-db";
+import { DISPENSADOS_COMPROMISSO } from "@/lib/acessos-especiais";
 
 // Contagem de pendências por aba, pra sinalizar no menu lateral que tem
 // algo a fazer (ex: compromisso do dia ainda não lançado). Sempre baseado
@@ -25,11 +26,11 @@ export async function buscarPendencias(
         .eq("profile_id", userId)
         .eq("data", hoje)
         .maybeSingle();
-      let countCompromisso = hojeRow?.lancado ? 0 : 1;
+      let countCompromisso = hojeRow?.lancado || DISPENSADOS_COMPROMISSO.has(userId) ? 0 : 1;
 
       if (role === "closer" && triboId) {
         const { data: sdrs } = await supabase.from("profiles").select("id").eq("tribo_id", triboId).eq("role", "sdr");
-        const idsSdrs = (sdrs ?? []).map((s) => s.id);
+        const idsSdrs = (sdrs ?? []).map((s) => s.id).filter((id) => !DISPENSADOS_COMPROMISSO.has(id));
         if (idsSdrs.length > 0) {
           const { data: rows } = await supabase
             .from("compromissos")

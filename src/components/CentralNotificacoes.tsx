@@ -7,6 +7,7 @@ import { resolverIdsDoEscopo } from "@/lib/pace";
 import { FUNNEL_STAGES, FUNNEL_LABELS, type FunilEtapa } from "@/lib/funil";
 import { hojeBR, amanhaBR, paraDataUTC, ehFimDeSemana, ultimoDiaUtilAntes } from "@/lib/data-br";
 import { buscarSubidos, contarPorPessoa } from "@/lib/subidos";
+import { DISPENSADOS_COMPROMISSO } from "@/lib/acessos-especiais";
 import { buscarFeedbacksMes, type AlvoFeedback } from "@/lib/feedback-mes";
 import FeedbackMes, { type ItemFeedback } from "@/components/FeedbackMes";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -175,7 +176,7 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
   // Diretor, 2026-09-07).
   const naoLancaram = ehFimDeSemana(hoje)
     ? []
-    : (pessoas ?? []).filter((p) => !lancouHoje.has(p.id) && !faltouHoje.has(p.id));
+    : (pessoas ?? []).filter((p) => !lancouHoje.has(p.id) && !faltouHoje.has(p.id) && !DISPENSADOS_COMPROMISSO.has(p.id));
 
   // Compromisso do dia — pedido do Diretor, 2026-09-11: SDR vê o próprio;
   // Closer vê o próprio + o da Tribo; Líder vê o do Exército inteiro. Só o
@@ -415,7 +416,7 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
                   </ul>
                 </div>
               ) : (
-                pessoal &&
+                pessoal && !DISPENSADOS_COMPROMISSO.has(viewerId ?? "") &&
                 !ehFimDeSemana(hoje) && (
                   <p className="text-sm text-stone-500">
                     Você ainda não lançou o compromisso de hoje.{" "}
