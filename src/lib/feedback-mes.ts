@@ -139,6 +139,8 @@ export type AlvoFeedback = {
   profileIds: string[];
   papel: Papel;
   triboId: string | null;
+  // Exército inteiro: a meta é a soma da meta das Tribos dele
+  triboIds?: string[];
 };
 
 const ETAPAS_FUNIL = ["tentativas", "alos", "conexoes", "entrevistas"] as const;
@@ -235,7 +237,9 @@ export async function buscarFeedbacksMes(
 
     const metaCredito =
       a.tipo === "time"
-        ? a.triboId
+        ? a.triboIds
+          ? a.triboIds.reduce((s, id) => s + (mapaTribo.get(id) ?? 0), 0)
+          : a.triboId
           ? mapaTribo.get(a.triboId) ?? null
           : null
         : fatiaPorPessoa.get(a.profileIds[0]) ?? null;

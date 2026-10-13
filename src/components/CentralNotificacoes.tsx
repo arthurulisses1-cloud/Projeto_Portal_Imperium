@@ -100,10 +100,21 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
   // Diretor (sem escopo) já tem o "Por time" abaixo.
   let itensFeedback: ItemFeedback[] = [];
   let tituloFeedback = "";
-  if (escopo) {
+  {
     const alvos: AlvoFeedback[] = [];
     const nomes = new Map<string, string>();
-    if (escopo.tipo === "exercito") {
+    if (!escopo) {
+      // Diretor: um feedback por Exército (soma das Tribos dele)
+      const { data: exercitosDir } = await supabase.from("exercitos").select("id, nome").order("nome");
+      for (const ex of exercitosDir ?? []) {
+        const doExercito = (pessoasRaw ?? []).filter((p) => (p.tribo as unknown as TriboRef | null)?.exercito_id === ex.id);
+        const triboIds = Array.from(new Set(doExercito.map((p) => (p.tribo as unknown as TriboRef).id)));
+        if (doExercito.length === 0) continue;
+        alvos.push({ chave: ex.id, tipo: "time", profileIds: doExercito.map((p) => p.id), papel: "sdr", triboId: null, triboIds });
+        nomes.set(ex.id, ex.nome);
+      }
+      tituloFeedback = "Como cada Exército está no mês";
+    } else if (escopo.tipo === "exercito") {
       const porTribo = new Map<string, { nome: string; ids: string[] }>();
       for (const p of pessoasEscopo) {
         const t = p.tribo as unknown as TriboRef | null;
