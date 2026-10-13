@@ -461,7 +461,7 @@ export async function salvarResumoAula(formData: FormData) {
 function revalidarModulos() {
   revalidatePath("/academy");
   revalidatePath("/academy/trilha");
-  revalidatePath("/academy/imperioflix");
+  revalidatePath("/academy/imperioflix", "layout");
 }
 
 // ---------- Módulos alternativos (Netflix fora da trilha oficial) ----------
