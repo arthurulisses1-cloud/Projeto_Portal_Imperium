@@ -124,9 +124,11 @@ export type ModuloItem = {
 // alternativos em prateleiras temáticas no Imperioflix — Diretor pode
 // deixar um módulo fora de todas (cai em "Outros").
 export const CATEGORIAS_MODULO: { value: string; label: string }[] = [
-  { value: "marketing", label: "Marketing" },
   { value: "vendas", label: "Vendas" },
   { value: "mentalidade", label: "Mentalidade" },
+  { value: "lideranca", label: "Liderança" },
+  { value: "livros", label: "Livros" },
+  { value: "marketing", label: "Marketing" },
   { value: "gestao", label: "Gestão" },
   { value: "podcast", label: "Podcasts" },
 ];
