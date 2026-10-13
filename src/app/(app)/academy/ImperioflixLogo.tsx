@@ -7,11 +7,11 @@ export default function ImperioflixLogo({ className = "" }: { className?: string
       <h1
         className="font-display text-4xl font-bold italic tracking-wide sm:text-5xl"
         style={{
-          background: "linear-gradient(180deg, #f0d27a 0%, #c9a227 40%, #8a1f1f 100%)",
+          background: "linear-gradient(180deg, #c9961e 0%, #a8761a 45%, #8a1f1f 100%)",
           WebkitBackgroundClip: "text",
           backgroundClip: "text",
           color: "transparent",
-          textShadow: "0 2px 12px rgba(0,0,0,0.35)",
+          textShadow: "0 2px 14px rgba(120,80,10,0.18)",
           letterSpacing: "0.02em",
         }}
       >

@@ -45,10 +45,10 @@ export default function RootLayout({
           // roda antes da hidratação pra não piscar o tema errado (padrão: Roma)
           dangerouslySetInnerHTML={{
             __html:
-              "try{var t=localStorage.getItem('imperium-theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}",
+              "try{var t=localStorage.getItem('imperium-theme');if(location.pathname.indexOf('/academy/imperioflix')===0)t='imperioflix';if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}",
           }}
         />
-        <ColosseumWatermark className="pointer-events-none fixed inset-x-0 bottom-0 -z-10 h-[42vh] w-full text-gold/[0.07]" />
+        <ColosseumWatermark className="coliseu-bg pointer-events-none fixed inset-x-0 bottom-0 -z-10 h-[42vh] w-full text-gold/[0.07]" />
         {children}
       </body>
     </html>

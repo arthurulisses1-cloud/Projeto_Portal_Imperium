@@ -8,9 +8,9 @@ function fundoDaCapa(serie: Pick<Serie, "capaUrl" | "gradiente">) {
   return serie.capaUrl ? `url("${serie.capaUrl.replace(/"/g, "%22")}") center/cover` : serie.gradiente;
 }
 
-export function BarraProgresso({ pct, className = "" }: { pct: number; className?: string }) {
+export function BarraProgresso({ pct, className = "", sobreImagem = false }: { pct: number; className?: string; sobreImagem?: boolean }) {
   return (
-    <div className={`h-1 overflow-hidden rounded-full bg-white/15 ${className}`}>
+    <div className={`h-1 overflow-hidden rounded-full ${sobreImagem ? "bg-white/25" : "bg-imperium-line-strong/50"} ${className}`}>
       <div className="h-full rounded-full bg-gold transition-all" style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
     </div>
   );
@@ -53,7 +53,7 @@ export function Poster({ serie, vistos, className = "" }: { serie: Serie; vistos
             {serie.episodios.length} {serie.episodios.length === 1 ? "aula" : "aulas"}
             {prog.feitos > 0 && prog.pct < 100 && ` · ${prog.pct}%`}
           </p>
-          {prog.feitos > 0 && prog.pct < 100 && <BarraProgresso pct={prog.pct} />}
+          {prog.feitos > 0 && prog.pct < 100 && <BarraProgresso pct={prog.pct} sobreImagem />}
         </div>
       </div>
     </Link>
@@ -135,8 +135,8 @@ export function Destaque({
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-imperium-line">
-      <div className="absolute inset-0 scale-110 opacity-80 blur-xl" style={{ background: fundoDaCapa(serie) }} />
-      <div className="absolute inset-0 bg-gradient-to-r from-imperium-bg via-imperium-bg/70 to-imperium-bg/10" />
+      <div className="absolute inset-0 scale-110 opacity-45 blur-2xl" style={{ background: fundoDaCapa(serie) }} />
+      <div className="absolute inset-0 bg-gradient-to-r from-imperium-bg/95 via-imperium-bg/60 to-imperium-bg/0" />
       <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-imperium-bg to-transparent" />
 
       <div className="relative grid min-h-[22rem] items-center gap-8 p-6 sm:p-10 md:grid-cols-[minmax(0,1fr)_14rem]">
@@ -145,7 +145,7 @@ export function Destaque({
             {modo === "home" ? (comecou ? "Continue assistindo" : "Em destaque") : serie.tipo === "trilha" ? "Trilha oficial" : "Módulo"}
             {serie.categoria && ` · ${serie.categoria}`}
           </p>
-          <h1 className="font-display text-3xl font-bold leading-tight text-stone-50 sm:text-5xl">
+          <h1 className="font-display text-3xl font-bold leading-tight text-stone-100 sm:text-5xl">
             {serie.icone} {serie.titulo}
           </h1>
           {serie.descricao && <p className="line-clamp-3 text-sm text-stone-300 sm:text-base">{serie.descricao}</p>}
@@ -170,10 +170,10 @@ export function Destaque({
                 ▶ {rotuloCta}
               </Link>
             ) : (
-              <span className="rounded-md border border-imperium-line px-5 py-2.5 text-sm text-stone-500">Aulas em breve</span>
+              <span className="rounded-md border border-imperium-line px-5 py-2.5 text-sm text-stone-1000">Aulas em breve</span>
             )}
             {modo === "home" && (
-              <Link href={`/academy/imperioflix/${serie.id}`} className="inline-flex items-center gap-2 rounded-md border border-stone-500/60 bg-white/10 px-5 py-2.5 text-sm text-stone-100 transition hover:bg-white/20">
+              <Link href={`/academy/imperioflix/${serie.id}`} className="inline-flex items-center gap-2 rounded-md border border-imperium-line-strong bg-white/70 px-5 py-2.5 text-sm font-medium text-stone-100 transition hover:bg-white">
                 ⓘ Ver todas as aulas
               </Link>
             )}

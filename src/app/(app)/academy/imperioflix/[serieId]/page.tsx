@@ -32,7 +32,7 @@ export default async function SeriePage({ params }: { params: { serieId: string 
 
   return (
     <main className="mx-auto max-w-[1400px] space-y-8 px-4 py-8 sm:px-6">
-      <nav className="text-sm text-stone-500" aria-label="Navegação">
+      <nav className="text-sm text-stone-1000" aria-label="Navegação">
         <Link href="/academy/imperioflix" className="hover:text-gold">
           Imperioflix
         </Link>
@@ -51,13 +51,13 @@ export default async function SeriePage({ params }: { params: { serieId: string 
           <section className="space-y-3">
             <div className="flex items-baseline justify-between gap-3">
               <h2 className="font-display text-xl text-stone-100">Aulas</h2>
-              <span className="text-xs text-stone-500">
+              <span className="text-xs text-stone-1000">
                 {prog.feitos}/{prog.total} concluídas
               </span>
             </div>
 
             {serie.episodios.length === 0 ? (
-              <p className="rounded-xl border border-imperium-line px-6 py-10 text-center text-sm text-stone-500">
+              <p className="rounded-xl border border-imperium-line px-6 py-10 text-center text-sm text-stone-1000">
                 Nenhuma aula cadastrada ainda. Assim que a primeira for publicada, ela aparece aqui.
               </p>
             ) : (
@@ -81,9 +81,9 @@ export default async function SeriePage({ params }: { params: { serieId: string 
           <aside className="space-y-6">
             <div className="space-y-3 rounded-xl border border-imperium-line bg-imperium-surface/60 p-5">
               <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold">Seu progresso</h3>
-              <p className="font-display text-4xl text-stone-50">{prog.pct}%</p>
+              <p className="font-display text-4xl text-stone-100">{prog.pct}%</p>
               <BarraProgresso pct={prog.pct} />
-              <p className="text-xs text-stone-500">
+              <p className="text-xs text-stone-1000">
                 {prog.feitos} de {prog.total} {prog.total === 1 ? "aula concluída" : "aulas concluídas"}
               </p>
             </div>
@@ -149,7 +149,7 @@ function LinhaEpisodio({
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-start justify-between gap-3">
             <h3 className="text-base font-medium leading-snug text-stone-100">
-              <span className="mr-2 text-stone-500 sm:hidden">{numero}.</span>
+              <span className="mr-2 text-stone-1000 sm:hidden">{numero}.</span>
               {ep.titulo}
             </h3>
             {visto ? (

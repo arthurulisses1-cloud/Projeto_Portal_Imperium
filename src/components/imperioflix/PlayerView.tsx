@@ -116,7 +116,7 @@ export default function PlayerView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <nav className="flex min-w-0 flex-wrap items-center gap-x-2 text-sm text-stone-500" aria-label="Navegação">
+        <nav className="flex min-w-0 flex-wrap items-center gap-x-2 text-sm text-stone-1000" aria-label="Navegação">
           <Link href="/academy/imperioflix" className="hover:text-gold">
             Imperioflix
           </Link>
@@ -169,7 +169,7 @@ export default function PlayerView({
               Aula {indice + 1} de {serie.episodios.length}
               {episodio.marco && " · Marco"}
             </p>
-            <h1 className="font-display text-2xl font-bold leading-tight text-stone-50 sm:text-3xl">{episodio.titulo}</h1>
+            <h1 className="font-display text-2xl font-bold leading-tight text-stone-100 sm:text-3xl">{episodio.titulo}</h1>
 
             <div className="flex flex-wrap items-center gap-2.5">
               {anterior ? (
@@ -234,19 +234,19 @@ export default function PlayerView({
                 {episodio.resumo ? (
                   <p className="whitespace-pre-line text-[15px] leading-relaxed text-stone-300">{episodio.resumo}</p>
                 ) : (
-                  <p className="text-sm text-stone-500">Essa aula ainda não tem resumo.</p>
+                  <p className="text-sm text-stone-1000">Essa aula ainda não tem resumo.</p>
                 )}
                 {(episodio.instrutorNome || episodio.data) && (
                   <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
                     {episodio.instrutorNome && (
                       <div>
-                        <dt className="text-[11px] uppercase tracking-wide text-stone-500">Instrutor</dt>
+                        <dt className="text-[11px] uppercase tracking-wide text-stone-1000">Instrutor</dt>
                         <dd className="text-stone-200">{episodio.instrutorNome}</dd>
                       </div>
                     )}
                     {episodio.data && (
                       <div>
-                        <dt className="text-[11px] uppercase tracking-wide text-stone-500">Data da aula</dt>
+                        <dt className="text-[11px] uppercase tracking-wide text-stone-1000">Data da aula</dt>
                         <dd className="text-stone-200">{dataBr(episodio.data)}</dd>
                       </div>
                     )}
@@ -254,7 +254,7 @@ export default function PlayerView({
                 )}
                 {serie.descricao && (
                   <div className="rounded-xl border border-imperium-line bg-imperium-surface/50 p-4">
-                    <p className="text-[11px] uppercase tracking-wide text-stone-500">Sobre o curso</p>
+                    <p className="text-[11px] uppercase tracking-wide text-stone-1000">Sobre o curso</p>
                     <p className="mt-1 text-sm text-stone-300">{serie.descricao}</p>
                   </div>
                 )}
@@ -296,7 +296,7 @@ export default function PlayerView({
               <div className="space-y-2 border-b border-imperium-line p-4">
                 <h2 className="font-display text-base text-stone-100">Conteúdo do curso</h2>
                 <BarraProgresso pct={prog.pct} />
-                <p className="text-xs text-stone-500">
+                <p className="text-xs text-stone-1000">
                   {prog.feitos} de {prog.total} concluídas · {prog.pct}%
                 </p>
               </div>
@@ -316,13 +316,13 @@ export default function PlayerView({
                       >
                         <span
                           className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[11px] ${
-                            feito ? "border-success bg-success/20 text-success-bright" : atual ? "border-gold text-gold" : "border-imperium-line text-stone-500"
+                            feito ? "border-success bg-success/20 text-success-bright" : atual ? "border-gold text-gold" : "border-imperium-line text-stone-1000"
                           }`}
                         >
                           {feito ? "✓" : atual ? "▶" : i + 1}
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className={`block text-sm leading-snug ${atual ? "font-medium text-stone-50" : "text-stone-300"}`}>{ep.titulo}</span>
+                          <span className={`block text-sm leading-snug ${atual ? "font-medium text-stone-100" : "text-stone-300"}`}>{ep.titulo}</span>
                           <span className="text-[11px] text-stone-600">{ep.videoUrl ? "Vídeo" : ep.arquivoUrl ? "Material" : "Aula"}</span>
                         </span>
                       </Link>

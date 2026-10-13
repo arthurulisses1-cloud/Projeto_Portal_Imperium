@@ -90,6 +90,52 @@
   --foreground: rgb(var(--stone-100));
 }
 
+/* ============ Tema "Imperioflix" (claro, frio e moderno — só nas telas da Imperioflix) ============ */
+:root[data-theme="imperioflix"] {
+  --c-bg: 243 246 252;
+  --c-surface: 255 255 255;
+  --c-raised: 232 238 250;
+  --c-line: 214 222 238;
+  --c-line-strong: 178 190 216;
+
+  --c-gold: 176 128 24;
+  --c-gold-bright: 204 150 30;
+  --c-gold-dim: 126 94 20;
+
+  --c-wine: 150 40 58;
+  --c-wine-bright: 184 52 72;
+
+  --c-success: 5 150 105;
+  --c-success-bright: 16 185 129;
+  --c-warning: 180 95 6;
+  --c-warning-bright: 217 119 6;
+
+  --c-templar: 163 39 47;
+  --c-maximus: 140 109 59;
+
+  --c-purpura: 91 51 130;
+  --c-purpura-bright: 118 68 158;
+
+  /* escala invertida: 100 = tinta azul-marinho (texto principal), 900 = quase branco */
+  --stone-50: 250 250 252;
+  --stone-100: 24 28 44;
+  --stone-200: 38 44 66;
+  --stone-300: 62 70 96;
+  --stone-400: 88 97 124;
+  --stone-500: 120 128 152;
+  --stone-600: 160 168 190;
+  --stone-700: 205 211 226;
+  --stone-800: 226 231 242;
+  --stone-900: 240 243 250;
+
+  --background: rgb(var(--c-bg));
+  --foreground: rgb(var(--stone-100));
+}
+/* O Coliseu de fundo não aparece na Imperioflix (ela tem o próprio plano de fundo). */
+:root[data-theme="imperioflix"] .coliseu-bg {
+  display: none;
+}
+
 /* ============ Tema "Império" (vívido — púrpura e vermelho pompeiano, mais ornamento romano) ============ */
 :root[data-theme="imperio"] {
   --c-bg: 21 9 10;
