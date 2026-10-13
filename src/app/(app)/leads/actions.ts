@@ -36,6 +36,7 @@ const TEMPERATURAS_VALIDAS = new Set(["frio", "morno", "quente"]);
 // Enviada, Assinado, Pago) pra fechar a brecha de arrastar direto pra lá
 // sem passar pelas etapas anteriores.
 const ETAPAS_QUE_EXIGEM_QUALIFICACAO = new Set(["fechamento", "subido", "ccb_enviada", "assinado", "pago"]);
+const ETAPAS_DEPOIS_DO_SUBIDO = new Set(["ccb_enviada", "assinado", "pago"]);
 
 // Etapas de onde um lead pode "cair" — tudo antes de Perdido/Pago, que já
 // são saídas em si (migration 0059, pedido do Diretor, 2026-08-28: motivo
@@ -145,6 +146,16 @@ export async function salvarStatusLead(formData: FormData) {
     update.compliance_comportamento = "aguardando";
     update.compliance_atualizado_em = agora;
     update.compliance_atualizado_por = user.id;
+  }
+
+  // Lead que pula o Subido e vai direto pra CCB/Assinado/Pago (o caminho que o
+  // Diretor quer incentivar) também conta como subido — pedido do Diretor,
+  // 2026-10-13. Registra na data de hoje, em nome de quem moveu, sem entrar na
+  // fila de análise do compliance (não há o que aguardar: já assinou).
+  if (!atual.subido_em && ETAPAS_DEPOIS_DO_SUBIDO.has(statusRaw)) {
+    update.subido_em = hojeBR();
+    update.subido_por = user.id;
+    update.subido_obs = "Contabilizado automaticamente: foi direto para a assinatura.";
   }
 
   // Entrevista Recusada (pedido do Diretor, 2026-10-09): só sai de Validação
