@@ -43,12 +43,13 @@ export const RANK_SUBTITLE: Record<Rank | "diretor", string> = {
 // 2026-09-07: as duas telas usavam STAR_PACE[rankAtual], o que aplicava a
 // régua um degrau ACIMA da documentada no PDF pra quem já tá no rank —
 // corrigido pra usar o próximo rank, igual /carreira já fazia certo).
+// Revisado pelo Diretor em 2026-10-15 (antes: tribuno 8 estrelas 5/3 · pretor 10 estrelas 7/5 · legado 12 estrelas 10/6).
 export const STAR_PACE: Record<Rank, { estrelas: number; cheia: number; meia: number }> = {
   legionario: { estrelas: 0, cheia: 0, meia: 0 },
   centuriao: { estrelas: 6, cheia: 3, meia: 2 },
-  tribuno: { estrelas: 8, cheia: 5, meia: 3 },
-  pretor: { estrelas: 10, cheia: 7, meia: 5 },
-  legado: { estrelas: 12, cheia: 10, meia: 6 },
+  tribuno: { estrelas: 6, cheia: 4, meia: 2 },
+  pretor: { estrelas: 8, cheia: 5, meia: 3 },
+  legado: { estrelas: 10, cheia: 6, meia: 4 },
 };
 
 // Bloco RESULTADO do PDF (Matri_Planodecarreira.pdf) — perda de estrela por
