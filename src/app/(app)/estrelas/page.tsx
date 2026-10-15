@@ -97,6 +97,16 @@ export default async function EstrelasPage() {
   const resultadoSemana = (qtd: number) => resultadoSemanaEstrela(qtd, pace);
 
   const semanaAtual = semanas[0];
+  // Bônus mensais automáticos (meta individual, melhor SDR/Closer) — tabela criada
+  // pela migration 0095; sem ela, só não mostra nada.
+  const { data: bonusRows } = await supabase
+    .from("estrelas_bonus")
+    .select("competencia, tipo, valor, detalhe")
+    .eq("profile_id", meId)
+    .order("competencia", { ascending: false })
+    .limit(12);
+  const BONUS_LABEL: Record<string, string> = { meta_individual: "Bateu a meta individual", melhor_sdr: "Melhor SDR do mês", melhor_closer: "Melhor Closer do mês" };
+
   const resultadoAtual = resultadoSemana(semanaAtual.qtd);
   const faltamParaCheia = Math.max(0, pace.cheia - semanaAtual.qtd);
   const faltamParaMeia = Math.max(0, pace.meia - semanaAtual.qtd);
@@ -166,6 +176,22 @@ export default async function EstrelasPage() {
           <p className="font-display text-2xl text-stone-500">{totalZeradas}</p>
         </Card>
       </div>
+
+      {(bonusRows ?? []).length > 0 && (
+        <Card title="Bônus de estrela do mês">
+          <ul className="space-y-1.5 text-sm">
+            {(bonusRows ?? []).map((b, i) => (
+              <li key={i} className="flex items-center justify-between">
+                <span className="text-stone-300">
+                  {BONUS_LABEL[b.tipo] ?? b.tipo}{" "}
+                  <span className="text-xs text-stone-500">· {String(b.competencia).slice(5, 7)}/{String(b.competencia).slice(0, 4)}</span>
+                </span>
+                <span className="font-medium text-gold-bright">+{String(b.valor).replace(".", ",")} ★</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <Card title="Semana a semana">
         <Table>
