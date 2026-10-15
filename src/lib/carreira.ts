@@ -185,7 +185,7 @@ export function avaliarCriterioAutomatico(
     };
   }
 
-  const matchEntrevistas = texto.match(/média de ([\d,.]+) entrevistas\/dia/i);
+  const matchEntrevistas = texto.match(/média de ([\d,.]+) entrevistas?\/dia/i);
   if (matchEntrevistas) {
     const alvo = Number(matchEntrevistas[1].replace(",", "."));
     const atualArred = Math.round(ctx.entrevistasPorDia * 10) / 10;
