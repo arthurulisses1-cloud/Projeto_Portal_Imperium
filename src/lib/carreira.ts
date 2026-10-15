@@ -57,11 +57,16 @@ export const STAR_PACE: Record<Rank, { estrelas: number; cheia: number; meia: nu
 // quem já está naquele rank, diferente do STAR_PACE que é "rumo a X").
 // Tiers em ordem da mais severa pra menos severa; a primeira que bater vale.
 // Achado 2026-09-07, auditoria de agosto/2026.
+//
+// SEM PERDA DE ESTRELA (pedido do Diretor, 2026-10-15): as faixas abaixo foram
+// zeradas — estrela só sobe. Guardadas aqui as regras antigas caso volte:
+//   legionario: 0 → -3, ≤100k → -1 · centuriao: 0 → -3, ≤100k → -2, ≤150k → -1
+//   tribuno: 0 → -3, ≤200k → -2 · pretor: 0 → -3, ≤200k → -2, ≤300k → -1
 export const PERDA_MENSAL: Record<Rank, { max: number; delta: number }[]> = {
-  legionario: [{ max: 0, delta: -3 }, { max: 100000, delta: -1 }],
-  centuriao: [{ max: 0, delta: -3 }, { max: 100000, delta: -2 }, { max: 150000, delta: -1 }],
-  tribuno: [{ max: 0, delta: -3 }, { max: 200000, delta: -2 }],
-  pretor: [{ max: 0, delta: -3 }, { max: 200000, delta: -2 }, { max: 300000, delta: -1 }],
+  legionario: [],
+  centuriao: [],
+  tribuno: [],
+  pretor: [],
   legado: [],
 };
 
