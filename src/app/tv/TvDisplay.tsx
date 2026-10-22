@@ -185,7 +185,7 @@ export default function TvDisplay(props: Props) {
   // campanha ativa (ou, pra lendas, cada uma das 8 telas fixas pedidas
   // pelo Diretor em 2026-09-24) ganha sua própria tela cheia, em vez de
   // espremer tudo num card só.
-  const slides = props.ordem.flatMap((chave): React.ReactElement[] => {
+  const slidesBase = props.ordem.flatMap((chave): React.ReactElement[] => {
     if (chave === "lendas") return slidesLendas(props.lendas);
     if (chave === "campanhas") {
       if (props.campanhasAtivas.length === 0) return [<SlideCampanhaVazia key="campanhas-vazia" />];
@@ -216,6 +216,9 @@ export default function TvDisplay(props: Props) {
     const el = slidesPorChave[chave];
     return el ? [el] : [];
   });
+
+  // A cada 3 telas entra o "BOLSONARO 22" (pedido do Diretor, 2026-10-22).
+  const slides = slidesBase.flatMap((el, i) => ((i + 1) % 3 === 0 ? [el, <SlideBolsonaro22 key={`bolsonaro22-${i}`} />] : [el]));
 
   useEffect(() => {
     const id = setInterval(() => setSlide((s) => (s + 1) % slides.length), INTERVALO_SLIDE_MS);
@@ -661,6 +664,26 @@ function SlideRanking({
         </div>
       )}
     </SlideShell>
+  );
+}
+
+// Tela cheia: foto gigante + legenda enorme.
+function SlideBolsonaro22() {
+  return (
+    <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-black">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/tv/bolsonaro22.jpg" alt="" className="absolute inset-0 h-full w-full object-cover opacity-30 blur-2xl" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/tv/bolsonaro22.jpg" alt="Bolsonaro 22" className="relative h-full w-auto object-contain" />
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent px-[3vw] pb-[4vh] pt-[14vh] text-center">
+        <p
+          className="font-display font-black uppercase leading-none tracking-tight text-[#ffdf00]"
+          style={{ fontSize: "15vh", textShadow: "0 0.6vh 2vh rgba(0,0,0,0.8), 0 0 4vh rgba(0,156,59,0.7)" }}
+        >
+          BOLSONARO 22
+        </p>
+      </div>
+    </div>
   );
 }
 
