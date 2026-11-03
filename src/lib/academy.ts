@@ -130,6 +130,7 @@ export const CATEGORIAS_MODULO: { value: string; label: string }[] = [
   { value: "livros", label: "Livros" },
   { value: "marketing", label: "Marketing" },
   { value: "gestao", label: "Gestão" },
+  { value: "vorp-energy", label: "Vorp Energy" },
   { value: "podcast", label: "Podcasts" },
 ];
 
