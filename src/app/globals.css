@@ -461,3 +461,33 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ============ Identidade por negócio (modelo multinegócio, 2026-11) ============
+   Sobrescreve a paleta toda: o "gold" do app é a cor de destaque, então cada
+   negócio troca esse destaque e o fundo. Matri e a visão consolidada ("todos")
+   não têm bloco aqui e mantêm o visual de sempre. Vem por último no arquivo
+   pra vencer os temas escolhidos pelo usuário (a marca do negócio manda). */
+:root[data-negocio="vorp"] {
+  --c-bg: 15 15 35; --c-surface: 22 22 48; --c-raised: 30 30 62;
+  --c-line: 48 48 82; --c-line-strong: 72 72 112;
+  --c-gold: 252 84 0; --c-gold-bright: 255 128 56; --c-gold-dim: 176 60 0;
+  --background: rgb(var(--c-bg));
+}
+:root[data-negocio="vorp-finance"] {
+  --c-bg: 8 22 32; --c-surface: 12 32 46; --c-raised: 17 42 60;
+  --c-line: 30 62 82; --c-line-strong: 44 90 116;
+  --c-gold: 34 176 125; --c-gold-bright: 74 214 163; --c-gold-dim: 22 120 86;
+  --background: rgb(var(--c-bg));
+}
+:root[data-negocio="matchsales"] {
+  --c-bg: 24 35 61; --c-surface: 33 46 78; --c-raised: 42 58 96;
+  --c-line: 60 76 116; --c-line-strong: 86 104 148;
+  --c-gold: 235 32 91; --c-gold-bright: 255 95 136; --c-gold-dim: 176 20 66;
+  --background: rgb(var(--c-bg));
+}
+:root[data-negocio="vorp-energy"] {
+  --c-bg: 50 0 26; --c-surface: 66 6 36; --c-raised: 84 12 46;
+  --c-line: 112 30 66; --c-line-strong: 150 50 90;
+  --c-gold: 255 106 26; --c-gold-bright: 255 148 84; --c-gold-dim: 190 74 10;
+  --background: rgb(var(--c-bg));
+}

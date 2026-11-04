@@ -6,6 +6,8 @@ import CampanhasCompactas from "@/components/ui/CampanhasCompactas";
 import SidebarRight from "@/components/ui/SidebarRight";
 import SidebarRightGate from "@/components/ui/SidebarRightGate";
 import UserMenu from "@/components/ui/UserMenu";
+import NegocioSwitcher from "@/components/ui/NegocioSwitcher";
+import { buscarNegociosVisiveis, negocioEmFoco, veConsolidado, COOKIE_NEGOCIO } from "@/lib/negocios";
 import MencoesBell from "@/components/ui/MencoesBell";
 import MinervaWidget from "@/components/minerva/MinervaWidget";
 import { limparPreview } from "./preview-actions";
@@ -163,6 +165,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const cookieStore = await cookies();
 
+  // Multinegócio (2026-11): negócios que a pessoa pode abrir e o que está em foco.
+  // Se a migration 0096 ainda não rodou, volta lista vazia e o seletor não aparece.
+  const negociosVisiveis = user ? await buscarNegociosVisiveis(supabase, user.id, profile?.role) : [];
+  const negocioFoco = negocioEmFoco(cookieStore.get(COOKIE_NEGOCIO)?.value, negociosVisiveis);
+
   // Pré-visualização (Diretor virar outra pessoa/papel pra revisar telas)
   // foi desativada a pedido (2026-08-22) — "só quero usar minha conta como
   // Diretor". Continua lendo preview_profile_id só de forma defensiva, pra
@@ -317,6 +324,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         )}
         <header className="flex items-center justify-end gap-3 border-b border-imperium-line bg-imperium-surface px-6 py-3">
+          {user && negociosVisiveis.length > 0 && (
+            <NegocioSwitcher
+              opcoes={negociosVisiveis.map((n) => ({ slug: n.slug, nome: n.nome, arquivado: n.status === "arquivado" }))}
+              atual={negocioFoco?.slug ?? null}
+              podeConsolidado={veConsolidado(profile?.role)}
+            />
+          )}
           {user && <MencoesBell mencoes={mencoesPendentes} />}
           {user && (
             <UserMenu
