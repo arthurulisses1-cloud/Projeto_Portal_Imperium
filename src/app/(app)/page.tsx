@@ -23,6 +23,8 @@ import { podeVerArea } from "@/lib/permissoes-analista";
 import { ACADEMY_RH } from "@/lib/acessos-especiais";
 import { buscarAulasCobranca } from "@/lib/academy";
 import CobrancaFechamento from "@/components/academy/CobrancaFechamento";
+import PainelNegocios from "@/components/ui/PainelNegocios";
+import { buscarPainelNegocios } from "@/lib/negocio-painel";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -255,8 +257,16 @@ export default async function MuralPage({
     ]);
   const pessoasParaMarcar = (todasPessoas ?? []).map((p) => ({ id: p.id, nome: p.full_name }));
 
+  // Multinegócio: painel de 4 quadrantes (recebido x meta) logo no topo, só pra
+  // quem enxerga $ da firma. Se a migration ainda não rodou, vem vazio e some.
+  const verPainelNegocios = meRole === "diretor" || meRole === "investidor" || analistaFinanceiroLiberado;
+  const painelNegocios = verPainelNegocios ? await buscarPainelNegocios(supabase, ano, mes) : [];
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
+      {painelNegocios.length > 0 && (
+        <PainelNegocios linhas={painelNegocios} ano={ano} mes={mes} mesLabel={MESES[mes - 1] + " de " + ano} editavel={meRole === "diretor"} />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {profile?.avatar_url ? (

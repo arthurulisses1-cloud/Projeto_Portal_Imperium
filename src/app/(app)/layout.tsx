@@ -7,7 +7,7 @@ import SidebarRight from "@/components/ui/SidebarRight";
 import SidebarRightGate from "@/components/ui/SidebarRightGate";
 import UserMenu from "@/components/ui/UserMenu";
 import NegocioSwitcher from "@/components/ui/NegocioSwitcher";
-import { buscarNegociosVisiveis, negocioEmFoco, veConsolidado, COOKIE_NEGOCIO } from "@/lib/negocios";
+import { buscarNegociosVisiveis, negocioEmFoco, veConsolidado, visualEfetivo, COOKIE_NEGOCIO, COOKIE_VISUAL, VISUAL_AUTO } from "@/lib/negocios";
 import MencoesBell from "@/components/ui/MencoesBell";
 import MinervaWidget from "@/components/minerva/MinervaWidget";
 import { limparPreview } from "./preview-actions";
@@ -46,7 +46,7 @@ type NavConfigEntry =
 // Campanhas virou um atalho na lateral do Mural em vez de aba fixa.
 const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/", label: "Mural", roles: ["sdr", "closer", "lider", "diretor", "investidor", "analista"], area: "mural" },
-  { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer"] },
+  { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/tarefas", label: "Tarefas", roles: ["sdr", "closer", "lider", "diretor", "analista"], area: "tarefas" },
   { type: "link", href: "/leads", label: "Meus Leads", roles: ["closer", "lider", "diretor", "analista"], area: "leads" },
   // Atalho direto pra visão Subidos (resultado do compliance) dentro de Meus Leads.
@@ -169,6 +169,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Se a migration 0096 ainda não rodou, volta lista vazia e o seletor não aparece.
   const negociosVisiveis = user ? await buscarNegociosVisiveis(supabase, user.id, profile?.role) : [];
   const negocioFoco = negocioEmFoco(cookieStore.get(COOKIE_NEGOCIO)?.value, negociosVisiveis);
+  const visualEscolhido = cookieStore.get(COOKIE_VISUAL)?.value ?? VISUAL_AUTO;
+  const visualAplicado = visualEfetivo(visualEscolhido, negocioFoco?.slug ?? null);
 
   // Pré-visualização (Diretor virar outra pessoa/papel pra revisar telas)
   // foi desativada a pedido (2026-08-22) — "só quero usar minha conta como
@@ -328,6 +330,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <NegocioSwitcher
               opcoes={negociosVisiveis.map((n) => ({ slug: n.slug, nome: n.nome, arquivado: n.status === "arquivado" }))}
               atual={negocioFoco?.slug ?? null}
+              visual={visualAplicado}
+              visualEscolhido={visualEscolhido}
               podeConsolidado={veConsolidado(profile?.role)}
             />
           )}

@@ -11,6 +11,8 @@ import { hojeBR, amanhaBR, paraDataUTC } from "@/lib/data-br";
 import { buscarSubidos } from "@/lib/subidos";
 import { IconFlame, IconCheck, IconAlert } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
+import CompromissoKpis from "@/components/CompromissoKpis";
+import { buscarContextoKpis, buscarLinhasKpis } from "@/lib/compromisso-kpis";
 
 type CompromissoRow = StreakRow;
 
@@ -50,6 +52,15 @@ export default async function CompromissoPage() {
   logErroSupabase(`CompromissoPage: profiles (id=${meId})`, profileError);
 
   const hoje = hojeBR();
+
+  // Multinegócio: quem está num negócio com indicadores próprios (kpi_definicoes)
+  // vê o compromisso adaptado ao esforço do cargo; o resto segue no formato antigo.
+  const ctxKpis = await buscarContextoKpis(supabase, meId);
+  if (ctxKpis) {
+    const desde = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
+    const linhasKpis = await buscarLinhasKpis(supabase, meId, ctxKpis.negocioId, desde);
+    return <CompromissoKpis ctx={ctxKpis} hoje={hoje} linhas={linhasKpis} />;
+  }
 
   const { data: hojeRow } = await supabase
     .from("compromissos")

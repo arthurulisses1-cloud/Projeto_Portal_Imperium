@@ -70,3 +70,33 @@ export function negocioEmFoco(cookieValor: string | undefined, visiveis: Vinculo
   }
   return null;
 }
+
+export const COOKIE_VISUAL = "visual_atual";
+export const VISUAL_AUTO = "auto";
+export const VISUAL_PADRAO = "padrao";
+
+/** Cor de destaque de cada negócio (RGB) — usada nos quadrantes do Mural. */
+export const NEGOCIO_COR: Record<string, string> = {
+  vorp: "252 84 0",
+  "vorp-finance": "34 176 125",
+  matchsales: "235 32 91",
+  "vorp-energy": "255 106 26",
+  matri: "201 162 74",
+};
+
+export const VISUAIS: { slug: string; nome: string }[] = [
+  { slug: VISUAL_PADRAO, nome: "Padrão (Senatus)" },
+  { slug: "vorp", nome: "Grupo Vorp" },
+  { slug: "vorp-finance", nome: "Vorp Finance" },
+  { slug: "matchsales", nome: "MatchSales" },
+  { slug: "vorp-energy", nome: "Vorp Energy (Sunne)" },
+];
+
+/** Visual efetivo: escolha explícita da pessoa, senão o do negócio em foco. */
+export function visualEfetivo(cookieVisual: string | undefined, negocioSlug: string | null): string | null {
+  if (cookieVisual && cookieVisual !== VISUAL_AUTO) {
+    if (cookieVisual === VISUAL_PADRAO) return null;
+    if ((SLUGS_COM_TEMA as readonly string[]).includes(cookieVisual)) return cookieVisual;
+  }
+  return negocioSlug && (SLUGS_COM_TEMA as readonly string[]).includes(negocioSlug) ? negocioSlug : null;
+}
