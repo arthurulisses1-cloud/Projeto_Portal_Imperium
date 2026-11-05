@@ -170,6 +170,9 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
           <div className={`mt-3 grid gap-5 ${funis.length >= 3 ? "lg:grid-cols-3" : funis.length === 2 ? "lg:grid-cols-2" : ""}`}>
             {funis.map((fu) => {
               const topo = fu.etapas[0]?.meta || 1;
+              // Todos os canais têm o mesmo número de linhas: os mais curtos ganham linhas vazias no topo,
+              // assim as etapas finais (reuniões, propostas, vendas) e os cabeçalhos ficam na mesma altura.
+              const pad = Math.max(...funis.map((x) => x.etapas.length)) - fu.etapas.length;
               return (
                 <div key={fu.canal} className="min-w-0">
                   <p className="border-b pb-1.5 text-sm font-semibold" style={{ color: `rgb(${cor})`, borderColor: `rgb(${cor} / 0.4)` }}>
@@ -182,6 +185,17 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
                     <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Hoje</span>
                     <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Real.</span>
                     <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Meta</span>
+                    {Array.from({ length: pad }).map((_, i) => (
+                      <div key={`pv${i}`} className="contents" aria-hidden="true">
+                        <div className="invisible">
+                          <p>.</p>
+                          <div className="mt-1 h-1.5" />
+                        </div>
+                        <span className="invisible">0</span>
+                        <span className="invisible">0</span>
+                        <span className="invisible">0</span>
+                      </div>
+                    ))}
                     {fu.etapas.map((e) => (
                       <div key={e.label} className="contents">
                         <div className="min-w-0">
@@ -207,6 +221,13 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
                     <span className="border-b border-imperium-line pb-1 text-[10px] uppercase tracking-widest text-stone-500">Conversões</span>
                     <span className="border-b border-imperium-line pb-1 text-right text-[10px] uppercase tracking-widest text-stone-500">Real.</span>
                     <span className="border-b border-imperium-line pb-1 text-right text-[10px] uppercase tracking-widest text-stone-500">Meta</span>
+                    {Array.from({ length: pad }).map((_, i) => (
+                      <div key={`pc${i}`} className="contents" aria-hidden="true">
+                        <span className="invisible border-b border-transparent py-1.5">.</span>
+                        <span className="invisible border-b border-transparent py-1.5">0</span>
+                        <span className="invisible border-b border-transparent py-1.5">0</span>
+                      </div>
+                    ))}
                     {fu.etapas.slice(1).map((e, idx) => (
                       <div key={e.label} className="contents">
                         <span className="min-w-0 truncate border-b border-imperium-line/60 py-1.5 text-stone-300" title={`${fu.etapas[idx].label} → ${e.label}`}>
