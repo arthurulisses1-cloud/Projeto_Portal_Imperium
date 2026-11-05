@@ -60,7 +60,8 @@ export async function buscarDashboardNegocio(supabase: SupabaseClient, slug: str
 
   const p = PARAMETROS[slug];
   const i = indiceMes(ano, mes);
-  const previsto = p && i >= 0 ? vendasDoMes(p, i) : null;
+  const vm = p && i >= 0 ? vendasDoMes(p, i) : null;
+  const previsto = vm ? { vendas: vm.total, outbound: vm.outbound, inbound: vm.inbound, referidos: vm.referidos } : null;
 
   // Esforço: soma do mês por KPI (apenas definições ativas) e por pessoa.
   const ordem = new Map((defs ?? []).map((d) => [d.chave as string, d]));
