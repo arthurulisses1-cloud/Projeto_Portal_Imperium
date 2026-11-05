@@ -93,7 +93,11 @@ export default function PainelNegocios({
                 />
               </div>
               {editavel && (
-                <form action={salvarMetaNegocio} className="mt-3 flex items-center gap-2">
+                <details className="mt-3 group">
+                  <summary className="cursor-pointer select-none text-[10px] uppercase tracking-widest text-stone-500 hover:text-stone-300">
+                    Definir meta
+                  </summary>
+                <form action={salvarMetaNegocio} className="mt-2 flex items-center gap-2">
                   <input type="hidden" name="negocio_id" value={n.id} />
                   <input type="hidden" name="ano" value={ano} />
                   <input type="hidden" name="mes" value={mes} />
@@ -108,6 +112,7 @@ export default function PainelNegocios({
                     Salvar
                   </button>
                 </form>
+                </details>
               )}
             </div>
           );
