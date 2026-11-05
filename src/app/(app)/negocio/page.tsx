@@ -171,44 +171,54 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
             {funis.map((fu) => {
               const topo = fu.etapas[0]?.meta || 1;
               return (
-                <div key={fu.canal}>
-                  <p className="text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
+                <div key={fu.canal} className="min-w-0">
+                  <p className="border-b pb-1.5 text-sm font-semibold" style={{ color: `rgb(${cor})`, borderColor: `rgb(${cor} / 0.4)` }}>
                     {fu.titulo}
                   </p>
-                  <p className="mt-2 text-[10px] uppercase tracking-widest text-stone-500">Volumes</p>
-                  <ul className="mt-1 space-y-2">
+
+                  {/* Volumes: colunas fixas para alinhar os números entre as linhas */}
+                  <div className="mt-2 grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem_3.5rem] items-center gap-x-2 gap-y-1.5 text-xs tabular-nums">
+                    <span className="text-[10px] uppercase tracking-widest text-stone-500">Volumes</span>
+                    <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Hoje</span>
+                    <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Real.</span>
+                    <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Meta</span>
                     {fu.etapas.map((e) => (
-                      <li key={e.label}>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-stone-300">{e.label}</span>
-                          <span className="text-stone-100">
-                            {e.realizado === null ? "—" : num(e.realizado)}
-                            <span className="text-stone-500"> / {num(e.meta)}</span>
-                          </span>
+                      <div key={e.label} className="contents">
+                        <div className="min-w-0">
+                          <p className="truncate text-stone-200" title={e.label}>
+                            {e.label}
+                          </p>
+                          <div className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-imperium-raised">
+                            <div className="absolute inset-y-0 left-0 rounded-full opacity-30" style={{ width: `${Math.max(1.5, (e.meta / topo) * 100)}%`, backgroundColor: `rgb(${cor})` }} />
+                            {e.realizado !== null && (
+                              <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(100, Math.max(0, (e.realizado / topo) * 100))}%`, backgroundColor: `rgb(${cor})` }} />
+                            )}
+                          </div>
                         </div>
-                        <div className="relative h-2 overflow-hidden rounded-full bg-imperium-raised">
-                          <div className="absolute inset-y-0 left-0 rounded-full opacity-30" style={{ width: `${Math.max(1.5, (e.meta / topo) * 100)}%`, backgroundColor: `rgb(${cor})` }} />
-                          {e.realizado !== null && (
-                            <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(100, Math.max(0, (e.realizado / topo) * 100))}%`, backgroundColor: `rgb(${cor})` }} />
-                          )}
-                        </div>
-                        <p className="mt-0.5 text-[10px] text-stone-500">esperado até hoje {num(e.meta * fracaoMes)}</p>
-                      </li>
+                        <span className="text-right text-stone-400">{num(e.meta * fracaoMes)}</span>
+                        <span className="text-right text-stone-100">{e.realizado === null ? "—" : num(e.realizado)}</span>
+                        <span className="text-right text-stone-300">{num(e.meta)}</span>
+                      </div>
                     ))}
-                  </ul>
-                  <p className="mt-4 text-[10px] uppercase tracking-widest text-stone-500">Conversões</p>
-                  <ul className="mt-1 divide-y divide-imperium-line text-xs">
+                  </div>
+
+                  {/* Conversões: mesma grade, uma linha por passagem de etapa */}
+                  <div className="mt-5 grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem] items-center gap-x-2 text-xs tabular-nums">
+                    <span className="border-b border-imperium-line pb-1 text-[10px] uppercase tracking-widest text-stone-500">Conversões</span>
+                    <span className="border-b border-imperium-line pb-1 text-right text-[10px] uppercase tracking-widest text-stone-500">Real.</span>
+                    <span className="border-b border-imperium-line pb-1 text-right text-[10px] uppercase tracking-widest text-stone-500">Meta</span>
                     {fu.etapas.slice(1).map((e, idx) => (
-                      <li key={e.label} className="flex items-center justify-between py-1">
-                        <span className="text-stone-400">
-                          {fu.etapas[idx].label} → {e.label}
+                      <div key={e.label} className="contents">
+                        <span className="min-w-0 truncate border-b border-imperium-line/60 py-1.5 text-stone-300" title={`${fu.etapas[idx].label} → ${e.label}`}>
+                          {e.label} <span className="text-stone-500">← {fu.etapas[idx].label}</span>
                         </span>
-                        <span className="text-stone-100">
-                          —<span className="text-stone-500"> / meta {((e.conversaoMeta ?? 0) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
+                        <span className="border-b border-imperium-line/60 py-1.5 text-right text-stone-100">—</span>
+                        <span className="border-b border-imperium-line/60 py-1.5 text-right text-stone-300">
+                          {((e.conversaoMeta ?? 0) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
                         </span>
-                      </li>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 </div>
               );
             })}
