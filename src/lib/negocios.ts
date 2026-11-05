@@ -92,6 +92,18 @@ export const VISUAIS: { slug: string; nome: string }[] = [
   { slug: "vorp-energy", nome: "Vorp Energy (Sunne)" },
 ];
 
+export const COOKIE_MODO = "visual_modo";
+export const MODO_AUTO = "auto";
+/** Finance e MatchSales abrem na versão clara por padrão (pedido do Diretor, 2026-11-05). */
+const CLARO_POR_PADRAO = ["vorp-finance", "matchsales"];
+
+/** Modo efetivo (claro/escuro) de um visual; null quando não há visual de negócio. */
+export function modoEfetivo(cookieModo: string | undefined, visual: string | null): "claro" | "escuro" | null {
+  if (!visual) return null;
+  if (cookieModo === "claro" || cookieModo === "escuro") return cookieModo;
+  return CLARO_POR_PADRAO.includes(visual) ? "claro" : "escuro";
+}
+
 /** Visual efetivo: escolha explícita da pessoa, senão o do negócio em foco. */
 export function visualEfetivo(cookieVisual: string | undefined, negocioSlug: string | null): string | null {
   if (cookieVisual && cookieVisual !== VISUAL_AUTO) {

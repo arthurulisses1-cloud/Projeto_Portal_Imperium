@@ -463,31 +463,96 @@ body {
 }
 
 /* ============ Identidade por negócio (modelo multinegócio, 2026-11) ============
-   Sobrescreve a paleta toda: o "gold" do app é a cor de destaque, então cada
-   negócio troca esse destaque e o fundo. Matri e a visão consolidada ("todos")
-   não têm bloco aqui e mantêm o visual de sempre. Vem por último no arquivo
-   pra vencer os temas escolhidos pelo usuário (a marca do negócio manda). */
+   Cada negócio tem versão escura e versão clara (atributo data-modo no <html>).
+   O "gold" do app é a cor de destaque, então cada negócio troca esse destaque e
+   o fundo. Matri e a visão padrão não têm bloco aqui e mantêm o visual de sempre.
+   Vem por último no arquivo pra vencer os temas escolhidos pelo usuário. */
+
+/* Sem o Coliseu de fundo em nenhuma identidade de negócio (os demais detalhes ficam). */
+:root[data-negocio] .coliseu-bg {
+  display: none;
+}
+
+/* Escuro: escala de cinzas mais clara que a do tema Roma — nos fundos azulados
+   e vinho os cinzas antigos (stone-400/500) ficavam quase ilegíveis. */
+:root[data-negocio]:not([data-modo="claro"]) {
+  --stone-100: 250 250 252;
+  --stone-200: 238 238 244;
+  --stone-300: 224 224 234;
+  --stone-400: 198 198 214;
+  --stone-500: 166 166 186;
+  --stone-600: 124 124 148;
+  --stone-700: 84 84 108;
+  --stone-800: 52 52 74;
+  --stone-900: 34 34 52;
+  --background: rgb(var(--c-bg));
+  --foreground: rgb(var(--stone-100));
+}
+/* Claro: escala invertida (tinta escura sobre fundo branco). */
+:root[data-negocio][data-modo="claro"] {
+  --c-success: 5 150 105;
+  --c-success-bright: 16 185 129;
+  --c-warning: 180 95 6;
+  --c-warning-bright: 217 119 6;
+  --c-wine: 150 40 58;
+  --c-wine-bright: 184 52 72;
+  --stone-50: 250 250 252;
+  --stone-600: 150 156 176;
+  --stone-700: 208 212 224;
+  --stone-800: 228 231 240;
+  --stone-900: 242 244 250;
+  --background: rgb(var(--c-bg));
+  --foreground: rgb(var(--stone-100));
+}
+
+/* ---- Grupo Vorp ---- */
 :root[data-negocio="vorp"] {
-  --c-bg: 15 15 35; --c-surface: 22 22 48; --c-raised: 30 30 62;
-  --c-line: 48 48 82; --c-line-strong: 72 72 112;
+  --c-bg: 15 15 35; --c-surface: 22 22 48; --c-raised: 32 32 66;
+  --c-line: 52 52 88; --c-line-strong: 78 78 120;
   --c-gold: 252 84 0; --c-gold-bright: 255 128 56; --c-gold-dim: 176 60 0;
-  --background: rgb(var(--c-bg));
 }
+:root[data-negocio="vorp"][data-modo="claro"] {
+  --c-bg: 246 240 226; --c-surface: 255 255 255; --c-raised: 238 229 208;
+  --c-line: 224 213 190; --c-line-strong: 196 180 148;
+  --c-gold: 214 66 0; --c-gold-bright: 252 84 0; --c-gold-dim: 160 48 0;
+  --stone-100: 15 15 35; --stone-200: 32 32 56; --stone-300: 58 58 84; --stone-400: 88 88 114; --stone-500: 120 120 144;
+}
+
+/* ---- Vorp Finance (branco da Imperioflix como cor central) ---- */
 :root[data-negocio="vorp-finance"] {
-  --c-bg: 8 22 32; --c-surface: 12 32 46; --c-raised: 17 42 60;
-  --c-line: 30 62 82; --c-line-strong: 44 90 116;
+  --c-bg: 8 22 32; --c-surface: 12 32 46; --c-raised: 18 44 62;
+  --c-line: 34 66 88; --c-line-strong: 52 96 124;
   --c-gold: 34 176 125; --c-gold-bright: 74 214 163; --c-gold-dim: 22 120 86;
-  --background: rgb(var(--c-bg));
 }
+:root[data-negocio="vorp-finance"][data-modo="claro"] {
+  --c-bg: 243 246 252; --c-surface: 255 255 255; --c-raised: 232 238 250;
+  --c-line: 214 222 238; --c-line-strong: 178 190 216;
+  --c-gold: 14 138 98; --c-gold-bright: 24 164 117; --c-gold-dim: 10 100 72;
+  --stone-100: 14 30 40; --stone-200: 30 48 60; --stone-300: 54 72 88; --stone-400: 84 102 118; --stone-500: 116 132 148;
+}
+
+/* ---- MatchSales (site do PipeFácil: branco quente, tinta azul-marinho, rosa) ---- */
 :root[data-negocio="matchsales"] {
-  --c-bg: 24 35 61; --c-surface: 33 46 78; --c-raised: 42 58 96;
-  --c-line: 60 76 116; --c-line-strong: 86 104 148;
+  --c-bg: 24 35 61; --c-surface: 33 46 78; --c-raised: 44 60 100;
+  --c-line: 64 80 120; --c-line-strong: 92 110 154;
   --c-gold: 235 32 91; --c-gold-bright: 255 95 136; --c-gold-dim: 176 20 66;
-  --background: rgb(var(--c-bg));
 }
+:root[data-negocio="matchsales"][data-modo="claro"] {
+  --c-bg: 251 250 248; --c-surface: 255 255 255; --c-raised: 243 241 236;
+  --c-line: 228 225 232; --c-line-strong: 196 192 206;
+  --c-gold: 207 21 80; --c-gold-bright: 235 32 91; --c-gold-dim: 160 16 62;
+  --stone-100: 24 35 61; --stone-200: 33 46 78; --stone-300: 62 74 104; --stone-400: 90 102 130; --stone-500: 122 132 156;
+}
+
+/* ---- Vorp Energy (Sunne: rubi e laranja solar) ---- */
 :root[data-negocio="vorp-energy"] {
-  --c-bg: 50 0 26; --c-surface: 66 6 36; --c-raised: 84 12 46;
-  --c-line: 112 30 66; --c-line-strong: 150 50 90;
+  --c-bg: 50 0 26; --c-surface: 66 6 36; --c-raised: 86 14 48;
+  --c-line: 116 34 70; --c-line-strong: 154 54 94;
   --c-gold: 255 106 26; --c-gold-bright: 255 148 84; --c-gold-dim: 190 74 10;
-  --background: rgb(var(--c-bg));
+}
+:root[data-negocio="vorp-energy"][data-modo="claro"] {
+  --c-bg: 253 246 240; --c-surface: 255 255 255; --c-raised: 247 232 220;
+  --c-line: 236 214 196; --c-line-strong: 208 176 150;
+  --c-gold: 222 82 8; --c-gold-bright: 255 106 26; --c-gold-dim: 170 60 4;
+  --stone-100: 50 0 26; --stone-200: 72 20 44; --stone-300: 98 46 68; --stone-400: 128 76 96; --stone-500: 156 108 124;
 }

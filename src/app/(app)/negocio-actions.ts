@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { COOKIE_NEGOCIO, COOKIE_VISUAL, NEGOCIO_TODOS } from "@/lib/negocios";
+import { COOKIE_MODO, COOKIE_NEGOCIO, COOKIE_VISUAL, NEGOCIO_TODOS } from "@/lib/negocios";
 
 /** Troca o negócio em foco. A validação real (se a pessoa pode ver aquele
  *  negócio) acontece no layout, que ignora cookie de negócio não permitido. */
@@ -19,6 +19,14 @@ export async function trocarVisual(slug: string) {
   const cookieStore = await cookies();
   const limpo = /^[a-z0-9-]{1,40}$/.test(slug) ? slug : "auto";
   cookieStore.set(COOKIE_VISUAL, limpo, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+  revalidatePath("/", "layout");
+}
+
+/** Versão clara ou escura do visual (auto = padrão de cada marca). */
+export async function trocarModo(modo: string) {
+  const cookieStore = await cookies();
+  const limpo = modo === "claro" || modo === "escuro" ? modo : "auto";
+  cookieStore.set(COOKIE_MODO, limpo, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
   revalidatePath("/", "layout");
 }
 

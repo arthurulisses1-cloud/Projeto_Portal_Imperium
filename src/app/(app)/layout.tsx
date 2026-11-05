@@ -7,7 +7,7 @@ import SidebarRight from "@/components/ui/SidebarRight";
 import SidebarRightGate from "@/components/ui/SidebarRightGate";
 import UserMenu from "@/components/ui/UserMenu";
 import NegocioSwitcher from "@/components/ui/NegocioSwitcher";
-import { buscarNegociosVisiveis, negocioEmFoco, veConsolidado, visualEfetivo, COOKIE_NEGOCIO, COOKIE_VISUAL, VISUAL_AUTO } from "@/lib/negocios";
+import { buscarNegociosVisiveis, negocioEmFoco, veConsolidado, visualEfetivo, modoEfetivo, COOKIE_NEGOCIO, COOKIE_VISUAL, COOKIE_MODO, MODO_AUTO, VISUAL_AUTO } from "@/lib/negocios";
 import MencoesBell from "@/components/ui/MencoesBell";
 import MinervaWidget from "@/components/minerva/MinervaWidget";
 import { limparPreview } from "./preview-actions";
@@ -171,6 +171,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const negocioFoco = negocioEmFoco(cookieStore.get(COOKIE_NEGOCIO)?.value, negociosVisiveis);
   const visualEscolhido = cookieStore.get(COOKIE_VISUAL)?.value ?? VISUAL_AUTO;
   const visualAplicado = visualEfetivo(visualEscolhido, negocioFoco?.slug ?? null);
+  const modoEscolhido = cookieStore.get(COOKIE_MODO)?.value ?? MODO_AUTO;
+  const modoAplicado = modoEfetivo(modoEscolhido, visualAplicado);
 
   // Pré-visualização (Diretor virar outra pessoa/papel pra revisar telas)
   // foi desativada a pedido (2026-08-22) — "só quero usar minha conta como
@@ -332,6 +334,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               atual={negocioFoco?.slug ?? null}
               visual={visualAplicado}
               visualEscolhido={visualEscolhido}
+              modo={modoAplicado}
+              modoEscolhido={modoEscolhido}
               podeConsolidado={veConsolidado(profile?.role)}
             />
           )}
