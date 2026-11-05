@@ -3,6 +3,7 @@
 // entram). Pura em calcularPace; o acesso ao banco fica em buscarPaceNegocio.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ehFimDeSemana, paraDataUTC } from "@/lib/data-br";
+import { metaForecast } from "@/lib/forecast-negocios";
 
 export type StatusPace = "sem_meta" | "adiantado" | "no_ritmo" | "atrasado" | "critico";
 
@@ -138,7 +139,8 @@ export async function buscarPaceNegocios(
   }
 
   return lista.map((n) => {
-    const meta = metaPor.get(n.id) ?? 0;
+    // A meta vem do forecast; a digitada à mão só vale onde não há forecast.
+    const meta = Math.round(metaForecast(n.slug, ano, mes)) || (metaPor.get(n.id) ?? 0);
     const doNegocio = (vendas ?? []).filter((v) => v.negocio_id === n.id);
     const recebido = doNegocio.reduce((s, v) => s + Number(v.valor), 0);
 

@@ -1,5 +1,6 @@
 // Painel de 4 quadrantes do Mural: recebido x meta de recebimento por negócio.
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { metaForecast } from "@/lib/forecast-negocios";
 
 export type LinhaPainelNegocio = {
   id: string;
@@ -40,7 +41,7 @@ export async function buscarPainelNegocios(
     equipe_nome: n.equipe_nome ?? null,
     equipe_bandeira: n.equipe_bandeira ?? null,
     status: n.status,
-    meta: metaPor.get(n.id) ?? 0,
+    meta: Math.round(metaForecast(n.slug, ano, mes)) || (metaPor.get(n.id) ?? 0),
     recebido: recebidoPor.get(n.id) ?? 0,
   }));
 }

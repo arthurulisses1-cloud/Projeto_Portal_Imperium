@@ -264,7 +264,7 @@ export default async function MuralPage({
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       {painelNegocios.length > 0 && (
-        <PainelNegocios linhas={painelNegocios} ano={ano} mes={mes} mesLabel={MESES[mes - 1] + " de " + ano} editavel={meRole === "diretor"} />
+        <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} />
       )}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">

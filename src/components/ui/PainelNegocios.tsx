@@ -1,4 +1,3 @@
-import { salvarMetaNegocio } from "@/app/(app)/negocio-actions";
 import { NEGOCIO_COR, nomeEquipe } from "@/lib/negocios";
 import type { LinhaPainelNegocio } from "@/lib/negocio-painel";
 
@@ -12,16 +11,10 @@ function pct(recebido: number, meta: number): number | null {
 /** Painel do Mural: meta e recebido da empresa + um quadrante por negócio. */
 export default function PainelNegocios({
   linhas,
-  ano,
-  mes,
   mesLabel,
-  editavel,
 }: {
   linhas: LinhaPainelNegocio[];
-  ano: number;
-  mes: number;
   mesLabel: string;
-  editavel: boolean;
 }) {
   const ativos = linhas.filter((l) => l.status === "ativo");
   const arquivados = linhas.filter((l) => l.status === "arquivado" && l.recebido > 0);
@@ -38,7 +31,7 @@ export default function PainelNegocios({
             <p className="mt-1 text-2xl font-semibold text-gold-bright">
               {moeda(recebidoTotal)}
               <span className="ml-2 text-sm font-normal text-stone-400">
-                {metaTotal > 0 ? `de ${moeda(metaTotal)}` : "(defina as metas abaixo)"}
+                {metaTotal > 0 ? `de ${moeda(metaTotal)}` : "(sem forecast)"}
               </span>
             </p>
           </div>
@@ -92,28 +85,6 @@ export default function PainelNegocios({
                   style={{ width: `${Math.min(100, p ?? 0)}%`, backgroundColor: `rgb(${cor})` }}
                 />
               </div>
-              {editavel && (
-                <details className="mt-3 group">
-                  <summary className="cursor-pointer select-none text-[10px] uppercase tracking-widest text-stone-500 hover:text-stone-300">
-                    Definir meta
-                  </summary>
-                <form action={salvarMetaNegocio} className="mt-2 flex items-center gap-2">
-                  <input type="hidden" name="negocio_id" value={n.id} />
-                  <input type="hidden" name="ano" value={ano} />
-                  <input type="hidden" name="mes" value={mes} />
-                  <input
-                    name="meta"
-                    inputMode="numeric"
-                    defaultValue={n.meta > 0 ? String(n.meta) : ""}
-                    placeholder="Meta de recebimento (R$)"
-                    className="w-full rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-xs text-stone-100 focus:border-gold focus:outline-none"
-                  />
-                  <button type="submit" className="shrink-0 rounded border border-gold/40 px-2 py-1 text-[10px] uppercase text-gold hover:bg-gold/20">
-                    Salvar
-                  </button>
-                </form>
-                </details>
-              )}
             </div>
           );
         })}
