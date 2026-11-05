@@ -1,5 +1,5 @@
 import { salvarMetaNegocio } from "@/app/(app)/negocio-actions";
-import { NEGOCIO_COR } from "@/lib/negocios";
+import { NEGOCIO_COR, nomeEquipe } from "@/lib/negocios";
 import type { LinhaPainelNegocio } from "@/lib/negocio-painel";
 
 function moeda(v: number) {
@@ -51,7 +51,7 @@ export default function PainelNegocios({
         )}
         {arquivados.length > 0 && (
           <p className="mt-2 text-xs text-stone-500">
-            Inclui {arquivados.map((a) => `${a.nome}: ${moeda(a.recebido)}`).join(" · ")}
+            Inclui {arquivados.map((a) => `${nomeEquipe(a)}: ${moeda(a.recebido)}`).join(" · ")}
           </p>
         )}
       </div>
@@ -67,9 +67,20 @@ export default function PainelNegocios({
               style={{ borderColor: `rgb(${cor} / 0.55)` }}
             >
               <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
-                  {n.nome}
-                </p>
+                <div className="flex min-w-0 items-center gap-3">
+                  {n.equipe_bandeira && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={n.equipe_bandeira} alt="" className="h-12 w-10 shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
+                      {nomeEquipe(n)}
+                    </p>
+                    {n.equipe_nome && n.equipe_nome !== n.nome && (
+                      <p className="truncate text-[11px] text-stone-500">{n.nome}</p>
+                    )}
+                  </div>
+                </div>
                 <p className="text-2xl font-semibold text-stone-100">{p === null ? "—" : `${p}%`}</p>
               </div>
               <p className="mt-1 text-xs text-stone-400">

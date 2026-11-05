@@ -25,6 +25,8 @@ export type Negocio = {
   nome: string;
   status: "ativo" | "arquivado";
   aceita_vendas_ate: string | null;
+  equipe_nome: string | null;
+  equipe_bandeira: string | null;
 };
 
 export type VinculoNegocio = Negocio & { cargo: CargoNegocio; principal: boolean };
@@ -46,13 +48,13 @@ export async function buscarNegociosVisiveis(
   if (veConsolidado(role)) {
     const { data } = await supabase
       .from("negocios")
-      .select("id, slug, nome, status, aceita_vendas_ate")
+      .select("id, slug, nome, status, aceita_vendas_ate, equipe_nome, equipe_bandeira")
       .order("ordem");
     return ((data ?? []) as Negocio[]).map((n) => ({ ...n, cargo: "head" as CargoNegocio, principal: false }));
   }
   const { data } = await supabase
     .from("profile_negocios")
-    .select("cargo, principal, negocios(id, slug, nome, status, aceita_vendas_ate, ordem)")
+    .select("cargo, principal, negocios(id, slug, nome, status, aceita_vendas_ate, equipe_nome, equipe_bandeira, ordem)")
     .eq("profile_id", userId);
   type Linha = { cargo: CargoNegocio; principal: boolean; negocios: (Negocio & { ordem: number }) | (Negocio & { ordem: number })[] | null };
   return ((data ?? []) as unknown as Linha[])
@@ -71,6 +73,11 @@ export function negocioEmFoco(cookieValor: string | undefined, visiveis: Vinculo
   return null;
 }
 
+/** Nome da equipe (ex.: Acrópole); cai no nome do negócio quando não há equipe. */
+export function nomeEquipe(n: { nome: string; equipe_nome?: string | null }): string {
+  return n.equipe_nome || n.nome;
+}
+
 export const COOKIE_VISUAL = "visual_atual";
 export const VISUAL_AUTO = "auto";
 export const VISUAL_PADRAO = "padrao";
@@ -86,10 +93,10 @@ export const NEGOCIO_COR: Record<string, string> = {
 
 export const VISUAIS: { slug: string; nome: string }[] = [
   { slug: VISUAL_PADRAO, nome: "Padrão (Senatus)" },
-  { slug: "vorp", nome: "Grupo Vorp" },
+  { slug: "vorp", nome: "Acrópole (Grupo Vorp)" },
   { slug: "vorp-finance", nome: "Vorp Finance" },
-  { slug: "matchsales", nome: "MatchSales" },
-  { slug: "vorp-energy", nome: "Vorp Energy (Sunne)" },
+  { slug: "matchsales", nome: "Galácticos (MatchSales)" },
+  { slug: "vorp-energy", nome: "Maximus Energy (Sunne)" },
 ];
 
 export const COOKIE_MODO = "visual_modo";

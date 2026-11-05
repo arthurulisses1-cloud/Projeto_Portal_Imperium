@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 150" role="img" aria-label="Bandeira Acrópole">
+  <rect x="6" y="2" width="6" height="146" rx="3" fill="#C9CFE0"/>
+  <path d="M12 8h102v96l-51 22-51-22z" fill="#0F0F23" stroke="#FC5400" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M30 52 63 34l33 18z" fill="#FC5400"/>
+  <rect x="28" y="55" width="70" height="5" fill="#FC5400"/>
+  <g fill="#FFFFFF">
+    <rect x="33" y="64" width="7" height="30" rx="1"/>
+    <rect x="48" y="64" width="7" height="30" rx="1"/>
+    <rect x="63" y="64" width="7" height="30" rx="1"/>
+    <rect x="78" y="64" width="7" height="30" rx="1"/>
+  </g>
+  <rect x="28" y="96" width="70" height="6" fill="#FC5400"/>
+</svg>

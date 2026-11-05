@@ -11,8 +11,8 @@ import CentralNotificacoes from "@/components/CentralNotificacoes";
 import LeadsCobrancaMural from "@/components/LeadsCobrancaMural";
 import TarefasMuralWidget from "@/components/TarefasMuralWidget";
 import CampanhasFeed from "@/components/CampanhasFeed";
-import { IconSwords, IconShield, IconCoin, IconHorn, IconBallot, IconMedal, IconScroll } from "@/components/ui/icons";
-import { buscarConfrontoExercitos, buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
+import { IconShield, IconCoin, IconHorn, IconBallot, IconMedal, IconScroll } from "@/components/ui/icons";
+import { buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
 import { buscarMetaIndividual, buscarMetaExercito, buscarProducaoPagaExercito, buscarMetaTribo, buscarProducaoPagaTribo, buscarMetaFirma, buscarProducaoPagaFirma, buscarPainelFinanceiroTribo, buscarPainelFinanceiroPessoa, type PainelFinanceiro } from "@/lib/metas";
 import { buscarCampanhasAtivas } from "@/lib/campanhas";
 import { getViewerContext } from "@/lib/preview";
@@ -114,8 +114,7 @@ export default async function MuralPage({
   const quote =
     quotes && quotes.length > 0 ? quotes[dayOfYear % quotes.length] : null;
 
-  const [confrontoExercitos, confrontoTribos, topCredito, crestsTribos] = await Promise.all([
-    buscarConfrontoExercitos(supabase, inicioMes, fimMes),
+  const [confrontoTribos, topCredito, crestsTribos] = await Promise.all([
     buscarConfrontoTribos(supabase, inicioMes, fimMes),
     buscarTopCredito(supabase, inicioMes, fimMes, 5),
     buscarCrestsTribos(supabase),
@@ -412,18 +411,11 @@ export default async function MuralPage({
           visitas é olhando o mês atual). */}
       {!mesEhAtual && (
         <p className="-mb-3 text-[11px] text-stone-500">
-          Guerra Civil, Guerra de Tribos e Ranking abaixo são de{" "}
+          Guerra de Tribos e Ranking abaixo são de{" "}
           <span className="text-gold">{MESES[mes - 1]}/{ano}</span>
         </p>
       )}
-      <div className="grid gap-6 sm:grid-cols-3">
-        <Card title="Guerra Civil" icon={<IconSwords className="h-4 w-4 text-wine-bright" />}>
-          <ConfrontoWidget
-            dados={confrontoExercitos}
-            crests={{ Templários: "/crests/templarios.jpg", Maximus: "/crests/maximus.jpg" }}
-          />
-        </Card>
-
+      <div className="grid gap-6 sm:grid-cols-2">
         <Card title="Guerra de Tribos" icon={<IconShield className="h-4 w-4 text-gold" />}>
           <ConfrontoWidget dados={confrontoTribos} crests={crestsTribos} />
         </Card>

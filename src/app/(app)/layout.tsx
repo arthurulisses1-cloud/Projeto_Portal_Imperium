@@ -7,7 +7,7 @@ import SidebarRight from "@/components/ui/SidebarRight";
 import SidebarRightGate from "@/components/ui/SidebarRightGate";
 import UserMenu from "@/components/ui/UserMenu";
 import NegocioSwitcher from "@/components/ui/NegocioSwitcher";
-import { buscarNegociosVisiveis, negocioEmFoco, veConsolidado, visualEfetivo, modoEfetivo, COOKIE_NEGOCIO, COOKIE_VISUAL, COOKIE_MODO, MODO_AUTO, VISUAL_AUTO } from "@/lib/negocios";
+import { nomeEquipe, buscarNegociosVisiveis, negocioEmFoco, veConsolidado, visualEfetivo, modoEfetivo, COOKIE_NEGOCIO, COOKIE_VISUAL, COOKIE_MODO, MODO_AUTO, VISUAL_AUTO } from "@/lib/negocios";
 import MencoesBell from "@/components/ui/MencoesBell";
 import MinervaWidget from "@/components/minerva/MinervaWidget";
 import { limparPreview } from "./preview-actions";
@@ -331,7 +331,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <header className="flex items-center justify-end gap-3 border-b border-imperium-line bg-imperium-surface px-6 py-3">
           {user && negociosVisiveis.length > 0 && (
             <NegocioSwitcher
-              opcoes={negociosVisiveis.map((n) => ({ slug: n.slug, nome: n.nome, arquivado: n.status === "arquivado" }))}
+              opcoes={negociosVisiveis.map((n) => ({ slug: n.slug, nome: nomeEquipe(n), arquivado: n.status === "arquivado" }))}
               atual={negocioFoco?.slug ?? null}
               visual={visualAplicado}
               visualEscolhido={visualEscolhido}

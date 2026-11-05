@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import Card from "@/components/ui/Card";
 import { hojeBR } from "@/lib/data-br";
-import { CARGO_LABEL, NEGOCIO_COR, type CargoNegocio } from "@/lib/negocios";
+import { CARGO_LABEL, NEGOCIO_COR, nomeEquipe, type CargoNegocio } from "@/lib/negocios";
 import { lancarVenda, excluirVendaManual } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -31,15 +31,15 @@ export default async function LancarVendasPage({
   const { data: eu } = await supabase.from("profiles").select("role").eq("id", user.id).single();
 
   // Diretor lança em qualquer negócio ativo; Head só no(s) negócio(s) que chefia.
-  type Neg = { id: string; slug: string; nome: string };
+  type Neg = { id: string; slug: string; nome: string; equipe_nome: string | null };
   let negocios: Neg[] = [];
   if (eu?.role === "diretor") {
-    const { data } = await supabase.from("negocios").select("id, slug, nome").eq("status", "ativo").order("ordem");
+    const { data } = await supabase.from("negocios").select("id, slug, nome, equipe_nome").eq("status", "ativo").order("ordem");
     negocios = (data ?? []) as Neg[];
   } else {
     const { data } = await supabase
       .from("profile_negocios")
-      .select("cargo, negocios(id, slug, nome, status, ordem)")
+      .select("cargo, negocios(id, slug, nome, equipe_nome, status, ordem)")
       .eq("profile_id", user.id)
       .eq("cargo", "head");
     type L = { negocios: (Neg & { status: string }) | (Neg & { status: string })[] | null };
@@ -106,7 +106,7 @@ export default async function LancarVendasPage({
               className={`rounded border px-3 py-1 text-sm ${n.id === atual.id ? "text-stone-100" : "border-imperium-line text-stone-400 hover:text-stone-100"}`}
               style={n.id === atual.id ? { borderColor: `rgb(${cor})`, backgroundColor: `rgb(${cor} / 0.15)` } : undefined}
             >
-              {n.nome}
+              {nomeEquipe(n)}
             </Link>
           ))}
         </div>
@@ -116,7 +116,7 @@ export default async function LancarVendasPage({
 
       <Card>
         <p className="mb-3 text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
-          {atual.nome}
+          {nomeEquipe(atual)}
         </p>
         <form action={lancarVenda} className="grid gap-3 sm:grid-cols-2">
           <input type="hidden" name="negocio_slug" value={atual.slug} />

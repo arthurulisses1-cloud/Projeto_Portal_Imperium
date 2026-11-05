@@ -5,6 +5,8 @@ export type LinhaPainelNegocio = {
   id: string;
   slug: string;
   nome: string;
+  equipe_nome: string | null;
+  equipe_bandeira: string | null;
   status: "ativo" | "arquivado";
   meta: number;
   recebido: number;
@@ -19,7 +21,7 @@ export async function buscarPainelNegocios(
   const fim = mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, "0")}-01`;
 
   const [{ data: negocios }, { data: metas }, { data: vendas }] = await Promise.all([
-    supabase.from("negocios").select("id, slug, nome, status").order("ordem"),
+    supabase.from("negocios").select("id, slug, nome, status, equipe_nome, equipe_bandeira").order("ordem"),
     supabase.from("metas_negocio").select("negocio_id, meta_recebimento").eq("ano", ano).eq("mes", mes),
     supabase.from("vendas").select("negocio_id, valor").gte("data", inicio).lt("data", fim).range(0, 19999),
   ]);
@@ -35,6 +37,8 @@ export async function buscarPainelNegocios(
     id: n.id,
     slug: n.slug,
     nome: n.nome,
+    equipe_nome: n.equipe_nome ?? null,
+    equipe_bandeira: n.equipe_bandeira ?? null,
     status: n.status,
     meta: metaPor.get(n.id) ?? 0,
     recebido: recebidoPor.get(n.id) ?? 0,
