@@ -13,7 +13,6 @@ import MinervaWidget from "@/components/minerva/MinervaWidget";
 import { limparPreview } from "./preview-actions";
 import { IconLaurel, IconEye } from "@/components/ui/icons";
 import { buscarPendencias, temNovidadeMural, temNovidadeLeads } from "@/lib/pendencias";
-import { SDR_FORECAST_LIBERADO } from "@/lib/acessos-especiais";
 import { buscarUltimaSyncOk } from "@/lib/sync/status";
 import { buscarMencoesPendentes } from "@/lib/social";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
@@ -48,9 +47,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/", label: "Mural", roles: ["sdr", "closer", "lider", "diretor", "investidor", "analista"], area: "mural" },
   { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/tarefas", label: "Tarefas", roles: ["sdr", "closer", "lider", "diretor", "analista"], area: "tarefas" },
-  { type: "link", href: "/leads", label: "Meus Leads", roles: ["closer", "lider", "diretor", "analista"], area: "leads" },
-  // Atalho direto pra visão Subidos (resultado do compliance) dentro de Meus Leads.
-  { type: "link", href: "/leads?visao=subidos", label: "Subidos", roles: ["closer", "lider", "diretor"] },
   // SDR só vê o funil de Repasse de Entrevistas (mesma rota, visão restrita).
   { type: "link", href: "/leads", label: "Repasse de Entrevistas", roles: ["sdr"] },
   { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
@@ -73,7 +69,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
       { href: "/recordes", label: "Recordes" },
     ],
   },
-  { type: "link", href: "/forecast", label: "Forecast", roles: ["closer", "lider", "diretor", "investidor", "analista"], area: "forecast" },
   { type: "link", href: "/parceiros", label: "Parceiros", roles: ["closer", "lider"] },
   { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
   {
@@ -101,9 +96,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
     items: [
       { href: "/pace", label: "Pace", roles: ["sdr", "closer", "lider", "diretor", "analista"] },
       { href: "/compromissos", label: "Compromissos", roles: ["diretor", "lider", "analista"] },
-      { href: "/weekly", label: "Weekly de Receita", roles: ["lider", "diretor", "investidor", "analista"] },
-      { href: "/fechamento-semanal", label: "Fechamento Semanal", roles: ["lider", "diretor"] },
-      { href: "/visao-diaria", label: "Visão Diária", roles: ["lider", "diretor", "analista"] },
       { href: "/metas", label: "Metas Mensais", roles: ["diretor", "analista"] },
       { href: "/lancar-vendas", label: "Lançar Vendas", roles: ["closer", "lider", "diretor"] },
       { href: "/tv", label: "Painel TV (gestão à vista)", roles: ["diretor", "analista"] },
@@ -133,18 +125,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
       { href: "/marcos", label: "Corrida dos Marcos", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
       { href: "/legado", label: "Meu Legado", roles: ["diretor"] },
       { href: "/gestao", label: "Gestão de Pessoas", roles: ["diretor"] },
-    ],
-  },
-  {
-    type: "group",
-    label: "Validações",
-    roles: ["diretor"],
-    area: "validacoes",
-    items: [
-      { href: "/auditoria", label: "Auditoria" },
-      { href: "/validacao", label: "Fila de Validação" },
-      { href: "/aprovacoes", label: "Aprovações de Carreira" },
-      { href: "/contestacoes", label: "Fila de Contestação" },
     ],
   },
 ];
@@ -241,10 +221,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Exceção pontual (ver src/lib/acessos-especiais.ts): Forecast liberado
   // pra 2 SDRs específicos, sem virar um papel novo — não usa
   // previewPessoa de propósito, é sempre sobre a conta real logada.
-  if (user && profile?.role === "sdr" && SDR_FORECAST_LIBERADO.has(user.id)) {
-    const posProducao = itensVisiveis.findIndex((i) => i.type === "link" && i.href === "/producao");
-    itensVisiveis.splice(posProducao + 1, 0, { type: "link", href: "/forecast", label: "Forecast" });
-  }
 
   const ehExecutivo = papelVisualizado === "sdr" || papelVisualizado === "closer" || papelVisualizado === "lider";
   // Diretor também ganha a lateral (2026-08-22, a pedido) — o conteúdo já
