@@ -70,7 +70,7 @@ export default function PainelNegocios({
                 <div className="flex min-w-0 items-center gap-3">
                   {n.equipe_bandeira && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={n.equipe_bandeira} alt="" className="h-12 w-10 shrink-0" />
+                    <img src={n.equipe_bandeira} alt="" className="h-14 w-14 shrink-0 rounded-md object-cover" />
                   )}
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
