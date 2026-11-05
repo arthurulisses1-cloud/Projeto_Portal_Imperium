@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
-import { buscarDashboardNegocio, type MixCanal } from "@/lib/dashboard-negocio";
+import { buscarDashboardNegocio, RANKINGS, type MixCanal } from "@/lib/dashboard-negocio";
+import { funisDoMes } from "@/lib/funil-negocio";
 import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
 import type { StatusPace } from "@/lib/pace-negocio";
 
@@ -78,6 +79,9 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
   const seg = mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;
   const mesParam = `${ano}-${String(mes).padStart(2, "0")}`;
   const totalMix = dados.vendas.mix.reduce((s, x) => s + x.valor, 0);
+  const funis = funisDoMes(atual.slug, ano, mes);
+  const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
+  const rankings = (RANKINGS[atual.slug] ?? []).map((k) => dados.esforco.find((e) => e.chave === k)).filter((e): e is NonNullable<typeof e> => !!e);
   const pessoasComVenda = dados.pace.pessoas.filter((p) => p.recebido > 0);
 
   return (
@@ -154,7 +158,98 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      {/* Funil do mês: volumes e conversões, um bloco por canal, lado a lado */}
+      <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Funil do mês (meta do forecast)</p>
+          <p className="text-[11px] text-stone-500">Realizado aguardando a integração com o Pipefácil</p>
+        </div>
+        {funis.length === 0 ? (
+          <p className="mt-2 text-sm text-stone-500">Este negócio ainda não tem forecast neste mês.</p>
+        ) : (
+          <div className={`mt-3 grid gap-5 ${funis.length >= 3 ? "lg:grid-cols-3" : funis.length === 2 ? "lg:grid-cols-2" : ""}`}>
+            {funis.map((fu) => {
+              const topo = fu.etapas[0]?.meta || 1;
+              return (
+                <div key={fu.canal}>
+                  <p className="text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
+                    {fu.titulo}
+                  </p>
+                  <p className="mt-2 text-[10px] uppercase tracking-widest text-stone-500">Volumes</p>
+                  <ul className="mt-1 space-y-2">
+                    {fu.etapas.map((e) => (
+                      <li key={e.label}>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-stone-300">{e.label}</span>
+                          <span className="text-stone-100">
+                            {e.realizado === null ? "—" : num(e.realizado)}
+                            <span className="text-stone-500"> / {num(e.meta)}</span>
+                          </span>
+                        </div>
+                        <div className="relative h-2 overflow-hidden rounded-full bg-imperium-raised">
+                          <div className="absolute inset-y-0 left-0 rounded-full opacity-30" style={{ width: `${Math.max(1.5, (e.meta / topo) * 100)}%`, backgroundColor: `rgb(${cor})` }} />
+                          {e.realizado !== null && (
+                            <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(100, Math.max(0, (e.realizado / topo) * 100))}%`, backgroundColor: `rgb(${cor})` }} />
+                          )}
+                        </div>
+                        <p className="mt-0.5 text-[10px] text-stone-500">esperado até hoje {num(e.meta * fracaoMes)}</p>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-4 text-[10px] uppercase tracking-widest text-stone-500">Conversões</p>
+                  <ul className="mt-1 divide-y divide-imperium-line text-xs">
+                    {fu.etapas.slice(1).map((e, idx) => (
+                      <li key={e.label} className="flex items-center justify-between py-1">
+                        <span className="text-stone-400">
+                          {fu.etapas[idx].label} → {e.label}
+                        </span>
+                        <span className="text-stone-100">
+                          —<span className="text-stone-500"> / meta {((e.conversaoMeta ?? 0) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Rankings dos indicadores-chave */}
+      {rankings.length > 0 && (
+        <div className={`grid gap-4 ${rankings.length >= 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+          {rankings.map((rk) => (
+            <section key={rk.chave} className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+              <p className="text-[10px] uppercase tracking-widest text-stone-500">Ranking · {rk.label}</p>
+              <p className="text-xs text-stone-500">
+                {num(rk.realizado)} no mês · {num(rk.meta)} comprometidos
+              </p>
+              {rk.porPessoa.length === 0 ? (
+                <p className="mt-2 text-sm text-stone-500">Ninguém registrou ainda.</p>
+              ) : (
+                <ol className="mt-2 space-y-1 text-sm">
+                  {rk.porPessoa.slice(0, 8).map((p, i) => (
+                    <li key={p.nome} className="flex items-center gap-2">
+                      <span className="w-5 text-xs text-stone-500">{i + 1}</span>
+                      <span className="min-w-0 flex-1 truncate text-stone-200">{p.nome}</span>
+                      <span className="text-stone-100">{num(p.realizado)}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </section>
+          ))}
+          {atual.slug === "vorp-energy" && (
+            <section className="rounded-lg border border-dashed border-imperium-line bg-imperium-surface p-4">
+              <p className="text-[10px] uppercase tracking-widest text-stone-500">Ranking · kWh gerado</p>
+              <p className="mt-2 text-sm text-stone-500">Aguardando a integração com o Pipefácil.</p>
+            </section>
+          )}
+        </div>
+      )}
+
+      <div className="grid gap-4">
         {/* Vendas */}
         <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Vendas do mês</p>
@@ -188,38 +283,6 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
           )}
         </section>
 
-        {/* Funil previsto */}
-        <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
-          <p className="text-[10px] uppercase tracking-widest text-stone-500">Forecast do mês (com ramp-up)</p>
-          {dados.previsto ? (
-            <ul className="mt-2 space-y-1 text-sm">
-              <li className="flex justify-between">
-                <span className="text-stone-400">Vendas via outbound</span>
-                <span className="text-stone-100">{num(dados.previsto.outbound)}</span>
-              </li>
-              <li className="flex justify-between">
-                <span className="text-stone-400">Vendas via inbound</span>
-                <span className="text-stone-100">{num(dados.previsto.inbound)}</span>
-              </li>
-              {dados.previsto.referidos > 0 && (
-                <li className="flex justify-between">
-                  <span className="text-stone-400">Vendas por indicação</span>
-                  <span className="text-stone-100">{num(dados.previsto.referidos)}</span>
-                </li>
-              )}
-              <li className="flex justify-between border-t border-imperium-line pt-1 font-semibold">
-                <span className="text-stone-300">Total previsto</span>
-                <span className="text-stone-100">{num(dados.previsto.vendas)}</span>
-              </li>
-              <li className="flex justify-between text-xs text-stone-500">
-                <span>Realizado até hoje</span>
-                <span>{dados.vendas.qtd} lançamentos</span>
-              </li>
-            </ul>
-          ) : (
-            <p className="mt-2 text-sm text-stone-500">Este negócio ainda não tem forecast.</p>
-          )}
-        </section>
       </div>
 
       {/* Esforço */}

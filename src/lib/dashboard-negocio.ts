@@ -14,6 +14,14 @@ export type EsforcoKpi = {
   porPessoa: { nome: string; meta: number; realizado: number }[];
 };
 
+/** Indicadores-chave de cada negócio, em ordem; viram rankings no dashboard. */
+export const RANKINGS: Record<string, string[]> = {
+  vorp: ["reunioes_agendadas", "reunioes_realizadas"],
+  matchsales: ["reunioes_agendadas", "reunioes_realizadas"],
+  "vorp-finance": ["entrevistas", "subidos"],
+  "vorp-energy": ["contas_subidas", "reunioes_realizadas"],
+};
+
 export type DashboardNegocio = {
   pace: PaceNegocio;
   vendas: { qtd: number; ticketMedio: number; mix: MixCanal[] };
