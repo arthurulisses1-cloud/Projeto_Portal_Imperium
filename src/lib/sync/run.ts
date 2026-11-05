@@ -462,6 +462,11 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   // Mesmo ajuste do bloco acima: intervalo de data em vez de `.in()` com
   // centenas de chave_natural (nomes longos embutidos na chave estouravam
   // a URL do PostgREST — "Bad Request").
+  // Multinegócio: a planilha é do Matri. Marca as vendas dela como Matri e só
+  // apaga/regrava vendas do Matri, preservando lançamentos manuais dos outros negócios.
+  const { data: matriRow } = await supabase.from("negocios").select("id").eq("slug", "matri").maybeSingle();
+  const matriId: string | null = matriRow?.id ?? null;
+
   const weeklyIdPorChave = new Map<string, string>();
   if (assinado.menorData && assinado.maiorData) {
     const { data: idsRows, error } = await supabase
@@ -490,6 +495,7 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
         cliente: v.cliente,
         papel: v.papel,
         weekly_operacao_id: weeklyIdPorChave.get(v.chaveNatural) ?? null,
+        ...(matriId ? { negocio_id: matriId } : {}),
         synced_at: new Date().toISOString(),
       };
     })
@@ -500,12 +506,14 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   if (assinado.menorData && assinado.maiorData) {
     const idsEnvolvidos = Array.from(new Set(vendaRows.map((v) => v.profile_id)));
     for (const idsBatch of chunk(idsEnvolvidos, 200)) {
-      const { error } = await supabase
+      let del = supabase
         .from("vendas")
         .delete()
         .in("profile_id", idsBatch)
         .gte("data", assinado.menorData)
         .lte("data", assinado.maiorData);
+      if (matriId) del = del.eq("negocio_id", matriId);
+      const { error } = await del;
       if (error) throw new Error("Erro limpando vendas antigas: " + error.message);
     }
   }
