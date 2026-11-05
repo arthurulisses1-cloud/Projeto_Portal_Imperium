@@ -150,9 +150,20 @@ export default async function LancarVendasPage({
             <input name="produto" placeholder="Ex.: Consultoria, Sunne, Cessão…" className={campo} />
           </label>
           <label className="text-xs text-stone-400">
-            Indicado por (outro negócio, opcional)
+            Canal da venda
+            <select name="canal" required className={campo} defaultValue="">
+              <option value="" disabled>
+                Escolha…
+              </option>
+              <option value="outbound">Outbound</option>
+              <option value="inbound">Inbound</option>
+              <option value="indicacao">Indicação</option>
+            </select>
+          </label>
+          <label className="text-xs text-stone-400">
+            SDR / BDR / indicador (opcional)
             <select name="indicador_id" className={campo} defaultValue="">
-              <option value="">Ninguém</option>
+              <option value="">Ninguém (venda sem SDR/BDR)</option>
               {(todos ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.full_name}

@@ -58,7 +58,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
   // própria comissão — pedido do Diretor, 2026-09-24. Os outros Analistas
   // também ganham o link (é por papel, não por pessoa), mas a página fica
   // vazia pra eles (sem plano de comissão cadastrado), sem problema.
-  { type: "link", href: "/comissao", label: "Comissão do Mês", roles: ["sdr", "closer", "lider", "analista"] },
+  { type: "link", href: "/comissao-negocio", label: "Comissão do Mês", roles: ["sdr", "closer", "lider", "analista"] },
   {
     type: "group",
     label: "Legado",
@@ -108,7 +108,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
     roles: ["diretor", "investidor"],
     area: "financeiro",
     items: [
-      { href: "/comissao", label: "Comissão do Mês" },
+      { href: "/comissao-negocio", label: "Comissão do Mês" },
       { href: "/parceiros", label: "Parceiros" },
       { href: "/dre", label: "DRE" },
       { href: "/fechamento", label: "Fechamento de Mês" },

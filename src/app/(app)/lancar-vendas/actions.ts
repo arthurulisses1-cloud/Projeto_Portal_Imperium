@@ -29,8 +29,10 @@ export async function lancarVenda(formData: FormData) {
   const cliente = String(formData.get("cliente") ?? "").trim() || null;
   const produto = String(formData.get("produto") ?? "").trim() || null;
   const observacao = String(formData.get("observacao") ?? "").trim() || null;
+  const canal = String(formData.get("canal") ?? "");
   const indicadorId = String(formData.get("indicador_id") ?? "") || null;
 
+  if (!["outbound", "inbound", "indicacao"].includes(canal)) throw new Error("Escolha o canal da venda.");
   if (!slug || !vendedorId) throw new Error("Escolha o negócio e o vendedor.");
   if (!(valor > 0)) throw new Error("Informe um valor maior que zero.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || data > hojeBR()) throw new Error("Data inválida (não pode ser futura).");
@@ -57,6 +59,7 @@ export async function lancarVenda(formData: FormData) {
     cliente,
     produto,
     observacao,
+    canal,
     indicador_id: indicadorId && indicadorId !== vendedorId ? indicadorId : null,
     papel,
     negocio_id: negocio.id,
