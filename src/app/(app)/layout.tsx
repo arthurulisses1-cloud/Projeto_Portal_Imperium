@@ -110,6 +110,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
     items: [
       { href: "/comissao-negocio", label: "Comissão do Mês" },
       { href: "/parceiros", label: "Parceiros" },
+      { href: "/financeiro-negocio", label: "Financeiro por Negócio" },
       { href: "/dre", label: "DRE" },
       { href: "/fechamento", label: "Fechamento de Mês" },
     ],

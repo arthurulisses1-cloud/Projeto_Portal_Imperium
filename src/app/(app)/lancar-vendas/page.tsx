@@ -171,6 +171,30 @@ export default async function LancarVendasPage({
               ))}
             </select>
           </label>
+          {atual.slug === "vorp" && (
+            <fieldset className="grid gap-3 rounded border border-imperium-line p-3 sm:col-span-2 sm:grid-cols-3">
+              <legend className="px-1 text-[10px] uppercase tracking-widest text-stone-500">Contrato (Vorp)</legend>
+              <label className="text-xs text-stone-400">
+                MRR do contrato (R$)
+                <input name="mrr" required inputMode="decimal" placeholder="Ex.: 3.000,00" className={campo} />
+              </label>
+              <label className="text-xs text-stone-400">
+                Valor total do contrato (R$)
+                <input name="valor_total_contrato" inputMode="decimal" className={campo} />
+              </label>
+              <label className="text-xs text-stone-400">
+                Valor antecipado (R$)
+                <input name="valor_antecipado" inputMode="decimal" placeholder="0 se não antecipou" className={campo} />
+              </label>
+              <label className="flex items-center gap-2 text-xs text-stone-400 sm:col-span-3">
+                <input type="checkbox" name="primeiro_contrato" defaultChecked />
+                Primeiro contrato do cliente (só ele paga comissão)
+              </label>
+              <p className="text-[11px] text-stone-500 sm:col-span-3">
+                Com valor antecipado, a comissão incide sobre no máximo 3 meses de MRR.
+              </p>
+            </fieldset>
+          )}
           <label className="text-xs text-stone-400 sm:col-span-2">
             Observação
             <input name="observacao" className={campo} />

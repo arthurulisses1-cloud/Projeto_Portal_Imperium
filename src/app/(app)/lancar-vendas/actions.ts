@@ -33,6 +33,13 @@ export async function lancarVenda(formData: FormData) {
   const indicadorId = String(formData.get("indicador_id") ?? "") || null;
 
   if (!["outbound", "inbound", "indicacao"].includes(canal)) throw new Error("Escolha o canal da venda.");
+  // Vorp: sempre se lança MRR, valor total do contrato e valor antecipado.
+  const ehVorp = slug === "vorp";
+  const mrr = ehVorp ? valorBR(formData.get("mrr")) : null;
+  const valorTotal = ehVorp ? valorBR(formData.get("valor_total_contrato")) : null;
+  const valorAntecipado = ehVorp ? valorBR(formData.get("valor_antecipado")) : null;
+  const primeiroContrato = ehVorp ? formData.get("primeiro_contrato") === "on" : true;
+  if (ehVorp && !((mrr ?? 0) > 0)) throw new Error("Informe o MRR do contrato.");
   if (!slug || !vendedorId) throw new Error("Escolha o negócio e o vendedor.");
   if (!(valor > 0)) throw new Error("Informe um valor maior que zero.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || data > hojeBR()) throw new Error("Data inválida (não pode ser futura).");
@@ -60,6 +67,10 @@ export async function lancarVenda(formData: FormData) {
     produto,
     observacao,
     canal,
+    mrr,
+    valor_total_contrato: valorTotal,
+    valor_antecipado: valorAntecipado,
+    primeiro_contrato: primeiroContrato,
     indicador_id: indicadorId && indicadorId !== vendedorId ? indicadorId : null,
     papel,
     negocio_id: negocio.id,

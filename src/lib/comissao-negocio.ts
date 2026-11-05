@@ -8,9 +8,13 @@
 //   canal        = outbound | inbound | indicacao (indicação paga como inbound)
 // Gestão = Head do negócio; sem Head (Vorp), o Diretor ocupa o lugar.
 //
-// Ainda NÃO modelado (pendências com o Diretor): teto de 3 meses na Vorp quando o
-// cliente paga adiantado, comissão só do 1º contrato, parada no churn, BDR por SQL
-// da Vorp (R$ 10 inbound / R$ 20 outbound) e comissão da Energy.
+// Vorp: lança-se MRR, valor total do contrato e valor antecipado. A base da comissão
+// de uma venda com antecipado é limitada a 3 x MRR (teto de 3 meses), e só o 1º
+// contrato do cliente paga comissão. A recorrência segue a cada MRR recebido e
+// termina quando o contrato deixa de ser lançado (churn/encerramento).
+//
+// Ainda NÃO modelado: BDR por SQL da Vorp (R$ 10 inbound / R$ 20 outbound; a
+// validação fica para o fim do mês).
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type Canal = "outbound" | "inbound" | "indicacao";
@@ -20,6 +24,8 @@ export type LinhaComissao = {
   beneficiarioId: string;
   papel: PapelComissao;
   pct: number;
+  /** Base sobre a qual o % incide (valor recebido, ou o teto de 3 x MRR na Vorp). */
+  base: number;
   valor: number;
 };
 
@@ -32,6 +38,11 @@ export type VendaParaComissao = {
   closerCargo: string | null;
   /** SDR/BDR/indicador, quando houver. */
   indicadorId: string | null;
+  /** Contrato (Vorp). */
+  mrr?: number | null;
+  valorAntecipado?: number | null;
+  /** Só o 1º contrato do cliente paga comissão; padrão true. */
+  primeiroContrato?: boolean;
 };
 
 export type ContextoNegocio = {
@@ -71,7 +82,11 @@ export function percentuais(slug: string, venda: VendaParaComissao): { closer: n
     if (temIndicador) return { closer: 5, sdr: 0, bdr: 5, head: 2, diretor: 0 };
     return { closer: via === "outbound" ? 10 : 8, sdr: 0, bdr: 0, head: 2, diretor: 0 };
   }
-  return null; // Energy: percentuais pendentes
+  if (slug === "vorp-energy") {
+    // Executivo 30 + Head 5 + Diretor 5. Head vendendo: 35. Diretor vendendo: 40.
+    return { closer: 30, sdr: 0, bdr: 0, head: 5, diretor: 5 };
+  }
+  return null;
 }
 
 /** Linhas de comissão de uma venda (vazio quando o negócio ainda não tem regra). */
@@ -79,16 +94,29 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
   const p = percentuais(slug, venda);
   if (!p) return [];
   const linhas: LinhaComissao[] = [];
+  if (slug === "vorp" && venda.primeiroContrato === false) return [];
+  // Teto da Vorp: com valor antecipado e MRR, a base é no máximo 3 x MRR.
+  const base =
+    slug === "vorp" && (venda.valorAntecipado ?? 0) > 0 && (venda.mrr ?? 0) > 0
+      ? Math.min(venda.valorAntecipado as number, 3 * (venda.mrr as number))
+      : venda.valor;
   const add = (beneficiarioId: string | null, papel: PapelComissao, pct: number) => {
     if (!beneficiarioId || pct <= 0) return;
-    linhas.push({ beneficiarioId, papel, pct, valor: (venda.valor * pct) / 100 });
+    linhas.push({ beneficiarioId, papel, pct, base, valor: (base * pct) / 100 });
   };
+  const energia = slug === "vorp-energy";
+  const diretorVendeu = !!ctx.diretorId && venda.closerId === ctx.diretorId;
   add(venda.closerId, "closer", p.closer);
   if (venda.indicadorId) {
     add(venda.indicadorId, slug === "matchsales" ? "bdr" : "sdr", slug === "matchsales" ? p.bdr : p.sdr);
   }
   // Head: o líder do negócio. Se o próprio Head fechou, o % de Head não se soma ao dele.
-  add(ctx.headId && ctx.headId !== venda.closerId ? ctx.headId : null, "head", p.head);
+  // Energy: o Head leva os 5% mesmo vendendo (35%); se o Diretor vendeu, ele fica também com o do Head (40%).
+  if (energia) {
+    add(diretorVendeu ? ctx.diretorId : ctx.headId, "head", p.head);
+  } else {
+    add(ctx.headId && ctx.headId !== venda.closerId ? ctx.headId : null, "head", p.head);
+  }
   // Vorp com Head: 1% dele e 2% do Diretor (em vez dos 3% só do Diretor).
   if (slug === "vorp" && ctx.headId) {
     add(ctx.headId, "head", 1);
@@ -140,7 +168,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
   const [{ data: vendas }, { data: membros }, { data: diretor }, { data: perfis }] = await Promise.all([
     supabase
       .from("vendas")
-      .select("id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente")
+      .select("id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente, mrr, valor_antecipado, primeiro_contrato")
       .in("negocio_id", ids)
       .gte("data", inicio)
       .lt("data", fimExcl)
@@ -173,6 +201,9 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
         closerId: v.profile_id,
         closerCargo: cargoDe.get(v.profile_id) ?? null,
         indicadorId: v.indicador_id ?? null,
+        mrr: v.mrr === null || v.mrr === undefined ? null : Number(v.mrr),
+        valorAntecipado: v.valor_antecipado === null || v.valor_antecipado === undefined ? null : Number(v.valor_antecipado),
+        primeiroContrato: v.primeiro_contrato ?? true,
       };
       for (const l of comissaoDaVenda(n.slug, venda, ctx)) {
         const pessoa = porPessoa.get(l.beneficiarioId) ?? {
@@ -184,7 +215,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
         };
         pessoa.total += l.valor;
         pessoa.porPapel[l.papel] = (pessoa.porPapel[l.papel] ?? 0) + l.valor;
-        pessoa.itens.push({ vendaId: v.id, data: v.data, cliente: v.cliente ?? null, papel: l.papel, pct: l.pct, base: venda.valor, valor: l.valor });
+        pessoa.itens.push({ vendaId: v.id, data: v.data, cliente: v.cliente ?? null, papel: l.papel, pct: l.pct, base: l.base, valor: l.valor });
         porPessoa.set(l.beneficiarioId, pessoa);
       }
     }

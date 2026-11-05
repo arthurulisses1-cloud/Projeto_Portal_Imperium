@@ -42,3 +42,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 relatorio_compra_comissoes.csv
+
+# Dados sensíveis (salários) — nunca versionar
+supabase/privado/

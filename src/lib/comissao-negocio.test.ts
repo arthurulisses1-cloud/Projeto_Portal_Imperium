@@ -35,8 +35,23 @@ describe("comissaoDaVenda", () => {
     expect(l.find((x) => x.papel === "closer")?.pct).toBe(5);
     expect(l.find((x) => x.papel === "head")?.pct).toBe(2);
   });
-  it("Energy ainda sem regra", () => {
-    expect(comissaoDaVenda("vorp-energy", base, ctx)).toEqual([]);
+  it("Energy: executivo 30 + head 5 + diretor 5", () => {
+    expect(soma(comissaoDaVenda("vorp-energy", base, ctx))).toBeCloseTo(4000);
+  });
+  it("Energy: head vendendo ganha 35, diretor vendendo ganha 40", () => {
+    const h = comissaoDaVenda("vorp-energy", { ...base, closerId: "h", closerCargo: "head" }, ctx);
+    expect(h.filter((x) => x.beneficiarioId === "h").reduce((a, x) => a + x.pct, 0)).toBe(35);
+    const d = comissaoDaVenda("vorp-energy", { ...base, closerId: "d", closerCargo: "outro" }, ctx);
+    expect(d.filter((x) => x.beneficiarioId === "d").reduce((a, x) => a + x.pct, 0)).toBe(40);
+  });
+  it("Vorp: valor antecipado limita a base a 3 x MRR", () => {
+    const v = { ...base, valor: 36000, mrr: 3000, valorAntecipado: 36000 };
+    const l = comissaoDaVenda("vorp", v, { headId: null, diretorId: "d" });
+    expect(l.find((x) => x.papel === "closer")?.base).toBe(9000);
+    expect(l.find((x) => x.papel === "closer")?.valor).toBeCloseTo(360);
+  });
+  it("Vorp: contrato que não é o primeiro não paga comissão", () => {
+    expect(comissaoDaVenda("vorp", { ...base, primeiroContrato: false }, ctx)).toEqual([]);
   });
 });
 
