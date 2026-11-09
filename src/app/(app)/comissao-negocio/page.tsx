@@ -157,7 +157,10 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
                               <tr key={idx} className="border-t border-imperium-line/60">
                                 <td className="w-12 py-1">{dataCurta(i.data)}</td>
                                 <td className="py-1">{i.cliente ?? "—"}</td>
-                                <td className="py-1">{PAPEL[i.papel]}</td>
+                                <td className="py-1">
+                                  {PAPEL[i.papel]}
+                                  {i.tipo === "desagio" && " · deságio"}
+                                </td>
                                 <td className="py-1 text-right">
                                   {i.pct}% de {moeda(i.base)}
                                 </td>

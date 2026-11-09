@@ -45,6 +45,10 @@ export async function lancarVenda(formData: FormData) {
   const recorrencia = ehEnergy && formData.get("recorrencia") === "on";
   const recorrenciaPct = recorrencia ? valorBR(formData.get("recorrencia_pct")) || null : null;
   if (recorrenciaPct !== null && (recorrenciaPct <= 0 || recorrenciaPct > 100)) throw new Error("Percentual da recorrência inválido.");
+  // Finance: o valor pago ao cliente define a margem base (6%) e o deságio.
+  const ehFinance = slug === "vorp-finance";
+  const valorCliente = ehFinance ? valorBR(formData.get("valor_cliente")) : null;
+  if (ehFinance && !((valorCliente ?? 0) > 0)) throw new Error("Informe o valor pago ao cliente.");
   if (!slug || !vendedorId) throw new Error("Escolha o negócio e o vendedor.");
   if (!(valor > 0)) throw new Error("Informe um valor maior que zero.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || data > hojeBR()) throw new Error("Data inválida (não pode ser futura).");
@@ -78,6 +82,7 @@ export async function lancarVenda(formData: FormData) {
     primeiro_contrato: primeiroContrato,
     recorrencia,
     recorrencia_pct: recorrenciaPct,
+    valor_cliente: valorCliente,
     indicador_id: indicadorId && indicadorId !== vendedorId ? indicadorId : null,
     papel,
     negocio_id: negocio.id,

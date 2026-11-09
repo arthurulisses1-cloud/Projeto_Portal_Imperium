@@ -195,6 +195,18 @@ export default async function LancarVendasPage({
               </p>
             </fieldset>
           )}
+          {atual.slug === "vorp-finance" && (
+            <fieldset className="grid gap-3 rounded border border-imperium-line p-3 sm:col-span-2">
+              <legend className="px-1 text-[10px] uppercase tracking-widest text-stone-500">Precatório (Vorp Finance)</legend>
+              <label className="text-xs text-stone-400">
+                Valor pago ao cliente (R$)
+                <input name="valor_cliente" required inputMode="decimal" placeholder="Ex.: 100.000,00" className={campo} />
+              </label>
+              <p className="text-[11px] text-stone-500">
+                O campo &quot;Valor recebido&quot; acima é a comissão recebida. Margem base = 6% do pago ao cliente (25% dela vira comissão); o que a comissão exceder a margem é deságio.
+              </p>
+            </fieldset>
+          )}
           {atual.slug === "vorp-energy" && (
             <fieldset className="grid gap-3 rounded border border-imperium-line p-3 sm:col-span-2 sm:grid-cols-2">
               <legend className="px-1 text-[10px] uppercase tracking-widest text-stone-500">Recorrência (Maximus Energy)</legend>

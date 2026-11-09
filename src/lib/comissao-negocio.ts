@@ -13,6 +13,11 @@
 // contrato do cliente paga comissão. A recorrência segue a cada MRR recebido e
 // termina quando o contrato deixa de ser lançado (churn/encerramento).
 //
+// Finance (precatórios): a venda registra a comissão recebida (valor) e o valor pago ao
+// cliente. Margem base = 6% do pago ao cliente; 25% dela é comissão (executivo 10 / líder
+// 10 / diretor 5; líder vendendo 15 / 10). O que a comissão exceder a margem é deságio
+// (executivo 20 / líder 15 / diretor 15; líder vendendo 20 / 20).
+//
 // Ainda NÃO modelado: BDR por SQL da Vorp (R$ 10 inbound / R$ 20 outbound; a
 // validação fica para o fim do mês).
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -27,6 +32,8 @@ export type LinhaComissao = {
   /** Base sobre a qual o % incide (valor recebido, ou o teto de 3 x MRR na Vorp). */
   base: number;
   valor: number;
+  /** Finance: "base" (margem de 6%) ou "desagio" (excedente da comissão sobre a margem). */
+  tipo?: "base" | "desagio";
 };
 
 export type VendaParaComissao = {
@@ -45,7 +52,22 @@ export type VendaParaComissao = {
   primeiroContrato?: boolean;
   /** Energy: recebimento de recorrência (não é a 1ª fatura). */
   recorrencia?: boolean;
+  /** Finance: valor pago ao cliente; a margem base é 6% dele e o que a comissão (valor) exceder é deságio. */
+  valorCliente?: number | null;
 };
+
+/** Finance: margem base de 6% sobre o pago ao cliente; 25% dela vira comissão; o deságio tem tabela própria. */
+export const FINANCE = {
+  margemBase: 6,
+  base: {
+    comExecutivo: { executivo: 10, lider: 10, diretor: 5 },
+    liderVendendo: { lider: 15, diretor: 10 },
+  },
+  desagio: {
+    comExecutivo: { executivo: 20, lider: 15, diretor: 15 },
+    liderVendendo: { lider: 20, diretor: 20 },
+  },
+} as const;
 
 /** Energy, recorrência: 30% executivo, 25% lideranças (Head e Diretor em partes iguais), 45% Vorp (sem linha). */
 export const RECORRENCIA_ENERGY = { executivo: 30, liderancas: 25, vorp: 45 } as const;
@@ -100,6 +122,7 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
   if (!p) return [];
   const linhas: LinhaComissao[] = [];
   if (slug === "vorp-energy" && venda.recorrencia) return comissaoRecorrenciaEnergy(venda, ctx);
+  if (slug === "vorp-finance") return comissaoFinance(venda, ctx);
   if (slug === "vorp" && venda.primeiroContrato === false) return [];
   // Teto da Vorp: com valor antecipado e MRR, a base é no máximo 3 x MRR.
   const base =
@@ -130,6 +153,34 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
   } else {
     add(ctx.diretorId, "diretor", p.diretor);
   }
+  return linhas;
+}
+
+/** Finance: comissão base sobre a margem (6% do pago ao cliente) + deságio (excedente da comissão recebida). */
+function comissaoFinance(venda: VendaParaComissao, ctx: ContextoNegocio): LinhaComissao[] {
+  const linhas: LinhaComissao[] = [];
+  const temCliente = (venda.valorCliente ?? 0) > 0;
+  // Sem o valor pago ao cliente (vendas antigas), a margem é o próprio valor recebido e não há deságio.
+  const margem = temCliente ? ((venda.valorCliente as number) * FINANCE.margemBase) / 100 : venda.valor;
+  const desagio = temCliente ? Math.max(0, venda.valor - margem) : 0;
+  const liderVendendo = venda.closerCargo === "head";
+  const add = (id: string | null, papel: PapelComissao, pct: number, base: number, tipo: "base" | "desagio") => {
+    if (!id || pct <= 0 || base <= 0) return;
+    linhas.push({ beneficiarioId: id, papel, pct, base, valor: (base * pct) / 100, tipo });
+  };
+  const aplicar = (base: number, tipo: "base" | "desagio") => {
+    const t = FINANCE[tipo];
+    if (liderVendendo) {
+      add(venda.closerId, "closer", t.liderVendendo.lider, base, tipo);
+      add(ctx.diretorId, "diretor", t.liderVendendo.diretor, base, tipo);
+    } else {
+      add(venda.closerId, "closer", t.comExecutivo.executivo, base, tipo);
+      add(ctx.headId && ctx.headId !== venda.closerId ? ctx.headId : null, "head", t.comExecutivo.lider, base, tipo);
+      add(ctx.diretorId, "diretor", t.comExecutivo.diretor, base, tipo);
+    }
+  };
+  aplicar(margem, "base");
+  aplicar(desagio, "desagio");
   return linhas;
 }
 
@@ -165,7 +216,7 @@ export type ComissaoPessoa = {
   nome: string;
   total: number;
   porPapel: Partial<Record<PapelComissao, number>>;
-  itens: { vendaId: string; data: string; cliente: string | null; papel: PapelComissao; pct: number; base: number; valor: number }[];
+  itens: { vendaId: string; data: string; cliente: string | null; papel: PapelComissao; pct: number; base: number; valor: number; tipo?: "base" | "desagio" }[];
 };
 
 export type ComissaoNegocio = {
@@ -193,7 +244,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
   const [{ data: vendas }, { data: membros }, { data: diretor }, { data: perfis }] = await Promise.all([
     supabase
       .from("vendas")
-      .select("id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente, mrr, valor_antecipado, primeiro_contrato, recorrencia")
+      .select("id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente, mrr, valor_antecipado, primeiro_contrato, recorrencia, valor_cliente")
       .in("negocio_id", ids)
       .gte("data", inicio)
       .lt("data", fimExcl)
@@ -230,6 +281,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
         valorAntecipado: v.valor_antecipado === null || v.valor_antecipado === undefined ? null : Number(v.valor_antecipado),
         primeiroContrato: v.primeiro_contrato ?? true,
         recorrencia: v.recorrencia ?? false,
+        valorCliente: v.valor_cliente === null || v.valor_cliente === undefined ? null : Number(v.valor_cliente),
       };
       for (const l of comissaoDaVenda(n.slug, venda, ctx)) {
         const pessoa = porPessoa.get(l.beneficiarioId) ?? {
@@ -241,7 +293,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
         };
         pessoa.total += l.valor;
         pessoa.porPapel[l.papel] = (pessoa.porPapel[l.papel] ?? 0) + l.valor;
-        pessoa.itens.push({ vendaId: v.id, data: v.data, cliente: v.cliente ?? null, papel: l.papel, pct: l.pct, base: l.base, valor: l.valor });
+        pessoa.itens.push({ vendaId: v.id, data: v.data, cliente: v.cliente ?? null, papel: l.papel, pct: l.pct, base: l.base, valor: l.valor, tipo: l.tipo });
         porPessoa.set(l.beneficiarioId, pessoa);
       }
     }

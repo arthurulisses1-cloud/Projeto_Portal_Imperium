@@ -20,12 +20,35 @@ describe("comissaoDaVenda", () => {
     expect(l.find((x) => x.beneficiarioId === "h")?.pct).toBe(1);
     expect(l.find((x) => x.beneficiarioId === "d")?.pct).toBe(2);
   });
-  it("Finance: executivo 10 + head 10 + diretor 5", () => {
+  it("Finance sem valor pago ao cliente (venda antiga): 25% do recebido, sem deságio", () => {
     expect(soma(comissaoDaVenda("vorp-finance", base, ctx))).toBeCloseTo(2500);
   });
-  it("Finance com Head vendendo: 15 para ele e 10 para o Diretor", () => {
-    const l = comissaoDaVenda("vorp-finance", { ...base, closerId: "h", closerCargo: "head" }, ctx);
-    expect(l.map((x) => [x.beneficiarioId, x.pct])).toEqual([["h", 15], ["d", 10]]);
+  it("Finance: margem de 6% do pago ao cliente, 25% dela em 10/10/5; sem deságio quando a comissão é igual à margem", () => {
+    // pago ao cliente 100.000 -> margem 6.000; comissão recebida 6.000
+    const l = comissaoDaVenda("vorp-finance", { ...base, valor: 6000, valorCliente: 100000 }, ctx);
+    expect(l.every((x) => x.tipo === "base")).toBe(true);
+    expect(l.find((x) => x.beneficiarioId === "c")?.valor).toBeCloseTo(600);
+    expect(l.find((x) => x.beneficiarioId === "h")?.valor).toBeCloseTo(600);
+    expect(l.find((x) => x.beneficiarioId === "d")?.valor).toBeCloseTo(300);
+  });
+  it("Finance: o excedente sobre a margem é deságio, 20/15/15 com executivo", () => {
+    // margem 6.000; comissão recebida 10.000 -> deságio 4.000
+    const l = comissaoDaVenda("vorp-finance", { ...base, valor: 10000, valorCliente: 100000 }, ctx);
+    const d = l.filter((x) => x.tipo === "desagio");
+    expect(d.find((x) => x.beneficiarioId === "c")?.valor).toBeCloseTo(800);
+    expect(d.find((x) => x.beneficiarioId === "h")?.valor).toBeCloseTo(600);
+    expect(d.find((x) => x.beneficiarioId === "d")?.valor).toBeCloseTo(600);
+    expect(soma(l)).toBeCloseTo(1500 + 2000);
+  });
+  it("Finance com líder vendendo: base 15/10 e deságio 20/20", () => {
+    const v = { ...base, valor: 10000, valorCliente: 100000, closerId: "h", closerCargo: "head" };
+    const l = comissaoDaVenda("vorp-finance", v, ctx);
+    expect(l.filter((x) => x.tipo === "base").map((x) => [x.beneficiarioId, x.pct])).toEqual([["h", 15], ["d", 10]]);
+    expect(l.filter((x) => x.tipo === "desagio").map((x) => [x.beneficiarioId, x.pct, x.valor])).toEqual([["h", 20, 800], ["d", 20, 800]]);
+  });
+  it("Finance: comissão menor que a margem não gera deságio", () => {
+    const l = comissaoDaVenda("vorp-finance", { ...base, valor: 5000, valorCliente: 100000 }, ctx);
+    expect(l.some((x) => x.tipo === "desagio")).toBe(false);
   });
   it("MatchSales outbound 10 + líder 2; inbound 8 + 2; com BDR 5/5/2", () => {
     expect(soma(comissaoDaVenda("matchsales", base, ctx))).toBeCloseTo(1200);
