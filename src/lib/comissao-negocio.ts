@@ -43,7 +43,12 @@ export type VendaParaComissao = {
   valorAntecipado?: number | null;
   /** Só o 1º contrato do cliente paga comissão; padrão true. */
   primeiroContrato?: boolean;
+  /** Energy: recebimento de recorrência (não é a 1ª fatura). */
+  recorrencia?: boolean;
 };
+
+/** Energy, recorrência: 30% executivo, 25% lideranças (Head e Diretor em partes iguais), 45% Vorp (sem linha). */
+export const RECORRENCIA_ENERGY = { executivo: 30, liderancas: 25, vorp: 45 } as const;
 
 export type ContextoNegocio = {
   /** Head do negócio, se houver. */
@@ -94,6 +99,7 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
   const p = percentuais(slug, venda);
   if (!p) return [];
   const linhas: LinhaComissao[] = [];
+  if (slug === "vorp-energy" && venda.recorrencia) return comissaoRecorrenciaEnergy(venda, ctx);
   if (slug === "vorp" && venda.primeiroContrato === false) return [];
   // Teto da Vorp: com valor antecipado e MRR, a base é no máximo 3 x MRR.
   const base =
@@ -123,6 +129,25 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
     add(ctx.diretorId, "diretor", p.diretor - 1);
   } else {
     add(ctx.diretorId, "diretor", p.diretor);
+  }
+  return linhas;
+}
+
+function comissaoRecorrenciaEnergy(venda: VendaParaComissao, ctx: ContextoNegocio): LinhaComissao[] {
+  const linhas: LinhaComissao[] = [];
+  const base = venda.valor;
+  const add = (id: string | null, papel: PapelComissao, pct: number) => {
+    if (!id || pct <= 0) return;
+    linhas.push({ beneficiarioId: id, papel, pct, base, valor: (base * pct) / 100 });
+  };
+  const lider = RECORRENCIA_ENERGY.liderancas;
+  const diretorVendeu = !!ctx.diretorId && venda.closerId === ctx.diretorId;
+  add(venda.closerId, "closer", RECORRENCIA_ENERGY.executivo);
+  if (!ctx.headId) {
+    add(ctx.diretorId, "diretor", lider);
+  } else {
+    add(diretorVendeu ? ctx.diretorId : ctx.headId, "head", lider / 2);
+    add(ctx.diretorId, "diretor", lider / 2);
   }
   return linhas;
 }
@@ -168,7 +193,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
   const [{ data: vendas }, { data: membros }, { data: diretor }, { data: perfis }] = await Promise.all([
     supabase
       .from("vendas")
-      .select("id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente, mrr, valor_antecipado, primeiro_contrato")
+      .select("id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente, mrr, valor_antecipado, primeiro_contrato, recorrencia")
       .in("negocio_id", ids)
       .gte("data", inicio)
       .lt("data", fimExcl)
@@ -204,6 +229,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
         mrr: v.mrr === null || v.mrr === undefined ? null : Number(v.mrr),
         valorAntecipado: v.valor_antecipado === null || v.valor_antecipado === undefined ? null : Number(v.valor_antecipado),
         primeiroContrato: v.primeiro_contrato ?? true,
+        recorrencia: v.recorrencia ?? false,
       };
       for (const l of comissaoDaVenda(n.slug, venda, ctx)) {
         const pessoa = porPessoa.get(l.beneficiarioId) ?? {

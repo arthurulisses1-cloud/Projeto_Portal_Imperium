@@ -195,6 +195,22 @@ export default async function LancarVendasPage({
               </p>
             </fieldset>
           )}
+          {atual.slug === "vorp-energy" && (
+            <fieldset className="grid gap-3 rounded border border-imperium-line p-3 sm:col-span-2 sm:grid-cols-2">
+              <legend className="px-1 text-[10px] uppercase tracking-widest text-stone-500">Recorrência (Maximus Energy)</legend>
+              <label className="flex items-center gap-2 text-xs text-stone-400">
+                <input type="checkbox" name="recorrencia" />
+                Este lançamento é recorrência (não a primeira fatura)
+              </label>
+              <label className="text-xs text-stone-400">
+                % da recorrência negociado (3 a 15, opcional)
+                <input name="recorrencia_pct" inputMode="decimal" placeholder="Ex.: 4,5" className={campo} />
+              </label>
+              <p className="text-[11px] text-stone-500 sm:col-span-2">
+                Informe o valor realmente recebido: ele se divide em 30% executivos, 25% lideranças e 45% Vorp.
+              </p>
+            </fieldset>
+          )}
           <label className="text-xs text-stone-400 sm:col-span-2">
             Observação
             <input name="observacao" className={campo} />

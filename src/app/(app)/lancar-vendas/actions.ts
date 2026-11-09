@@ -40,6 +40,11 @@ export async function lancarVenda(formData: FormData) {
   const valorAntecipado = ehVorp ? valorBR(formData.get("valor_antecipado")) : null;
   const primeiroContrato = ehVorp ? formData.get("primeiro_contrato") === "on" : true;
   if (ehVorp && !((mrr ?? 0) > 0)) throw new Error("Informe o MRR do contrato.");
+  // Energy: recebimento de recorrência (30% executivos, 25% lideranças, 45% Vorp). O % negociado (3 a 15) é só referência.
+  const ehEnergy = slug === "vorp-energy";
+  const recorrencia = ehEnergy && formData.get("recorrencia") === "on";
+  const recorrenciaPct = recorrencia ? valorBR(formData.get("recorrencia_pct")) || null : null;
+  if (recorrenciaPct !== null && (recorrenciaPct <= 0 || recorrenciaPct > 100)) throw new Error("Percentual da recorrência inválido.");
   if (!slug || !vendedorId) throw new Error("Escolha o negócio e o vendedor.");
   if (!(valor > 0)) throw new Error("Informe um valor maior que zero.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || data > hojeBR()) throw new Error("Data inválida (não pode ser futura).");
@@ -71,6 +76,8 @@ export async function lancarVenda(formData: FormData) {
     valor_total_contrato: valorTotal,
     valor_antecipado: valorAntecipado,
     primeiro_contrato: primeiroContrato,
+    recorrencia,
+    recorrencia_pct: recorrenciaPct,
     indicador_id: indicadorId && indicadorId !== vendedorId ? indicadorId : null,
     papel,
     negocio_id: negocio.id,

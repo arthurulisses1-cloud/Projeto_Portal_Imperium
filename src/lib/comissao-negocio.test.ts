@@ -44,6 +44,17 @@ describe("comissaoDaVenda", () => {
     const d = comissaoDaVenda("vorp-energy", { ...base, closerId: "d", closerCargo: "outro" }, ctx);
     expect(d.filter((x) => x.beneficiarioId === "d").reduce((a, x) => a + x.pct, 0)).toBe(40);
   });
+  it("Energy recorrência: 30% executivo + 25% lideranças (Head e Diretor), 45% fica com a Vorp", () => {
+    const l = comissaoDaVenda("vorp-energy", { ...base, recorrencia: true }, ctx);
+    expect(soma(l)).toBeCloseTo(5500);
+    expect(l.find((x) => x.beneficiarioId === "c")?.valor).toBeCloseTo(3000);
+    expect(l.find((x) => x.beneficiarioId === "h")?.valor).toBeCloseTo(1250);
+    expect(l.find((x) => x.beneficiarioId === "d")?.valor).toBeCloseTo(1250);
+  });
+  it("Energy recorrência: Diretor vendendo leva 30% + as duas partes de liderança", () => {
+    const l = comissaoDaVenda("vorp-energy", { ...base, closerId: "d", recorrencia: true }, ctx);
+    expect(l.filter((x) => x.beneficiarioId === "d").reduce((a, x) => a + x.pct, 0)).toBe(55);
+  });
   it("Vorp: valor antecipado limita a base a 3 x MRR", () => {
     const v = { ...base, valor: 36000, mrr: 3000, valorAntecipado: 36000 };
     const l = comissaoDaVenda("vorp", v, { headId: null, diretorId: "d" });
