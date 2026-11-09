@@ -32,6 +32,8 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
   const m = /^(\d{4})-(\d{2})$/.exec(searchParams.mes ?? "");
   const ano = m ? Number(m[1]) : Number(hoje.slice(0, 4));
   const mes = m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? Number(m[2]) : Number(hoje.slice(5, 7));
+  // Antes de novembro/2026 vale o modelo antigo (DRE).
+  if (ano * 100 + mes < 202611) redirect("/dre");
   const ant = mesAnterior(ano, mes);
 
   const [comissoes, comissoesAnt, { data: negocios }] = await Promise.all([

@@ -47,6 +47,9 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
   const ano = m ? Number(m[1]) : Number(hoje.slice(0, 4));
   const mes = m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? Number(m[2]) : Number(hoje.slice(5, 7));
 
+  // Fechamentos até outubro/2026 (inclusive) seguem o modelo antigo de comissão.
+  if (ano * 100 + mes < 202611) redirect(`/comissao?ano=${ano}&mes=${mes}`);
+
   const foco = negocioEmFoco(searchParams.negocio ?? cookies().get(COOKIE_NEGOCIO)?.value, visiveis);
   const escolhidos = foco ? [foco] : visiveis;
   const dados = await buscarComissoesNegocios(supabase, ano, mes, escolhidos.map((n) => n.slug));
@@ -79,6 +82,10 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
           </Link>
         </div>
       </div>
+
+      <p className="text-xs text-stone-500">
+        Fechamentos até outubro/2026 seguem o modelo antigo: <Link href="/comissao?ano=2026&mes=10" className="text-gold hover:underline">ver outubro</Link>.
+      </p>
 
       {visiveis.length > 1 && (
         <div className="flex flex-wrap gap-2 text-sm">

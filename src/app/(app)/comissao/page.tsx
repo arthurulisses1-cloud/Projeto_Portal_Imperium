@@ -186,6 +186,13 @@ export default async function ComissaoPage({
             Comissão de {MESES[mes - 1]}/{ano}
           </h1>
           <p className="text-xs text-stone-400">Visão privada — só você e o Diretor veem isso</p>
+          {ano * 100 + mes >= 202611 ? (
+            <p className="mt-1 text-xs text-amber-400">
+              Este mês já segue o modelo novo por negócio. <a href={`/comissao-negocio?mes=${ano}-${String(mes).padStart(2, "0")}`} className="underline">Abrir a Comissão do Mês nova</a>.
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-stone-500">Fechamento no modelo antigo (até outubro/2026).</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <a
