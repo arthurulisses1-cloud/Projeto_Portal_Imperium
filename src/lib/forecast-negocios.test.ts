@@ -16,8 +16,12 @@ describe("forecast por negócio", () => {
   it("recorrência faz dezembro maior que novembro (MatchSales)", () => {
     expect(metaForecast("matchsales", 2026, 12)).toBeGreaterThan(metaForecast("matchsales", 2026, 11));
   });
-  it("Vorp: meta de recebido fixa em R$ 100 mil e a de MRR segue o forecast", () => {
+  it("Energy: novembro = 62.192 (1ª conta do outbound + referidos; inbound cai em dezembro)", () => {
+    expect(Math.round(metaForecast("vorp-energy", 2026, 11))).toBe(62192);
+  });
+  it("Vorp: meta de recebido fixa em R$ 100 mil só em novembro e a de MRR segue o forecast", () => {
     expect(metaForecast("vorp", 2026, 11)).toBe(100000);
+    expect(metaForecast("vorp", 2026, 12)).not.toBe(100000);
     expect(metaMrrForecast("vorp", 2026, 12)).toBeGreaterThan(metaMrrForecast("vorp", 2026, 11));
   });
 });

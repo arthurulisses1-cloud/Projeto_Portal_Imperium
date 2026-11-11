@@ -15,7 +15,7 @@ export type ParametrosForecast = {
   outbound?: CanalFunil;
   inbound?: CanalFunil;
   /** Indicações: leads gerados por venda direta e taxas [reunião realizada, venda]. */
-  referidos?: { leadsPorVenda: number; taxas: [number, number] };
+  referidos?: { leadsPorVenda: number; taxas: [number, number]; /** Se o inbound converte diferente do outbound. */ taxasInbound?: [number, number] };
   churn: number;
 };
 
@@ -45,6 +45,7 @@ export const PARAMETROS: Record<string, ParametrosForecast> = {
   "vorp-energy": {
     outbound: { volume: 3960, taxas: [0.15, 0.25, 0.7, 0.7, 0.2] },
     inbound: { volume: 200, taxas: [0.3, 0.8, 0.3, 0.7, 0.8, 0.3] },
+    referidos: { leadsPorVenda: 4, taxas: [0.6, 0.2], taxasInbound: [0.6, 0.3] },
     churn: 0.05,
   },
 };
@@ -81,24 +82,31 @@ function chaveMes(i: number): string {
 }
 
 /** Vendas (fracionárias) previstas no mês i, já com ramp-up. */
-export function vendasDoMes(p: ParametrosForecast, i: number): { outbound: number; inbound: number; referidos: number; total: number } {
+export function vendasDoMes(
+  p: ParametrosForecast,
+  i: number,
+): { outbound: number; inbound: number; referidos: number; referidosOutbound: number; referidosInbound: number; total: number } {
   const ramp = RAMP_UP[chaveMes(i)] ?? 1;
   const outbound = p.outbound ? produto(p.outbound.volume, p.outbound.taxas) * ramp : 0;
   const inbound = p.inbound ? produto(p.inbound.volume, p.inbound.taxas) * ramp : 0;
-  const diretas = outbound + inbound;
-  const referidos = p.referidos ? diretas * p.referidos.leadsPorVenda * p.referidos.taxas[0] * p.referidos.taxas[1] : 0;
-  return { outbound, inbound, referidos, total: diretas + referidos };
+  const r = p.referidos;
+  const taxaIn = r?.taxasInbound ?? r?.taxas;
+  const referidosOutbound = r ? outbound * r.leadsPorVenda * r.taxas[0] * r.taxas[1] : 0;
+  const referidosInbound = r && taxaIn ? inbound * r.leadsPorVenda * taxaIn[0] * taxaIn[1] : 0;
+  const referidos = referidosOutbound + referidosInbound;
+  return { outbound, inbound, referidos, referidosOutbound, referidosInbound, total: outbound + inbound + referidos };
 }
 
 /** Metas de recebimento definidas pelo Diretor, que valem no lugar do forecast (a meta de MRR segue o forecast). */
-export const META_RECEBIDO_FIXA: Record<string, number> = { vorp: 100000 };
+export const META_RECEBIDO_FIXA: Record<string, Record<string, number>> = { vorp: { "2026-11": 100000 } };
 
 /** Meta de recebimento (R$) do negócio no mês, ou 0 se não houver forecast. */
 export function metaForecast(slug: string, ano: number, mes: number): number {
   const p = PARAMETROS[slug];
   const i = indiceMes(ano, mes);
   if (!p || i < 0) return 0;
-  if (META_RECEBIDO_FIXA[slug]) return META_RECEBIDO_FIXA[slug];
+  const fixa = META_RECEBIDO_FIXA[slug]?.[chaveMes(i)];
+  if (fixa) return fixa;
   const vendas = Array.from({ length: i + 1 }, (_, j) => vendasDoMes(p, j).total);
   const sobrevive = (desde: number) => Math.pow(1 - p.churn, desde);
 
@@ -112,19 +120,21 @@ export function metaForecast(slug: string, ano: number, mes: number): number {
     return vendas[i] * FINANCE_TICKET;
   }
   if (slug === "vorp-energy") {
+    // Sunne em 100% das vendas; Folha em 30% delas. A 1ª conta do Sunne cai no mês da venda
+    // (outbound) ou no mês seguinte (inbound); a recorrência de ambos começa no 3º mês.
+    const det = Array.from({ length: i + 1 }, (_, j) => vendasDoMes(p, j));
     let total = 0;
+    const primeiraConta = (j: number, parte: number) => {
+      const pct = det[j].total * ENERGY_KWH_POR_VENDA <= ENERGY_LIMITE_KWH_MES ? ENERGY_PCT_ATE_LIMITE : 1;
+      return parte * ENERGY_PRIMEIRA_CONTA * pct;
+    };
+    total += primeiraConta(i, det[i].outbound + det[i].referidosOutbound);
+    if (i >= 1) total += primeiraConta(i - 1, det[i - 1].inbound + det[i - 1].referidosInbound);
     for (let j = 0; j <= i; j++) {
-      const sunne = vendas[j] * (1 - ENERGY_PCT_FOLHA);
-      const folha = vendas[j] * ENERGY_PCT_FOLHA;
-      if (j === i) {
-        const pct = sunne * ENERGY_KWH_POR_VENDA <= ENERGY_LIMITE_KWH_MES ? ENERGY_PCT_ATE_LIMITE : 1;
-        total += sunne * ENERGY_PRIMEIRA_CONTA * pct;
-      }
       const idade = i - j;
-      if (idade >= 2) {
-        total += sunne * ENERGY_PRIMEIRA_CONTA * ENERGY_RECORRENCIA_SUNNE * sobrevive(idade);
-        total += folha * ENERGY_FOLHA_MENSAL * sobrevive(idade);
-      }
+      if (idade < 2) continue;
+      total += det[j].total * ENERGY_PRIMEIRA_CONTA * ENERGY_RECORRENCIA_SUNNE * sobrevive(idade);
+      total += det[j].total * ENERGY_PCT_FOLHA * ENERGY_FOLHA_MENSAL * sobrevive(idade);
     }
     return total;
   }

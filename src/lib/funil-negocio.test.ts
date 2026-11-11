@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { funisDoMes } from "./funil-negocio";
 
 describe("funisDoMes", () => {
-  it("MatchSales tem 3 canais; Finance e Energy têm 2", () => {
+  it("MatchSales e Energy têm 3 canais (com indicação); Finance tem 2", () => {
     expect(funisDoMes("matchsales", 2026, 12).map((f) => f.canal)).toEqual(["outbound", "inbound", "indicacao"]);
     expect(funisDoMes("vorp-finance", 2026, 12).map((f) => f.canal)).toEqual(["outbound", "inbound"]);
-    expect(funisDoMes("vorp-energy", 2026, 12).map((f) => f.canal)).toEqual(["outbound", "inbound"]);
+    expect(funisDoMes("vorp-energy", 2026, 12).map((f) => f.canal)).toEqual(["outbound", "inbound", "indicacao"]);
   });
   it("volume inicial e conversões do forecast (outbound MatchSales, mês cheio)", () => {
     const e = funisDoMes("matchsales", 2026, 12)[0].etapas;
