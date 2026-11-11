@@ -52,7 +52,7 @@ async function lerFormulario(formData: FormData) {
   const kwh = ehEnergy ? valorBR(formData.get("kwh")) || null : null;
   if (!slug || !vendedorId) throw new Error("Escolha o negócio e o vendedor.");
   if (!(valor > 0)) throw new Error("Informe um valor maior que zero.");
-  if (!/^d{4}-d{2}-d{2}$/.test(data) || data > hojeBR()) throw new Error("Data inválida (não pode ser futura).");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || data > hojeBR()) throw new Error("Data inválida (não pode ser futura).");
 
   const { data: negocio } = await supabase.from("negocios").select("id, status").eq("slug", slug).maybeSingle();
   if (!negocio || negocio.status !== "ativo") throw new Error("Negócio inválido ou arquivado.");
