@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { indiceMes, metaForecast, PARAMETROS, vendasDoMes } from "./forecast-negocios";
+import { indiceMes, metaForecast, metaMrrForecast, PARAMETROS, vendasDoMes } from "./forecast-negocios";
 
 describe("forecast por negócio", () => {
   it("novembro/2026 é o mês 0 e antes dele não há meta", () => {
@@ -13,7 +13,11 @@ describe("forecast por negócio", () => {
     const p = PARAMETROS.matchsales;
     expect(vendasDoMes(p, 0).total).toBeCloseTo(vendasDoMes(p, 1).total / 2);
   });
-  it("recorrência faz dezembro maior que novembro (Vorp)", () => {
-    expect(metaForecast("vorp", 2026, 12)).toBeGreaterThan(metaForecast("vorp", 2026, 11));
+  it("recorrência faz dezembro maior que novembro (MatchSales)", () => {
+    expect(metaForecast("matchsales", 2026, 12)).toBeGreaterThan(metaForecast("matchsales", 2026, 11));
+  });
+  it("Vorp: meta de recebido fixa em R$ 100 mil e a de MRR segue o forecast", () => {
+    expect(metaForecast("vorp", 2026, 11)).toBe(100000);
+    expect(metaMrrForecast("vorp", 2026, 12)).toBeGreaterThan(metaMrrForecast("vorp", 2026, 11));
   });
 });

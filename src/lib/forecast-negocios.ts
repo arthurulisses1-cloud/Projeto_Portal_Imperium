@@ -90,11 +90,15 @@ export function vendasDoMes(p: ParametrosForecast, i: number): { outbound: numbe
   return { outbound, inbound, referidos, total: diretas + referidos };
 }
 
+/** Metas de recebimento definidas pelo Diretor, que valem no lugar do forecast (a meta de MRR segue o forecast). */
+export const META_RECEBIDO_FIXA: Record<string, number> = { vorp: 100000 };
+
 /** Meta de recebimento (R$) do negócio no mês, ou 0 se não houver forecast. */
 export function metaForecast(slug: string, ano: number, mes: number): number {
   const p = PARAMETROS[slug];
   const i = indiceMes(ano, mes);
   if (!p || i < 0) return 0;
+  if (META_RECEBIDO_FIXA[slug]) return META_RECEBIDO_FIXA[slug];
   const vendas = Array.from({ length: i + 1 }, (_, j) => vendasDoMes(p, j).total);
   const sobrevive = (desde: number) => Math.pow(1 - p.churn, desde);
 
