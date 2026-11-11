@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { NEGOCIO_COR, nomeEquipe } from "@/lib/negocios";
 import type { LinhaPainelNegocio } from "@/lib/negocio-painel";
 
@@ -12,9 +13,15 @@ function pct(recebido: number, meta: number): number | null {
 export default function PainelNegocios({
   linhas,
   mesLabel,
+  ritmoPct,
+  lancar,
 }: {
   linhas: LinhaPainelNegocio[];
   mesLabel: string;
+  /** % do mês já transcorrido (só no mês corrente): marca onde a barra deveria estar. */
+  ritmoPct: number | null;
+  /** Atalho para lançar venda (só o Diretor). */
+  lancar?: ReactNode;
 }) {
   const ativos = linhas.filter((l) => l.status === "ativo");
   const arquivados = linhas.filter((l) => l.status === "arquivado" && l.recebido > 0);
@@ -42,12 +49,15 @@ export default function PainelNegocios({
             <div className="h-full rounded-full bg-gold" style={{ width: `${Math.min(100, pctTotal ?? 0)}%` }} />
           </div>
         )}
+        {metaTotal > 0 && <Situacao recebido={recebidoTotal} meta={metaTotal} ritmoPct={ritmoPct} />}
         {arquivados.length > 0 && (
           <p className="mt-2 text-xs text-stone-500">
             Inclui {arquivados.map((a) => `${nomeEquipe(a)}: ${moeda(a.recebido)}`).join(" · ")}
           </p>
         )}
       </div>
+
+      {lancar}
 
       <div className="grid gap-3 sm:grid-cols-2">
         {ativos.map((n) => {
@@ -76,19 +86,54 @@ export default function PainelNegocios({
                 </div>
                 <p className="text-2xl font-semibold text-stone-100">{p === null ? "—" : `${p}%`}</p>
               </div>
-              <p className="mt-1 text-xs text-stone-400">
-                {moeda(n.recebido)} {n.meta > 0 ? `de ${moeda(n.meta)}` : "· sem meta definida"}
+              <Barra rotulo="Recebido" valor={n.recebido} meta={n.meta} cor={cor} ritmoPct={ritmoPct} />
+              {n.mrrMeta > 0 && <Barra rotulo="MRR" valor={n.mrrRealizado} meta={n.mrrMeta} cor={cor} ritmoPct={ritmoPct} />}
+              <p className="mt-3 text-[11px] text-stone-500">
+                {n.vendasQtd} {n.vendasQtd === 1 ? "lançamento" : "lançamentos"} no mês
+                {n.meta > 0 && <> · <Situacao inline recebido={n.recebido} meta={n.meta} ritmoPct={ritmoPct} /></>}
               </p>
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-imperium-raised">
-                <div
-                  className="h-full rounded-full"
-                  style={{ width: `${Math.min(100, p ?? 0)}%`, backgroundColor: `rgb(${cor})` }}
-                />
-              </div>
             </div>
           );
         })}
       </div>
     </section>
   );
+}
+
+/** Barra de progresso com a marca de ritmo (onde deveria estar hoje). */
+function Barra({ rotulo, valor, meta, cor, ritmoPct }: { rotulo: string; valor: number; meta: number; cor: string; ritmoPct: number | null }) {
+  const p = pct(valor, meta);
+  return (
+    <div className="mt-3">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <span className="uppercase tracking-widest text-stone-500">{rotulo}</span>
+        <span className="text-stone-300">
+          <span className="font-semibold text-stone-100">{moeda(valor)}</span>
+          {meta > 0 ? ` de ${moeda(meta)} · ${p}%` : " · sem meta definida"}
+        </span>
+      </div>
+      <div className="relative mt-1 h-2 overflow-hidden rounded-full bg-imperium-raised">
+        <div className="h-full rounded-full" style={{ width: `${Math.min(100, p ?? 0)}%`, backgroundColor: `rgb(${cor})` }} />
+        {ritmoPct !== null && meta > 0 && <div className="absolute top-0 h-full w-0.5 bg-stone-200/70" style={{ left: `${Math.min(100, ritmoPct)}%` }} />}
+      </div>
+    </div>
+  );
+}
+
+/** Quanto falta e se está no ritmo da meta (só no mês corrente). */
+function Situacao({ recebido, meta, ritmoPct, inline }: { recebido: number; meta: number; ritmoPct: number | null; inline?: boolean }) {
+  const falta = Math.max(0, meta - recebido);
+  const esperado = ritmoPct !== null ? (meta * ritmoPct) / 100 : null;
+  const noRitmo = esperado === null ? null : recebido >= esperado;
+  const texto = falta === 0 ? "meta batida" : `faltam ${moeda(falta)}`;
+  const ritmo = noRitmo === null ? null : noRitmo ? "no ritmo" : `${moeda(esperado! - recebido)} abaixo do ritmo`;
+  const conteudo = (
+    <>
+      {texto}
+      {ritmo && (
+        <span className={noRitmo ? "text-success-bright" : "text-wine-bright"}> · {ritmo}</span>
+      )}
+    </>
+  );
+  return inline ? <>{conteudo}</> : <p className="mt-2 text-xs text-stone-400">{conteudo}</p>;
 }

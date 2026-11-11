@@ -24,7 +24,10 @@ import { ACADEMY_RH } from "@/lib/acessos-especiais";
 import { buscarAulasCobranca } from "@/lib/academy";
 import CobrancaFechamento from "@/components/academy/CobrancaFechamento";
 import PainelNegocios from "@/components/ui/PainelNegocios";
-import { buscarPainelNegocios } from "@/lib/negocio-painel";
+import { buscarPainelNegocios, buscarOpcoesLancamento } from "@/lib/negocio-painel";
+import FormLancarVenda from "@/components/negocio/FormLancarVenda";
+import LancarVendaMural from "@/components/negocio/LancarVendaMural";
+import { NEGOCIO_COR, nomeEquipe } from "@/lib/negocios";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -35,7 +38,7 @@ function moeda(v: number) {
 export default async function MuralPage({
   searchParams,
 }: {
-  searchParams: { ano?: string; mes?: string };
+  searchParams: { ano?: string; mes?: string; lancado?: string };
 }) {
   const supabase = await createClient();
 
@@ -261,10 +264,32 @@ export default async function MuralPage({
   const verPainelNegocios = meRole === "diretor" || meRole === "investidor" || analistaFinanceiroLiberado;
   const painelNegocios = verPainelNegocios ? await buscarPainelNegocios(supabase, ano, mes) : [];
 
+  // Ritmo: só no mês corrente, % do mês já transcorrido.
+  const ritmoPct =
+    ano === anoHoje && mes === mesHoje ? Math.round((Number(hoje.slice(8, 10)) / new Date(ano, mes, 0).getDate()) * 100) : null;
+  // Atalho de lançamento de venda direto no Mural (só o Diretor).
+  let lancarVenda: React.ReactNode = null;
+  if (meRole === "diretor" && painelNegocios.length > 0) {
+    const { vendedoresPor, todos } = await buscarOpcoesLancamento(supabase, painelNegocios);
+    lancarVenda = (
+      <LancarVendaMural
+        itens={painelNegocios
+          .filter((n) => n.status === "ativo")
+          .map((n) => ({
+            slug: n.slug,
+            nome: nomeEquipe(n),
+            cor: NEGOCIO_COR[n.slug] ?? "201 162 74",
+            form: <FormLancarVenda slug={n.slug} vendedores={vendedoresPor[n.slug] ?? []} todos={todos} hoje={hoje} retorno="mural" />,
+          }))}
+      />
+    );
+  }
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
+      {searchParams.lancado && <p className="rounded border border-success/50 px-3 py-2 text-sm text-success-bright">Venda lançada.</p>}
       {painelNegocios.length > 0 && (
-        <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} />
+        <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} ritmoPct={ritmoPct} lancar={lancarVenda} />
       )}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">

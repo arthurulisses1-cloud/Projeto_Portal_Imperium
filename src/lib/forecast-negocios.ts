@@ -126,3 +126,14 @@ export function metaForecast(slug: string, ano: number, mes: number): number {
   }
   return 0;
 }
+
+/** Meta de MRR (R$) do mês — só Vorp e MatchSales têm contrato recorrente. É a parte recorrente da meta de recebimento (sem o setup). */
+export function metaMrrForecast(slug: string, ano: number, mes: number): number {
+  if (slug !== "vorp" && slug !== "matchsales") return 0;
+  const p = PARAMETROS[slug];
+  const i = indiceMes(ano, mes);
+  if (!p || i < 0) return 0;
+  const vendas = Array.from({ length: i + 1 }, (_, j) => vendasDoMes(p, j).total);
+  const ticket = slug === "vorp" ? VORP_TICKET_MENSAL : MATCH_TICKET_MENSAL;
+  return vendas.reduce((acc, v, j) => acc + v * ticket * Math.pow(1 - p.churn, i - j), 0);
+}

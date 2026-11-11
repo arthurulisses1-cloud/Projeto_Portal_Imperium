@@ -35,7 +35,7 @@ export async function lancarVenda(formData: FormData) {
   if (!["outbound", "inbound", "indicacao"].includes(canal)) throw new Error("Escolha o canal da venda.");
   // Vorp: sempre se lança MRR, valor total do contrato e valor antecipado.
   const ehVorp = slug === "vorp";
-  const mrr = ehVorp ? valorBR(formData.get("mrr")) : null;
+  const mrr = ehVorp || slug === "matchsales" ? valorBR(formData.get("mrr")) || null : null;
   const valorTotal = ehVorp ? valorBR(formData.get("valor_total_contrato")) : null;
   const valorAntecipado = ehVorp ? valorBR(formData.get("valor_antecipado")) : null;
   const primeiroContrato = ehVorp ? formData.get("primeiro_contrato") === "on" : true;
@@ -93,6 +93,7 @@ export async function lancarVenda(formData: FormData) {
 
   revalidatePath("/lancar-vendas");
   revalidatePath("/");
+  if (formData.get("retorno") === "mural") redirect("/?lancado=1");
   redirect(`/lancar-vendas?negocio=${slug}&ok=1`);
 }
 
