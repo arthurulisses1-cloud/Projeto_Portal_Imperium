@@ -88,6 +88,7 @@ export default function PainelNegocios({
               </div>
               <Barra rotulo="Recebido" valor={n.recebido} meta={n.meta} cor={cor} ritmoPct={ritmoPct} />
               {n.mrrMeta > 0 && <Barra rotulo="MRR" valor={n.mrrRealizado} meta={n.mrrMeta} cor={cor} ritmoPct={ritmoPct} />}
+              {n.kwhMeta > 0 && <Barra rotulo="kWh no mês" valor={n.kwhRealizado} meta={n.kwhMeta} cor={cor} ritmoPct={ritmoPct} fmt={kwhFmt} />}
               <p className="mt-3 text-[11px] text-stone-500">
                 {n.vendasQtd} {n.vendasQtd === 1 ? "lançamento" : "lançamentos"} no mês
                 {n.meta > 0 && <> · <Situacao inline recebido={n.recebido} meta={n.meta} ritmoPct={ritmoPct} /></>}
@@ -101,15 +102,19 @@ export default function PainelNegocios({
 }
 
 /** Barra de progresso com a marca de ritmo (onde deveria estar hoje). */
-function Barra({ rotulo, valor, meta, cor, ritmoPct }: { rotulo: string; valor: number; meta: number; cor: string; ritmoPct: number | null }) {
+function kwhFmt(v: number) {
+  return `${Math.round(v).toLocaleString("pt-BR")} kWh`;
+}
+
+function Barra({ rotulo, valor, meta, cor, ritmoPct, fmt = moeda }: { rotulo: string; valor: number; meta: number; cor: string; ritmoPct: number | null; fmt?: (v: number) => string }) {
   const p = pct(valor, meta);
   return (
     <div className="mt-3">
       <div className="flex items-baseline justify-between gap-2 text-xs">
         <span className="uppercase tracking-widest text-stone-500">{rotulo}</span>
         <span className="text-stone-300">
-          <span className="font-semibold text-stone-100">{moeda(valor)}</span>
-          {meta > 0 ? ` de ${moeda(meta)} · ${p}%` : " · sem meta definida"}
+          <span className="font-semibold text-stone-100">{fmt(valor)}</span>
+          {meta > 0 ? ` de ${fmt(meta)} · ${p}%` : " · sem meta definida"}
         </span>
       </div>
       <div className="relative mt-1 h-2 overflow-hidden rounded-full bg-imperium-raised">

@@ -131,6 +131,10 @@ export default function FormLancarVenda({
                 % da recorrência negociado (3 a 15, opcional)
                 <input name="recorrencia_pct" inputMode="decimal" placeholder="Ex.: 4,5" className={campo} />
               </label>
+              <label className="text-xs text-stone-400">
+                kWh vendidos (opcional)
+                <input name="kwh" inputMode="decimal" placeholder="Ex.: 10.500 (conta nova, não recorrência)" className={campo} />
+              </label>
               <p className="text-[11px] text-stone-500 sm:col-span-2">
                 Informe o valor realmente recebido: ele se divide em 30% executivos, 25% lideranças e 45% Vorp.
               </p>

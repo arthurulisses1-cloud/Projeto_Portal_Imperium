@@ -1,6 +1,6 @@
 // Painel de 4 quadrantes do Mural: recebido x meta de recebimento por negócio.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { metaForecast, metaMrrForecast } from "@/lib/forecast-negocios";
+import { metaForecast, metaKwhForecast, metaMrrForecast } from "@/lib/forecast-negocios";
 import type { CargoNegocio } from "@/lib/negocios";
 import type { VendedorOpcao, PessoaOpcao } from "@/components/negocio/FormLancarVenda";
 
@@ -17,6 +17,9 @@ export type LinhaPainelNegocio = {
   mrrMeta: number;
   mrrRealizado: number;
   vendasQtd: number;
+  /** Só Energy: meta e realizado de kWh vendidos no mês. */
+  kwhMeta: number;
+  kwhRealizado: number;
 };
 
 export async function buscarPainelNegocios(
@@ -30,17 +33,19 @@ export async function buscarPainelNegocios(
   const [{ data: negocios }, { data: metas }, { data: vendas }] = await Promise.all([
     supabase.from("negocios").select("id, slug, nome, status, equipe_nome, equipe_bandeira").order("ordem"),
     supabase.from("metas_negocio").select("negocio_id, meta_recebimento").eq("ano", ano).eq("mes", mes),
-    supabase.from("vendas").select("negocio_id, valor, mrr").gte("data", inicio).lt("data", fim).range(0, 19999),
+    supabase.from("vendas").select("negocio_id, valor, mrr, kwh").gte("data", inicio).lt("data", fim).range(0, 19999),
   ]);
 
   const metaPor = new Map((metas ?? []).map((m) => [m.negocio_id as string, Number(m.meta_recebimento)]));
   const recebidoPor = new Map<string, number>();
   const mrrPor = new Map<string, number>();
   const qtdPor = new Map<string, number>();
+  const kwhPor = new Map<string, number>();
   for (const v of vendas ?? []) {
     if (!v.negocio_id) continue;
     recebidoPor.set(v.negocio_id, (recebidoPor.get(v.negocio_id) ?? 0) + Number(v.valor));
     mrrPor.set(v.negocio_id, (mrrPor.get(v.negocio_id) ?? 0) + Number(v.mrr ?? 0));
+    kwhPor.set(v.negocio_id, (kwhPor.get(v.negocio_id) ?? 0) + Number(v.kwh ?? 0));
     qtdPor.set(v.negocio_id, (qtdPor.get(v.negocio_id) ?? 0) + 1);
   }
 
@@ -56,6 +61,8 @@ export async function buscarPainelNegocios(
     mrrMeta: Math.round(metaMrrForecast(n.slug, ano, mes)),
     mrrRealizado: mrrPor.get(n.id) ?? 0,
     vendasQtd: qtdPor.get(n.id) ?? 0,
+    kwhMeta: Math.round(metaKwhForecast(n.slug, ano, mes)),
+    kwhRealizado: kwhPor.get(n.id) ?? 0,
   }));
 }
 

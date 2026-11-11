@@ -141,6 +141,18 @@ export function metaForecast(slug: string, ano: number, mes: number): number {
   return 0;
 }
 
+/** Metas de kWh/mês do Energy definidas pelo Diretor; fora delas vale o forecast (vendas do mês x kWh por venda). */
+export const META_KWH_FIXA: Record<string, Record<string, number>> = { "vorp-energy": { "2026-11": 120000 } };
+
+/** Meta de kWh vendidos no mês (só Energy), ou 0. */
+export function metaKwhForecast(slug: string, ano: number, mes: number): number {
+  if (slug !== "vorp-energy") return 0;
+  const i = indiceMes(ano, mes);
+  const p = PARAMETROS[slug];
+  if (!p || i < 0) return 0;
+  return META_KWH_FIXA[slug]?.[chaveMes(i)] ?? vendasDoMes(p, i).total * ENERGY_KWH_POR_VENDA;
+}
+
 /** Meta de MRR (R$) do mês — só Vorp e MatchSales têm contrato recorrente. É a parte recorrente da meta de recebimento (sem o setup). */
 export function metaMrrForecast(slug: string, ano: number, mes: number): number {
   if (slug !== "vorp" && slug !== "matchsales") return 0;
