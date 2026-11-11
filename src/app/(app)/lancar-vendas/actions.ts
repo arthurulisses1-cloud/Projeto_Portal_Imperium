@@ -13,9 +13,8 @@ function valorBR(v: FormDataEntryValue | null): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-/** Registra uma venda/recebimento de um negócio. Quem pode (Diretor ou Head do
- *  negócio) é garantido pela RLS; aqui só validamos os dados. */
-export async function lancarVenda(formData: FormData) {
+/** Lê e valida o formulário de venda (lançar e editar usam as mesmas regras). */
+async function lerFormulario(formData: FormData) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -53,7 +52,7 @@ export async function lancarVenda(formData: FormData) {
   const kwh = ehEnergy ? valorBR(formData.get("kwh")) || null : null;
   if (!slug || !vendedorId) throw new Error("Escolha o negócio e o vendedor.");
   if (!(valor > 0)) throw new Error("Informe um valor maior que zero.");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || data > hojeBR()) throw new Error("Data inválida (não pode ser futura).");
+  if (!/^d{4}-d{2}-d{2}$/.test(data) || data > hojeBR()) throw new Error("Data inválida (não pode ser futura).");
 
   const { data: negocio } = await supabase.from("negocios").select("id, status").eq("slug", slug).maybeSingle();
   if (!negocio || negocio.status !== "ativo") throw new Error("Negócio inválido ou arquivado.");
@@ -68,12 +67,10 @@ export async function lancarVenda(formData: FormData) {
 
   const papel = ["sdr", "bdr", "pre_vendas"].includes(vinc.cargo) ? "sdr" : "closer";
 
-  const { error } = await supabase.from("vendas").insert({
+  const campos = {
     profile_id: vendedorId,
-    tipo: "individual",
     valor,
     data,
-    origem: "lancamento manual",
     cliente,
     produto,
     observacao,
@@ -88,7 +85,19 @@ export async function lancarVenda(formData: FormData) {
     kwh,
     indicador_id: indicadorId && indicadorId !== vendedorId ? indicadorId : null,
     papel,
-    negocio_id: negocio.id,
+  };
+  return { supabase, user, slug, negocioId: negocio.id as string, campos };
+}
+
+/** Registra uma venda/recebimento de um negócio. Quem pode (Diretor ou Head do
+ *  negócio) é garantido pela RLS; aqui só validamos os dados. */
+export async function lancarVenda(formData: FormData) {
+  const { supabase, user, slug, negocioId, campos } = await lerFormulario(formData);
+  const { error } = await supabase.from("vendas").insert({
+    ...campos,
+    tipo: "individual",
+    origem: "lancamento manual",
+    negocio_id: negocioId,
     lancamento_manual: true,
     lancado_por: user.id,
   });
@@ -98,6 +107,20 @@ export async function lancarVenda(formData: FormData) {
   revalidatePath("/");
   if (formData.get("retorno") === "mural") redirect("/?lancado=1");
   redirect(`/lancar-vendas?negocio=${slug}&ok=1`);
+}
+
+/** Corrige um lançamento manual já feito (mesmas regras do lançamento). */
+export async function editarVendaManual(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("Lançamento inválido.");
+  const { supabase, slug, campos } = await lerFormulario(formData);
+  const { data, error } = await supabase.from("vendas").update(campos).eq("id", id).eq("lancamento_manual", true).select("id");
+  if (error) throw new Error("Não foi possível salvar: " + error.message);
+  if (!data || data.length === 0) throw new Error("Lançamento não encontrado ou sem permissão para editar.");
+
+  revalidatePath("/lancar-vendas");
+  revalidatePath("/");
+  redirect(`/lancar-vendas?negocio=${slug}&editado=1`);
 }
 
 export async function excluirVendaManual(formData: FormData) {

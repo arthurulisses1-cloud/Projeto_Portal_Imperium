@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import Card from "@/components/ui/Card";
 import { hojeBR } from "@/lib/data-br";
 import { NEGOCIO_COR, nomeEquipe, type CargoNegocio } from "@/lib/negocios";
-import FormLancarVenda from "@/components/negocio/FormLancarVenda";
+import FormLancarVenda, { type VendaEdicao } from "@/components/negocio/FormLancarVenda";
 import { excluirVendaManual } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ function dataCurta(iso: string) {
 export default async function LancarVendasPage({
   searchParams,
 }: {
-  searchParams: { negocio?: string; ok?: string };
+  searchParams: { negocio?: string; ok?: string; editar?: string; editado?: string };
 }) {
   const supabase = await createClient();
   const {
@@ -61,7 +61,7 @@ export default async function LancarVendasPage({
   const hoje = hojeBR();
   const inicioMes = hoje.slice(0, 7) + "-01";
 
-  const [{ data: membros }, { data: todos }, { data: lancados }] = await Promise.all([
+  const [{ data: membros }, { data: todos }, { data: lancados }, { data: emEdicao }] = await Promise.all([
     supabase.from("profile_negocios").select("cargo, profiles(id, full_name)").eq("negocio_id", atual.id),
     supabase.from("profiles").select("id, full_name").order("full_name"),
     supabase
@@ -73,6 +73,15 @@ export default async function LancarVendasPage({
       .order("data", { ascending: false })
       .order("synced_at", { ascending: false })
       .limit(100),
+    searchParams.editar
+      ? supabase
+          .from("vendas")
+          .select("id, profile_id, valor, data, cliente, produto, observacao, canal, indicador_id, mrr, valor_total_contrato, valor_antecipado, primeiro_contrato, recorrencia, recorrencia_pct, valor_cliente, kwh")
+          .eq("id", searchParams.editar)
+          .eq("negocio_id", atual.id)
+          .eq("lancamento_manual", true)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   type M = { cargo: CargoNegocio; profiles: { id: string; full_name: string } | { id: string; full_name: string }[] | null };
@@ -110,7 +119,29 @@ export default async function LancarVendasPage({
         </div>
       )}
 
+      {searchParams.editado && <p className="rounded border border-success/50 px-3 py-2 text-sm text-success-bright">Lançamento atualizado.</p>}
       {searchParams.ok && <p className="rounded border border-success/50 px-3 py-2 text-sm text-success-bright">Venda lançada.</p>}
+
+      {emEdicao && (
+        <Card>
+          <div className="mb-3 flex items-baseline justify-between">
+            <p className="text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
+              Editando lançamento · {nomeEquipe(atual)}
+            </p>
+            <Link href={`/lancar-vendas?negocio=${atual.slug}`} className="text-xs text-stone-400 hover:text-stone-100">
+              Cancelar
+            </Link>
+          </div>
+          <FormLancarVenda
+            key={emEdicao.id}
+            slug={atual.slug}
+            hoje={hoje}
+            todos={todos ?? []}
+            vendedores={vendedores.map((v) => ({ id: v.p.id, nome: v.p.full_name, cargo: v.cargo }))}
+            venda={emEdicao as VendaEdicao}
+          />
+        </Card>
+      )}
 
       <Card>
         <p className="mb-3 text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
@@ -142,6 +173,9 @@ export default async function LancarVendasPage({
                     {nome} {l.cliente ? `· ${l.cliente}` : ""} {l.produto ? `· ${l.produto}` : ""}
                   </span>
                   <span className="shrink-0 text-stone-100">{moeda(Number(l.valor))}</span>
+                  <Link href={`/lancar-vendas?negocio=${atual.slug}&editar=${l.id}`} className="text-xs text-gold hover:underline">
+                    Editar
+                  </Link>
                   <form action={excluirVendaManual}>
                     <input type="hidden" name="id" value={l.id} />
                     <input type="hidden" name="negocio_slug" value={atual.slug} />
