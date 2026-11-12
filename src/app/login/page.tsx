@@ -118,6 +118,11 @@ export default function LoginPage() {
             <button type="submit" disabled={loading} className="btn-gold w-full">
               {loading ? "Entrando..." : "Entrar"}
             </button>
+            {process.env.NODE_ENV === "development" && (
+              <a href="/demo" className="btn-outline mt-3 block w-full text-center">
+                Ver demonstração local
+              </a>
+            )}
           </form>
         ) : resetEnviado ? (
           <div>
