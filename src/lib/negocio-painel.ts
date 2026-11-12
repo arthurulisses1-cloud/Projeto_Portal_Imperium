@@ -2,6 +2,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { metaForecast, metaKwhForecast, metaMrrForecast } from "@/lib/forecast-negocios";
 import type { CargoNegocio } from "@/lib/negocios";
+import { kwhSunneDoMes } from "@/lib/sunne";
 import type { VendedorOpcao, PessoaOpcao } from "@/components/negocio/FormLancarVenda";
 
 export type LinhaPainelNegocio = {
@@ -30,10 +31,15 @@ export async function buscarPainelNegocios(
   const inicio = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const fim = mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, "0")}-01`;
 
-  const [{ data: negocios }, { data: metas }, { data: vendas }] = await Promise.all([
+  const [{ data: negocios }, { data: metas }, { data: vendas }, kwhSunne] = await Promise.all([
     supabase.from("negocios").select("id, slug, nome, status, equipe_nome, equipe_bandeira").order("ordem"),
     supabase.from("metas_negocio").select("negocio_id, meta_recebimento").eq("ano", ano).eq("mes", mes),
     supabase.from("vendas").select("negocio_id, valor, mrr, kwh").gte("data", inicio).lt("data", fim).range(0, 19999),
+    // kWh do Energy vem da Sunne (consumo médio dos fechados no mês); null se a leitura falhar.
+    kwhSunneDoMes(ano, mes).catch((e) => {
+      console.error("kwhSunneDoMes falhou:", e);
+      return null;
+    }),
   ]);
 
   const metaPor = new Map((metas ?? []).map((m) => [m.negocio_id as string, Number(m.meta_recebimento)]));
@@ -62,7 +68,7 @@ export async function buscarPainelNegocios(
     mrrRealizado: mrrPor.get(n.id) ?? 0,
     vendasQtd: qtdPor.get(n.id) ?? 0,
     kwhMeta: Math.round(metaKwhForecast(n.slug, ano, mes)),
-    kwhRealizado: kwhPor.get(n.id) ?? 0,
+    kwhRealizado: n.slug === "vorp-energy" && kwhSunne !== null ? kwhSunne : kwhPor.get(n.id) ?? 0,
   }));
 }
 
