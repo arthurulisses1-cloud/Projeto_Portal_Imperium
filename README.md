@@ -1,5 +1,11 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Banco local para desenvolvimento
+
+Com o Docker Desktop em execução, rode `npm ci` e `npm run db:start`. O primeiro início baixa as imagens e aplica as migrations de `supabase/migrations`. Use `npm run db:status` para consultar as URLs e chaves locais e `npm run db:stop` para parar os serviços.
+
+**Iniciar o Supabase local não muda a conexão do aplicativo.** Antes de testar, configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY` com os valores da instância local, em um ambiente separado do arquivo de credenciais remoto. Confirme o destino antes de iniciar o portal ou executar operações de escrita. Use dados fictícios e mantenha integrações externas desativadas nos testes locais.
+
 ## Getting Started
 
 First, run the development server:
