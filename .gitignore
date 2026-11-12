@@ -34,6 +34,9 @@ yarn-error.log*
 # claude code local settings
 .claude/settings.local.json
 
+# configuração MCP local (contém token de acesso) — nunca versionar
+/.mcp.json
+
 # arquivos de imagem originais (não otimizados) — as versões usadas pelo
 # site ficam em public/crests, essas aqui só existem no seu computador
 /fotos
@@ -45,3 +48,6 @@ relatorio_compra_comissoes.csv
 
 # Dados sensíveis (salários) — nunca versionar
 supabase/privado/
+
+# Documentação privada de integrações
+/Sunne-Partner-API-v1-2026-11-10.pdf

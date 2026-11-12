@@ -7,6 +7,7 @@ import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nom
 import { buscarDashboardNegocio, RANKINGS, type MixCanal } from "@/lib/dashboard-negocio";
 import { funisDoMes } from "@/lib/funil-negocio";
 import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
+import { buscarResumoSunne, type SunneResumo } from "@/lib/sunne";
 import type { StatusPace } from "@/lib/pace-negocio";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +69,17 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
   const dados = await buscarDashboardNegocio(supabase, atual.slug, ano, mes, hoje);
   if (!dados) redirect("/");
 
+  let sunne: SunneResumo | null = null;
+  let sunneErro = false;
+  if (atual.slug === "vorp-energy") {
+    try {
+      sunne = await buscarResumoSunne(supabase, ano, mes);
+    } catch (e) {
+      console.error("buscarResumoSunne falhou:", e);
+      sunneErro = true;
+    }
+  }
+
   const ehGestor = eu.role === "diretor" || atual.cargo === "head";
   const comissao = ehGestor ? (await buscarComissoesNegocios(supabase, ano, mes, [atual.slug]))[0] : null;
 
@@ -81,7 +93,26 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
   const totalMix = dados.vendas.mix.reduce((s, x) => s + x.valor, 0);
   const funis = funisDoMes(atual.slug, ano, mes);
   const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
-  const rankings = (RANKINGS[atual.slug] ?? []).map((k) => dados.esforco.find((e) => e.chave === k)).filter((e): e is NonNullable<typeof e> => !!e);
+  // Energy: contas subidas vêm da Sunne (negócios criados no mês por vendedor), não do compromisso do dia.
+  const rankings = (RANKINGS[atual.slug] ?? [])
+    .map((k) => dados.esforco.find((e) => e.chave === k))
+    .filter((e): e is NonNullable<typeof e> => !!e)
+    .map((rk) =>
+      atual.slug === "vorp-energy" && rk.chave === "contas_subidas" && sunne
+        ? {
+            ...rk,
+            realizado: sunne.criados,
+            porPessoa: sunne.porOrganizacao
+              .filter((o) => o.criados > 0)
+              .map((o) => ({ nome: o.pessoa ?? o.nome, meta: 0, realizado: o.criados }))
+              .sort((a, b) => b.realizado - a.realizado || a.nome.localeCompare(b.nome, "pt-BR")),
+            fonte: "Sunne",
+          }
+        : { ...rk, fonte: null as string | null },
+    );
+  // Realizado do funil do Energy: a Sunne não informa o canal, então é o total de todos os canais.
+  const metaEtapa = (label: string) => funis.reduce((s, fu) => s + (fu.etapas.find((e) => e.label === label)?.meta ?? 0), 0);
+  const funilSunne = atual.slug === "vorp-energy" && sunne ? { contas: sunne.criados, metaContas: metaEtapa("Contas subidas"), vendas: sunne.fechados, metaVendas: metaEtapa("Vendas") } : null;
   const pessoasComVenda = dados.pace.pessoas.filter((p) => p.recebido > 0);
 
   return (
@@ -162,7 +193,14 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Funil do mês (meta do forecast)</p>
-          <p className="text-[11px] text-stone-500">Realizado aguardando a integração com o Pipefácil</p>
+          {funilSunne ? (
+            <p className="text-[11px] text-stone-400">
+              Realizado na Sunne, todos os canais: <span className="text-stone-100">{num(funilSunne.contas)}</span> contas subidas de {num(funilSunne.metaContas)} ·{" "}
+              <span className="text-stone-100">{num(funilSunne.vendas)}</span> vendas de {num(funilSunne.metaVendas)}
+            </p>
+          ) : (
+            <p className="text-[11px] text-stone-500">{atual.slug === "vorp-energy" && sunneErro ? "Dados da Sunne indisponíveis no momento" : "Realizado aguardando a integração com o Pipefácil"}</p>
+          )}
         </div>
         {funis.length === 0 ? (
           <p className="mt-2 text-sm text-stone-500">Este negócio ainda não tem forecast neste mês.</p>
@@ -255,6 +293,7 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
               <p className="text-[10px] uppercase tracking-widest text-stone-500">Ranking · {rk.label}</p>
               <p className="text-xs text-stone-500">
                 {num(rk.realizado)} no mês · {num(rk.meta)} comprometidos
+                {rk.fonte ? ` · ${rk.fonte}` : ""}
               </p>
               {rk.porPessoa.length === 0 ? (
                 <p className="mt-2 text-sm text-stone-500">Ninguém registrou ainda.</p>
@@ -272,9 +311,25 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
             </section>
           ))}
           {atual.slug === "vorp-energy" && (
-            <section className="rounded-lg border border-dashed border-imperium-line bg-imperium-surface p-4">
-              <p className="text-[10px] uppercase tracking-widest text-stone-500">Ranking · kWh gerado</p>
-              <p className="mt-2 text-sm text-stone-500">Aguardando a integração com o Pipefácil.</p>
+            <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+              <p className="text-[10px] uppercase tracking-widest text-stone-500">Ranking · kWh vendido</p>
+              <p className="text-xs text-stone-500">Consumo médio dos fechados no mês · Sunne</p>
+              {!sunne || sunne.porOrganizacao.every((o) => o.kwh === 0) ? (
+                <p className="mt-2 text-sm text-stone-500">{sunneErro ? "Dados da Sunne indisponíveis." : "Nenhum fechamento no mês."}</p>
+              ) : (
+                <ol className="mt-2 space-y-1 text-sm">
+                  {sunne.porOrganizacao
+                    .filter((o) => o.kwh > 0)
+                    .slice(0, 8)
+                    .map((o, i) => (
+                      <li key={o.organizationId} className="flex items-center gap-2">
+                        <span className="w-5 text-xs text-stone-500">{i + 1}</span>
+                        <span className="min-w-0 flex-1 truncate text-stone-200">{o.pessoa ?? o.nome}</span>
+                        <span className="text-stone-100">{num(o.kwh)}</span>
+                      </li>
+                    ))}
+                </ol>
+              )}
             </section>
           )}
         </div>

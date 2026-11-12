@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     url.searchParams.get("secret") ??
     request.headers.get("x-sync-secret") ??
     authHeader?.replace(/^Bearer\s+/i, "");
-  if (secret !== process.env.CRON_SECRET) {
+  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

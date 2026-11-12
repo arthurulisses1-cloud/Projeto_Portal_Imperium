@@ -2,6 +2,10 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
+  // A demonstração usa apenas dados fictícios e só existe em desenvolvimento.
+  if (process.env.NODE_ENV === "development" && request.nextUrl.pathname === "/demo") {
+    return NextResponse.next();
+  }
   // Repassa o pathname num header pra páginas/layouts Server Component
   // saberem em que rota estão sem precisar virar Client Component
   // (usado pra não duplicar a lateral direita no Mural, que já tem a sua própria).
