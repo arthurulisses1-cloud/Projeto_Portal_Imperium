@@ -64,7 +64,7 @@ export function canalDoDeal(d: Pick<DealPipefacil, "properties" | "tags" | "trac
   return null;
 }
 
-function dealParaLinha(negocioId: string, d: DealPipefacil): DealCrm & Record<string, unknown> {
+function dealParaLinha(negocioId: string, d: DealPipefacil, campos: ConfigCrm["campos"]): DealCrm & Record<string, unknown> {
   const p = d.properties ?? {};
   const produtos = Array.isArray(p.produtos) ? (p.produtos as unknown[]).map(String) : TEXTO(p.produtos) ? [String(p.produtos)] : null;
   return {
@@ -75,8 +75,9 @@ function dealParaLinha(negocioId: string, d: DealPipefacil): DealCrm & Record<st
     stage_id: d.stageId,
     status: d.status,
     canal: canalDoDeal(d),
-    faturamento: TEXTO(p.quanto_sua_empresa_fatura_por_mes),
-    cargo: TEXTO(p.qual_seu_cargo_atual),
+    faturamento: TEXTO(p[campos.faturamento]),
+    cargo: TEXTO(p[campos.cargo]),
+    tamanho_time: campos.tamanhoTime ? TEXTO(p[campos.tamanhoTime]) : null,
     valor: NUMERO(d.value),
     mrr: NUMERO(p.mrr),
     nome: d.name,
@@ -132,9 +133,15 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   // 1) Espelho dos leads dos funis do negócio.
   const deals: DealPipefacil[] = [];
   for (const seq of cfg.pipelines) deals.push(...(await api.dealsDoFunil(seq)));
-  const linhasDeals = deals.map((d) => dealParaLinha(negocioId, d));
+  const linhasDeals = deals.map((d) => dealParaLinha(negocioId, d, cfg.campos));
   if (!simular) {
-    for (const lote of chunk(linhasDeals, 500)) {
+    // tamanho_time só é usado no cálculo do MQL; crm_deals não tem essa coluna.
+    const espelho = linhasDeals.map((d) => {
+      const linha: Record<string, unknown> = { ...d };
+      delete linha.tamanho_time;
+      return linha;
+    });
+    for (const lote of chunk(espelho, 500)) {
       const { error } = await supabase.from("crm_deals").upsert(lote, { onConflict: "negocio_id,deal_id" });
       if (error) throw new Error("Erro gravando leads do CRM: " + error.message);
     }
@@ -207,7 +214,8 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   }
 
   // 4) Vendas a partir dos Ganhos.
-  const ganhas = vendasGanhas(linhasDeals, eventos, cfg).filter((g) => g.data >= INICIO_REALIZADO);
+  const inicioVendas = cfg.inicioVendas ?? INICIO_REALIZADO;
+  const ganhas = vendasGanhas(linhasDeals, eventos, cfg).filter((g) => g.data >= inicioVendas);
   let vendas: Resultado = { ganhas: ganhas.length, criadas: 0, atualizadas: 0, removidas: 0, semVinculo: [] as string[] };
   if (opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas);
 
@@ -309,32 +317,35 @@ export async function runSyncIntegracoes(opts: OpcoesSync = {}): Promise<Resulta
   const resultado: Resultado = {};
   const erros: string[] = [];
 
-  for (const n of negocios ?? []) {
-    const r: Resultado = {};
-    const c3 = TRESC_POR_NEGOCIO[n.slug];
-    if (c3) {
-      const token = process.env[c3.tokenEnv];
-      try {
-        if (!token) throw new Error(`${c3.tokenEnv} não configurado`);
-        r.tresc = await sync3c(supabase, n.id, token, c3.segundosConexao, opts.desde3c ?? somaDias(hoje, -1), !!opts.simular);
-      } catch (e) {
-        const msg = `${n.slug}/3c: ${e instanceof Error ? e.message : String(e)}`;
-        erros.push(msg);
-        r.tresc = { erro: msg };
+  // Negócios em paralelo (contas separadas), para caber no tempo da função.
+  await Promise.all(
+    (negocios ?? []).map(async (n) => {
+      const r: Resultado = {};
+      const c3 = TRESC_POR_NEGOCIO[n.slug];
+      if (c3) {
+        const token = process.env[c3.tokenEnv];
+        try {
+          if (!token) throw new Error(`${c3.tokenEnv} não configurado`);
+          r.tresc = await sync3c(supabase, n.id, token, c3.segundosConexao, opts.desde3c ?? somaDias(hoje, -1), !!opts.simular);
+        } catch (e) {
+          const msg = `${n.slug}/3c: ${e instanceof Error ? e.message : String(e)}`;
+          erros.push(msg);
+          r.tresc = { erro: msg };
+        }
       }
-    }
-    const crm = CRM_POR_NEGOCIO[n.slug];
-    if (crm) {
-      try {
-        r.crm = await syncCrm(supabase, n.slug, n.id, crm, opts);
-      } catch (e) {
-        const msg = `${n.slug}/pipefacil: ${e instanceof Error ? e.message : String(e)}`;
-        erros.push(msg);
-        r.crm = { erro: msg };
+      const crm = CRM_POR_NEGOCIO[n.slug];
+      if (crm) {
+        try {
+          r.crm = await syncCrm(supabase, n.slug, n.id, crm, opts);
+        } catch (e) {
+          const msg = `${n.slug}/pipefacil: ${e instanceof Error ? e.message : String(e)}`;
+          erros.push(msg);
+          r.crm = { erro: msg };
+        }
       }
-    }
-    resultado[n.slug] = r;
-  }
+      resultado[n.slug] = r;
+    }),
+  );
 
   if (!opts.simular) {
     await supabase.from("sync_log").insert({

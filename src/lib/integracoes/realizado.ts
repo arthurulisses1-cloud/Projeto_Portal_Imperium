@@ -3,13 +3,15 @@
 // Regra de contagem: um lead conta numa etapa no dia em que, pela primeira vez, chegou
 // nela OU numa etapa mais avançada (lead que pula etapa ou já nasce adiantado também conta).
 // O canal é o campo Canal do lead: outbound, trafego (= Inbound) ou indicacao.
-import { ETAPAS_PORTAL, NIVEL, NIVEL_DA_ETAPA, type CanalPortal, type ConfigCrm, type Nivel } from "./config";
+import { ETAPAS_PORTAL, NIVEL, NIVEL_DA_ETAPA, type CanalPortal, type ConfigCrm, type CriterioMql, type Nivel } from "./config";
 
 export type DealCrm = {
   deal_id: string;
   canal: string | null;
   faturamento: string | null;
   cargo: string | null;
+  /** Tamanho do time comercial (só em memória; não vai para crm_deals). */
+  tamanho_time?: string | null;
   status: string | null;
   stage_id: string | null;
   valor: number | null;
@@ -35,8 +37,14 @@ export function canalPortal(deal: Pick<DealCrm, "canal">, cfg: ConfigCrm): Canal
   return deal.canal ? cfg.canais[deal.canal] ?? null : null;
 }
 
-export function ehMql(deal: Pick<DealCrm, "faturamento" | "cargo">, cfg: ConfigCrm): boolean {
-  return !!deal.faturamento && !!deal.cargo && cfg.mql.faturamento.includes(deal.faturamento) && cfg.mql.cargo.includes(deal.cargo);
+/** MQL: o lead atende todos os critérios definidos na config do negócio. */
+export function ehMql(deal: Pick<DealCrm, "faturamento" | "cargo" | "tamanho_time">, cfg: ConfigCrm): boolean {
+  const criterios = (Object.entries(cfg.mql) as [CriterioMql, string[] | undefined][]).filter(([, v]) => v && v.length > 0);
+  if (criterios.length === 0) return false;
+  return criterios.every(([k, aceitos]) => {
+    const v = deal[k];
+    return !!v && aceitos!.includes(v);
+  });
 }
 
 /** Primeiro instante em que cada lead atingiu cada nível (ou mais). */
@@ -117,7 +125,7 @@ export function vendasGanhas(deals: DealCrm[], eventos: EventoCrm[], cfg: Config
   const chegada = primeiraChegada(eventos, cfg);
   const out: VendaCrm[] = [];
   for (const d of deals) {
-    if (d.status !== "won" || d.stage_id !== cfg.stageGanhoVenda) continue;
+    if (d.status !== "won" || !d.stage_id || !cfg.stagesGanhoVenda.includes(d.stage_id)) continue;
     const canal = canalPortal(d, cfg);
     if (!canal) continue;
     const quando = chegada.get(d.deal_id)?.[NIVEL.venda] ?? d.fechado_em;

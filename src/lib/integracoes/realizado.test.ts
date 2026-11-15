@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CRM_POR_NEGOCIO } from "./config";
+import { CRM_POR_NEGOCIO, TRESC_POR_NEGOCIO } from "./config";
 import { calcularRealizadoCrm, dataBR, ehMql, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { contarAlosConexoes, segundos } from "./tresc";
 import { canalDoDeal } from "./run";
@@ -130,7 +130,73 @@ describe("funil do dashboard", () => {
     const out = funis.find((f) => f.canal === "outbound")!;
     expect(out.etapas[0].realizado).toBe(143);
     expect(out.etapas[1].realizado).toBe(0);
-    const semIntegracao = aplicarRealizado(funisDoMes("matchsales", 2026, 12), [], etapasIntegradas("matchsales"));
+    const semIntegracao = aplicarRealizado(funisDoMes("vorp-finance", 2026, 12), [], etapasIntegradas("vorp-finance"));
     expect(semIntegracao[0].etapas[0].realizado).toBeNull();
+  });
+});
+
+describe("Galáticos (MatchSales)", () => {
+  const ms = CRM_POR_NEGOCIO.matchsales;
+  const MS = {
+    conectadoIn: "626eef2e-4d84-49ab-ac8b-4d59d1cea87b", // Atendimento Humano
+    agendadaIn: "a4252513-8bce-41cd-9fe1-43af1d1cb12f",
+    propostaIn: "d40dee61-af9a-459e-8220-0887456a4346",
+    ganhoIn: "8c448cb1-7c1a-4244-bb64-690a70f453d0",
+    atendimentoIa: "25051def-de7f-4b10-b90b-e4e49e0dc612",
+    realizadaOut: "8e2ee4e7-e369-4d57-b9c7-26370d9d48d0",
+    ganhoOut: "31aab8a9-79f7-4824-b229-4d1a4eac8319",
+  };
+
+  it("tem 3C e Pipefácil próprios e todas as etapas do funil integradas", () => {
+    expect(TRESC_POR_NEGOCIO.matchsales.tokenEnv).toBe("TCP_API_TOKEN_MATCH");
+    expect(ms.tokenEnv).toBe("PIPEFACIL_API_TOKEN_MATCH");
+    const i = etapasIntegradas("matchsales");
+    expect(i.has("outbound|alos")).toBe(true);
+    expect(i.has("inbound|mql")).toBe(true);
+    expect(i.has("indicacao|vendas")).toBe(true);
+  });
+
+  it("MQL: faturamento a partir de 50 mil e mais de 2 vendedores (cargo não importa)", () => {
+    expect(ehMql({ faturamento: "entre_50_e_100_mil", cargo: null, tamanho_time: "entre_2_e_5_vendedores" }, ms)).toBe(true);
+    expect(ehMql({ faturamento: "acima_de_500_mil", cargo: "vendedor", tamanho_time: "mais_de_20_vendedores" }, ms)).toBe(true);
+    expect(ehMql({ faturamento: "abaixo_de_50_mil", cargo: "dono_socio", tamanho_time: "mais_de_20_vendedores" }, ms)).toBe(false);
+    expect(ehMql({ faturamento: "entre_100_e_150_mil", cargo: "dono_socio", tamanho_time: "ate_2_vendedores" }, ms)).toBe(false);
+    expect(ehMql({ faturamento: "entre_100_e_150_mil", cargo: "dono_socio", tamanho_time: null }, ms)).toBe(false);
+  });
+
+  it("inbound só Tráfego Pago; indicação de cliente/investidor e parceiros; Google fica fora", () => {
+    const deals = [
+      deal({ deal_id: "t", canal: "trafego", criado_em: "2026-11-05T13:00:00Z", faturamento: "entre_150_e_300_mil", tamanho_time: "entre_5_e_20_vendedores" }),
+      deal({ deal_id: "g", canal: "google", criado_em: "2026-11-05T13:00:00Z" }),
+      deal({ deal_id: "i", canal: "indicacao_cliente", criado_em: "2026-11-05T13:00:00Z" }),
+      deal({ deal_id: "p", canal: "parceiros", criado_em: "2026-11-06T13:00:00Z" }),
+    ];
+    const eventos = [
+      ev("t", MS.atendimentoIa, "2026-11-05T13:05:00Z"), // conversa com a IA não é conexão
+      ev("t", MS.conectadoIn, "2026-11-06T13:00:00Z"),
+      ev("t", MS.agendadaIn, "2026-11-07T13:00:00Z"),
+      ev("t", MS.propostaIn, "2026-11-10T13:00:00Z"), // sem etapa de realizada: conta junto da proposta
+    ];
+    const r = calcularRealizadoCrm(deals, eventos, ms, "2026-11-01", "2026-12-01");
+    expect(total(r, "inbound", "leads")).toBe(1);
+    expect(total(r, "inbound", "mql")).toBe(1);
+    expect(total(r, "inbound", "conectados")).toBe(1);
+    expect(r.find((x) => x.canal === "inbound" && x.etapa === "conectados")?.data).toBe("2026-11-06");
+    expect(total(r, "inbound", "reunioes_realizadas")).toBe(1);
+    expect(total(r, "inbound", "propostas")).toBe(1);
+    expect(total(r, "indicacao", "leads_indicados")).toBe(2);
+  });
+
+  it("Ganho do Inbound e do Outbound viram venda; closer = responsável", () => {
+    const deals = [
+      deal({ deal_id: "o", status: "won", stage_id: MS.ganhoOut, valor: 715, responsavel_user_id: "r1", produtos: ["plano_solo", "sdr_ia"] }),
+      deal({ deal_id: "n", status: "won", stage_id: MS.ganhoIn, canal: "trafego", valor: 890 }),
+      deal({ deal_id: "x", status: "won", stage_id: MS.ganhoIn, canal: "google", valor: 179 }),
+    ];
+    const v = vendasGanhas(deals, [ev("o", MS.ganhoOut, "2026-11-17T15:00:00Z"), ev("n", MS.ganhoIn, "2026-11-18T15:00:00Z")], ms);
+    expect(v.map((x) => x.deal_id)).toEqual(["o", "n"]);
+    expect(v[0]).toMatchObject({ canal: "outbound", valor: 715, mrr: null, closer_user_id: "r1", produto: "plano_solo, sdr_ia" });
+    expect(v[1]).toMatchObject({ canal: "inbound", data: "2026-11-18" });
+    expect(ms.inicioVendas).toBe("2026-11-16");
   });
 });

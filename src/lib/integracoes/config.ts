@@ -15,13 +15,19 @@ export type ConfigCrm = {
   pipelines: number[];
   /** Etapa do CRM (id) → nível de avanço. Etapas fora do mapa (entrada, sem conexão, perda) não contam. */
   niveis: Record<string, Nivel>;
-  /** Etapa de Ganho do funil de vendas: cada Ganho vira uma venda no portal. */
-  stageGanhoVenda: string;
+  /** Etapas de Ganho que viram venda no portal (uma por funil que fecha venda). */
+  stagesGanhoVenda: string[];
   /** Valor do campo Canal (canal_origem) → canal do portal. Canais ausentes daqui ficam fora do negócio. */
   canais: Record<string, CanalPortal>;
-  /** MQL (inbound): faturamento e cargo aceitos. */
-  mql: { faturamento: string[]; cargo: string[] };
+  /** Slug dos campos do Pipefácil usados na qualificação (cada workspace tem os seus). */
+  campos: { faturamento: string; cargo: string; tamanhoTime?: string };
+  /** MQL (inbound): valores aceitos de cada critério; o lead precisa atender todos os critérios definidos. */
+  mql: Partial<Record<CriterioMql, string[]>>;
+  /** Primeiro dia (YYYY-MM-DD) em que os Ganhos viram venda; padrão INICIO_REALIZADO. Antes disso, vendas manuais. */
+  inicioVendas?: string;
 };
+
+export type CriterioMql = "faturamento" | "cargo" | "tamanho_time";
 
 export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
   vorp: {
@@ -51,8 +57,9 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "cd570e66-1e74-46b5-b207-8ba1eb325c4c": NIVEL.proposta, // Contratação Futura (proposta já apresentada)
       cmq9wwt8l024a41npns90puld: NIVEL.venda, // Ganho
     },
-    stageGanhoVenda: "cmq9wwt8l024a41npns90puld",
+    stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],
     canais: { outbound: "outbound", trafego: "inbound", indicacao: "indicacao" },
+    campos: { faturamento: "quanto_sua_empresa_fatura_por_mes", cargo: "qual_seu_cargo_atual" },
     mql: {
       faturamento: [
         "entre_100_e_200_mil",
@@ -66,6 +73,69 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       cargo: ["gerente", "diretor", "ceo_diretor_executivo", "socio", "proprietario", "proprietario_socio"],
     },
   },
+  // Galáticos (MatchSales): workspace próprio do Pipefácil (regras de 2026-11-15).
+  // Não há Funil de Vendas separado: Inbound e Outbound fecham a venda no próprio funil.
+  // Self-Checkout, GTM Outbound, Suporte, Ativações e Parceiros não entram.
+  matchsales: {
+    tokenEnv: "PIPEFACIL_API_TOKEN_MATCH",
+    // [MS] Inbound (1), [MS] Outbound (25)
+    pipelines: [1, 25],
+    niveis: {
+      // Outbound (25)
+      "c7e46790-7958-4169-a863-dc7f719d2edd": NIVEL.conectado, // Conectado 3C
+      "0de7c924-4532-4a78-9e6f-938676487b38": NIVEL.conectado, // Conectado
+      "aeebf0f5-e94d-441f-b9b6-dd7bdda90c71": NIVEL.conectado, // Perdemos Conexão
+      "7184f5de-b7d6-4271-8dee-b7fcf29cf93f": NIVEL.agendada, // Reunião Agendada
+      "576ef8ec-5359-4c03-b183-96f88b371bcd": NIVEL.agendada, // No Show
+      "8e2ee4e7-e369-4d57-b9c7-26370d9d48d0": NIVEL.realizada, // Reunião Realizada
+      "058201af-9ad4-4b43-adfb-145b820358eb": NIVEL.proposta, // Proposta Enviada
+      "25aceef3-3528-488b-9f6d-c15b6cd9d551": NIVEL.proposta, // Follow-Up
+      "b52cb249-6aa9-4f00-ae25-557357c0cc44": NIVEL.proposta, // Em Negociação
+      "78175757-8a62-4e00-a05d-9cdbc08c921b": NIVEL.proposta, // Proposta Aceita/Aguardando Pagamento
+      "382bcdf9-310a-401f-bc9a-f4d4ab20efb4": NIVEL.proposta, // Contratação Futura
+      "31aab8a9-79f7-4824-b229-4d1a4eac8319": NIVEL.venda, // Ganho
+      // Inbound (1). Sem etapa de Reunião Realizada: a reunião conta como realizada quando vira proposta.
+      "626eef2e-4d84-49ab-ac8b-4d59d1cea87b": NIVEL.conectado, // Atendimento Humano
+      "44da3e0a-3f86-4e4a-8d1d-8c52c41db97e": NIVEL.conectado, // Follow Up
+      "a4252513-8bce-41cd-9fe1-43af1d1cb12f": NIVEL.agendada, // Reunião Agendada
+      "d40dee61-af9a-459e-8220-0887456a4346": NIVEL.proposta, // Proposta enviada
+      "cb69fb19-dd9d-41cb-8ae0-5618484aeb30": NIVEL.proposta, // Aguardando pagamento
+      "8c448cb1-7c1a-4244-bb64-690a70f453d0": NIVEL.venda, // Ganho
+    },
+    stagesGanhoVenda: ["8c448cb1-7c1a-4244-bb64-690a70f453d0", "31aab8a9-79f7-4824-b229-4d1a4eac8319"],
+    // Inbound = só Tráfego Pago (Google, Instagram, WhatsApp IA ficam fora).
+    canais: {
+      outbound: "outbound",
+      trafego: "inbound",
+      indicacao_cliente: "indicacao",
+      indicacao_investidor: "indicacao",
+      parceiros: "indicacao",
+      "Indicação Cliente": "indicacao",
+      "Indicação Investidor": "indicacao",
+    },
+    campos: { faturamento: "faturamento_mensal", cargo: "cargo", tamanhoTime: "tamanho_do_time" },
+    // MQL: faturamento a partir de 50 mil/mês e mais de 2 vendedores.
+    mql: {
+      faturamento: [
+        "entre_50_e_100_mil",
+        "entre_50_e_80_mil",
+        "entre_80_e_150_mil",
+        "entre_100_e_150_mil",
+        "entre_100_e_300_mil",
+        "entre_150_e_300_mil",
+        "entre_300_e_500_mil",
+        "acima_de_500_mil",
+        "Entre 100 e 400 mil",
+        "Acima de 400 mil",
+        "301 mil a 500 mil mês",
+        "501 mil a 1 milhão mês",
+        "Acima de 1 milhão mês",
+      ],
+      tamanho_time: ["entre_2_e_5_vendedores", "entre_5_e_20_vendedores", "entre_6_e_20_vendedores", "mais_de_20_vendedores"],
+    },
+    // Até 15/11 as vendas da Match foram lançadas à mão; daqui em diante vêm dos Ganhos.
+    inicioVendas: "2026-11-16",
+  },
 };
 
 /** Discador 3C Plus: alôs e conexões do Outbound. Tudo que vem do 3C é Outbound. */
@@ -73,6 +143,8 @@ export type Config3c = { tokenEnv: string; segundosConexao: number };
 export const TRESC_POR_NEGOCIO: Record<string, Config3c> = {
   // Conta "Grupo Vorp". Alô = ligação atendida que falou com o BDR; conexão = conversa de 60s ou mais.
   vorp: { tokenEnv: "TCP_API_TOKEN", segundosConexao: 60 },
+  // Conta própria da Galáticos (MatchSales), mesmas regras.
+  matchsales: { tokenEnv: "TCP_API_TOKEN_MATCH", segundosConexao: 60 },
 };
 
 /** Chave de cada etapa do portal, por canal (mesma ordem de funil-negocio.ts). */
