@@ -1,0 +1,103 @@
+// Cliente do Pipefácil (API pública v1). Só leitura: leads (deals) de um funil,
+// histórico de movimentação e membros da conta.
+
+export type DealPipefacil = {
+  id: string;
+  seq: number;
+  name: string | null;
+  value: number | null;
+  status: "open" | "won" | "lost" | string;
+  pipelineId: string;
+  stageId: string;
+  responsibleUserId: string | null;
+  properties: Record<string, unknown> | null;
+  tags?: { name: string }[];
+  tracking?: { utmSource?: string | null } | null;
+  company?: { name?: string | null } | null;
+  createdAt: string;
+  closedAt: string | null;
+};
+
+export type AtividadePipefacil = {
+  id: string;
+  dealId: string;
+  type: string;
+  changes: { to?: unknown; from?: unknown } | null;
+  metadata: { stageId?: string; pipelineId?: string } | null;
+  occurredAt: string;
+};
+
+export type MembroPipefacil = { userId: string; name: string; email: string | null };
+
+type Pagina<T> = { data: { items: T[]; nextCursor: string | null; hasMore: boolean } };
+
+export class Pipefacil {
+  constructor(
+    private token: string,
+    private base = process.env.PIPEFACIL_API_URL ?? "",
+  ) {
+    if (!this.base) throw new Error("PIPEFACIL_API_URL não configurada (endereço da API do Pipefácil).");
+    this.base = this.base.replace(/\/+$/, "");
+  }
+
+  private async get<T>(caminho: string, params: Record<string, string | string[] | undefined> = {}): Promise<T> {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v === undefined) continue;
+      for (const item of Array.isArray(v) ? v : [v]) qs.append(k, item);
+    }
+    const q = qs.toString();
+    const res = await fetch(`${this.base}/api/v1${caminho}${q ? `?${q}` : ""}`, {
+      headers: { Accept: "application/json", Authorization: `Bearer ${this.token}`, "X-Api-Key": this.token },
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`Pipefácil respondeu ${res.status} em ${caminho}`);
+    return (await res.json()) as T;
+  }
+
+  /** Todos os leads de um funil (abertos, ganhos e perdidos). */
+  async dealsDoFunil(pipelineSeq: number): Promise<DealPipefacil[]> {
+    const out: DealPipefacil[] = [];
+    let cursor: string | undefined;
+    for (let i = 0; i < 200; i++) {
+      const r = await this.get<Pagina<DealPipefacil>>("/deals", { pipeline: String(pipelineSeq), limit: "200", cursor });
+      out.push(...r.data.items);
+      if (!r.data.hasMore || !r.data.nextCursor) break;
+      cursor = r.data.nextCursor;
+    }
+    return out;
+  }
+
+  /**
+   * Histórico de movimentação da conta, do mais novo para o mais antigo, até `desde`
+   * (exclusivo). Só criação, troca de etapa e ganho.
+   */
+  async atividadesDesde(desde: string): Promise<AtividadePipefacil[]> {
+    const limite = Date.parse(desde);
+    const out: AtividadePipefacil[] = [];
+    let cursor: string | undefined;
+    for (let i = 0; i < 500; i++) {
+      const r = await this.get<Pagina<AtividadePipefacil>>("/deals/activities", {
+        type: ["STAGE_CHANGED", "DEAL_CREATED", "DEAL_WON"],
+        limit: "200",
+        cursor,
+      });
+      let passou = false;
+      for (const a of r.data.items) {
+        if (Date.parse(a.occurredAt) <= limite) {
+          passou = true;
+          continue;
+        }
+        out.push(a);
+      }
+      if (passou || !r.data.hasMore || !r.data.nextCursor) break;
+      cursor = r.data.nextCursor;
+    }
+    return out;
+  }
+
+  async membros(): Promise<MembroPipefacil[]> {
+    const r = await this.get<{ data: { members: MembroPipefacil[] } }>("/users");
+    return r.data.members ?? [];
+  }
+}

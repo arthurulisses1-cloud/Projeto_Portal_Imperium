@@ -19,3 +19,8 @@ jobs:
       - name: Chamar /api/sync
         run: |
           curl -sf --retry 2 "https://projeto-portal-imperium-chi.vercel.app/api/sync?secret=${{ secrets.CRON_SECRET }}"
+      # Realizado do Dashboard do Negócio (3C Plus + Pipefácil). Roda mesmo se a planilha falhar.
+      - name: Chamar /api/sync-integracoes
+        if: always()
+        run: |
+          curl -s --retry 2 -o /dev/null -w "%{http_code}\n" "https://projeto-portal-imperium-chi.vercel.app/api/sync-integracoes?secret=${{ secrets.CRON_SECRET }}"

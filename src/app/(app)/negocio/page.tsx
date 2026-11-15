@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { buscarDashboardNegocio, RANKINGS, type MixCanal } from "@/lib/dashboard-negocio";
-import { funisDoMes } from "@/lib/funil-negocio";
+import { aplicarRealizado, etapasIntegradas, funisDoMes } from "@/lib/funil-negocio";
 import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
 import { buscarResumoSunne, type SunneResumo } from "@/lib/sunne";
 import type { StatusPace } from "@/lib/pace-negocio";
@@ -91,7 +91,21 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
   const seg = mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;
   const mesParam = `${ano}-${String(mes).padStart(2, "0")}`;
   const totalMix = dados.vendas.mix.reduce((s, x) => s + x.valor, 0);
-  const funis = funisDoMes(atual.slug, ano, mes);
+  const integradas = etapasIntegradas(atual.slug);
+  const inicioMes = `${mesParam}-01`;
+  const fimMesExcl = `${seg}-01`;
+  const { data: linhasRealizado } =
+    integradas.size > 0
+      ? await supabase
+          .from("funil_realizado")
+          .select("canal, etapa, quantidade, synced_at")
+          .eq("negocio_id", atual.id)
+          .gte("data", inicioMes)
+          .lt("data", fimMesExcl)
+          .range(0, 9999)
+      : { data: [] as { canal: string; etapa: string; quantidade: number; synced_at: string }[] };
+  const funis = aplicarRealizado(funisDoMes(atual.slug, ano, mes), linhasRealizado ?? [], integradas);
+  const ultimaSyncFunil = (linhasRealizado ?? []).reduce<string | null>((m, l) => (!m || l.synced_at > m ? l.synced_at : m), null);
   const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
   // Energy: contas subidas vêm da Sunne (negócios criados no mês por vendedor), não do compromisso do dia.
   const rankings = (RANKINGS[atual.slug] ?? [])
@@ -199,7 +213,15 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
               <span className="text-stone-100">{num(funilSunne.vendas)}</span> vendas de {num(funilSunne.metaVendas)}
             </p>
           ) : (
-            <p className="text-[11px] text-stone-500">{atual.slug === "vorp-energy" && sunneErro ? "Dados da Sunne indisponíveis no momento" : "Realizado aguardando a integração com o Pipefácil"}</p>
+            <p className="text-[11px] text-stone-500">
+              {atual.slug === "vorp-energy" && sunneErro
+                ? "Dados da Sunne indisponíveis no momento"
+                : integradas.size === 0
+                  ? "Realizado aguardando a integração com o Pipefácil"
+                  : ultimaSyncFunil
+                    ? `Realizado: 3C Plus e Pipefácil · atualizado ${new Date(ultimaSyncFunil).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                    : "Realizado: 3C Plus e Pipefácil · aguardando a primeira sincronização"}
+            </p>
           )}
         </div>
         {funis.length === 0 ? (
@@ -271,7 +293,11 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
                         <span className="min-w-0 truncate border-b border-imperium-line/60 py-1.5 text-stone-300" title={`${fu.etapas[idx].label} → ${e.label}`}>
                           {e.label} <span className="text-stone-500">← {fu.etapas[idx].label}</span>
                         </span>
-                        <span className="border-b border-imperium-line/60 py-1.5 text-right text-stone-100">—</span>
+                        <span className="border-b border-imperium-line/60 py-1.5 text-right text-stone-100">
+                          {e.realizado === null || fu.etapas[idx].realizado === null || !fu.etapas[idx].realizado
+                            ? "—"
+                            : `${((e.realizado / (fu.etapas[idx].realizado as number)) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
+                        </span>
                         <span className="border-b border-imperium-line/60 py-1.5 text-right text-stone-300">
                           {((e.conversaoMeta ?? 0) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
                         </span>
