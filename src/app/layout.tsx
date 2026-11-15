@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { Cinzel, Cormorant_Garamond } from "next/font/google";
 import ColosseumWatermark from "@/components/ui/ColosseumWatermark";
 import "./globals.css";
 
@@ -14,15 +13,19 @@ const geistMono = localFont({
   variable: "--font-geist-mono",
   weight: "100 900",
 });
-const cinzel = Cinzel({
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
+// Cinzel e Cormorant Garamond ficam no repositório (fontes variáveis, licença OFL, subconjunto
+// latino) em vez de baixar do Google no build: em 2026-11-12 o download do next/font/google
+// passou a falhar ("Cannot read properties of null (reading '1')") e derrubava o deploy.
+const cinzel = localFont({
+  src: "./fonts/cinzel-normal-latin.woff2",
+  weight: "400 900",
   variable: "--font-cinzel",
 });
-const garamond = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  style: ["normal", "italic"],
+const garamond = localFont({
+  src: [
+    { path: "./fonts/garamond-normal-latin.woff2", weight: "300 700", style: "normal" },
+    { path: "./fonts/garamond-italic-latin.woff2", weight: "300 700", style: "italic" },
+  ],
   variable: "--font-garamond",
 });
 
