@@ -17,14 +17,26 @@ export type ConfigCrm = {
   niveis: Record<string, Nivel>;
   /** Etapas de Ganho que viram venda no portal (uma por funil que fecha venda). */
   stagesGanhoVenda: string[];
-  /** Valor do campo Canal (canal_origem) → canal do portal. Canais ausentes daqui ficam fora do negócio. */
+  /** Valor do campo de canal (`campoCanal`) → canal do portal. Canais ausentes daqui ficam fora do negócio. */
   canais: Record<string, CanalPortal>;
+  /** Slug do campo do Pipefácil que diz o canal do lead; padrão "canal_origem". */
+  campoCanal?: string;
+  /** Canal (chave de `canais`) do lead sem o campo de canal preenchido; padrão: fica fora do negócio. */
+  canalSemValor?: string;
   /** Slug dos campos do Pipefácil usados na qualificação (cada workspace tem os seus). */
-  campos: { faturamento: string; cargo: string; tamanhoTime?: string };
+  campos: { faturamento?: string; cargo?: string; tamanhoTime?: string };
   /** MQL (inbound): valores aceitos de cada critério; o lead precisa atender todos os critérios definidos. */
   mql: Partial<Record<CriterioMql, string[]>>;
   /** Primeiro dia (YYYY-MM-DD) em que os Ganhos viram venda; padrão INICIO_REALIZADO. Antes disso, vendas manuais. */
   inicioVendas?: string;
+  /** Etapas do portal que o CRM preenche, por canal; padrão: todas (ETAPAS_PORTAL, menos alôs e conexões). */
+  etapas?: Partial<Record<CanalPortal, string[]>>;
+  /** Cria vendas a partir dos Ganhos; padrão true. Com false, o Ganho só conta no funil. */
+  criarVendas?: boolean;
+  /** Início do histórico lido na primeira sincronização; padrão INICIO_HISTORICO. */
+  inicioHistorico?: string;
+  /** Sincroniza numa chamada própria (/api/sync-integracoes?negocio=slug), com o tempo da função só para ele. */
+  syncSeparado?: boolean;
 };
 
 export type CriterioMql = "faturamento" | "cargo" | "tamanho_time";
@@ -136,7 +148,59 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     // Até 15/11 as vendas da Match foram lançadas à mão; daqui em diante vêm dos Ganhos.
     inicioVendas: "2026-11-16",
   },
+  // Maximus Energy: workspace "Sunne" do Pipefácil, só o funil Inside Sales (regras de 16/11/2026).
+  // - Canal pelo campo Origem do Lead: Inbound → Inbound; Outbound e Perdidos AlugSol → Outbound;
+  //   as demais origens → Indicação. Sem origem → Outbound (o Inside Sales é prospecção ativa).
+  // - Alôs e Conexões vêm da Api4Com (src/lib/api4com.ts), não daqui.
+  // - Reuniões ficam de fora: no Inside Sales a reunião vem depois da conta coletada, ao contrário do
+  //   funil do portal; contada por nível, sairia igual às contas subidas. MQL: sem critério ainda.
+  // - Vendas do portal continuam lançadas à mão (com kWh): o Ganho só conta no funil.
+  // - Precisa de PIPEFACIL_API_TOKEN_SUNNE no ambiente.
+  "vorp-energy": {
+    tokenEnv: "PIPEFACIL_API_TOKEN_SUNNE",
+    pipelines: [13],
+    niveis: {
+      "29f5f805-ad8d-4756-91c3-a00b7aa100ae": NIVEL.conectado, // Leads Conectados
+      "c0a372d4-96cc-4ca0-bced-46ffc7a0216e": NIVEL.proposta, // Conta Coletada (= conta subida)
+      "cd9bbaf1-c75a-46b6-bd87-37c511edb788": NIVEL.proposta, // Reunião Realizada
+      "0d80b4c9-3fb2-41b0-bea4-16bb4bbd61c6": NIVEL.proposta, // Aguardando Assinatura
+      "d7a84f4a-7e29-473f-ac87-206ea34c351f": NIVEL.proposta, // Validação Comercial
+      "6ec9fb40-184f-442b-a0cb-5fc7f0b89bac": NIVEL.venda, // Ganho
+    },
+    stagesGanhoVenda: ["6ec9fb40-184f-442b-a0cb-5fc7f0b89bac"],
+    campoCanal: "origem_do_lead",
+    canais: {
+      inbound: "inbound",
+      outbound: "outbound",
+      perdidos_alugsol: "outbound",
+      plataforma_sunne_partners: "indicacao",
+      organico: "indicacao",
+      parcerias: "indicacao",
+      parceiras_b2b: "indicacao",
+      plataforma_aae: "indicacao",
+      upsell: "indicacao",
+      vsl_assessores: "indicacao",
+    },
+    canalSemValor: "outbound",
+    campos: {},
+    mql: {},
+    etapas: {
+      outbound: ["propostas", "vendas"],
+      inbound: ["leads", "conectados", "propostas", "vendas"],
+      indicacao: ["leads_indicados", "vendas"],
+    },
+    criarVendas: false,
+    // A conta da Sunne tem muito movimento (~12 mil eventos só em novembro) e a API não filtra o
+    // histórico por funil: começa no início do realizado e roda numa chamada própria.
+    inicioHistorico: "2026-11-01T00:00:00-03:00",
+    syncSeparado: true,
+  },
 };
+
+/** Etapas do portal que o CRM preenche no canal (sem alôs e conexões, que vêm do discador). */
+export function etapasDoCrm(cfg: ConfigCrm, canal: CanalPortal): string[] {
+  return (cfg.etapas?.[canal] ?? ETAPAS_PORTAL[canal]).filter((e) => !(canal === "outbound" && (e === "alos" || e === "conexoes")));
+}
 
 /** Discador 3C Plus: alôs e conexões do Outbound. Tudo que vem do 3C é Outbound. */
 export type Config3c = { tokenEnv: string; segundosConexao: number };

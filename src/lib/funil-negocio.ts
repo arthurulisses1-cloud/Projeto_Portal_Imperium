@@ -4,7 +4,7 @@
 // Mapeamento de etapas (premissa): Finance usa Entrevistas e Subidos no lugar de
 // Reunião e Proposta; Energy usa Contas subidas no lugar de Proposta.
 import { PARAMETROS, RAMP_UP, indiceMes, vendasDoMes, type CanalFunil } from "@/lib/forecast-negocios";
-import { CRM_POR_NEGOCIO, ETAPAS_PORTAL, TRESC_POR_NEGOCIO } from "@/lib/integracoes/config";
+import { CRM_POR_NEGOCIO, ETAPAS_PORTAL, TRESC_POR_NEGOCIO, etapasDoCrm, type CanalPortal } from "@/lib/integracoes/config";
 
 export type CanalDoFunil = "outbound" | "inbound" | "indicacao";
 
@@ -66,9 +66,10 @@ export type LinhaRealizado = { canal: string; etapa: string; quantidade: number 
 export function etapasIntegradas(slug: string): Set<string> {
   const out = new Set<string>();
   if (TRESC_POR_NEGOCIO[slug]) ["outbound|alos", "outbound|conexoes"].forEach((k) => out.add(k));
-  if (CRM_POR_NEGOCIO[slug]) {
-    for (const [canal, etapas] of Object.entries(ETAPAS_PORTAL)) {
-      for (const e of etapas) if (!(canal === "outbound" && (e === "alos" || e === "conexoes"))) out.add(`${canal}|${e}`);
+  const crm = CRM_POR_NEGOCIO[slug];
+  if (crm) {
+    for (const canal of Object.keys(ETAPAS_PORTAL) as CanalPortal[]) {
+      for (const e of etapasDoCrm(crm, canal)) out.add(`${canal}|${e}`);
     }
   }
   return out;

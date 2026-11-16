@@ -16,6 +16,8 @@ export type OpcoesSync = {
   criarVendas?: boolean;
   /** Só calcula e devolve, sem gravar nada no banco. */
   simular?: boolean;
+  /** Só estes negócios (slugs). Sem lista: todos menos os de `syncSeparado`. */
+  negocios?: string[];
 };
 
 type Resultado = Record<string, unknown>;
@@ -55,16 +57,20 @@ const NUMERO = (v: unknown) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** Canal do lead; sem Canal preenchido, lead de formulário/anúncio conta como Tráfego Pago. */
-export function canalDoDeal(d: Pick<DealPipefacil, "properties" | "tags" | "tracking">): string | null {
-  const canal = TEXTO(d.properties?.canal_origem);
+/**
+ * Canal do lead pelo campo de canal do negócio (padrão canal_origem). Sem ele, lead de
+ * formulário/anúncio conta como Tráfego Pago; o resto cai no `canalSemValor` da config (ou fica sem canal).
+ */
+export function canalDoDeal(d: Pick<DealPipefacil, "properties" | "tags" | "tracking">, cfg: Pick<ConfigCrm, "campoCanal" | "canalSemValor"> = {}): string | null {
+  const canal = TEXTO(d.properties?.[cfg.campoCanal ?? "canal_origem"]);
   if (canal) return canal;
   const tags = (d.tags ?? []).map((t) => t.name.toLowerCase());
   if (tags.some((t) => t.includes("tráfego pago") || t.includes("trafego pago") || t.includes("forms facebook"))) return "trafego";
-  return null;
+  return cfg.canalSemValor ?? null;
 }
 
-function dealParaLinha(negocioId: string, d: DealPipefacil, campos: ConfigCrm["campos"]): DealCrm & Record<string, unknown> {
+function dealParaLinha(negocioId: string, d: DealPipefacil, cfg: ConfigCrm): DealCrm & Record<string, unknown> {
+  const campos = cfg.campos;
   const p = d.properties ?? {};
   const produtos = Array.isArray(p.produtos) ? (p.produtos as unknown[]).map(String) : TEXTO(p.produtos) ? [String(p.produtos)] : null;
   return {
@@ -74,9 +80,9 @@ function dealParaLinha(negocioId: string, d: DealPipefacil, campos: ConfigCrm["c
     pipeline_id: d.pipelineId,
     stage_id: d.stageId,
     status: d.status,
-    canal: canalDoDeal(d),
-    faturamento: TEXTO(p[campos.faturamento]),
-    cargo: TEXTO(p[campos.cargo]),
+    canal: canalDoDeal(d, cfg),
+    faturamento: campos.faturamento ? TEXTO(p[campos.faturamento]) : null,
+    cargo: campos.cargo ? TEXTO(p[campos.cargo]) : null,
     tamanho_time: campos.tamanhoTime ? TEXTO(p[campos.tamanhoTime]) : null,
     valor: NUMERO(d.value),
     mrr: NUMERO(p.mrr),
@@ -133,7 +139,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   // 1) Espelho dos leads dos funis do negócio.
   const deals: DealPipefacil[] = [];
   for (const seq of cfg.pipelines) deals.push(...(await api.dealsDoFunil(seq)));
-  const linhasDeals = deals.map((d) => dealParaLinha(negocioId, d, cfg.campos));
+  const linhasDeals = deals.map((d) => dealParaLinha(negocioId, d, cfg));
   if (!simular) {
     // tamanho_time só é usado no cálculo do MQL; crm_deals não tem essa coluna.
     const espelho = linhasDeals.map((d) => {
@@ -151,7 +157,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const chaveEstado = `pipefacil:${slug}:ultimo_evento`;
   const { data: estado } = await supabase.from("integracao_estado").select("valor").eq("chave", chaveEstado).maybeSingle();
   const ultimo = (estado?.valor as { em?: string } | null)?.em;
-  const desde = ultimo ? new Date(Date.parse(ultimo) - 10 * 60 * 1000).toISOString() : INICIO_HISTORICO;
+  const desde = ultimo ? new Date(Date.parse(ultimo) - 10 * 60 * 1000).toISOString() : cfg.inicioHistorico ?? INICIO_HISTORICO;
   const atividades = await api.atividadesDesde(desde);
   const idsDeals = new Set(deals.map((d) => d.id));
   const novosEventos = atividades
@@ -213,11 +219,12 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
     }
   }
 
-  // 4) Vendas a partir dos Ganhos.
+  // 4) Vendas a partir dos Ganhos (o negócio pode desligar: aí o Ganho só conta no funil).
   const inicioVendas = cfg.inicioVendas ?? INICIO_REALIZADO;
-  const ganhas = vendasGanhas(linhasDeals, eventos, cfg).filter((g) => g.data >= inicioVendas);
+  const criaVendas = cfg.criarVendas !== false;
+  const ganhas = criaVendas ? vendasGanhas(linhasDeals, eventos, cfg).filter((g) => g.data >= inicioVendas) : [];
   let vendas: Resultado = { ganhas: ganhas.length, criadas: 0, atualizadas: 0, removidas: 0, semVinculo: [] as string[] };
-  if (opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas);
+  if (criaVendas && opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas);
 
   const semCanal = linhasDeals.filter((d) => !d.canal).length;
   return {
@@ -312,7 +319,10 @@ async function sincronizarVendas(supabase: SupabaseClient, api: Pipefacil, negoc
 export async function runSyncIntegracoes(opts: OpcoesSync = {}): Promise<Resultado> {
   const supabase = createAdminClient();
   const hoje = hojeBR();
-  const slugs = Array.from(new Set([...Object.keys(TRESC_POR_NEGOCIO), ...Object.keys(CRM_POR_NEGOCIO)]));
+  // Sem lista, roda todos menos os de sincronização separada (chamados com ?negocio=slug).
+  const slugs = Array.from(new Set([...Object.keys(TRESC_POR_NEGOCIO), ...Object.keys(CRM_POR_NEGOCIO)])).filter((s) =>
+    opts.negocios ? opts.negocios.includes(s) : !CRM_POR_NEGOCIO[s]?.syncSeparado,
+  );
   const { data: negocios } = await supabase.from("negocios").select("id, slug").in("slug", slugs);
   const resultado: Resultado = {};
   const erros: string[] = [];

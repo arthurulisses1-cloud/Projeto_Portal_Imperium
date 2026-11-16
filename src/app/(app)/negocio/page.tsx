@@ -239,13 +239,21 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
               </p>
             )}
             {atual.slug === "vorp-energy" && (
-              <p className="text-[11px] text-stone-500">
-                {ligacoes
-                  ? `Alôs e Conexões do Outbound: ligações do Inside Sales na Api4Com (${num(ligacoes.ligacoes)} no mês)`
-                  : ligacoesErro
-                    ? "Ligações da Api4Com indisponíveis no momento"
-                    : null}
-              </p>
+              <>
+                <p className="text-[11px] text-stone-500">
+                  {ligacoes
+                    ? `Alôs e Conexões do Outbound: ligações do Inside Sales na Api4Com (${num(ligacoes.ligacoes)} no mês)`
+                    : ligacoesErro
+                      ? "Ligações da Api4Com indisponíveis no momento"
+                      : null}
+                </p>
+                <p className="text-[11px] text-stone-500">
+                  Demais etapas: Inside Sales no Pipefácil ·{" "}
+                  {ultimaSyncFunil
+                    ? `atualizado ${new Date(ultimaSyncFunil).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                    : "aguardando a primeira sincronização"}
+                </p>
+              </>
             )}
           </div>
         </div>

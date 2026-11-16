@@ -3,7 +3,7 @@
 // Regra de contagem: um lead conta numa etapa no dia em que, pela primeira vez, chegou
 // nela OU numa etapa mais avançada (lead que pula etapa ou já nasce adiantado também conta).
 // O canal é o campo Canal do lead: outbound, trafego (= Inbound) ou indicacao.
-import { ETAPAS_PORTAL, NIVEL, NIVEL_DA_ETAPA, type CanalPortal, type ConfigCrm, type CriterioMql, type Nivel } from "./config";
+import { NIVEL, NIVEL_DA_ETAPA, etapasDoCrm, type CanalPortal, type ConfigCrm, type CriterioMql, type Nivel } from "./config";
 
 export type DealCrm = {
   deal_id: string;
@@ -86,7 +86,7 @@ export function calcularRealizadoCrm(
   for (const d of deals) {
     const canal = canalPortal(d, cfg);
     if (!canal) continue;
-    const etapas = ETAPAS_PORTAL[canal];
+    const etapas = etapasDoCrm(cfg, canal);
 
     // Topo do funil: criação do lead (Inbound e Indicação). Alôs/Conexões do Outbound vêm do 3C.
     if (d.criado_em) {
