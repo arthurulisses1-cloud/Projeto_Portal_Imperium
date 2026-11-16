@@ -5,7 +5,7 @@
 // O canal é o campo Canal do lead: outbound, trafego (= Inbound) ou indicacao.
 // Regras opcionais por negócio (config): voltar de etapa desfaz realizada/proposta/venda; nascer no
 // Funil de Vendas não conta etapa; reunião "realizada" antes do horário marcado só conta no horário.
-import { ETAPAS_PORTAL, NIVEL, NIVEL_DA_ETAPA, type CanalPortal, type ConfigCrm, type CriterioMql, type Nivel } from "./config";
+import { ETAPAS_PORTAL, NIVEL, NIVEL_DA_ETAPA, type CanalPortal, type ConfigCrm, type CriterioMql, type FunilUnico, type Nivel } from "./config";
 
 export type DealCrm = {
   deal_id: string;
@@ -170,6 +170,50 @@ export function calcularRealizadoCrm(
       const t = marcas[nivel];
       if (t) somar(dataBR(t), canal, etapa);
     }
+  }
+  return Array.from(acc.values());
+}
+
+/**
+ * Funil próprio do negócio (etapas do funil do CRM, sem canais). Mesma regra de contagem: o lead conta
+ * na etapa no dia em que chegou pela primeira vez nela ou numa etapa à frente; a etapa de entrada
+ * (sem `stages`) conta pela criação do lead. Etapas fora do funil (perda) não contam. Canal gravado: outbound.
+ */
+export function calcularFunilUnico(deals: DealCrm[], eventos: EventoCrm[], funil: FunilUnico, inicio: string, fimExcl: string): ContagemDia[] {
+  const posicao = new Map<string, number>();
+  funil.etapas.forEach((e, i) => e.stages.forEach((s) => posicao.set(s, i)));
+  const entradas = funil.etapas.map((e, i) => (e.stages.length === 0 ? i : -1)).filter((i) => i >= 0);
+
+  // Primeiro instante em que cada lead chegou em cada etapa (ou além).
+  const chegada = new Map<string, (string | undefined)[]>();
+  for (const ev of eventos) {
+    const pos = ev.stage_id ? posicao.get(ev.stage_id) : undefined;
+    if (pos === undefined) continue;
+    const marcas = chegada.get(ev.deal_id) ?? [];
+    for (let i = 0; i <= pos; i++) {
+      if (entradas.includes(i)) continue;
+      const t = marcas[i];
+      if (!t || Date.parse(ev.ocorrido_em) < Date.parse(t)) marcas[i] = ev.ocorrido_em;
+    }
+    chegada.set(ev.deal_id, marcas);
+  }
+
+  const acc = new Map<string, ContagemDia>();
+  const somar = (instante: string, etapa: string) => {
+    const data = dataBR(instante);
+    if (data < inicio || data >= fimExcl) return;
+    const k = `${data}|${etapa}`;
+    const atual = acc.get(k);
+    if (atual) atual.quantidade += 1;
+    else acc.set(k, { data, canal: "outbound", etapa, quantidade: 1 });
+  };
+  for (const d of deals) {
+    if (d.criado_em) for (const i of entradas) somar(d.criado_em, funil.etapas[i].chave);
+    const marcas = chegada.get(d.deal_id);
+    if (!marcas) continue;
+    marcas.forEach((t, i) => {
+      if (t) somar(t, funil.etapas[i].chave);
+    });
   }
   return Array.from(acc.values());
 }

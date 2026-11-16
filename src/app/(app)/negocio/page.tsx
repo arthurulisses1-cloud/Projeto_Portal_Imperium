@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { buscarDashboardNegocio, RANKINGS, type MixCanal } from "@/lib/dashboard-negocio";
-import { aplicarRealizado, etapasIntegradas, funisDoMes } from "@/lib/funil-negocio";
+import { aplicarRealizado, etapasIntegradas, funilUnicoDoNegocio, funisDoMes } from "@/lib/funil-negocio";
 import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
 import { buscarResumoSunne, type SunneResumo } from "@/lib/sunne";
 import { buscarLigacoesSunne, type LigacoesResumo } from "@/lib/api4com";
@@ -121,12 +121,10 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
           .lt("data", fimMesExcl)
           .range(0, 9999)
       : { data: [] as { canal: string; etapa: string; quantidade: number; synced_at: string }[] };
-  // Energy: Alôs e Conexões do Outbound são as ligações do Inside Sales na Api4Com.
-  const funis = aplicarRealizado(funisDoMes(atual.slug, ano, mes), linhasRealizado ?? [], integradas).map((fu) =>
-    atual.slug === "vorp-energy" && ligacoes && fu.canal === "outbound"
-      ? { ...fu, etapas: fu.etapas.map((e) => (e.chave === "alos" ? { ...e, realizado: ligacoes.alos } : e.chave === "conexoes" ? { ...e, realizado: ligacoes.conexoes } : e)) }
-      : fu,
-  );
+  // Funis por canal do forecast; o negócio com funil próprio no CRM (Energy) mostra só ele, sem meta.
+  const previstos = funisDoMes(atual.slug, ano, mes);
+  const funilUnico = funilUnicoDoNegocio(atual.slug);
+  const funis = aplicarRealizado(funilUnico ? [funilUnico] : previstos, linhasRealizado ?? [], integradas);
   const ultimaSyncFunil = (linhasRealizado ?? []).reduce<string | null>((m, l) => (!m || l.synced_at > m ? l.synced_at : m), null);
   const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
   // Energy: contas subidas vêm da Sunne (negócios criados no mês por vendedor), não do compromisso do dia.
@@ -147,7 +145,7 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
         : { ...rk, fonte: null as string | null },
     );
   // Realizado do funil do Energy: a Sunne não informa o canal, então é o total de todos os canais.
-  const metaEtapa = (label: string) => funis.reduce((s, fu) => s + (fu.etapas.find((e) => e.label === label)?.meta ?? 0), 0);
+  const metaEtapa = (label: string) => previstos.reduce((s, fu) => s + (fu.etapas.find((e) => e.label === label)?.meta ?? 0), 0);
   const funilSunne = atual.slug === "vorp-energy" && sunne ? { contas: sunne.criados, metaContas: metaEtapa("Contas subidas"), vendas: sunne.fechados, metaVendas: metaEtapa("Vendas") } : null;
   const pessoasComVenda = dados.pace.pessoas.filter((p) => p.recebido > 0);
 
@@ -228,7 +226,7 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
       {/* Funil do mês: volumes e conversões, um bloco por canal, lado a lado */}
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-[10px] uppercase tracking-widest text-stone-500">Funil do mês (meta do forecast)</p>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">{funilUnico ? `Funil do mês (${funilUnico.titulo} no Pipefácil)` : "Funil do mês (meta do forecast)"}</p>
           <div className="text-right">
             {funilSunne ? (
               <p className="text-[11px] text-stone-400">
@@ -247,13 +245,21 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
               </p>
             )}
             {atual.slug === "vorp-energy" && (
-              <p className="text-[11px] text-stone-500">
-                {ligacoes
-                  ? `Alôs e Conexões do Outbound: ligações do Inside Sales na Api4Com (${num(ligacoes.ligacoes)} no mês)`
-                  : ligacoesErro
-                    ? "Ligações da Api4Com indisponíveis no momento"
-                    : null}
-              </p>
+              <>
+                <p className="text-[11px] text-stone-500">
+                  {ligacoes
+                    ? `Ligações na Api4Com: ${num(ligacoes.ligacoes)} · ${num(ligacoes.alos)} alôs · ${num(ligacoes.conexoes)} conexões no mês`
+                    : ligacoesErro
+                      ? "Ligações da Api4Com indisponíveis no momento"
+                      : null}
+                </p>
+                <p className="text-[11px] text-stone-500">
+                  Funil: Pipefácil ·{" "}
+                  {ultimaSyncFunil
+                    ? `atualizado ${new Date(ultimaSyncFunil).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                    : "aguardando a primeira sincronização"}
+                </p>
+              </>
             )}
           </div>
         </div>
@@ -288,29 +294,51 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
                         <span className="invisible">0</span>
                       </div>
                     ))}
-                    {fu.etapas.map((e) => (
-                      <div key={e.label} className="contents">
-                        <div className="min-w-0">
-                          <p className="truncate text-stone-200" title={e.label}>
-                            {e.label}
-                          </p>
-                          {/* Barra = meta da etapa (100%): faixa clara = esperado até hoje; preenchimento = realizado. */}
-                          <div
-                            className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-imperium-raised"
-                            title={`Esperado até hoje ${num(e.meta * fracaoMes)} · realizado ${e.realizado === null ? "—" : num(e.realizado)} · meta ${num(e.meta)}`}
-                          >
-                            <div className="absolute inset-y-0 left-0 opacity-30" style={{ width: `${Math.min(100, fracaoMes * 100)}%`, backgroundColor: `rgb(${cor})` }} />
-                            {e.realizado !== null && (
-                              <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${e.meta > 0 ? Math.min(100, Math.max(0, (e.realizado / e.meta) * 100)) : 0}%`, backgroundColor: `rgb(${cor})` }} />
-                            )}
-                            <div className="absolute inset-y-0 w-px bg-stone-200" style={{ left: `${Math.min(100, fracaoMes * 100)}%` }} />
+                    {fu.etapas.map((e) =>
+                      e.meta === null ? (
+                        // Etapa sem meta (funil próprio do CRM): a barra é o realizado em relação à 1ª etapa.
+                        <div key={e.label} className="contents">
+                          <div className="min-w-0">
+                            <p className="truncate text-stone-200" title={e.label}>
+                              {e.label}
+                            </p>
+                            <div className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-imperium-raised" title={`Realizado ${e.realizado === null ? "—" : num(e.realizado)}`}>
+                              {e.realizado !== null && (fu.etapas[0].realizado ?? 0) > 0 && (
+                                <div
+                                  className="absolute inset-y-0 left-0 rounded-full"
+                                  style={{ width: `${Math.min(100, Math.max(e.realizado > 0 ? 1.5 : 0, (e.realizado / (fu.etapas[0].realizado as number)) * 100))}%`, backgroundColor: `rgb(${cor})` }}
+                                />
+                              )}
+                            </div>
                           </div>
+                          <span className="text-right text-stone-500">—</span>
+                          <span className="text-right text-stone-100">{e.realizado === null ? "—" : num(e.realizado)}</span>
+                          <span className="text-right text-stone-500">—</span>
                         </div>
-                        <span className="text-right text-stone-400">{num(e.meta * fracaoMes)}</span>
-                        <span className="text-right text-stone-100">{e.realizado === null ? "—" : num(e.realizado)}</span>
-                        <span className="text-right text-stone-300">{num(e.meta)}</span>
-                      </div>
-                    ))}
+                      ) : (
+                        <div key={e.label} className="contents">
+                          <div className="min-w-0">
+                            <p className="truncate text-stone-200" title={e.label}>
+                              {e.label}
+                            </p>
+                            {/* Barra = meta da etapa (100%): faixa clara = esperado até hoje; preenchimento = realizado. */}
+                            <div
+                              className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-imperium-raised"
+                              title={`Esperado até hoje ${num(e.meta * fracaoMes)} · realizado ${e.realizado === null ? "—" : num(e.realizado)} · meta ${num(e.meta)}`}
+                            >
+                              <div className="absolute inset-y-0 left-0 opacity-30" style={{ width: `${Math.min(100, fracaoMes * 100)}%`, backgroundColor: `rgb(${cor})` }} />
+                              {e.realizado !== null && (
+                                <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${e.meta > 0 ? Math.min(100, Math.max(0, (e.realizado / e.meta) * 100)) : 0}%`, backgroundColor: `rgb(${cor})` }} />
+                              )}
+                              <div className="absolute inset-y-0 w-px bg-stone-200" style={{ left: `${Math.min(100, fracaoMes * 100)}%` }} />
+                            </div>
+                          </div>
+                          <span className="text-right text-stone-400">{num(e.meta * fracaoMes)}</span>
+                          <span className="text-right text-stone-100">{e.realizado === null ? "—" : num(e.realizado)}</span>
+                          <span className="text-right text-stone-300">{num(e.meta)}</span>
+                        </div>
+                      ),
+                    )}
                   </div>
 
                   {/* Conversões: mesma grade, uma linha por passagem de etapa */}
@@ -337,7 +365,7 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
                           {real === null ? "—" : `${(real * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
                         </span>
                         <span className="border-b border-imperium-line/60 py-1.5 text-right text-stone-300">
-                          {((e.conversaoMeta ?? 0) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
+                          {e.conversaoMeta === null ? "—" : `${(e.conversaoMeta * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
                         </span>
                       </div>
                       );

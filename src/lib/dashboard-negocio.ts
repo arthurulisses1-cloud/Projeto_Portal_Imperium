@@ -3,6 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarPaceNegocios, limitesDoMes, type PaceNegocio } from "@/lib/pace-negocio";
 import { PARAMETROS, indiceMes, vendasDoMes } from "@/lib/forecast-negocios";
+import { buscarGanhosCrm } from "@/lib/recebido-crm";
 
 export type MixCanal = { canal: "outbound" | "inbound" | "indicacao" | "sem_canal"; qtd: number; valor: number };
 
@@ -38,7 +39,7 @@ export async function buscarDashboardNegocio(supabase: SupabaseClient, slug: str
   const fimExcl = new Date(Date.parse(fim + "T00:00:00Z") + 86400000).toISOString().slice(0, 10);
   const negocioId = pace.negocio.id;
 
-  const [{ data: vendas }, { data: kpis }, { data: perfis }, { data: defs }] = await Promise.all([
+  const [{ data: vendas }, { data: kpis }, { data: perfis }, { data: defs }, ganhosCrm] = await Promise.all([
     supabase
       .from("vendas")
       .select("id, valor, canal, data, cliente, profile_id")
@@ -50,11 +51,16 @@ export async function buscarDashboardNegocio(supabase: SupabaseClient, slug: str
     supabase.from("compromisso_kpis").select("profile_id, chave, label, meta, realizado").eq("negocio_id", negocioId).gte("data", inicio).lt("data", fimExcl).range(0, 19999),
     supabase.from("profiles").select("id, full_name"),
     supabase.from("kpi_definicoes").select("chave, label, ordem").eq("negocio_id", negocioId).eq("ativo", true).order("ordem"),
+    buscarGanhosCrm([pace.negocio], inicio, fimExcl),
   ]);
 
   const nomePor = new Map((perfis ?? []).map((p) => [p.id as string, p.full_name as string]));
 
-  const lista = vendas ?? [];
+  // Negócio com recebidoPeloCrm (Energy): vendas do mês = Ganhos do CRM (mesma fonte do Recebido).
+  const crm = ganhosCrm.get(negocioId);
+  const lista: { id: string; valor: number; canal: string | null; data: string; cliente: string | null; profile_id: string | null }[] = crm
+    ? crm.map((g) => ({ id: g.id, valor: g.valor, canal: g.canal, data: g.data, cliente: g.cliente, profile_id: null }))
+    : vendas ?? [];
   const qtd = lista.length;
   const total = lista.reduce((s, v) => s + Number(v.valor), 0);
   const mixMap = new Map<MixCanal["canal"], MixCanal>();
@@ -103,7 +109,7 @@ export async function buscarDashboardNegocio(supabase: SupabaseClient, slug: str
       data: v.data,
       cliente: v.cliente ?? null,
       valor: Number(v.valor),
-      vendedor: nomePor.get(v.profile_id) ?? "—",
+      vendedor: (v.profile_id && nomePor.get(v.profile_id)) || "—",
     })),
   };
 }

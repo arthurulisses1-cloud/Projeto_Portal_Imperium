@@ -31,14 +31,34 @@ export type ConfigCrm = {
   /** Valor do campo Canal (canal_origem) → canal do portal. Canais ausentes daqui ficam fora do negócio. */
   canais: Record<string, CanalPortal>;
   /** Slug dos campos do Pipefácil usados na qualificação (cada workspace tem os seus). */
-  campos: { faturamento: string; cargo: string; tamanhoTime?: string };
+  campos: { faturamento?: string; cargo?: string; tamanhoTime?: string };
   /** MQL (inbound): valores aceitos de cada critério; o lead precisa atender todos os critérios definidos. */
   mql: Partial<Record<CriterioMql, string[]>>;
   /** Primeiro dia (YYYY-MM-DD) em que os Ganhos viram venda; padrão INICIO_REALIZADO. Antes disso, vendas manuais. */
   inicioVendas?: string;
+  /**
+   * Funil próprio no dashboard: as etapas do funil do CRM, sem canais nem meta do forecast. Com ele,
+   * `niveis` e `canais` não são usados. Gravado em funil_realizado com canal "outbound".
+   */
+  funilUnico?: FunilUnico;
+  /**
+   * Recebido do negócio = soma dos Ganhos (`stagesGanhoVenda`) do espelho do CRM, pela data de fechamento,
+   * no lugar da tabela vendas. O Ganho não vira venda: dispensa vínculo do responsável com um login do portal.
+   */
+  recebidoPeloCrm?: boolean;
+  /** Início do histórico lido na primeira sincronização; padrão INICIO_HISTORICO. */
+  inicioHistorico?: string;
+  /** Sincroniza numa chamada própria (/api/sync-integracoes?negocio=slug), com o tempo da função só para ele. */
+  syncSeparado?: boolean;
 };
 
 export type CriterioMql = "faturamento" | "cargo" | "tamanho_time";
+
+/**
+ * Etapas em ordem. Um lead conta numa etapa no dia em que chegou pela primeira vez nela ou numa
+ * etapa à frente. A etapa sem `stages` é a entrada: conta pela criação do lead.
+ */
+export type FunilUnico = { titulo: string; etapas: { chave: string; label: string; stages: string[] }[] };
 
 export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
   vorp: {
@@ -155,7 +175,37 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     // Até 15/11 as vendas da Match foram lançadas à mão; daqui em diante vêm dos Ganhos.
     inicioVendas: "2026-11-16",
   },
+  // Maximus Energy: workspace "Sunne" do Pipefácil, funil Inside Sales (16/11/2026). O dashboard mostra
+  // um funil só, com as etapas do Inside Sales (sem canais nem meta do forecast). O Recebido é a soma do
+  // valor dos leads no Ganho do Pipefácil (recebidoPeloCrm). Precisa de PIPEFACIL_API_TOKEN_SUNNE.
+  "vorp-energy": {
+    tokenEnv: "PIPEFACIL_API_TOKEN_SUNNE",
+    pipelines: [13],
+    niveis: {},
+    stagesGanhoVenda: ["6ec9fb40-184f-442b-a0cb-5fc7f0b89bac"], // Ganho do Inside Sales
+    canais: {},
+    campos: {},
+    mql: {},
+    funilUnico: {
+      titulo: "Inside Sales",
+      etapas: [
+        { chave: "is_leads", label: "Leads", stages: [] },
+        { chave: "is_conectados", label: "Leads Conectados", stages: ["29f5f805-ad8d-4756-91c3-a00b7aa100ae"] },
+        { chave: "is_conta_coletada", label: "Conta Coletada", stages: ["c0a372d4-96cc-4ca0-bced-46ffc7a0216e"] },
+        { chave: "is_reuniao_realizada", label: "Reunião Realizada", stages: ["cd9bbaf1-c75a-46b6-bd87-37c511edb788"] },
+        { chave: "is_aguardando_assinatura", label: "Aguardando Assinatura", stages: ["0d80b4c9-3fb2-41b0-bea4-16bb4bbd61c6"] },
+        { chave: "is_validacao_comercial", label: "Validação Comercial", stages: ["d7a84f4a-7e29-473f-ac87-206ea34c351f"] },
+        { chave: "is_ganho", label: "Ganho", stages: ["6ec9fb40-184f-442b-a0cb-5fc7f0b89bac"] },
+      ],
+    },
+    recebidoPeloCrm: true,
+    // A conta da Sunne tem muito movimento (~12 mil eventos só em novembro) e a API não filtra o
+    // histórico por funil: começa no início do realizado e roda numa chamada própria.
+    inicioHistorico: "2026-11-01T00:00:00-03:00",
+    syncSeparado: true,
+  },
 };
+
 
 /** Discador 3C Plus: alôs e conexões do Outbound. Tudo que vem do 3C é Outbound. */
 export type Config3c = { tokenEnv: string; segundosConexao: number };
