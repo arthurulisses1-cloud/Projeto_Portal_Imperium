@@ -221,12 +221,11 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
     }
   }
 
-  // 4) Vendas a partir dos Ganhos (o negócio pode desligar: aí o Ganho só conta no funil).
+  // 4) Vendas a partir dos Ganhos (negócio com recebidoPeloCrm lê o Ganho direto do espelho: sem vendas).
   const inicioVendas = cfg.inicioVendas ?? INICIO_REALIZADO;
-  const criaVendas = cfg.criarVendas !== false;
-  const ganhas = criaVendas ? vendasGanhas(linhasDeals, eventos, cfg, extras).filter((g) => g.data >= inicioVendas) : [];
+  const ganhas = cfg.recebidoPeloCrm ? [] : vendasGanhas(linhasDeals, eventos, cfg, extras).filter((g) => g.data >= inicioVendas);
   let vendas: Resultado = { ganhas: ganhas.length, criadas: 0, atualizadas: 0, removidas: 0, semVinculo: [] as string[] };
-  if (criaVendas && opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas);
+  if (opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas);
 
   const semCanal = linhasDeals.filter((d) => !d.canal).length;
   return {

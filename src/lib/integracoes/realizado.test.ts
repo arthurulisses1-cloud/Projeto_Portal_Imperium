@@ -4,6 +4,7 @@ import { calcularFunilUnico, calcularRealizadoCrm, dataBR, ehMql, vendasGanhas, 
 import { contarAlosConexoes, segundos } from "./tresc";
 import { canalDoDeal } from "./run";
 import { aplicarRealizado, etapasIntegradas, funilUnicoDoNegocio, funisDoMes } from "../funil-negocio";
+import { ganhosDoMes } from "../recebido-crm";
 
 const cfg = CRM_POR_NEGOCIO.vorp;
 const ST = {
@@ -392,9 +393,26 @@ describe("Energy (funil Inside Sales do Pipefácil da Sunne)", () => {
     expect(r).toEqual([{ data: "2026-11-30", canal: "outbound", etapa: "is_leads", quantidade: 1 }]);
   });
 
-  it("sincroniza à parte, desde novembro, sem criar vendas", () => {
+  it("sincroniza à parte, desde novembro", () => {
     expect(en.syncSeparado).toBe(true);
-    expect(en.criarVendas).toBe(false);
     expect(en.inicioHistorico).toBe("2026-11-01T00:00:00-03:00");
+  });
+
+  it("Recebido pelos Ganhos do CRM: valor do Pipefácil no dia do fechamento; sem venda lançada", () => {
+    expect(en.recebidoPeloCrm).toBe(true);
+    expect(en.stagesGanhoVenda).toEqual([IS.ganho]);
+    const linhas = [
+      { deal_id: "g1", negocio_id: "n", status: "won", stage_id: IS.ganho, valor: 195.99, nome: "A", empresa: null, fechado_em: "2026-11-16T17:00:05Z" },
+      { deal_id: "g2", negocio_id: "n", status: "won", stage_id: IS.ganho, valor: "150.47", nome: null, empresa: "B", fechado_em: "2026-12-01T02:00:00Z" }, // 30/11 em Brasília
+      { deal_id: "g3", negocio_id: "n", status: "open", stage_id: IS.ganho, valor: 100, nome: null, empresa: null, fechado_em: null },
+      { deal_id: "g4", negocio_id: "n", status: "won", stage_id: IS.conta, valor: 50, nome: null, empresa: null, fechado_em: "2026-11-16T17:00:05Z" },
+      { deal_id: "g5", negocio_id: "n", status: "won", stage_id: IS.ganho, valor: 70, nome: null, empresa: null, fechado_em: "2026-10-31T12:00:00Z" },
+    ];
+    const g = ganhosDoMes(linhas, en.stagesGanhoVenda, "2026-11-01", "2026-12-01");
+    expect(g).toEqual([
+      { id: "g2", negocio_id: "n", data: "2026-11-30", valor: 150.47, cliente: "B", canal: "outbound" },
+      { id: "g1", negocio_id: "n", data: "2026-11-16", valor: 195.99, cliente: "A", canal: "outbound" },
+    ]);
+    expect(vendasGanhas([deal({ deal_id: "g1", canal: null, status: "won", stage_id: IS.ganho, valor: 1, fechado_em: "2026-11-16T17:00:05Z" })], [], en)).toEqual([]);
   });
 });

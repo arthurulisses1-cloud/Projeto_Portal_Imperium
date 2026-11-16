@@ -41,8 +41,11 @@ export type ConfigCrm = {
    * `niveis` e `canais` não são usados. Gravado em funil_realizado com canal "outbound".
    */
   funilUnico?: FunilUnico;
-  /** Cria vendas a partir dos Ganhos; padrão true. Com false, o Ganho só conta no funil. */
-  criarVendas?: boolean;
+  /**
+   * Recebido do negócio = soma dos Ganhos (`stagesGanhoVenda`) do espelho do CRM, pela data de fechamento,
+   * no lugar da tabela vendas. O Ganho não vira venda: dispensa vínculo do responsável com um login do portal.
+   */
+  recebidoPeloCrm?: boolean;
   /** Início do histórico lido na primeira sincronização; padrão INICIO_HISTORICO. */
   inicioHistorico?: string;
   /** Sincroniza numa chamada própria (/api/sync-integracoes?negocio=slug), com o tempo da função só para ele. */
@@ -173,13 +176,13 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     inicioVendas: "2026-11-16",
   },
   // Maximus Energy: workspace "Sunne" do Pipefácil, funil Inside Sales (16/11/2026). O dashboard mostra
-  // um funil só, com as etapas do Inside Sales (sem canais nem meta do forecast). As vendas do portal
-  // continuam lançadas à mão, com kWh: o Ganho só conta no funil. Precisa de PIPEFACIL_API_TOKEN_SUNNE.
+  // um funil só, com as etapas do Inside Sales (sem canais nem meta do forecast). O Recebido é a soma do
+  // valor dos leads no Ganho do Pipefácil (recebidoPeloCrm). Precisa de PIPEFACIL_API_TOKEN_SUNNE.
   "vorp-energy": {
     tokenEnv: "PIPEFACIL_API_TOKEN_SUNNE",
     pipelines: [13],
     niveis: {},
-    stagesGanhoVenda: [],
+    stagesGanhoVenda: ["6ec9fb40-184f-442b-a0cb-5fc7f0b89bac"], // Ganho do Inside Sales
     canais: {},
     campos: {},
     mql: {},
@@ -195,7 +198,7 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
         { chave: "is_ganho", label: "Ganho", stages: ["6ec9fb40-184f-442b-a0cb-5fc7f0b89bac"] },
       ],
     },
-    criarVendas: false,
+    recebidoPeloCrm: true,
     // A conta da Sunne tem muito movimento (~12 mil eventos só em novembro) e a API não filtra o
     // histórico por funil: começa no início do realizado e roda numa chamada própria.
     inicioHistorico: "2026-11-01T00:00:00-03:00",

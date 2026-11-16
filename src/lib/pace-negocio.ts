@@ -4,6 +4,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ehFimDeSemana, paraDataUTC } from "@/lib/data-br";
 import { metaForecast } from "@/lib/forecast-negocios";
+import { buscarGanhosCrm } from "@/lib/recebido-crm";
 
 export type StatusPace = "sem_meta" | "adiantado" | "no_ritmo" | "atrasado" | "critico";
 
@@ -131,10 +132,11 @@ export async function buscarPaceNegocios(
   if (lista.length === 0) return [];
   const ids = lista.map((n) => n.id);
 
-  const [{ data: metas }, { data: vendas }, { data: membros }] = await Promise.all([
+  const [{ data: metas }, { data: vendas }, { data: membros }, ganhosCrm] = await Promise.all([
     supabase.from("metas_negocio").select("negocio_id, meta_recebimento").eq("ano", ano).eq("mes", mes).in("negocio_id", ids),
     supabase.from("vendas").select("negocio_id, profile_id, valor, data").in("negocio_id", ids).gte("data", inicio).lt("data", fimExcl).range(0, 19999),
     supabase.from("profile_negocios").select("negocio_id, cargo, profiles!inner(id, full_name, ativo)").in("negocio_id", ids),
+    buscarGanhosCrm(lista, inicio, fimExcl),
   ]);
 
   const metaPor = new Map((metas ?? []).map((m) => [m.negocio_id as string, Number(m.meta_recebimento)]));
@@ -152,14 +154,18 @@ export async function buscarPaceNegocios(
   return lista.map((n) => {
     // A meta vem do forecast; a digitada à mão só vale onde não há forecast.
     const meta = Math.round(metaForecast(n.slug, ano, mes)) || (metaPor.get(n.id) ?? 0);
-    const doNegocio = (vendas ?? []).filter((v) => v.negocio_id === n.id);
+    // Negócio com recebidoPeloCrm (Energy): Ganhos do CRM, sem pessoa do portal; os demais, tabela vendas.
+    const crm = ganhosCrm.get(n.id);
+    const doNegocio: { profile_id: string | null; valor: number; data: string }[] = crm
+      ? crm.map((g) => ({ profile_id: null, valor: g.valor, data: g.data }))
+      : (vendas ?? []).filter((v) => v.negocio_id === n.id);
     const recebido = doNegocio.reduce((s, v) => s + Number(v.valor), 0);
 
     const porDia = new Map<string, number>();
     const porPessoa = new Map<string, number>();
     for (const v of doNegocio) {
       porDia.set(v.data, (porDia.get(v.data) ?? 0) + Number(v.valor));
-      porPessoa.set(v.profile_id, (porPessoa.get(v.profile_id) ?? 0) + Number(v.valor));
+      if (v.profile_id) porPessoa.set(v.profile_id, (porPessoa.get(v.profile_id) ?? 0) + Number(v.valor));
     }
     const acumulado: { data: string; valor: number }[] = [];
     let soma = 0;

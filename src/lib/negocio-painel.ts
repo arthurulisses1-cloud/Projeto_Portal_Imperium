@@ -4,6 +4,7 @@ import { metaForecast, metaKwhForecast, metaMrrForecast } from "@/lib/forecast-n
 import type { CargoNegocio } from "@/lib/negocios";
 import { kwhSunneDoMes } from "@/lib/sunne";
 import type { VendedorOpcao, PessoaOpcao } from "@/components/negocio/FormLancarVenda";
+import { buscarGanhosCrm } from "@/lib/recebido-crm";
 
 export type LinhaPainelNegocio = {
   id: string;
@@ -54,6 +55,13 @@ export async function buscarPainelNegocios(
     kwhPor.set(v.negocio_id, (kwhPor.get(v.negocio_id) ?? 0) + Number(v.kwh ?? 0));
     qtdPor.set(v.negocio_id, (qtdPor.get(v.negocio_id) ?? 0) + 1);
   }
+
+  // Negócio com recebidoPeloCrm (Energy): Recebido e quantidade pelos Ganhos do CRM.
+  const ganhosCrm = await buscarGanhosCrm(negocios ?? [], inicio, fim);
+  ganhosCrm.forEach((g, id) => {
+    recebidoPor.set(id, g.reduce((s, x) => s + x.valor, 0));
+    qtdPor.set(id, g.length);
+  });
 
   return (negocios ?? []).map((n) => ({
     id: n.id,
