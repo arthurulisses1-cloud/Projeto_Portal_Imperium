@@ -1,14 +1,22 @@
 // Cliente do discador 3C Plus (API v1). Só leitura: lista as ligações de um dia e
 // conta alôs (atendida e falou com o BDR) e conexões (conversa com o BDR >= N segundos).
+//
+// Alô: o BDR estava na ligação e ela foi atendida. Na discagem manual o BDR está sempre na
+// linha, então has_agent sozinho contava ligação que ninguém atendeu: status Falha (8) e
+// Não Atendida (5) não são alô (auditoria de 16/11/2026: 71 das 118 manuais de novembro).
 
 const BASE = "https://app.3c.plus/api/v1";
 
 export type Ligacao3c = {
   call_date: string; // "2026-11-11 18:12:39" (horário de Brasília)
   has_agent: boolean;
+  /** 4 Desligada, 5 Não Atendida, 6 Abandonada, 7 Finalizada, 8 Falha, 9/15 Caixa postal. */
+  status_id?: number;
   speaking_with_agent_time: string; // "00:01:25"
   agent: string;
 };
+
+const STATUS_NAO_ATENDIDA = [5, 8];
 
 export function segundos(hms: string | null | undefined): number {
   if (!hms) return 0;
@@ -22,7 +30,7 @@ export function contarAlosConexoes(ligacoes: Ligacao3c[], segundosConexao: numbe
   let alos = 0;
   let conexoes = 0;
   for (const l of ligacoes) {
-    if (l.has_agent) alos += 1;
+    if (l.has_agent && !STATUS_NAO_ATENDIDA.includes(Number(l.status_id))) alos += 1;
     if (segundos(l.speaking_with_agent_time) >= segundosConexao) conexoes += 1;
   }
   return { alos, conexoes };
