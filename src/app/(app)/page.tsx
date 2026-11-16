@@ -285,9 +285,39 @@ export default async function MuralPage({
     );
   }
 
+  // Head de um negócio (ex.: Arthur Barbosa, Vorp Finance) também lança vendas no Mural,
+  // só do(s) negócio(s) que chefia (a RLS de vendas já restringe o insert a Diretor/Head).
+  let lancarVendaHead: React.ReactNode = null;
+  if (meRole !== "diretor") {
+    const { data: chefia } = await supabase
+      .from("profile_negocios")
+      .select("negocios(id, slug, nome, equipe_nome, status, ordem)")
+      .eq("profile_id", meId)
+      .eq("cargo", "head");
+    type NegHead = { id: string; slug: string; nome: string; equipe_nome: string | null; status: "ativo" | "arquivado"; ordem: number | null };
+    const negociosHead = ((chefia ?? []) as unknown as { negocios: NegHead | NegHead[] | null }[])
+      .map((l) => (Array.isArray(l.negocios) ? l.negocios[0] : l.negocios))
+      .filter((n): n is NegHead => !!n && n.status === "ativo")
+      .sort((a, b) => (a.ordem ?? 99) - (b.ordem ?? 99));
+    if (negociosHead.length > 0) {
+      const { vendedoresPor, todos } = await buscarOpcoesLancamento(supabase, negociosHead);
+      lancarVendaHead = (
+        <LancarVendaMural
+          itens={negociosHead.map((n) => ({
+            slug: n.slug,
+            nome: nomeEquipe(n),
+            cor: NEGOCIO_COR[n.slug] ?? "201 162 74",
+            form: <FormLancarVenda slug={n.slug} vendedores={vendedoresPor[n.slug] ?? []} todos={todos} hoje={hoje} retorno="mural" />,
+          }))}
+        />
+      );
+    }
+  }
+
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       {searchParams.lancado && <p className="rounded border border-success/50 px-3 py-2 text-sm text-success-bright">Venda lançada.</p>}
+      {lancarVendaHead}
       {painelNegocios.length > 0 && (
         <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} ritmoPct={ritmoPct} lancar={lancarVenda} />
       )}

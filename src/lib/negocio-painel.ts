@@ -75,7 +75,7 @@ export async function buscarPainelNegocios(
 /** Opções do formulário de lançamento do Mural: vendedores de cada negócio ativo e todas as pessoas (SDR/BDR/indicador). */
 export async function buscarOpcoesLancamento(
   supabase: SupabaseClient,
-  linhas: LinhaPainelNegocio[],
+  linhas: Pick<LinhaPainelNegocio, "id" | "slug" | "status">[],
 ): Promise<{ vendedoresPor: Record<string, VendedorOpcao[]>; todos: PessoaOpcao[] }> {
   const ativos = linhas.filter((l) => l.status === "ativo");
   const slugPorId = new Map(ativos.map((l) => [l.id, l.slug]));
