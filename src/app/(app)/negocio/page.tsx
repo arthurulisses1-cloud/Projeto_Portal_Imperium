@@ -8,6 +8,7 @@ import { buscarDashboardNegocio, RANKINGS, type MixCanal } from "@/lib/dashboard
 import { aplicarRealizado, etapasIntegradas, funisDoMes } from "@/lib/funil-negocio";
 import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
 import { buscarResumoSunne, type SunneResumo } from "@/lib/sunne";
+import { buscarLigacoesSunne, type LigacoesResumo } from "@/lib/api4com";
 import type { StatusPace } from "@/lib/pace-negocio";
 
 export const dynamic = "force-dynamic";
@@ -71,12 +72,20 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
 
   let sunne: SunneResumo | null = null;
   let sunneErro = false;
+  let ligacoes: LigacoesResumo | null = null;
+  let ligacoesErro = false;
   if (atual.slug === "vorp-energy") {
-    try {
-      sunne = await buscarResumoSunne(supabase, ano, mes);
-    } catch (e) {
-      console.error("buscarResumoSunne falhou:", e);
+    // Sunne (contas e vendas) e Api4Com (ligações do Inside Sales) em paralelo; uma não derruba a outra.
+    const [rs, rl] = await Promise.allSettled([buscarResumoSunne(supabase, ano, mes), buscarLigacoesSunne(supabase, ano, mes)]);
+    if (rs.status === "fulfilled") sunne = rs.value;
+    else {
+      console.error("buscarResumoSunne falhou:", rs.reason);
       sunneErro = true;
+    }
+    if (rl.status === "fulfilled") ligacoes = rl.value;
+    else {
+      console.error("buscarLigacoesSunne falhou:", rl.reason);
+      ligacoesErro = true;
     }
   }
 
@@ -104,7 +113,12 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
           .lt("data", fimMesExcl)
           .range(0, 9999)
       : { data: [] as { canal: string; etapa: string; quantidade: number; synced_at: string }[] };
-  const funis = aplicarRealizado(funisDoMes(atual.slug, ano, mes), linhasRealizado ?? [], integradas);
+  // Energy: Alôs e Conexões do Outbound são as ligações do Inside Sales na Api4Com.
+  const funis = aplicarRealizado(funisDoMes(atual.slug, ano, mes), linhasRealizado ?? [], integradas).map((fu) =>
+    atual.slug === "vorp-energy" && ligacoes && fu.canal === "outbound"
+      ? { ...fu, etapas: fu.etapas.map((e) => (e.chave === "alos" ? { ...e, realizado: ligacoes.alos } : e.chave === "conexoes" ? { ...e, realizado: ligacoes.conexoes } : e)) }
+      : fu,
+  );
   const ultimaSyncFunil = (linhasRealizado ?? []).reduce<string | null>((m, l) => (!m || l.synced_at > m ? l.synced_at : m), null);
   const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
   // Energy: contas subidas vêm da Sunne (negócios criados no mês por vendedor), não do compromisso do dia.
@@ -207,22 +221,33 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Funil do mês (meta do forecast)</p>
-          {funilSunne ? (
-            <p className="text-[11px] text-stone-400">
-              Realizado na Sunne, todos os canais: <span className="text-stone-100">{num(funilSunne.contas)}</span> contas subidas de {num(funilSunne.metaContas)} ·{" "}
-              <span className="text-stone-100">{num(funilSunne.vendas)}</span> vendas de {num(funilSunne.metaVendas)}
-            </p>
-          ) : (
-            <p className="text-[11px] text-stone-500">
-              {atual.slug === "vorp-energy" && sunneErro
-                ? "Dados da Sunne indisponíveis no momento"
-                : integradas.size === 0
-                  ? "Realizado aguardando a integração com o Pipefácil"
-                  : ultimaSyncFunil
-                    ? `Realizado: 3C Plus e Pipefácil · atualizado ${new Date(ultimaSyncFunil).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
-                    : "Realizado: 3C Plus e Pipefácil · aguardando a primeira sincronização"}
-            </p>
-          )}
+          <div className="text-right">
+            {funilSunne ? (
+              <p className="text-[11px] text-stone-400">
+                Realizado na Sunne, todos os canais: <span className="text-stone-100">{num(funilSunne.contas)}</span> contas subidas de {num(funilSunne.metaContas)} ·{" "}
+                <span className="text-stone-100">{num(funilSunne.vendas)}</span> vendas de {num(funilSunne.metaVendas)}
+              </p>
+            ) : (
+              <p className="text-[11px] text-stone-500">
+                {atual.slug === "vorp-energy" && sunneErro
+                  ? "Dados da Sunne indisponíveis no momento"
+                  : integradas.size === 0
+                    ? "Realizado aguardando a integração com o Pipefácil"
+                    : ultimaSyncFunil
+                      ? `Realizado: 3C Plus e Pipefácil · atualizado ${new Date(ultimaSyncFunil).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                      : "Realizado: 3C Plus e Pipefácil · aguardando a primeira sincronização"}
+              </p>
+            )}
+            {atual.slug === "vorp-energy" && (
+              <p className="text-[11px] text-stone-500">
+                {ligacoes
+                  ? `Alôs e Conexões do Outbound: ligações do Inside Sales na Api4Com (${num(ligacoes.ligacoes)} no mês)`
+                  : ligacoesErro
+                    ? "Ligações da Api4Com indisponíveis no momento"
+                    : null}
+              </p>
+            )}
+          </div>
         </div>
         {funis.length === 0 ? (
           <p className="mt-2 text-sm text-stone-500">Este negócio ainda não tem forecast neste mês.</p>
@@ -354,6 +379,32 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
                         <span className="text-stone-100">{num(o.kwh)}</span>
                       </li>
                     ))}
+                </ol>
+              )}
+            </section>
+          )}
+          {atual.slug === "vorp-energy" && (
+            <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+              <p className="text-[10px] uppercase tracking-widest text-stone-500">Ranking · Conexões</p>
+              <p className="text-xs text-stone-500">
+                {ligacoes ? `${num(ligacoes.conexoes)} conexões (90 s ou mais) · ${num(ligacoes.alos)} alôs · ${num(ligacoes.ligacoes)} ligações` : "Ligações do Inside Sales"} · Api4Com
+              </p>
+              {!ligacoes || ligacoes.porPessoa.length === 0 ? (
+                <p className="mt-2 text-sm text-stone-500">{ligacoesErro ? "Ligações da Api4Com indisponíveis." : "Nenhuma ligação no mês."}</p>
+              ) : (
+                <ol className="mt-2 space-y-1 text-sm">
+                  {ligacoes.porPessoa.slice(0, 8).map((p, i) => (
+                    <li key={p.ramal} className="flex items-center gap-2">
+                      <span className="w-5 text-xs text-stone-500">{i + 1}</span>
+                      <span className="min-w-0 flex-1 truncate text-stone-200" title={`Ramal ${p.ramal}`}>
+                        {p.pessoa ?? p.nome}
+                      </span>
+                      <span className="text-xs text-stone-500" title="Alôs / ligações">
+                        {num(p.alos)}/{num(p.ligacoes)}
+                      </span>
+                      <span className="w-8 text-right text-stone-100">{num(p.conexoes)}</span>
+                    </li>
+                  ))}
                 </ol>
               )}
             </section>

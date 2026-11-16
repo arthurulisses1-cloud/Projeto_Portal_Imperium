@@ -137,7 +137,7 @@ export const redeSunneEmCache = unstable_cache(lerRedeSunne, ["sunne-rede-v1"], 
 
 // ---------------------------------------------------------------- vendedor de cada organização
 
-type PerfilParaCasar = { id: string; full_name: string | null; nomes_planilha?: string[] | null };
+export type PerfilParaCasar = { id: string; full_name: string | null; nomes_planilha?: string[] | null };
 
 /** Casa o nome da organização com uma única pessoa (nome completo ou apelido). Ambíguo ou sem par: null. */
 export function casarOrganizacao(nome: string | null, perfis: PerfilParaCasar[]): string | null {
