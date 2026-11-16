@@ -26,6 +26,14 @@ const STATUS: Record<StatusPace, { texto: string; classe: string }> = {
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
+/** Conversão real vs. meta: verde = na meta ou acima; amarelo = até 15% abaixo; vermelho = mais distante. */
+function corConversao(real: number | null, meta: number | null): string {
+  if (real === null || meta === null || meta <= 0) return "text-stone-100";
+  if (real >= meta) return "text-success-bright";
+  if (real >= meta * 0.85) return "text-warning-bright";
+  return "text-wine-bright";
+}
+
 function num(v: number) {
   return v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 }
@@ -254,7 +262,6 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
         ) : (
           <div className={`mt-3 grid gap-5 ${funis.length >= 3 ? "lg:grid-cols-3" : funis.length === 2 ? "lg:grid-cols-2" : ""}`}>
             {funis.map((fu) => {
-              const topo = fu.etapas[0]?.meta || 1;
               // Todos os canais têm o mesmo número de linhas: os mais curtos ganham linhas vazias no topo,
               // assim as etapas finais (reuniões, propostas, vendas) e os cabeçalhos ficam na mesma altura.
               const pad = Math.max(...funis.map((x) => x.etapas.length)) - fu.etapas.length;
@@ -287,11 +294,16 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
                           <p className="truncate text-stone-200" title={e.label}>
                             {e.label}
                           </p>
-                          <div className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-imperium-raised">
-                            <div className="absolute inset-y-0 left-0 rounded-full opacity-30" style={{ width: `${Math.max(1.5, (e.meta / topo) * 100)}%`, backgroundColor: `rgb(${cor})` }} />
+                          {/* Barra = meta da etapa (100%): faixa clara = esperado até hoje; preenchimento = realizado. */}
+                          <div
+                            className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-imperium-raised"
+                            title={`Esperado até hoje ${num(e.meta * fracaoMes)} · realizado ${e.realizado === null ? "—" : num(e.realizado)} · meta ${num(e.meta)}`}
+                          >
+                            <div className="absolute inset-y-0 left-0 opacity-30" style={{ width: `${Math.min(100, fracaoMes * 100)}%`, backgroundColor: `rgb(${cor})` }} />
                             {e.realizado !== null && (
-                              <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(100, Math.max(0, (e.realizado / topo) * 100))}%`, backgroundColor: `rgb(${cor})` }} />
+                              <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${e.meta > 0 ? Math.min(100, Math.max(0, (e.realizado / e.meta) * 100)) : 0}%`, backgroundColor: `rgb(${cor})` }} />
                             )}
+                            <div className="absolute inset-y-0 w-px bg-stone-200" style={{ left: `${Math.min(100, fracaoMes * 100)}%` }} />
                           </div>
                         </div>
                         <span className="text-right text-stone-400">{num(e.meta * fracaoMes)}</span>
@@ -313,21 +325,23 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
                         <span className="invisible border-b border-transparent py-1.5">0</span>
                       </div>
                     ))}
-                    {fu.etapas.slice(1).map((e, idx) => (
+                    {fu.etapas.slice(1).map((e, idx) => {
+                      const ant = fu.etapas[idx].realizado;
+                      const real = e.realizado !== null && ant !== null && ant > 0 ? e.realizado / ant : null;
+                      return (
                       <div key={e.label} className="contents">
                         <span className="min-w-0 truncate border-b border-imperium-line/60 py-1.5 text-stone-300" title={`${fu.etapas[idx].label} → ${e.label}`}>
                           {e.label} <span className="text-stone-500">← {fu.etapas[idx].label}</span>
                         </span>
-                        <span className="border-b border-imperium-line/60 py-1.5 text-right text-stone-100">
-                          {e.realizado === null || fu.etapas[idx].realizado === null || !fu.etapas[idx].realizado
-                            ? "—"
-                            : `${((e.realizado / (fu.etapas[idx].realizado as number)) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
+                        <span className={`border-b border-imperium-line/60 py-1.5 text-right ${corConversao(real, e.conversaoMeta)}`}>
+                          {real === null ? "—" : `${(real * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
                         </span>
                         <span className="border-b border-imperium-line/60 py-1.5 text-right text-stone-300">
                           {((e.conversaoMeta ?? 0) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
                         </span>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );
