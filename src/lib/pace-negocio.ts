@@ -1,6 +1,6 @@
 // Pace de recebimento por negócio: onde a equipe deveria estar hoje, onde está
-// e para onde caminha no fim do mês. Dias úteis = seg-sex (feriados ainda não
-// entram). Pura em calcularPace; o acesso ao banco fica em buscarPaceNegocio.
+// e para onde caminha no fim do mês. Dias úteis = seg-sex menos os feriados
+// nacionais (FERIADOS_NACIONAIS). Pura em calcularPace; o acesso ao banco fica em buscarPaceNegocio.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ehFimDeSemana, paraDataUTC } from "@/lib/data-br";
 import { metaForecast } from "@/lib/forecast-negocios";
@@ -28,10 +28,21 @@ function proximoDia(data: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Dias úteis (seg-sex) em [inicio, fim], inclusive. */
+/** Feriados nacionais (lei federal; Carnaval e Corpus Christi são ponto facultativo e não entram).
+ *  Acrescente os anos seguintes aqui. */
+export const FERIADOS_NACIONAIS = new Set<string>([
+  // 2026
+  "2026-01-01", "2026-04-03", "2026-04-21", "2026-05-01", "2026-09-07",
+  "2026-10-12", "2026-11-02", "2026-11-15", "2026-11-20", "2026-12-25",
+  // 2027
+  "2027-01-01", "2027-03-26", "2027-04-21", "2027-05-01", "2027-09-07",
+  "2027-10-12", "2027-11-02", "2027-11-15", "2027-11-20", "2027-12-25",
+]);
+
+/** Dias úteis (seg-sex, sem feriado nacional) em [inicio, fim], inclusive. */
 export function diasUteis(inicio: string, fim: string): number {
   let n = 0;
-  for (let c = inicio; c <= fim; c = proximoDia(c)) if (!ehFimDeSemana(c)) n++;
+  for (let c = inicio; c <= fim; c = proximoDia(c)) if (!ehFimDeSemana(c) && !FERIADOS_NACIONAIS.has(c)) n++;
   return n;
 }
 

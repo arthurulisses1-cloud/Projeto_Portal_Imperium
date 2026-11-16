@@ -2,7 +2,7 @@
 // Tudo que é regra de negócio mora aqui como dado: trocar uma etapa ou um canal é mudar este arquivo.
 
 /** Nível de avanço de um lead, comum a todos os funis do CRM. */
-export const NIVEL = { conectado: 1, agendada: 2, realizada: 3, proposta: 4, venda: 5 } as const;
+export const NIVEL = { entrada: 0, conectado: 1, agendada: 2, realizada: 3, proposta: 4, venda: 5 } as const;
 export type Nivel = (typeof NIVEL)[keyof typeof NIVEL];
 
 /** Canal do portal. No CRM: outbound = "outbound", inbound = "trafego" (Tráfego Pago), indicação = "indicacao". */
@@ -13,8 +13,19 @@ export type ConfigCrm = {
   tokenEnv: string;
   /** Funis lidos (seq do Pipefácil). Os demais (Social Seller, Eventos, ABM, Monetização…) não entram. */
   pipelines: number[];
-  /** Etapa do CRM (id) → nível de avanço. Etapas fora do mapa (entrada, sem conexão, perda) não contam. */
+  /** Etapa do CRM (id) → nível de avanço. Etapas fora do mapa (perda) são neutras; nível 0 (entrada,
+   *  sem conexão) não conta etapa nenhuma, mas serve para saber que o lead voltou para trás. */
   niveis: Record<string, Nivel>;
+  /** Voltar para uma etapa anterior desfaz reunião realizada, proposta e venda (ex.: proposta que volta
+   *  para Proposta Pendente deixa de contar; reunião marcada como realizada por engano e devolvida para
+   *  Reunião Agendada/No Show também). Agendada e conectado continuam contando: o agendamento aconteceu. */
+  regressaoDesfaz?: boolean;
+  /** Funis (id) onde a criação do lead não conta etapa: lead que nasce direto no Funil de Vendas (ex.:
+   *  criado pela conversa do WhatsApp) não teve reunião realizada por isso. */
+  pipelinesSemNivelNaCriacao?: string[];
+  /** Campo com a data/hora da reunião. Reunião marcada como realizada antes desse horário (ex.: COPILOT
+   *  movendo para Ganho na hora do agendamento) só conta quando o horário chega. */
+  campoReuniao?: string;
   /** Etapas de Ganho que viram venda no portal (uma por funil que fecha venda). */
   stagesGanhoVenda: string[];
   /** Valor do campo Canal (canal_origem) → canal do portal. Canais ausentes daqui ficam fora do negócio. */
@@ -56,7 +67,15 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       cmq9wwt8l024841np838jy467: NIVEL.proposta, // Proposta Aceita
       "cd570e66-1e74-46b5-b207-8ba1eb325c4c": NIVEL.proposta, // Contratação Futura (proposta já apresentada)
       cmq9wwt8l024a41npns90puld: NIVEL.venda, // Ganho
+      // Etapas de entrada (nível 0): voltar para elas desfaz o que vinha depois.
+      "badae364-589d-46ca-a54b-c4ef85780cd0": NIVEL.entrada, // Outbound: Entrada de Leads
+      "74c30965-d9f9-4223-a8d9-6b15278f8fc5": NIVEL.entrada, // Outbound: Sem Conexão
+      cmq9hpng3008q40mz50stjrfp: NIVEL.entrada, // Inbound SDR: ENTRADA DE LEADS
+      "15f65232-76e8-4c24-93d0-a52c6c477998": NIVEL.entrada, // Inbound SDR: SEM CONEXÃO
     },
+    regressaoDesfaz: true,
+    pipelinesSemNivelNaCriacao: ["cmq9wwt6u024441npj37o5f2y"], // [Vorp] Funil de Vendas
+    campoReuniao: "reuniao_agendada",
     stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],
     canais: { outbound: "outbound", trafego: "inbound", indicacao: "indicacao" },
     campos: { faturamento: "quanto_sua_empresa_fatura_por_mes", cargo: "qual_seu_cargo_atual" },
