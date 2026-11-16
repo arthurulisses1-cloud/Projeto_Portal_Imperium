@@ -7,7 +7,7 @@ import { hojeBR } from "@/lib/data-br";
 import { CRM_POR_NEGOCIO, INICIO_HISTORICO, INICIO_REALIZADO, TRESC_POR_NEGOCIO, type ConfigCrm } from "./config";
 import { buscarLigacoesDoDia, contarAlosConexoes } from "./tresc";
 import { Pipefacil, type AtividadePipefacil, type DealPipefacil } from "./pipefacil";
-import { calcularFunilUnico, calcularRealizadoCrm, dataBR, marcosPorLead, vendasGanhas, type DealCrm, type EventoCrm, type HistoricoReuniao } from "./realizado";
+import { calcularFunilUnico, calcularRealizadoCrm, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 
 export type OpcoesSync = {
   /** Dias do 3C a recalcular a partir desta data (YYYY-MM-DD); padrão: ontem e hoje. */
@@ -150,11 +150,16 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
     }
   }
 
-  // 2) Histórico novo desde a última leitura (com 10 min de folga; upsert por id evita duplicar).
+  // 2) Histórico dos últimos 3 meses, relido inteiro a cada execução (upsert por id evita duplicar).
+  // Ler só o que veio depois da última leitura deixava buracos que nunca fechavam: a auditoria de
+  // 16/11/2026 achou 401 de 1.654 mudanças de etapa faltando no banco. Reler tudo custa ~17 páginas
+  // (~6 s) e corrige qualquer falha na execução seguinte.
   const chaveEstado = `pipefacil:${slug}:ultimo_evento`;
   const { data: estado } = await supabase.from("integracao_estado").select("valor").eq("chave", chaveEstado).maybeSingle();
   const ultimo = (estado?.valor as { em?: string } | null)?.em;
-  const desde = ultimo ? new Date(Date.parse(ultimo) - 10 * 60 * 1000).toISOString() : cfg.inicioHistorico ?? INICIO_HISTORICO;
+  const inicioHistorico = cfg.inicioHistorico ?? INICIO_HISTORICO;
+  const tresMeses = `${inicioDoMes(hojeBR(), -3)}T00:00:00-03:00`;
+  const desde = Date.parse(tresMeses) > Date.parse(inicioHistorico) ? tresMeses : inicioHistorico;
   const atividades = await api.atividadesDesde(desde);
   const idsDeals = new Set(deals.map((d) => d.id));
   const novosEventos = atividades
@@ -197,12 +202,10 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const mesAnterior = inicioDoMes(hoje, -1);
   const inicio = mesAnterior < INICIO_REALIZADO ? INICIO_REALIZADO : mesAnterior;
   const fimExcl = inicioDoMes(hoje, 1);
-  const reunioes = await historicoReunioes(supabase, api, slug, cfg, linhasDeals, eventos, inicio, simular);
-  const extras = { reunioes: reunioes.mapa };
   // Negócio com funil próprio (Energy): as etapas do funil do CRM, sem divisão por canal.
   const contagens = cfg.funilUnico
     ? calcularFunilUnico(linhasDeals, eventos, cfg.funilUnico, inicio, fimExcl)
-    : calcularRealizadoCrm(linhasDeals, eventos, cfg, inicio, fimExcl, extras);
+    : calcularRealizadoCrm(linhasDeals, eventos, cfg, inicio, fimExcl);
   if (!simular) {
     const { error: limpar } = await supabase
       .from("funil_realizado")
@@ -223,7 +226,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
 
   // 4) Vendas a partir dos Ganhos (negócio com recebidoPeloCrm lê o Ganho direto do espelho: sem vendas).
   const inicioVendas = cfg.inicioVendas ?? INICIO_REALIZADO;
-  const ganhas = cfg.recebidoPeloCrm ? [] : vendasGanhas(linhasDeals, eventos, cfg, extras).filter((g) => g.data >= inicioVendas);
+  const ganhas = cfg.recebidoPeloCrm ? [] : vendasGanhas(linhasDeals, eventos, cfg).filter((g) => g.data >= inicioVendas);
   let vendas: Resultado = { ganhas: ganhas.length, criadas: 0, atualizadas: 0, removidas: 0, semVinculo: [] as string[] };
   if (opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas);
 
@@ -233,53 +236,9 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
     semCanal,
     eventosNovos: novosEventos.length,
     historicoDesde: desde,
-    reunioesLidas: reunioes.lidas,
-    reunioesPendentes: reunioes.pendentes,
     realizado: contagens,
     vendas: { ...vendas, lista: ganhas },
   };
-}
-
-/**
- * Histórico do campo de data da reunião dos leads com reunião realizada no período (para a regra
- * "realizada antes do horário marcado só conta no horário"). A API não filtra o histórico da conta
- * por campo, então ele é lido lead a lead e guardado em integracao_estado; cada lead é relido só se
- * a realizada for posterior à última leitura. No máximo 40 leituras por execução (o resto, na próxima).
- */
-async function historicoReunioes(
-  supabase: SupabaseClient,
-  api: Pipefacil,
-  slug: string,
-  cfg: ConfigCrm,
-  deals: DealCrm[],
-  eventos: EventoCrm[],
-  inicio: string,
-  simular: boolean,
-): Promise<{ mapa: Map<string, HistoricoReuniao>; lidas: number; pendentes: number }> {
-  const mapa = new Map<string, HistoricoReuniao>();
-  if (!cfg.campoReuniao) return { mapa, lidas: 0, pendentes: 0 };
-  type Cache = Record<string, { lido_em: string; hist: HistoricoReuniao }>;
-  const chave = `pipefacil:${slug}:reunioes`;
-  const { data: estado } = await supabase.from("integracao_estado").select("valor").eq("chave", chave).maybeSingle();
-  const cache: Cache = { ...((estado?.valor as Cache | null) ?? {}) };
-
-  const seqPorId = new Map(deals.map((d) => [d.deal_id, (d as DealCrm & { seq?: number }).seq]));
-  const pendentes: string[] = [];
-  marcosPorLead(eventos, cfg).forEach((m, id) => {
-    const realizada = m[3];
-    if (!realizada || dataBR(realizada) < inicio || !seqPorId.get(id)) return;
-    const c = cache[id];
-    if (!c || Date.parse(c.lido_em) < Date.parse(realizada)) pendentes.push(id);
-  });
-  const lote = pendentes.slice(0, 40);
-  for (const id of lote) {
-    cache[id] = { lido_em: new Date().toISOString(), hist: await api.historicoCampo(seqPorId.get(id)!, cfg.campoReuniao) };
-  }
-  if (lote.length && !simular) {
-    await supabase.from("integracao_estado").upsert({ chave, valor: cache, atualizado_em: new Date().toISOString() });
-  }
-  for (const [id, c] of Object.entries(cache)) mapa.set(id, c.hist);
-  return { mapa, lidas: lote.length, pendentes: pendentes.length - lote.length };
 }
 
 async function sincronizarVendas(supabase: SupabaseClient, api: Pipefacil, negocioId: string, ganhas: ReturnType<typeof vendasGanhas>) {

@@ -153,8 +153,7 @@ describe("regras de correção da Acrópole (auditoria 16/11)", () => {
       ],
       cfg,
       "2026-11-01",
-      "2026-12-01",
-      { agora: "2026-11-30T00:00:00Z" },
+      "2026-12-01"
     );
     expect(total(r, "outbound", "propostas")).toBe(1);
     expect(r.find((x) => x.etapa === "propostas")?.data).toBe("2026-11-18");
@@ -167,8 +166,7 @@ describe("regras de correção da Acrópole (auditoria 16/11)", () => {
       [evt("p3", ST.propostaApresentada, "2026-11-12T14:00:00Z"), evt("p3", PERDA_VENDAS, "2026-11-16T14:00:00Z")],
       cfg,
       "2026-11-01",
-      "2026-12-01",
-      { agora: "2026-11-30T00:00:00Z" },
+      "2026-12-01"
     );
     expect(total(r, "outbound", "propostas")).toBe(1);
   });
@@ -179,8 +177,7 @@ describe("regras de correção da Acrópole (auditoria 16/11)", () => {
       [evt("n1", ST.agendadaOut, "2026-11-05T13:00:00Z"), evt("n1", ST.ganhoOut, "2026-11-06T13:00:00Z"), evt("n1", NO_SHOW_OUT, "2026-11-06T15:00:00Z")],
       cfg,
       "2026-11-01",
-      "2026-12-01",
-      { agora: "2026-11-30T00:00:00Z" },
+      "2026-12-01"
     );
     expect(total(r, "outbound", "reunioes_agendadas")).toBe(1);
     expect(total(r, "outbound", "reunioes_realizadas")).toBe(0);
@@ -196,41 +193,16 @@ describe("regras de correção da Acrópole (auditoria 16/11)", () => {
       ],
       cfg,
       "2026-11-01",
-      "2026-12-01",
-      { agora: "2026-11-30T00:00:00Z" },
+      "2026-12-01"
     );
     expect(r.find((x) => x.etapa === "reunioes_agendadas")?.data).toBe("2026-11-05");
     expect(r.find((x) => x.etapa === "reunioes_realizadas")?.data).toBe("2026-11-06");
   });
 
-  it("Ganho antes do horário da reunião conta no horário marcado; reunião ainda no futuro não conta", () => {
-    const deals = [deal({ deal_id: "c1" }), deal({ deal_id: "c2" }), deal({ deal_id: "c3" })];
-    const eventos = [
-      // COPILOT moveu para Ganho em 06/11, a reunião estava marcada para 09/11 11h
-      evt("c1", ST.agendadaOut, "2026-11-06T19:26:00Z"),
-      evt("c1", ST.ganhoOut, "2026-11-06T19:26:30Z"),
-      // reunião marcada para 02/12: ainda não aconteceu
-      evt("c2", ST.agendadaOut, "2026-11-20T12:00:00Z"),
-      evt("c2", ST.ganhoOut, "2026-11-20T12:00:30Z"),
-      // proposta apresentada antes do horário marcado prova que a reunião já tinha acontecido
-      evt("c3", ST.agendadaOut, "2026-11-09T17:48:00Z"),
-      evt("c3", ST.ganhoOut, "2026-11-09T17:48:10Z"),
-      evt("c3", ST.propostaApresentada, "2026-11-09T17:50:00Z"),
-    ];
-    const reunioes = new Map<string, [string, string | null][]>([
-      ["c1", [["2026-11-06T18:49:00Z", "2026-11-06T19:00:00Z"], ["2026-11-06T19:25:00Z", "2026-11-09T11:00"]]],
-      ["c2", [["2026-11-20T11:59:00Z", "2026-12-02T10:00"]]],
-      ["c3", [["2026-11-09T17:48:00Z", "2026-11-12T18:30"]]],
-    ]);
-    const r = calcularRealizadoCrm(deals, eventos, cfg, "2026-11-01", "2026-12-01", { reunioes, agora: "2026-11-25T00:00:00Z" });
-    const realizadas = r.filter((x) => x.etapa === "reunioes_realizadas");
-    expect(realizadas).toEqual([{ data: "2026-11-09", canal: "outbound", etapa: "reunioes_realizadas", quantidade: 2 }]);
-  });
-
   it("Galáticos não usa essas regras: voltar de etapa não desfaz", () => {
     const ms = CRM_POR_NEGOCIO.matchsales;
     expect(ms.regressaoDesfaz).toBeFalsy();
-    expect(ms.campoReuniao).toBeUndefined();
+    expect(ms.pipelinesSemNivelNaCriacao).toBeUndefined();
   });
 });
 

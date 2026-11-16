@@ -23,9 +23,7 @@ export type ConfigCrm = {
   /** Funis (id) onde a criação do lead não conta etapa: lead que nasce direto no Funil de Vendas (ex.:
    *  criado pela conversa do WhatsApp) não teve reunião realizada por isso. */
   pipelinesSemNivelNaCriacao?: string[];
-  /** Campo com a data/hora da reunião. Reunião marcada como realizada antes desse horário (ex.: COPILOT
-   *  movendo para Ganho na hora do agendamento) só conta quando o horário chega. */
-  campoReuniao?: string;
+
   /** Etapas de Ganho que viram venda no portal (uma por funil que fecha venda). */
   stagesGanhoVenda: string[];
   /** Valor do campo Canal (canal_origem) → canal do portal. Canais ausentes daqui ficam fora do negócio. */
@@ -95,7 +93,6 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     },
     regressaoDesfaz: true,
     pipelinesSemNivelNaCriacao: ["cmq9wwt6u024441npj37o5f2y"], // [Vorp] Funil de Vendas
-    campoReuniao: "reuniao_agendada",
     stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],
     canais: { outbound: "outbound", trafego: "inbound", indicacao: "indicacao" },
     campos: { faturamento: "quanto_sua_empresa_fatura_por_mes", cargo: "qual_seu_cargo_atual" },

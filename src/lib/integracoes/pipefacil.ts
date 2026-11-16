@@ -97,23 +97,6 @@ export class Pipefacil {
     return out;
   }
 
-  /** Histórico de um campo personalizado de um lead, do mais antigo para o mais novo: [quando, valor novo]. */
-  async historicoCampo(seq: number, campo: string): Promise<[string, string | null][]> {
-    const out: [string, string | null][] = [];
-    let cursor: string | undefined;
-    for (let i = 0; i < 20; i++) {
-      const r = await this.get<Pagina<AtividadePipefacil>>(`/deals/${seq}/activities`, { type: "CUSTOM_FIELD_CHANGED", limit: "200", cursor });
-      for (const a of r.data.items) {
-        if (a.field !== `customFields.${campo}`) continue;
-        const to = a.changes?.to;
-        out.push([a.occurredAt, typeof to === "string" && to.trim() ? to : null]);
-      }
-      if (!r.data.hasMore || !r.data.nextCursor) break;
-      cursor = r.data.nextCursor;
-    }
-    return out.sort((a, b) => Date.parse(a[0]) - Date.parse(b[0]));
-  }
-
   async membros(): Promise<MembroPipefacil[]> {
     const r = await this.get<{ data: { members: MembroPipefacil[] } }>("/users");
     return r.data.members ?? [];
