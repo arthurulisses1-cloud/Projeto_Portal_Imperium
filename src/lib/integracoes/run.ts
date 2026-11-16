@@ -7,7 +7,7 @@ import { hojeBR } from "@/lib/data-br";
 import { CRM_POR_NEGOCIO, INICIO_HISTORICO, INICIO_REALIZADO, TRESC_POR_NEGOCIO, type ConfigCrm } from "./config";
 import { buscarLigacoesDoDia, contarAlosConexoes } from "./tresc";
 import { Pipefacil, type AtividadePipefacil, type DealPipefacil } from "./pipefacil";
-import { calcularRealizadoCrm, dataBR, marcosPorLead, vendasGanhas, type DealCrm, type EventoCrm, type HistoricoReuniao } from "./realizado";
+import { calcularFunilUnico, calcularRealizadoCrm, dataBR, marcosPorLead, vendasGanhas, type DealCrm, type EventoCrm, type HistoricoReuniao } from "./realizado";
 
 export type OpcoesSync = {
   /** Dias do 3C a recalcular a partir desta data (YYYY-MM-DD); padrão: ontem e hoje. */
@@ -57,16 +57,13 @@ const NUMERO = (v: unknown) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/**
- * Canal do lead pelo campo de canal do negócio (padrão canal_origem). Sem ele, lead de
- * formulário/anúncio conta como Tráfego Pago; o resto cai no `canalSemValor` da config (ou fica sem canal).
- */
-export function canalDoDeal(d: Pick<DealPipefacil, "properties" | "tags" | "tracking">, cfg: Pick<ConfigCrm, "campoCanal" | "canalSemValor"> = {}): string | null {
-  const canal = TEXTO(d.properties?.[cfg.campoCanal ?? "canal_origem"]);
+/** Canal do lead; sem Canal preenchido, lead de formulário/anúncio conta como Tráfego Pago. */
+export function canalDoDeal(d: Pick<DealPipefacil, "properties" | "tags" | "tracking">): string | null {
+  const canal = TEXTO(d.properties?.canal_origem);
   if (canal) return canal;
   const tags = (d.tags ?? []).map((t) => t.name.toLowerCase());
   if (tags.some((t) => t.includes("tráfego pago") || t.includes("trafego pago") || t.includes("forms facebook"))) return "trafego";
-  return cfg.canalSemValor ?? null;
+  return null;
 }
 
 function dealParaLinha(negocioId: string, d: DealPipefacil, cfg: ConfigCrm): DealCrm & Record<string, unknown> {
@@ -80,7 +77,7 @@ function dealParaLinha(negocioId: string, d: DealPipefacil, cfg: ConfigCrm): Dea
     pipeline_id: d.pipelineId,
     stage_id: d.stageId,
     status: d.status,
-    canal: canalDoDeal(d, cfg),
+    canal: canalDoDeal(d),
     faturamento: campos.faturamento ? TEXTO(p[campos.faturamento]) : null,
     cargo: campos.cargo ? TEXTO(p[campos.cargo]) : null,
     tamanho_time: campos.tamanhoTime ? TEXTO(p[campos.tamanhoTime]) : null,
@@ -202,7 +199,10 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const fimExcl = inicioDoMes(hoje, 1);
   const reunioes = await historicoReunioes(supabase, api, slug, cfg, linhasDeals, eventos, inicio, simular);
   const extras = { reunioes: reunioes.mapa };
-  const contagens = calcularRealizadoCrm(linhasDeals, eventos, cfg, inicio, fimExcl, extras);
+  // Negócio com funil próprio (Energy): as etapas do funil do CRM, sem divisão por canal.
+  const contagens = cfg.funilUnico
+    ? calcularFunilUnico(linhasDeals, eventos, cfg.funilUnico, inicio, fimExcl)
+    : calcularRealizadoCrm(linhasDeals, eventos, cfg, inicio, fimExcl, extras);
   if (!simular) {
     const { error: limpar } = await supabase
       .from("funil_realizado")

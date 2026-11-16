@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { CRM_POR_NEGOCIO, TRESC_POR_NEGOCIO } from "./config";
-import { calcularRealizadoCrm, dataBR, ehMql, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
+import { calcularFunilUnico, calcularRealizadoCrm, dataBR, ehMql, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { contarAlosConexoes, segundos } from "./tresc";
 import { canalDoDeal } from "./run";
-import { aplicarRealizado, etapasIntegradas, funisDoMes } from "../funil-negocio";
+import { aplicarRealizado, etapasIntegradas, funilUnicoDoNegocio, funisDoMes } from "../funil-negocio";
 
 const cfg = CRM_POR_NEGOCIO.vorp;
 const ST = {
@@ -323,67 +323,78 @@ describe("Galáticos (MatchSales)", () => {
   });
 });
 
-describe("Energy (Pipefácil da Sunne, Inside Sales)", () => {
+describe("Energy (funil Inside Sales do Pipefácil da Sunne)", () => {
   const en = CRM_POR_NEGOCIO["vorp-energy"];
-  const EN = {
-    conectado: "29f5f805-ad8d-4756-91c3-a00b7aa100ae", // Leads Conectados
-    contaColetada: "c0a372d4-96cc-4ca0-bced-46ffc7a0216e",
-    reuniaoRealizada: "cd9bbaf1-c75a-46b6-bd87-37c511edb788", // vem depois da conta
+  const funil = en.funilUnico!;
+  const IS = {
+    leads: "248cd46c-a2c0-45f8-a406-25a25533fa6a",
+    conectados: "29f5f805-ad8d-4756-91c3-a00b7aa100ae",
+    conta: "c0a372d4-96cc-4ca0-bced-46ffc7a0216e",
+    reuniao: "cd9bbaf1-c75a-46b6-bd87-37c511edb788",
     ganho: "6ec9fb40-184f-442b-a0cb-5fc7f0b89bac",
+    perda: "fafa2c0f-91d3-4d51-b1c8-30921cc90c12",
   };
+  const soma = (r: ReturnType<typeof calcularFunilUnico>, etapa: string) =>
+    r.filter((x) => x.etapa === etapa).reduce((s, x) => s + x.quantidade, 0);
 
-  it("canal pela Origem do Lead; sem origem é Outbound", () => {
-    expect(canalDoDeal({ properties: { origem_do_lead: "perdidos_alugsol" }, tags: [] }, en)).toBe("perdidos_alugsol");
-    expect(canalDoDeal({ properties: { canal_origem: "trafego" }, tags: [] }, en)).toBe("outbound");
-    expect(canalDoDeal({ properties: {}, tags: [] }, en)).toBe("outbound");
-    expect(en.canais.perdidos_alugsol).toBe("outbound");
-    expect(en.canais.inbound).toBe("inbound");
-    expect(en.canais.plataforma_sunne_partners).toBe("indicacao");
+  it("um funil só, com as etapas do Inside Sales na ordem do Pipefácil e sem meta", () => {
+    const f = funilUnicoDoNegocio("vorp-energy")!;
+    expect(f.titulo).toBe("Inside Sales");
+    expect(f.etapas.map((e) => e.label)).toEqual([
+      "Leads",
+      "Leads Conectados",
+      "Conta Coletada",
+      "Reunião Realizada",
+      "Aguardando Assinatura",
+      "Validação Comercial",
+      "Ganho",
+    ]);
+    expect(f.etapas.every((e) => e.meta === null && e.conversaoMeta === null)).toBe(true);
+    expect(funilUnicoDoNegocio("vorp")).toBeNull();
   });
 
-  it("conta subida = Conta Coletada (ou além) e venda = Ganho; reuniões e MQL ficam de fora", () => {
+  it("todas as etapas do funil vêm da integração, e só elas", () => {
+    const k = etapasIntegradas("vorp-energy");
+    expect(Array.from(k).sort()).toEqual(funil.etapas.map((e) => `outbound|${e.chave}`).sort());
+    const f = aplicarRealizado([funilUnicoDoNegocio("vorp-energy")!], [{ canal: "outbound", etapa: "is_leads", quantidade: 40 }], k);
+    expect(f[0].etapas[0].realizado).toBe(40);
+    expect(f[0].etapas[1].realizado).toBe(0);
+  });
+
+  it("lead conta na etapa e em todas as anteriores no dia em que chegou; Leads = criação; Perda não conta", () => {
     const deals = [
-      deal({ deal_id: "o1", canal: "perdidos_alugsol", criado_em: "2026-11-03T13:00:00Z" }),
-      deal({ deal_id: "i1", canal: "inbound", criado_em: "2026-11-03T13:00:00Z" }),
-      deal({ deal_id: "p1", canal: "plataforma_sunne_partners", criado_em: "2026-11-04T13:00:00Z" }),
+      deal({ deal_id: "a", criado_em: "2026-11-03T13:00:00Z" }),
+      deal({ deal_id: "b", criado_em: "2026-11-04T13:00:00Z" }),
+      deal({ deal_id: "c", criado_em: "2026-10-20T13:00:00Z" }),
     ];
     const eventos = [
-      ev("o1", EN.conectado, "2026-11-04T13:00:00Z"),
-      ev("o1", EN.contaColetada, "2026-11-05T13:00:00Z"),
-      ev("o1", EN.reuniaoRealizada, "2026-11-07T13:00:00Z"),
-      ev("o1", EN.ganho, "2026-11-10T13:00:00Z"),
-      ev("i1", EN.conectado, "2026-11-04T13:00:00Z"),
-      ev("p1", EN.contaColetada, "2026-11-06T13:00:00Z"),
+      ev("a", IS.leads, "2026-11-03T13:00:00Z"),
+      ev("a", IS.conectados, "2026-11-03T15:00:00Z"),
+      ev("a", IS.reuniao, "2026-11-05T15:00:00Z"), // pulou Conta Coletada
+      ev("a", IS.conta, "2026-11-06T15:00:00Z"), // voltou: não conta de novo
+      ev("b", IS.perda, "2026-11-04T15:00:00Z"),
+      ev("c", IS.ganho, "2026-11-10T15:00:00Z"), // criado em outubro, ganho em novembro
     ];
-    const r = calcularRealizadoCrm(deals, eventos, en, "2026-11-01", "2026-12-01");
-    expect(total(r, "outbound", "propostas")).toBe(1);
-    expect(r.find((x) => x.canal === "outbound" && x.etapa === "propostas")?.data).toBe("2026-11-05");
-    expect(total(r, "outbound", "vendas")).toBe(1);
-    expect(total(r, "inbound", "leads")).toBe(1);
-    expect(total(r, "inbound", "conectados")).toBe(1);
-    expect(total(r, "indicacao", "leads_indicados")).toBe(1);
-    expect(r.some((x) => x.etapa.startsWith("reunioes") || x.etapa === "mql")).toBe(false);
+    const r = calcularFunilUnico(deals, eventos, funil, "2026-11-01", "2026-12-01");
+    expect(soma(r, "is_leads")).toBe(2);
+    expect(soma(r, "is_conectados")).toBe(2);
+    expect(soma(r, "is_conta_coletada")).toBe(2);
+    expect(soma(r, "is_reuniao_realizada")).toBe(2);
+    expect(soma(r, "is_aguardando_assinatura")).toBe(1);
+    expect(soma(r, "is_ganho")).toBe(1);
+    expect(r.find((x) => x.etapa === "is_conta_coletada" && x.data === "2026-11-05")?.quantidade).toBe(1);
+    expect(r.every((x) => x.canal === "outbound")).toBe(true);
   });
 
-  it("o Ganho não vira venda no portal (as vendas do Energy são lançadas à mão)", () => {
-    expect(en.criarVendas).toBe(false);
+  it("chegada fora do intervalo não conta; data no fuso de Brasília", () => {
+    const deals = [deal({ deal_id: "a", criado_em: "2026-12-01T02:00:00Z" })]; // 30/11 em Brasília
+    const r = calcularFunilUnico(deals, [ev("a", IS.conectados, "2026-12-01T12:00:00Z")], funil, "2026-11-01", "2026-12-01");
+    expect(r).toEqual([{ data: "2026-11-30", canal: "outbound", etapa: "is_leads", quantidade: 1 }]);
   });
 
-  it("no dashboard: Pipefácil nas etapas configuradas; alôs, conexões, reuniões e MQL não", () => {
-    const i = etapasIntegradas("vorp-energy");
-    expect(Array.from(i).sort()).toEqual(
-      ["inbound|conectados", "inbound|leads", "inbound|propostas", "inbound|vendas", "indicacao|leads_indicados", "indicacao|vendas", "outbound|propostas", "outbound|vendas"].sort(),
-    );
-    const funis = aplicarRealizado(funisDoMes("vorp-energy", 2026, 11), [{ canal: "outbound", etapa: "propostas", quantidade: 19 }], i);
-    const out = funis.find((f) => f.canal === "outbound")!;
-    expect(out.etapas.find((e) => e.label === "Contas subidas")?.realizado).toBe(19);
-    expect(out.etapas.find((e) => e.label === "Reuniões realizadas")?.realizado).toBeNull();
-    expect(out.etapas.find((e) => e.label === "Alôs")?.realizado).toBeNull();
-  });
-
-  it("sincroniza numa chamada própria, com histórico desde o início do realizado", () => {
+  it("sincroniza à parte, desde novembro, sem criar vendas", () => {
     expect(en.syncSeparado).toBe(true);
+    expect(en.criarVendas).toBe(false);
     expect(en.inicioHistorico).toBe("2026-11-01T00:00:00-03:00");
-    expect(CRM_POR_NEGOCIO.vorp.syncSeparado).toBeUndefined();
   });
 });

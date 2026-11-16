@@ -4,7 +4,7 @@
 // Mapeamento de etapas (premissa): Finance usa Entrevistas e Subidos no lugar de
 // Reunião e Proposta; Energy usa Contas subidas no lugar de Proposta.
 import { PARAMETROS, RAMP_UP, indiceMes, vendasDoMes, type CanalFunil } from "@/lib/forecast-negocios";
-import { CRM_POR_NEGOCIO, ETAPAS_PORTAL, TRESC_POR_NEGOCIO, etapasDoCrm, type CanalPortal } from "@/lib/integracoes/config";
+import { CRM_POR_NEGOCIO, ETAPAS_PORTAL, TRESC_POR_NEGOCIO } from "@/lib/integracoes/config";
 
 export type CanalDoFunil = "outbound" | "inbound" | "indicacao";
 
@@ -12,8 +12,8 @@ export type EtapaFunil = {
   /** Chave estável da etapa (ver ETAPAS_PORTAL em integracoes/config.ts). */
   chave: string;
   label: string;
-  /** Volume previsto no mês (com ramp-up). */
-  meta: number;
+  /** Volume previsto no mês (com ramp-up); null = etapa sem meta (funil próprio do CRM). */
+  meta: number | null;
   /** Conversão prevista desde a etapa anterior (null na 1ª etapa). */
   conversaoMeta: number | null;
   /** Preenchido pela integração; null = aguardando. */
@@ -62,14 +62,30 @@ export function funisDoMes(slug: string, ano: number, mes: number): FunilDoCanal
 
 export type LinhaRealizado = { canal: string; etapa: string; quantidade: number };
 
+/**
+ * Funil próprio do negócio (ex.: Energy = etapas do Inside Sales no Pipefácil), no lugar dos funis por
+ * canal do forecast. Sem meta: o forecast não tem essas etapas. null = o negócio usa os funis por canal.
+ */
+export function funilUnicoDoNegocio(slug: string): FunilDoCanal | null {
+  const unico = CRM_POR_NEGOCIO[slug]?.funilUnico;
+  if (!unico) return null;
+  return {
+    canal: "outbound",
+    titulo: unico.titulo,
+    etapas: unico.etapas.map((e) => ({ chave: e.chave, label: e.label, meta: null, conversaoMeta: null, realizado: null })),
+  };
+}
+
 /** Etapas que a integração do negócio alimenta (as demais continuam sem realizado). */
 export function etapasIntegradas(slug: string): Set<string> {
   const out = new Set<string>();
   if (TRESC_POR_NEGOCIO[slug]) ["outbound|alos", "outbound|conexoes"].forEach((k) => out.add(k));
-  const crm = CRM_POR_NEGOCIO[slug];
-  if (crm) {
-    for (const canal of Object.keys(ETAPAS_PORTAL) as CanalPortal[]) {
-      for (const e of etapasDoCrm(crm, canal)) out.add(`${canal}|${e}`);
+  const unico = CRM_POR_NEGOCIO[slug]?.funilUnico;
+  if (unico) {
+    for (const e of unico.etapas) out.add(`outbound|${e.chave}`);
+  } else if (CRM_POR_NEGOCIO[slug]) {
+    for (const [canal, etapas] of Object.entries(ETAPAS_PORTAL)) {
+      for (const e of etapas) if (!(canal === "outbound" && (e === "alos" || e === "conexoes"))) out.add(`${canal}|${e}`);
     }
   }
   return out;
