@@ -16,6 +16,8 @@ export type DealCrm = {
   tamanho_time?: string | null;
   /** Motivo de perda (só em memória; não vai para crm_deals). */
   motivo_perda?: string | null;
+  /** Origem do lead quando difere do canal (só em memória; vai para as listas do hover). */
+  origem?: string | null;
   status: string | null;
   stage_id: string | null;
   valor: number | null;
@@ -244,7 +246,7 @@ export function responsavelNoAgendamento(d: DealCrm, marcos: Partial<Record<Nive
   const t = marcos?.[NIVEL.agendada];
   return (t ? responsavelEm(hist, t) : null) ?? d.sdr_user_id ?? d.responsavel_user_id;
 }
-export type PessoaRanking = { pessoa: string | null; leads: { nome: string; data: string; canal: CanalPortal }[] };
+export type PessoaRanking = { pessoa: string | null; leads: { nome: string; data: string; canal: CanalPortal; origem?: string | null }[] };
 
 /**
  * Ranking de pré-vendas por etapa (agendadas, realizadas, vendas): cada contagem do mês vai para quem era o
@@ -268,7 +270,7 @@ export function rankingPreVendas(
       if (it.etapa !== etapa) continue;
       const pessoa = quemAgendou(it.deal);
       const p = porPessoa.get(pessoa) ?? { pessoa, leads: [] };
-      p.leads.push({ nome: it.deal.nome || it.deal.empresa || "(sem nome)", data: it.data, canal: it.canal });
+      p.leads.push({ nome: it.deal.nome || it.deal.empresa || "(sem nome)", data: it.data, canal: it.canal, origem: it.deal.origem ?? null });
       porPessoa.set(pessoa, p);
     }
     out[etapa] = Array.from(porPessoa.values())

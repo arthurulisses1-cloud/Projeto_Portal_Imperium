@@ -33,7 +33,7 @@ export type ConfigCrm = {
   /** Valor do campo Canal (canal_origem) → canal do portal. Canais ausentes daqui ficam fora do negócio. */
   canais: Record<string, CanalPortal>;
   /** Slug dos campos do Pipefácil usados na qualificação (cada workspace tem os seus). */
-  campos: { faturamento?: string; cargo?: string; tamanhoTime?: string; /** Campo de MRR (padrão "mrr"). */ mrr?: string };
+  campos: { faturamento?: string; cargo?: string; tamanhoTime?: string; /** Campo de MRR (padrão "mrr"). */ mrr?: string; /** Origem do lead quando difere do canal (aparece na lista do hover). */ origem?: string };
   /** MQL (inbound): valores aceitos de cada critério; o lead precisa atender todos os critérios definidos. */
   mql: Partial<Record<CriterioMql, string[]>>;
   /** Canal alternativo cuja venda só entra se o closer que fez a call (campo Closer; sem ele, o responsável
@@ -122,7 +122,7 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     pipelinesSemNivelNaCriacao: ["cmq9wwt6u024441npj37o5f2y"], // [Vorp] Funil de Vendas
     stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],
     canais: { outbound: "outbound", trafego: "inbound", referido: "indicacao" },
-    campos: { faturamento: "quanto_sua_empresa_fatura_por_mes", cargo: "qual_seu_cargo_atual" },
+    campos: { faturamento: "quanto_sua_empresa_fatura_por_mes", cargo: "qual_seu_cargo_atual", origem: "origem_lead" },
     mql: {
       faturamento: [
         "entre_100_e_200_mil",

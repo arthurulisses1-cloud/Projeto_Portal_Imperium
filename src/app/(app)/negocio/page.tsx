@@ -222,7 +222,7 @@ export default async function NegocioDashboardPage({
             nome: p.nome,
             meta: 0,
             realizado: p.total,
-            leads: p.leads.map((l) => ({ nome: l.nome, data: l.data, responsavel: CANAL_LEAD[l.canal] ?? l.canal, preVendas: null })) as LeadEtapa[],
+            leads: p.leads.map((l) => ({ nome: l.nome, data: l.data, responsavel: CANAL_LEAD[l.canal] ?? l.canal, preVendas: null, origem: l.origem ?? null })) as LeadEtapa[],
           })),
           fonte: "Pipefácil" as string | null,
         };
