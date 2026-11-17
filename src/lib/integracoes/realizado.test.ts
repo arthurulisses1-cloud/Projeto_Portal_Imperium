@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { CRM_POR_NEGOCIO, TRESC_POR_NEGOCIO } from "./config";
-import { calcularFunilUnico, calcularRealizadoCrm, dataBR, ehMql, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
+import { calcularFunilUnico, calcularRealizadoCrm, dataBR, ehMql, leadsDoRealizado, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { contarAlosConexoes, segundos } from "./tresc";
 import { canalDoDeal } from "./run";
-import { aplicarRealizado, etapasIntegradas, funilUnicoDoNegocio, funisDoMes } from "../funil-negocio";
+import { aplicarLeads, aplicarRealizado, etapasIntegradas, funilUnicoDoNegocio, funisDoMes } from "../funil-negocio";
 import { ganhosDoMes } from "../recebido-crm";
 
 const cfg = CRM_POR_NEGOCIO.vorp;
@@ -394,5 +394,31 @@ describe("Energy (funil Inside Sales do Pipefácil da Sunne)", () => {
       { id: "g1", negocio_id: "n", data: "2026-11-16", valor: 195.99, cliente: "A", canal: "outbound" },
     ]);
     expect(vendasGanhas([deal({ deal_id: "g1", canal: null, status: "won", stage_id: IS.ganho, valor: 1, fechado_em: "2026-11-16T17:00:05Z" })], [], en)).toEqual([]);
+  });
+});
+
+describe("lista de leads do dashboard", () => {
+  it("a lista de cada etapa tem exatamente os leads que o número conta", () => {
+    const deals = [deal({ deal_id: "a", nome: "ACME" }), deal({ deal_id: "b", nome: "Beta" }), deal({ deal_id: "c", nome: "Fora", canal: "eventos" })];
+    const eventos = [
+      ev("a", ST.agendadaOut, "2026-11-05T13:00:00Z"),
+      ev("a", ST.ganhoOut, "2026-11-06T13:00:00Z"),
+      ev("b", ST.agendadaOut, "2026-11-09T13:00:00Z"),
+      ev("c", ST.agendadaOut, "2026-11-09T13:00:00Z"),
+    ];
+    const contagem = calcularRealizadoCrm(deals, eventos, cfg, "2026-11-01", "2026-12-01");
+    const lista = leadsDoRealizado(deals, eventos, cfg, "2026-11-01", "2026-12-01");
+    for (const etapa of ["reunioes_agendadas", "reunioes_realizadas"]) {
+      expect(lista.filter((l) => l.canal === "outbound" && l.etapa === etapa).length).toBe(total(contagem, "outbound", etapa));
+    }
+    expect(lista.filter((l) => l.etapa === "reunioes_agendadas").map((l) => l.deal.nome)).toEqual(["ACME", "Beta"]);
+    expect(leadsDoRealizado(deals, eventos, cfg, "2026-11-01", "2026-12-01", ["reunioes_realizadas"]).map((l) => l.deal.nome)).toEqual(["ACME"]);
+  });
+
+  it("coloca a lista na etapa certa do funil", () => {
+    const funis = aplicarLeads(funisDoMes("vorp", 2026, 11), new Map([["outbound|reunioes_realizadas", [{ nome: "ACME", responsavel: "Jorge", preVendas: "Vinícius", data: "2026-11-06" }]]]));
+    const out = funis.find((f) => f.canal === "outbound")!;
+    expect(out.etapas.find((e) => e.chave === "reunioes_realizadas")?.leads?.[0].nome).toBe("ACME");
+    expect(out.etapas.find((e) => e.chave === "reunioes_agendadas")?.leads).toBeUndefined();
   });
 });

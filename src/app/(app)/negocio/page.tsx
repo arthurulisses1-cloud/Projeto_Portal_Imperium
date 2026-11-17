@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { buscarDashboardNegocio, RANKINGS, type MixCanal } from "@/lib/dashboard-negocio";
-import { aplicarRealizado, etapasIntegradas, funilUnicoDoNegocio, funisDoMes } from "@/lib/funil-negocio";
+import { aplicarLeads, aplicarRealizado, etapasIntegradas, funilUnicoDoNegocio, funisDoMes, type LeadEtapa } from "@/lib/funil-negocio";
+import { buscarLeadsDoFunil } from "@/lib/integracoes/leads-funil";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
 import { buscarResumoSunne, type SunneResumo } from "@/lib/sunne";
 import { buscarLigacoesSunne, type LigacoesResumo } from "@/lib/api4com";
@@ -127,7 +129,17 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
   // Funis por canal do forecast; o negócio com funil próprio no CRM (Energy) mostra só ele, sem meta.
   const previstos = funisDoMes(atual.slug, ano, mes);
   const funilUnico = funilUnicoDoNegocio(atual.slug);
-  const funis = aplicarRealizado(funilUnico ? [funilUnico] : previstos, linhasRealizado ?? [], integradas);
+  // Leads de cada número (agendadas, realizadas, propostas, vendas). O negócio já passou pelo filtro de
+  // visibilidade acima; o espelho do CRM só é lido no servidor.
+  let leadsFunil = new Map<string, LeadEtapa[]>();
+  if (integradas.size > 0 && !funilUnico) {
+    try {
+      leadsFunil = await buscarLeadsDoFunil(createAdminClient(), atual.slug, atual.id, inicioMes, fimMesExcl);
+    } catch (e) {
+      console.error("buscarLeadsDoFunil falhou:", e);
+    }
+  }
+  const funis = aplicarLeads(aplicarRealizado(funilUnico ? [funilUnico] : previstos, linhasRealizado ?? [], integradas), leadsFunil);
   const ultimaSyncFunil = (linhasRealizado ?? []).reduce<string | null>((m, l) => (!m || l.synced_at > m ? l.synced_at : m), null);
   const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
   // Energy: contas subidas vêm da Sunne (negócios criados no mês por vendedor), não do compromisso do dia.
@@ -343,7 +355,7 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
                             </div>
                           </div>
                           <span className="text-right text-stone-400">{num(e.meta * fracaoMes)}</span>
-                          <span className="text-right text-stone-100">{e.realizado === null ? "—" : num(e.realizado)}</span>
+                          <RealizadoComLeads valor={e.realizado === null ? "—" : num(e.realizado)} leads={e.leads} />
                           <span className="text-right text-stone-300">{num(e.meta)}</span>
                         </div>
                       ),
@@ -588,5 +600,29 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
         </section>
       </div>
     </main>
+  );
+}
+
+/** Número do realizado; com leads, mostra a lista (data, lead, responsável e pré-vendas) ao passar o mouse. */
+function RealizadoComLeads({ valor, leads }: { valor: string; leads?: LeadEtapa[] }) {
+  if (!leads || leads.length === 0) return <span className="text-right text-stone-100">{valor}</span>;
+  return (
+    <span className="group relative text-right text-stone-100" tabIndex={0}>
+      <span className="cursor-help underline decoration-stone-500 decoration-dotted underline-offset-4">{valor}</span>
+      <span className="pointer-events-none invisible absolute right-0 top-full z-30 mt-1 w-80 rounded-md border border-imperium-line bg-imperium-surface p-2 text-left opacity-0 shadow-xl transition-opacity group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus:pointer-events-auto group-focus:visible group-focus:opacity-100">
+        <span className="mb-1 block text-[10px] uppercase tracking-widest text-stone-500">{leads.length} {leads.length === 1 ? "lead" : "leads"}</span>
+        <span className="block max-h-72 space-y-1.5 overflow-y-auto">
+          {leads.map((l, i) => (
+            <span key={i} className="block text-[11px] leading-tight">
+              <span className="text-stone-500">{l.data.slice(8, 10)}/{l.data.slice(5, 7)}</span> <span className="text-stone-100">{l.nome}</span>
+              <span className="block text-stone-400">
+                {l.responsavel ?? "—"}
+                {l.preVendas ? <span className="text-stone-500"> · pré-vendas: {l.preVendas}</span> : null}
+              </span>
+            </span>
+          ))}
+        </span>
+      </span>
+    </span>
   );
 }

@@ -95,23 +95,20 @@ export function marcosPorLead(eventos: EventoCrm[], cfg: ConfigCrm): Map<string,
 export type ContagemDia = { data: string; canal: CanalPortal; etapa: string; quantidade: number };
 
 /** Realizado das etapas que vêm do CRM, por dia, no intervalo [inicio, fimExcl) (datas YYYY-MM-DD de Brasília). */
-export function calcularRealizadoCrm(
+/** Percorre cada contagem do realizado (lead, canal, etapa, dia), com a mesma regra para o número e
+ *  para a lista de leads do número. */
+function percorrerRealizado(
   deals: DealCrm[],
   eventos: EventoCrm[],
   cfg: ConfigCrm,
   inicio: string,
   fimExcl: string,
-): ContagemDia[] {
+  cada: (data: string, canal: CanalPortal, etapa: string, deal: DealCrm) => void,
+): void {
   const chegada = marcosPorLead(eventos, cfg);
-  const acc = new Map<string, ContagemDia>();
-  const somar = (data: string, canal: CanalPortal, etapa: string) => {
-    if (data < inicio || data >= fimExcl) return;
-    const k = `${data}|${canal}|${etapa}`;
-    const atual = acc.get(k);
-    if (atual) atual.quantidade += 1;
-    else acc.set(k, { data, canal, etapa, quantidade: 1 });
+  const somar = (data: string, canal: CanalPortal, etapa: string, d: DealCrm) => {
+    if (data >= inicio && data < fimExcl) cada(data, canal, etapa, d);
   };
-
   for (const d of deals) {
     const canal = canalPortal(d, cfg);
     if (!canal) continue;
@@ -120,9 +117,9 @@ export function calcularRealizadoCrm(
     // Topo do funil: criação do lead (Inbound e Indicação). Alôs/Conexões do Outbound vêm do 3C.
     if (d.criado_em) {
       const dia = dataBR(d.criado_em);
-      if (etapas.includes("leads")) somar(dia, canal, "leads");
-      if (etapas.includes("mql") && ehMql(d, cfg)) somar(dia, canal, "mql");
-      if (etapas.includes("leads_indicados")) somar(dia, canal, "leads_indicados");
+      if (etapas.includes("leads")) somar(dia, canal, "leads", d);
+      if (etapas.includes("mql") && ehMql(d, cfg)) somar(dia, canal, "mql", d);
+      if (etapas.includes("leads_indicados")) somar(dia, canal, "leads_indicados", d);
     }
 
     const marcas = chegada.get(d.deal_id);
@@ -131,10 +128,44 @@ export function calcularRealizadoCrm(
       const nivel = NIVEL_DA_ETAPA[etapa];
       if (!nivel) continue;
       const t = marcas[nivel];
-      if (t) somar(dataBR(t), canal, etapa);
+      if (t) somar(dataBR(t), canal, etapa, d);
     }
   }
+}
+
+export function calcularRealizadoCrm(
+  deals: DealCrm[],
+  eventos: EventoCrm[],
+  cfg: ConfigCrm,
+  inicio: string,
+  fimExcl: string,
+): ContagemDia[] {
+  const acc = new Map<string, ContagemDia>();
+  percorrerRealizado(deals, eventos, cfg, inicio, fimExcl, (data, canal, etapa) => {
+    const k = `${data}|${canal}|${etapa}`;
+    const atual = acc.get(k);
+    if (atual) atual.quantidade += 1;
+    else acc.set(k, { data, canal, etapa, quantidade: 1 });
+  });
   return Array.from(acc.values());
+}
+
+export type LeadDoRealizado = { canal: CanalPortal; etapa: string; data: string; deal: DealCrm };
+
+/** Os leads por trás de cada número do realizado (para mostrar ao passar o mouse no dashboard). */
+export function leadsDoRealizado(
+  deals: DealCrm[],
+  eventos: EventoCrm[],
+  cfg: ConfigCrm,
+  inicio: string,
+  fimExcl: string,
+  etapas?: string[],
+): LeadDoRealizado[] {
+  const out: LeadDoRealizado[] = [];
+  percorrerRealizado(deals, eventos, cfg, inicio, fimExcl, (data, canal, etapa, deal) => {
+    if (!etapas || etapas.includes(etapa)) out.push({ canal, etapa, data, deal });
+  });
+  return out.sort((a, b) => a.data.localeCompare(b.data));
 }
 
 /**

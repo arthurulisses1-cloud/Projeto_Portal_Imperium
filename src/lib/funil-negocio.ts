@@ -18,7 +18,12 @@ export type EtapaFunil = {
   conversaoMeta: number | null;
   /** Preenchido pela integração; null = aguardando. */
   realizado: number | null;
+  /** Os leads por trás do realizado (agendadas, realizadas, propostas e vendas do CRM). */
+  leads?: LeadEtapa[];
 };
+
+/** Lead que compõe o realizado de uma etapa: aparece ao passar o mouse no número. */
+export type LeadEtapa = { nome: string; responsavel: string | null; preVendas: string | null; data: string };
 
 export type FunilDoCanal = { canal: CanalDoFunil; titulo: string; etapas: EtapaFunil[] };
 
@@ -100,6 +105,18 @@ export function aplicarRealizado(funis: FunilDoCanal[], linhas: LinhaRealizado[]
     etapas: f.etapas.map((e) => {
       const k = `${f.canal}|${e.chave}`;
       return integradas.has(k) ? { ...e, realizado: soma.get(k) ?? 0 } : e;
+    }),
+  }));
+}
+
+/** Coloca em cada etapa a lista de leads do realizado (chave "canal|etapa"). */
+export function aplicarLeads(funis: FunilDoCanal[], porEtapa: Map<string, LeadEtapa[]>): FunilDoCanal[] {
+  if (porEtapa.size === 0) return funis;
+  return funis.map((f) => ({
+    ...f,
+    etapas: f.etapas.map((e) => {
+      const leads = porEtapa.get(`${f.canal}|${e.chave}`);
+      return leads ? { ...e, leads } : e;
     }),
   }));
 }

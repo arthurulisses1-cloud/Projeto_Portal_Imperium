@@ -140,6 +140,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   // 1) Espelho dos leads dos funis do negócio.
   const deals: DealPipefacil[] = [];
   for (const seq of cfg.pipelines) deals.push(...(await api.dealsDoFunil(seq)));
+  const inicioExecucao = new Date().toISOString();
   const linhasDeals = deals.map((d) => dealParaLinha(negocioId, d, cfg));
   if (!simular) {
     // tamanho_time só é usado no cálculo do MQL; crm_deals não tem essa coluna.
@@ -152,6 +153,18 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
       const { error } = await supabase.from("crm_deals").upsert(lote, { onConflict: "negocio_id,deal_id" });
       if (error) throw new Error("Erro gravando leads do CRM: " + error.message);
     }
+    // Lead excluído ou que saiu dos funis do negócio deixa o espelho (a lista do dashboard lê daqui).
+    if (linhasDeals.length > 0) {
+      const { error } = await supabase.from("crm_deals").delete().eq("negocio_id", negocioId).lt("synced_at", inicioExecucao);
+      if (error) throw new Error("Erro limpando leads antigos do CRM: " + error.message);
+    }
+    // Nome de cada usuário do Pipefácil (responsável e pré-vendas na lista de leads do dashboard).
+    const membros = await api.membros();
+    await supabase.from("integracao_estado").upsert({
+      chave: `pipefacil:${slug}:membros`,
+      valor: Object.fromEntries(membros.map((m) => [m.userId, m.name])),
+      atualizado_em: new Date().toISOString(),
+    });
   }
 
   // 2) Histórico dos últimos 3 meses, relido inteiro a cada execução (upsert por id evita duplicar).
