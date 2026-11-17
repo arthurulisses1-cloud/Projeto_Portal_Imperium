@@ -32,6 +32,9 @@ export type ConfigCrm = {
   campos: { faturamento?: string; cargo?: string; tamanhoTime?: string; /** Campo de MRR (padrão "mrr"). */ mrr?: string };
   /** MQL (inbound): valores aceitos de cada critério; o lead precisa atender todos os critérios definidos. */
   mql: Partial<Record<CriterioMql, string[]>>;
+  /** E-mail do Pipefácil → e-mail do login no portal, para quem ainda está com e-mails diferentes. Plano B:
+   *  vale só se o e-mail do Pipefácil não tiver conta no portal. */
+  emailsAlternativos?: Record<string, string>;
   /** Primeiro dia (YYYY-MM-DD) em que os Ganhos viram venda; padrão INICIO_REALIZADO. Antes disso, vendas manuais. */
   inicioVendas?: string;
   /** Motivos de perda de lead falso (cadastro inválido): o lead conta em "Leads" (o formulário chegou),
@@ -95,6 +98,8 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "15f65232-76e8-4c24-93d0-a52c6c477998": NIVEL.entrada, // Inbound SDR: SEM CONEXÃO
     },
     regressaoDesfaz: true,
+    // Login do portal ainda com outro e-mail (17/11/2026), até ajustarem lá.
+    emailsAlternativos: { "arthur.ulisses@grupovorp.com": "arthurulisses1@gmail.com" },
     motivosLeadFalso: ["Lead Falso"], // motivo de perda criado no Pipefácil em 16/11/2026
     pipelinesSemNivelNaCriacao: ["cmq9wwt6u024441npj37o5f2y"], // [Vorp] Funil de Vendas
     stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],
@@ -175,6 +180,8 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     },
     // As vendas de novembro inteiro vêm dos Ganhos (o lançamento manual até 15/11 não foi feito; 17/11/2026).
     inicioVendas: "2026-11-01",
+    // Login do portal ainda com outro e-mail (17/11/2026), até ajustarem lá.
+    emailsAlternativos: { "arthur.ulisses@grupovorp.com": "arthurulisses1@gmail.com" },
   },
   // Maximus Energy: workspace "Sunne" do Pipefácil, funil Inside Sales (16/11/2026). O dashboard mostra
   // um funil só, com as etapas do Inside Sales (sem canais nem meta do forecast). O Recebido é a soma do

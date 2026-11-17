@@ -329,7 +329,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
     });
   }
   let vendas: Resultado = { ganhas: ganhas.length, criadas: 0, atualizadas: 0, removidas: 0, semVinculo: [] as string[] };
-  if (opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas);
+  if (opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas, cfg.emailsAlternativos);
 
   const semCanal = linhasDeals.filter((d) => !d.canal).length;
   return {
@@ -342,7 +342,13 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   };
 }
 
-async function sincronizarVendas(supabase: SupabaseClient, api: Pipefacil, negocioId: string, ganhas: ReturnType<typeof vendasGanhas>) {
+async function sincronizarVendas(
+  supabase: SupabaseClient,
+  api: Pipefacil,
+  negocioId: string,
+  ganhas: ReturnType<typeof vendasGanhas>,
+  emailsAlternativos: Record<string, string> = {},
+) {
   // Vínculo Pipefácil → portal pelo e-mail de login.
   const membros = await api.membros();
   const emailPorUsuario = new Map(membros.filter((m) => m.email).map((m) => [m.userId, m.email!.toLowerCase()]));
@@ -355,7 +361,9 @@ async function sincronizarVendas(supabase: SupabaseClient, api: Pipefacil, negoc
   }
   const perfil = (userId: string | null) => {
     const email = userId ? emailPorUsuario.get(userId) : undefined;
-    return email ? perfilPorEmail.get(email) ?? null : null;
+    if (!email) return null;
+    const alternativo = emailsAlternativos[email]?.toLowerCase();
+    return perfilPorEmail.get(email) ?? (alternativo ? perfilPorEmail.get(alternativo) ?? null : null);
   };
 
   const { data: existentes, error: erroExist } = await supabase
