@@ -3,6 +3,7 @@ import { buscarProducaoDados } from "./dados";
 import { buscarAssinado } from "./assinado";
 import { buscarEntrevistas } from "./entrevistas";
 import { buscarEntrevistasLeads } from "./entrevistas-leads";
+import { CORTE_ENTREVISTAS_FINANCE } from "./config";
 import { buscarOperacoes } from "./weekly";
 import { normalizarNome } from "./parse";
 import { csvUrl, SHEET_GIDS } from "./config";
@@ -226,6 +227,10 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     .or("status_followup.in.(assinado,pago,perdido),compliance_comportamento.eq.queda,repasse_etapa.eq.nao_faz_sentido,rot_etapa.eq.nao_faz_sentido");
   if (limpezaLeadsError) throw new Error("Erro limpando entrevistas_leads de meses anteriores: " + limpezaLeadsError.message);
 
+  // Vorp Finance: entrevistas do formulário novo (a partir de CORTE_ENTREVISTAS_FINANCE) viram leads do negócio.
+  const { data: financeRow } = await supabase.from("negocios").select("id").eq("slug", "vorp-finance").maybeSingle();
+  const financeId: string | null = financeRow?.id ?? null;
+
   const leadRows = entrevistasLeads.map((l) => ({
     chave_natural: l.chaveNatural,
     data: l.data,
@@ -242,6 +247,9 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     dores: l.dores,
     documentacao_ciente: l.documentacaoCiente,
     valores_apresentados: l.valoresApresentados,
+    fundo_destino: l.fundoDestino,
+    tipo_precatorio: l.tipoPrecatorio,
+    negocio_id: financeId && l.data >= CORTE_ENTREVISTAS_FINANCE ? financeId : null,
     synced_at: new Date().toISOString(),
   }));
   for (const batch of chunk(leadRows, 1000)) {

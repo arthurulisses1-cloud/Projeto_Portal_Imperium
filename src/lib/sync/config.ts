@@ -21,3 +21,6 @@ export const SHEET_GIDS = {
 export function csvUrl(gid: string) {
   return `https://docs.google.com/spreadsheets/d/e/${SHEET_PUB_ID}/pub?gid=${gid}&single=true&output=csv&_ts=${Date.now()}`;
 }
+
+// Vorp Finance: o histórico novo de entrevistas começa nesta data (decisão do Diretor, 2026-11-17).
+export const CORTE_ENTREVISTAS_FINANCE = "2026-11-17";

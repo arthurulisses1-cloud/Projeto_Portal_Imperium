@@ -19,6 +19,8 @@ type EntrevistaLeadRow = {
   Closer?: string;
   Origem?: string; // N
   Entrevistado?: string; // O
+  "Fundo destino"?: string; // formulário do Finance (2026-11)
+  "Tipo de Precatório"?: string;
 };
 
 export type EntrevistaLeadLinha = {
@@ -37,6 +39,8 @@ export type EntrevistaLeadLinha = {
   dores: string | null;
   documentacaoCiente: string | null;
   valoresApresentados: string | null;
+  fundoDestino: string | null;
+  tipoPrecatorio: string | null;
 };
 
 // Lê a MESMA aba "Entrevistas" que buscarEntrevistas() (entrevistas.ts) já
@@ -111,6 +115,8 @@ export async function buscarEntrevistasLeads(textoCsv: string): Promise<Entrevis
       dores: row["Dores e necessidades encontradas"]?.trim() || null,
       documentacaoCiente: row["O lead esta ciente das documentações ?"]?.trim() || null,
       valoresApresentados: row["Os valores foram apresentados ?"]?.trim() || null,
+      fundoDestino: row["Fundo destino"]?.trim() || null,
+      tipoPrecatorio: row["Tipo de Precatório"]?.trim() || null,
     });
   }
 
