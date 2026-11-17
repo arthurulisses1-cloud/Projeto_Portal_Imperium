@@ -355,8 +355,6 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
         </div>
       )}
 
-      {esforco && dados[0] && <PaceComercial n={dados[0]} esforco={esforco} ano={ano} mes={mes} />}
-
       <div className={`grid gap-4 ${dados.length > 1 ? "lg:grid-cols-2" : ""}`}>
         {dados.map((d) => {
           const k = kwhPorNegocio.get(d.negocio.id);
@@ -368,6 +366,8 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
           );
         })}
       </div>
+
+      {esforco && dados[0] && <PaceComercial n={dados[0]} esforco={esforco} ano={ano} mes={mes} />}
     </main>
   );
 }
