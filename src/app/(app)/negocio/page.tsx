@@ -5,8 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { buscarDashboardNegocio, RANKINGS, type MixCanal } from "@/lib/dashboard-negocio";
-import { aplicarLeads, aplicarRealizado, etapasIntegradas, funilUnicoDoNegocio, funisDoMes, type LeadEtapa } from "@/lib/funil-negocio";
-import { buscarLeadsDoFunil } from "@/lib/integracoes/leads-funil";
+import { etapasIntegradas, funilUnicoDoNegocio, funisDoMes, leadsPorQualificacao, montarFunisDaVisao, type LeadEtapa } from "@/lib/funil-negocio";
+import { buscarLeadsDoFunil, buscarListasGravadas } from "@/lib/integracoes/leads-funil";
+import type { Qualificacao, Recorte } from "@/lib/integracoes/realizado";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
 import { buscarResumoSunne, type SunneResumo } from "@/lib/sunne";
@@ -55,7 +56,14 @@ function Barra({ valor, total, cor }: { valor: number; total: number; cor: strin
   );
 }
 
-export default async function NegocioDashboardPage({ searchParams }: { searchParams: { negocio?: string; mes?: string } }) {
+export default async function NegocioDashboardPage({
+  searchParams,
+}: {
+  searchParams: { negocio?: string; mes?: string; visao?: string; recorte?: string };
+}) {
+  // Visões do funil: qualificação (só Inbound) e recorte dos leads. Padrão: MQLs + todos os leads.
+  const qualificacao: Qualificacao = searchParams.visao === "completo" || searchParams.visao === "nao_mql" ? searchParams.visao : "mql";
+  const recorte: Recorte = searchParams.recorte === "mes" ? "mes" : "todos";
   const supabase = await createClient();
   const {
     data: { user },
@@ -129,17 +137,30 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
   // Funis por canal do forecast; o negócio com funil próprio no CRM (Energy) mostra só ele, sem meta.
   const previstos = funisDoMes(atual.slug, ano, mes);
   const funilUnico = funilUnicoDoNegocio(atual.slug);
-  // Leads de cada número (agendadas, realizadas, propostas, vendas). O negócio já passou pelo filtro de
-  // visibilidade acima; o espelho do CRM só é lido no servidor.
-  let leadsFunil = new Map<string, LeadEtapa[]>();
+  // Leads de cada número (agendadas, realizadas, propostas, vendas): as listas que a sincronização grava
+  // por mês e visão; mês fora da janela gravada cai no cálculo direto (só a visão padrão). O negócio já
+  // passou pelo filtro de visibilidade acima; o espelho do CRM só é lido no servidor.
+  let listasFunil = new Map<string, LeadEtapa[]>();
   if (integradas.size > 0 && !funilUnico) {
     try {
-      leadsFunil = await buscarLeadsDoFunil(createAdminClient(), atual.slug, atual.id, inicioMes, fimMesExcl);
+      const admin = createAdminClient();
+      listasFunil = (await buscarListasGravadas(admin, atual.slug, mesParam)) ?? (await buscarLeadsDoFunil(admin, atual.slug, atual.id, inicioMes, fimMesExcl));
     } catch (e) {
-      console.error("buscarLeadsDoFunil falhou:", e);
+      console.error("listas de leads do funil falharam:", e);
     }
   }
-  const funis = aplicarLeads(aplicarRealizado(funilUnico ? [funilUnico] : previstos, linhasRealizado ?? [], integradas), leadsFunil);
+  const comVisoes = integradas.size > 0 && !funilUnico;
+  const funis = montarFunisDaVisao(
+    funilUnico ? [funilUnico] : previstos,
+    linhasRealizado ?? [],
+    integradas,
+    listasFunil,
+    comVisoes ? recorte : "todos",
+    comVisoes ? qualificacao : "completo",
+  );
+  const leadsQualificacao = leadsPorQualificacao(linhasRealizado ?? [], recorte);
+  const hrefVisao = (mudar: { visao?: Qualificacao; recorte?: Recorte }) =>
+    `/negocio?${new URLSearchParams({ mes: mesParam, negocio: atual.slug, visao: mudar.visao ?? qualificacao, recorte: mudar.recorte ?? recorte })}`;
   const ultimaSyncFunil = (linhasRealizado ?? []).reduce<string | null>((m, l) => (!m || l.synced_at > m ? l.synced_at : m), null);
   const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
   // Energy: contas subidas vêm da Sunne (negócios criados no mês por vendedor), não do compromisso do dia.
@@ -241,7 +262,20 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
       {/* Funil do mês: volumes e conversões, um bloco por canal, lado a lado */}
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-[10px] uppercase tracking-widest text-stone-500">{funilUnico ? `Funil do mês (${funilUnico.titulo} no Pipefácil)` : "Funil do mês (meta do forecast)"}</p>
+          <div className="space-y-2">
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">{funilUnico ? `Funil do mês (${funilUnico.titulo} no Pipefácil)` : "Funil do mês (meta do forecast)"}</p>
+            {comVisoes && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Seletor
+                  opcoes={[
+                    { rotulo: "Todos os leads", href: hrefVisao({ recorte: "todos" }), ativo: recorte === "todos", dica: "Tudo o que aconteceu no mês, inclusive com leads de meses anteriores" },
+                    { rotulo: "Leads do mês", href: hrefVisao({ recorte: "mes" }), ativo: recorte === "mes", dica: "Só os leads que entraram no mês e o que fizeram dentro do mês" },
+                  ]}
+                />
+                {recorte === "mes" && <span className="text-[11px] text-stone-500">Alôs e conexões vêm do 3C (ligações) e não mudam.</span>}
+              </div>
+            )}
+          </div>
           <div className="text-right">
             {funilSunne ? (
               <p className="text-[11px] text-stone-400">
@@ -294,9 +328,20 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
               const pad = Math.max(...funis.map((x) => x.etapas.length)) - fu.etapas.length;
               return (
                 <div key={fu.canal} className="min-w-0">
-                  <p className="border-b pb-1.5 text-sm font-semibold" style={{ color: `rgb(${cor})`, borderColor: `rgb(${cor} / 0.4)` }}>
-                    {fu.titulo}
-                  </p>
+                  <div className="flex flex-wrap items-end justify-between gap-2 border-b pb-1.5" style={{ borderColor: `rgb(${cor} / 0.4)` }}>
+                    <p className="text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
+                      {fu.titulo}
+                    </p>
+                    {comVisoes && fu.canal === "inbound" && (
+                      <Seletor
+                        opcoes={[
+                          { rotulo: "MQLs", contagem: leadsQualificacao.mql, href: hrefVisao({ visao: "mql" }), ativo: qualificacao === "mql" },
+                          { rotulo: "Funil completo", contagem: leadsQualificacao.completo, href: hrefVisao({ visao: "completo" }), ativo: qualificacao === "completo" },
+                          { rotulo: "Não MQLs", contagem: leadsQualificacao.nao_mql, href: hrefVisao({ visao: "nao_mql" }), ativo: qualificacao === "nao_mql" },
+                        ]}
+                      />
+                    )}
+                  </div>
 
                   {/* Volumes: colunas fixas para alinhar os números entre as linhas */}
                   <div className="mt-2 grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem_3.5rem] items-center gap-x-2 gap-y-1.5 text-xs tabular-nums">
@@ -333,7 +378,7 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
                             </div>
                           </div>
                           <span className="text-right text-stone-500">—</span>
-                          <span className="text-right text-stone-100">{e.realizado === null ? "—" : num(e.realizado)}</span>
+                          <RealizadoComLeads valor={e.realizado === null ? "—" : num(e.realizado)} leads={e.leads} />
                           <span className="text-right text-stone-500">—</span>
                         </div>
                       ) : (
@@ -623,6 +668,29 @@ function RealizadoComLeads({ valor, leads }: { valor: string; leads?: LeadEtapa[
           ))}
         </span>
       </span>
+    </span>
+  );
+}
+
+/** Grupo de botões (links) de uma visão do funil; o ativo fica destacado. */
+function Seletor({ opcoes }: { opcoes: { rotulo: string; href: string; ativo: boolean; contagem?: number; dica?: string }[] }) {
+  return (
+    <span className="inline-flex rounded-lg border border-imperium-line bg-imperium-raised p-0.5 text-[11px]">
+      {opcoes.map((o) => (
+        <Link
+          key={o.rotulo}
+          href={o.href}
+          scroll={false}
+          title={o.dica}
+          aria-current={o.ativo ? "true" : undefined}
+          className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 transition ${o.ativo ? "bg-imperium-surface font-semibold text-stone-100 shadow" : "text-stone-400 hover:text-stone-200"}`}
+        >
+          {o.rotulo}
+          {o.contagem !== undefined && (
+            <span className={`rounded-full px-1.5 tabular-nums ${o.ativo ? "bg-gold/20 text-gold-bright" : "bg-imperium-line/60 text-stone-400"}`}>{o.contagem.toLocaleString("pt-BR")}</span>
+          )}
+        </Link>
+      ))}
     </span>
   );
 }

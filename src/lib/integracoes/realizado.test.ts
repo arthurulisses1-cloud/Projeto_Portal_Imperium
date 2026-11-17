@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { CRM_POR_NEGOCIO, TRESC_POR_NEGOCIO } from "./config";
-import { calcularFunilUnico, calcularRealizadoCrm, dataBR, ehMql, leadsDoRealizado, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
+import { calcularFunilUnico, calcularRealizadoCrm, contarPorDia, dataBR, detalharVisoes, ehMql, leadsDoRealizado, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { contarAlosConexoes, segundos } from "./tresc";
 import { canalDoDeal } from "./run";
-import { aplicarLeads, aplicarRealizado, etapasIntegradas, funilUnicoDoNegocio, funisDoMes } from "../funil-negocio";
+import { aplicarLeads, aplicarRealizado, leadsPorQualificacao, montarFunisDaVisao, etapasIntegradas, funilUnicoDoNegocio, funisDoMes } from "../funil-negocio";
 import { ganhosDoMes } from "../recebido-crm";
 
 const cfg = CRM_POR_NEGOCIO.vorp;
@@ -436,5 +436,71 @@ describe("lead falso", () => {
     expect(total(r, "inbound", "leads")).toBe(3);
     expect(total(r, "inbound", "mql")).toBe(2);
     expect(total(r, "inbound", "conectados")).toBe(1);
+  });
+});
+
+describe("visões do funil", () => {
+  const mqlOk = { faturamento: "entre_400_mil_e_1_milhao", cargo: "diretor" };
+  const deals = [
+    // MQL que entrou em outubro e agendou em novembro (o caso do Elias)
+    deal({ deal_id: "out", canal: "trafego", criado_em: "2026-10-20T13:00:00Z", ...mqlOk }),
+    // MQL de novembro que conectou
+    deal({ deal_id: "nov", canal: "trafego", criado_em: "2026-11-05T13:00:00Z", ...mqlOk }),
+    // não MQL de novembro que conectou
+    deal({ deal_id: "fraco", canal: "trafego", criado_em: "2026-11-06T13:00:00Z", faturamento: "entre_30_e_100_mil", cargo: "proprietario" }),
+    // lead falso com perfil de MQL
+    deal({ deal_id: "falso", canal: "trafego", criado_em: "2026-11-07T13:00:00Z", ...mqlOk, status: "lost", motivo_perda: "Lead Falso" }),
+    // outbound de outubro que agendou em novembro
+    deal({ deal_id: "ob", canal: "outbound", criado_em: "2026-10-28T13:00:00Z" }),
+  ];
+  const eventos = [
+    ev("out", "cmq9hpng3008t40mzafab69sq", "2026-11-04T12:00:00Z"),
+    ev("nov", ST.conectadoIn, "2026-11-06T12:00:00Z"),
+    ev("fraco", ST.conectadoIn, "2026-11-07T12:00:00Z"),
+    ev("falso", ST.conectadoIn, "2026-11-08T12:00:00Z"),
+    ev("ob", ST.agendadaOut, "2026-11-10T12:00:00Z"),
+  ];
+  const linhas = contarPorDia(detalharVisoes(deals, eventos, cfg, "2026-11-01", "2026-12-01"));
+  const soma = (canal: string, etapa: string) => linhas.filter((l) => l.canal === canal && l.etapa === etapa).reduce((s, l) => s + l.quantidade, 0);
+
+  it("a visão padrão é igual à contagem de sempre", () => {
+    const base = calcularRealizadoCrm(deals, eventos, cfg, "2026-11-01", "2026-12-01");
+    for (const b of base) expect(soma(b.canal, b.etapa)).toBe(total(base, b.canal, b.etapa));
+  });
+
+  it("MQLs + Não MQLs = Funil completo, e o lead falso nunca é MQL", () => {
+    for (const etapa of ["leads", "conectados", "reunioes_agendadas"]) {
+      expect(soma("inbound", `mql:${etapa}`) + soma("inbound", `nao_mql:${etapa}`)).toBe(soma("inbound", etapa));
+    }
+    expect(soma("inbound", "mql:leads")).toBe(1); // só "nov" (out entrou em outubro; falso não é MQL)
+    expect(soma("inbound", "nao_mql:leads")).toBe(2); // fraco + falso
+    expect(soma("inbound", "mql:conectados")).toBe(2); // nov + out (agendar sem passar por Conectados conta a conexão)
+  });
+
+  it("Leads do mês: lead de outubro que agenda em novembro conta só em Todos os leads", () => {
+    expect(soma("inbound", "reunioes_agendadas")).toBe(1);
+    expect(soma("inbound", "mes:reunioes_agendadas")).toBe(0);
+    expect(soma("outbound", "reunioes_agendadas")).toBe(1);
+    expect(soma("outbound", "mes:reunioes_agendadas")).toBe(0);
+    for (const l of linhas.filter((x) => x.etapa.startsWith("mes:"))) {
+      expect(l.quantidade).toBeLessThanOrEqual(soma(l.canal, l.etapa.replace("mes:", "")));
+    }
+  });
+
+  it("funil MQL começa nos leads MQL com a meta do MQL; Não MQL fica sem meta; alôs não mudam", () => {
+    const base = funisDoMes("vorp", 2026, 11);
+    const integ = etapasIntegradas("vorp");
+    const x = [...linhas, { data: "2026-11-04", canal: "outbound" as const, etapa: "alos", quantidade: 50 }];
+    const inMql = montarFunisDaVisao(base, x, integ, new Map(), "todos", "mql").find((f) => f.canal === "inbound")!;
+    const metaMql = base.find((f) => f.canal === "inbound")!.etapas.find((e) => e.chave === "mql")!.meta;
+    expect(inMql.etapas.map((e) => e.chave)).not.toContain("mql");
+    expect(inMql.etapas[0]).toMatchObject({ label: "Leads MQL", meta: metaMql, realizado: 1 });
+    const inNao = montarFunisDaVisao(base, x, integ, new Map(), "todos", "nao_mql").find((f) => f.canal === "inbound")!;
+    expect(inNao.etapas.every((e) => e.meta === null)).toBe(true);
+    expect(inNao.etapas[0].realizado).toBe(2);
+    const outMes = montarFunisDaVisao(base, x, integ, new Map(), "mes", "mql").find((f) => f.canal === "outbound")!;
+    expect(outMes.etapas.find((e) => e.chave === "alos")!.realizado).toBe(50);
+    expect(outMes.etapas.find((e) => e.chave === "reunioes_agendadas")!.realizado).toBe(0);
+    expect(leadsPorQualificacao(x, "todos")).toEqual({ completo: 3, mql: 1, nao_mql: 2 });
   });
 });

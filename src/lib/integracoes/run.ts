@@ -7,7 +7,9 @@ import { hojeBR } from "@/lib/data-br";
 import { CRM_POR_NEGOCIO, INICIO_HISTORICO, INICIO_REALIZADO, TRESC_POR_NEGOCIO, type ConfigCrm } from "./config";
 import { buscarLigacoesDoDia, contarAlosConexoes } from "./tresc";
 import { Pipefacil, type AtividadePipefacil, type DealPipefacil } from "./pipefacil";
-import { calcularFunilUnico, calcularRealizadoCrm, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
+import { calcularFunilUnico, contarPorDia, detalharVisoes, etapaBase, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
+import { ETAPAS_COM_LISTA } from "./leads-funil";
+import type { LeadEtapa } from "@/lib/funil-negocio";
 
 export type OpcoesSync = {
   /** Dias do 3C a recalcular a partir desta data (YYYY-MM-DD); padrão: ontem e hoje. */
@@ -147,6 +149,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const deals: DealPipefacil[] = [];
   for (const seq of cfg.pipelines) deals.push(...(await api.dealsDoFunil(seq)));
   const inicioExecucao = new Date().toISOString();
+  let nomesUsuarios: Record<string, string> = {};
   const linhasDeals = deals.map((d) => dealParaLinha(negocioId, d, cfg));
   if (!simular) {
     // tamanho_time e motivo_perda só são usados no cálculo; crm_deals não tem essas colunas.
@@ -167,9 +170,10 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
     }
     // Nome de cada usuário do Pipefácil (responsável e pré-vendas na lista de leads do dashboard).
     const membros = await api.membros();
+    nomesUsuarios = Object.fromEntries(membros.map((m) => [m.userId, m.name]));
     await supabase.from("integracao_estado").upsert({
       chave: `pipefacil:${slug}:membros`,
-      valor: Object.fromEntries(membros.map((m) => [m.userId, m.name])),
+      valor: nomesUsuarios,
       atualizado_em: new Date().toISOString(),
     });
   }
@@ -232,9 +236,29 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const inicio = mesAnterior < INICIO_REALIZADO ? INICIO_REALIZADO : mesAnterior;
   const fimExcl = inicioDoMes(hoje, 1);
   // Negócio com funil próprio (Energy): as etapas do funil do CRM, sem divisão por canal.
-  const contagens = cfg.funilUnico
-    ? calcularFunilUnico(linhasDeals, eventos, cfg.funilUnico, inicio, fimExcl)
-    : calcularRealizadoCrm(linhasDeals, eventos, cfg, inicio, fimExcl);
+  // Funis por canal: a visão padrão e as visões ("Leads do mês", MQL/não MQL) saem da mesma passada.
+  const visoes = cfg.funilUnico ? [] : detalharVisoes(linhasDeals, eventos, cfg, inicio, fimExcl);
+  const contagens = cfg.funilUnico ? calcularFunilUnico(linhasDeals, eventos, cfg.funilUnico, inicio, fimExcl) : contarPorDia(visoes);
+  if (!simular && visoes.length > 0) {
+    // Lista de leads de cada número (agendadas, realizadas, propostas, vendas), por mês e visão.
+    const nome = (id: string | null) => (id ? nomesUsuarios[id] ?? null : null);
+    const porMes = new Map<string, Record<string, LeadEtapa[]>>();
+    for (const v of visoes) {
+      if (!ETAPAS_COM_LISTA.includes(etapaBase(v.etapa))) continue;
+      const mes = v.data.slice(0, 7);
+      const doMes = porMes.get(mes) ?? {};
+      const k = `${v.canal}|${v.etapa}`;
+      const responsavel = nome(v.deal.responsavel_user_id);
+      const sdr = nome(v.deal.sdr_user_id);
+      (doMes[k] ??= []).push({ nome: v.deal.nome || v.deal.empresa || "(sem nome)", responsavel, preVendas: sdr && sdr !== responsavel ? sdr : null, data: v.data });
+      porMes.set(mes, doMes);
+    }
+    for (let mes = inicio.slice(0, 7); mes < fimExcl.slice(0, 7); mes = inicioDoMes(`${mes}-01`, 1).slice(0, 7)) {
+      const lista = porMes.get(mes) ?? {};
+      for (const l of Object.values(lista)) l.sort((a, b) => a.data.localeCompare(b.data));
+      await supabase.from("integracao_estado").upsert({ chave: `leads_funil:${slug}:${mes}`, valor: lista, atualizado_em: new Date().toISOString() });
+    }
+  }
   if (!simular) {
     const { error: limpar } = await supabase
       .from("funil_realizado")

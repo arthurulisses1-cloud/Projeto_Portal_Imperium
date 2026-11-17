@@ -61,3 +61,10 @@ export async function buscarLeadsDoFunil(
   }
   return out;
 }
+
+/** Listas gravadas pela sincronização para o mês (todas as visões). null = mês fora da janela gravada. */
+export async function buscarListasGravadas(admin: SupabaseClient, slug: string, mes: string): Promise<Map<string, LeadEtapa[]> | null> {
+  const { data } = await admin.from("integracao_estado").select("valor").eq("chave", `leads_funil:${slug}:${mes}`).maybeSingle();
+  if (!data?.valor) return null;
+  return new Map(Object.entries(data.valor as Record<string, LeadEtapa[]>));
+}

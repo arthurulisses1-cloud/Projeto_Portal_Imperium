@@ -5,6 +5,7 @@
 // Reunião e Proposta; Energy usa Contas subidas no lugar de Proposta.
 import { PARAMETROS, RAMP_UP, indiceMes, vendasDoMes, type CanalFunil } from "@/lib/forecast-negocios";
 import { CRM_POR_NEGOCIO, ETAPAS_PORTAL, TRESC_POR_NEGOCIO } from "@/lib/integracoes/config";
+import { chaveVisao, type Qualificacao, type Recorte } from "@/lib/integracoes/realizado";
 
 export type CanalDoFunil = "outbound" | "inbound" | "indicacao";
 
@@ -119,4 +120,51 @@ export function aplicarLeads(funis: FunilDoCanal[], porEtapa: Map<string, LeadEt
       return leads ? { ...e, leads } : e;
     }),
   }));
+}
+
+/** Etapas que vêm do 3C (contam ligações, não leads): iguais em todas as visões. */
+const ETAPA_DO_DISCADOR = (canal: string, chave: string) => canal === "outbound" && (chave === "alos" || chave === "conexoes");
+
+/**
+ * Funis na visão escolhida (pura). Recorte: "todos" (qualquer lead) ou "mes" (só leads que entraram no
+ * mês). Qualificação (só Inbound): "completo", "mql" (sem a etapa MQL; o funil começa nos leads MQL e a
+ * meta segue o forecast a partir do MQL) ou "nao_mql" (sem meta: o forecast não prevê esse caminho).
+ */
+export function montarFunisDaVisao(
+  funis: FunilDoCanal[],
+  linhas: LinhaRealizado[],
+  integradas: Set<string>,
+  leads: Map<string, LeadEtapa[]>,
+  recorte: Recorte,
+  qualificacao: Qualificacao,
+): FunilDoCanal[] {
+  const soma = new Map<string, number>();
+  for (const l of linhas) soma.set(`${l.canal}|${l.etapa}`, (soma.get(`${l.canal}|${l.etapa}`) ?? 0) + Number(l.quantidade));
+  return funis.map((f) => {
+    let etapas = f.etapas;
+    const iMql = etapas.findIndex((e) => e.chave === "mql");
+    if (f.canal === "inbound" && qualificacao !== "completo" && iMql > 0) {
+      const mql = qualificacao === "mql";
+      etapas = [
+        { ...etapas[0], label: mql ? "Leads MQL" : "Leads não MQL", meta: mql ? etapas[iMql].meta : null, conversaoMeta: null },
+        ...etapas.slice(iMql + 1).map((e) => (mql ? e : { ...e, meta: null, conversaoMeta: null })),
+      ];
+    }
+    return {
+      ...f,
+      etapas: etapas.map((e) => {
+        if (!integradas.has(`${f.canal}|${e.chave}`)) return e;
+        const chave = ETAPA_DO_DISCADOR(f.canal, e.chave) ? e.chave : chaveVisao(e.chave, f.canal, recorte, qualificacao);
+        const lista = leads.get(`${f.canal}|${chave}`);
+        return { ...e, realizado: soma.get(`${f.canal}|${chave}`) ?? 0, ...(lista ? { leads: lista } : {}) };
+      }),
+    };
+  });
+}
+
+/** Quantos leads do Inbound em cada qualificação (números dos botões), no recorte escolhido. */
+export function leadsPorQualificacao(linhas: LinhaRealizado[], recorte: Recorte): Record<Qualificacao, number> {
+  const total = (q: Qualificacao) =>
+    linhas.filter((l) => l.canal === "inbound" && l.etapa === chaveVisao("leads", "inbound", recorte, q)).reduce((s, l) => s + Number(l.quantidade), 0);
+  return { completo: total("completo"), mql: total("mql"), nao_mql: total("nao_mql") };
 }

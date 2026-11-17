@@ -97,6 +97,12 @@ export function marcosPorLead(eventos: EventoCrm[], cfg: ConfigCrm): Map<string,
 export type ContagemDia = { data: string; canal: CanalPortal; etapa: string; quantidade: number };
 
 /** Realizado das etapas que vêm do CRM, por dia, no intervalo [inicio, fimExcl) (datas YYYY-MM-DD de Brasília). */
+/** Lead perdido com um dos motivos de lead falso do negócio (sem diferenciar maiúsculas). */
+export function ehLeadFalso(d: Pick<DealCrm, "motivo_perda">, cfg: ConfigCrm): boolean {
+  const motivo = d.motivo_perda?.trim().toLowerCase();
+  return !!motivo && !!cfg.motivosLeadFalso?.some((m) => m.toLowerCase() === motivo);
+}
+
 /** Percorre cada contagem do realizado (lead, canal, etapa, dia), com a mesma regra para o número e
  *  para a lista de leads do número. */
 function percorrerRealizado(
@@ -117,8 +123,7 @@ function percorrerRealizado(
     const etapas = ETAPAS_PORTAL[canal];
 
     // Lead falso (perdido com motivo de lead falso): conta só como lead que chegou.
-    const motivo = d.motivo_perda?.trim().toLowerCase();
-    const falso = !!motivo && !!cfg.motivosLeadFalso?.some((m) => m.toLowerCase() === motivo);
+    const falso = ehLeadFalso(d, cfg);
 
     // Topo do funil: criação do lead (Inbound e Indicação). Alôs/Conexões do Outbound vêm do 3C.
     if (d.criado_em) {
@@ -173,6 +178,54 @@ export function leadsDoRealizado(
     if (!etapas || etapas.includes(etapa)) out.push({ canal, etapa, data, deal });
   });
   return out.sort((a, b) => a.data.localeCompare(b.data));
+}
+
+// ---------------------------------------------------------------- visões do funil
+// "Leads do mês" (recorte "mes"): só leads criados no mesmo mês do evento. "Todos os leads" (padrão):
+// qualquer lead. No Inbound, a qualificação separa MQL e não MQL (lead falso nunca é MQL). Cada visão é
+// gravada em funil_realizado com a etapa prefixada (ex.: "mes:mql:conectados"); sem prefixo = padrão.
+
+export type Recorte = "todos" | "mes";
+export type Qualificacao = "completo" | "mql" | "nao_mql";
+
+/** Etapa gravada para uma visão. A qualificação só existe no Inbound. */
+export function chaveVisao(etapa: string, canal: string, recorte: Recorte, qualificacao: Qualificacao): string {
+  const q = canal === "inbound" && qualificacao !== "completo" ? `${qualificacao}:` : "";
+  return `${recorte === "mes" ? "mes:" : ""}${q}${etapa}`;
+}
+
+/** Etapa sem o prefixo da visão. */
+export function etapaBase(chave: string): string {
+  return chave.slice(chave.lastIndexOf(":") + 1);
+}
+
+/** Cada contagem do realizado em todas as visões (a padrão e as prefixadas), com o lead. */
+export function detalharVisoes(deals: DealCrm[], eventos: EventoCrm[], cfg: ConfigCrm, inicio: string, fimExcl: string): LeadDoRealizado[] {
+  const out: LeadDoRealizado[] = [];
+  percorrerRealizado(deals, eventos, cfg, inicio, fimExcl, (data, canal, etapa, deal) => {
+    const doMes = !!deal.criado_em && dataBR(deal.criado_em).slice(0, 7) === data.slice(0, 7);
+    const add = (e: string) => out.push({ canal, etapa: e, data, deal });
+    add(etapa);
+    if (doMes) add(`mes:${etapa}`);
+    if (canal === "inbound" && etapa !== "mql") {
+      const q: Qualificacao = !ehLeadFalso(deal, cfg) && ehMql(deal, cfg) ? "mql" : "nao_mql";
+      add(`${q}:${etapa}`);
+      if (doMes) add(`mes:${q}:${etapa}`);
+    }
+  });
+  return out;
+}
+
+/** Soma por dia, canal e etapa (de detalharVisoes ou leadsDoRealizado). */
+export function contarPorDia(itens: { data: string; canal: CanalPortal; etapa: string }[]): ContagemDia[] {
+  const acc = new Map<string, ContagemDia>();
+  for (const { data, canal, etapa } of itens) {
+    const k = `${data}|${canal}|${etapa}`;
+    const atual = acc.get(k);
+    if (atual) atual.quantidade += 1;
+    else acc.set(k, { data, canal, etapa, quantidade: 1 });
+  }
+  return Array.from(acc.values());
 }
 
 /**
