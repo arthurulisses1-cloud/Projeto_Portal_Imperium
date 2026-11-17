@@ -69,3 +69,15 @@ describe("esforço 3C Plus", () => {
     expect(origemDaLista("vorp", "Lista 1 - Vinicius - Advocacia (site #25).csv")).toBeNull();
   });
 });
+
+describe("utilização do pré-vendas", () => {
+  it("tempo ativo = esperando + falando + pós-ligação, filtrando pelos agentes", async () => {
+    const { somarAtividade } = await import("./esforco-3c");
+    const linhas = [
+      { agenteId: 1, esperando: 600, falando: 1200, pos: 300 },
+      { agenteId: 2, esperando: 100, falando: 50, pos: 10 },
+    ];
+    expect(somarAtividade(linhas, null)).toEqual({ esperando: 700, falando: 1250, pos: 310, ativo: 2260 });
+    expect(somarAtividade(linhas, new Set([1]))).toEqual({ esperando: 600, falando: 1200, pos: 300, ativo: 2100 });
+  });
+});
