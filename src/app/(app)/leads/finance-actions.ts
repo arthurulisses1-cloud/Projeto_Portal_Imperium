@@ -124,7 +124,8 @@ export async function pedirVendaFinance(_prev: EstadoForm, formData: FormData): 
   if (!lead) return { erro: "Lead não encontrado." };
   if (!["subido", "resolvendo_pendencia", "venda_pendente"].includes(lead.status_followup)) return { erro: "Suba o lead antes de lançar a venda." };
   if (lead.sub_valor_proposta === null) return { erro: "Falta o formulário de Subido deste lead." };
-  if (!lead.closer_profile_id) return { erro: "O lead está sem closer na planilha; peça para corrigir antes de lançar a venda." };
+  // Sem closer, o executivo (SDR do formulário) leva a venda sozinho e a liderança fica com Head e Diretor.
+  if (!lead.closer_profile_id && !lead.sdr_profile_id) return { erro: "O lead está sem SDR e sem closer na planilha; peça para corrigir antes de lançar a venda." };
 
   const dados = {
     valorRecebido: valorBR(formData.get("valor_recebido")),
@@ -174,7 +175,7 @@ export async function aprovarVendaFinance(leadId: string): Promise<EstadoForm> {
   if (!lead) return { erro: "Lead não encontrado." };
   if (!(await podeAprovar(supabase, user.id, lead.negocio_id as string))) return { erro: "Só o Head do Finance ou o Diretor aprovam vendas." };
   if (lead.status_followup !== "venda_pendente") return { erro: "Esta venda não está aguardando aprovação." };
-  if (!lead.closer_profile_id || lead.venda_valor_recebido === null || lead.venda_valor_cliente === null || !lead.venda_data) {
+  if ((!lead.closer_profile_id && !lead.sdr_profile_id) || lead.venda_valor_recebido === null || lead.venda_valor_cliente === null || !lead.venda_data) {
     return { erro: "Dados da venda incompletos." };
   }
 
