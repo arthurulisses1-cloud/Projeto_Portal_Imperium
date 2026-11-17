@@ -612,7 +612,9 @@ export default async function NegocioDashboardPage({
 
       </div>
 
-      {/* Esforço */}
+      {/* Esforço (Compromisso do dia): fora dos negócios ligados ao Pipefácil, onde o realizado vem do CRM
+          e o compromisso não é usado (decisão de 17/11/2026). */}
+      {!comVisoes && (
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <p className="text-[10px] uppercase tracking-widest text-stone-500">Esforço da equipe no mês (compromisso do dia)</p>
         {dados.esforco.length === 0 ? (
@@ -648,6 +650,7 @@ export default async function NegocioDashboardPage({
           </div>
         )}
       </section>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Ranking */}
