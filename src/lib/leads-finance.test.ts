@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canalDaOrigem, nomeArquivoSeguro, podeAprovarVenda, validarSubido, validarVenda } from "./leads-finance";
+import { canalDaOrigem, desagioFinance, nomeArquivoSeguro, parseValorBR, podeAprovarVenda, validarSubido, validarVenda } from "./leads-finance";
 
 const ok = { valorPrecatorio: 100000, valorProposta: 60000, comissaoPrevista: 6000, mesmoFundo: true, fundoNovo: null };
 
@@ -25,6 +25,25 @@ describe("validarVenda", () => {
     expect(validarVenda({ valorRecebido: 6000, valorCliente: 0, data: "2026-11-17" }, "2026-11-17")).toMatch(/cliente/);
     expect(validarVenda({ valorRecebido: 6000, valorCliente: 60000, data: "2026-11-18" }, "2026-11-17")).toMatch(/Data/);
     expect(validarVenda({ valorRecebido: 6000, valorCliente: 60000, data: "17/11/2026" }, "2026-11-17")).toMatch(/Data/);
+  });
+});
+
+describe("desagioFinance", () => {
+  it("o que passa de 6% do desembolso é deságio", () => {
+    expect(desagioFinance(100000, 10000)).toEqual({ pct: 6, margem: 6000, desagio: 4000 });
+  });
+  it("comissão igual ou abaixo de 6% não gera deságio", () => {
+    expect(desagioFinance(100000, 6000).desagio).toBe(0);
+    expect(desagioFinance(100000, 5000).desagio).toBe(0);
+    expect(desagioFinance(0, 0)).toEqual({ pct: 6, margem: 0, desagio: 0 });
+  });
+});
+
+describe("parseValorBR", () => {
+  it("aceita 1.234,56 e 1234.56", () => {
+    expect(parseValorBR("R$ 1.234,56")).toBeCloseTo(1234.56);
+    expect(parseValorBR("1234.56")).toBeCloseTo(1234.56);
+    expect(parseValorBR("abc")).toBe(0);
   });
 });
 

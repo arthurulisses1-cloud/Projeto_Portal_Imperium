@@ -11,7 +11,7 @@ import {
   subirLeadFinance,
   type EstadoForm,
 } from "@/app/(app)/leads/finance-actions";
-import { COLUNAS_FINANCE } from "@/lib/leads-finance";
+import { COLUNAS_FINANCE, desagioFinance, parseValorBR } from "@/lib/leads-finance";
 
 export type LeadFinance = {
   id: string;
@@ -82,9 +82,32 @@ function useAcao(acao: (p: EstadoForm, f: FormData) => Promise<EstadoForm>, onOk
   return [estado, executar] as const;
 }
 
+/** % da comissão (fixo em 6%), margem e deságio calculados — somente leitura. */
+function CamposMargem({ desembolso, comissao }: { desembolso: string; comissao: string }) {
+  const c = desagioFinance(parseValorBR(desembolso), parseValorBR(comissao));
+  return (
+    <div className="grid grid-cols-3 gap-3 rounded border border-imperium-line/60 p-3">
+      <label className="text-xs text-stone-400">
+        % da comissão
+        <input value={`${c.pct}%`} readOnly tabIndex={-1} className={campo + " cursor-not-allowed opacity-70"} />
+      </label>
+      <label className="text-xs text-stone-400">
+        Margem base ({c.pct}%)
+        <input value={moeda(c.margem)} readOnly tabIndex={-1} className={campo + " cursor-not-allowed opacity-70"} />
+      </label>
+      <label className="text-xs text-stone-400">
+        Deságio
+        <input value={moeda(c.desagio)} readOnly tabIndex={-1} className={campo + " cursor-not-allowed opacity-70 " + (c.desagio > 0 ? "text-gold-bright" : "")} />
+      </label>
+    </div>
+  );
+}
+
 function SubirForm({ lead, onOk }: { lead: LeadFinance; onOk: () => void }) {
   const [estado, executar] = useAcao(subirLeadFinance, onOk);
   const [mudou, setMudou] = useState(lead.sub_mesmo_fundo === false);
+  const [desembolso, setDesembolso] = useState(num(lead.sub_valor_proposta));
+  const [comissao, setComissao] = useState(num(lead.sub_comissao_prevista));
   return (
     <form action={executar} className="grid gap-3">
       <input type="hidden" name="lead_id" value={lead.id} />
@@ -97,12 +120,14 @@ function SubirForm({ lead, onOk }: { lead: LeadFinance; onOk: () => void }) {
       </label>
       <label className="text-xs text-stone-400">
         Valor da nossa proposta de desembolso (R$)
-        <input name="valor_proposta" required inputMode="decimal" placeholder="Ex.: 90.000,00" defaultValue={num(lead.sub_valor_proposta)} className={campo} />
+        <input name="valor_proposta" required inputMode="decimal" placeholder="Ex.: 90.000,00" value={desembolso} onChange={(e) => setDesembolso(e.target.value)} className={campo} />
       </label>
       <label className="text-xs text-stone-400">
         Nossa comissão prevista (R$)
-        <input name="comissao_prevista" required inputMode="decimal" placeholder="Ex.: 9.000,00" defaultValue={num(lead.sub_comissao_prevista)} className={campo} />
+        <input name="comissao_prevista" required inputMode="decimal" placeholder="Ex.: 9.000,00" value={comissao} onChange={(e) => setComissao(e.target.value)} className={campo} />
       </label>
+      <CamposMargem desembolso={desembolso} comissao={comissao} />
+      <p className="-mt-1 text-[11px] text-stone-500">A margem base é fixa em 6% do desembolso. O que a comissão passar disso vira deságio; abaixo de 6% não há deságio.</p>
       <fieldset className="text-xs text-stone-400">
         <legend className="mb-1">Seguimos no mesmo fundo da entrevista?</legend>
         <div className="flex gap-4 text-sm text-stone-200">
@@ -138,6 +163,8 @@ function SubirForm({ lead, onOk }: { lead: LeadFinance; onOk: () => void }) {
 
 function VendaForm({ lead, hoje, onOk }: { lead: LeadFinance; hoje: string; onOk: () => void }) {
   const [estado, executar] = useAcao(pedirVendaFinance, onOk);
+  const [cliente, setCliente] = useState(num(lead.venda_valor_cliente ?? lead.sub_valor_proposta));
+  const [recebido, setRecebido] = useState(num(lead.venda_valor_recebido ?? lead.sub_comissao_prevista));
   return (
     <form action={executar} className="grid gap-3">
       <input type="hidden" name="lead_id" value={lead.id} />
@@ -145,13 +172,14 @@ function VendaForm({ lead, hoje, onOk }: { lead: LeadFinance; hoje: string; onOk
         {lead.lead_nome} · precatório {moeda(lead.sub_valor_precatorio)} · proposta {moeda(lead.sub_valor_proposta)}
       </p>
       <label className="text-xs text-stone-400">
-        Comissão recebida (R$)
-        <input name="valor_recebido" required inputMode="decimal" defaultValue={num(lead.venda_valor_recebido ?? lead.sub_comissao_prevista)} className={campo} />
+        Valor pago ao cliente — desembolso (R$)
+        <input name="valor_cliente" required inputMode="decimal" value={cliente} onChange={(e) => setCliente(e.target.value)} className={campo} />
       </label>
       <label className="text-xs text-stone-400">
-        Valor pago ao cliente (R$)
-        <input name="valor_cliente" required inputMode="decimal" defaultValue={num(lead.venda_valor_cliente ?? lead.sub_valor_proposta)} className={campo} />
+        Comissão recebida (R$)
+        <input name="valor_recebido" required inputMode="decimal" value={recebido} onChange={(e) => setRecebido(e.target.value)} className={campo} />
       </label>
+      <CamposMargem desembolso={cliente} comissao={recebido} />
       <label className="text-xs text-stone-400">
         Data do recebimento
         <input name="data" type="date" max={hoje} defaultValue={lead.venda_data ?? hoje} className={campo} />
@@ -302,6 +330,9 @@ export default function LeadsFinanceView({
                       {l.sub_valor_proposta !== null && (
                         <p className="mt-1 text-xs text-stone-300">
                           Precatório {moeda(l.sub_valor_precatorio)} · proposta {moeda(l.sub_valor_proposta)} · comissão prev. {moeda(l.sub_comissao_prevista)}
+                          {desagioFinance(l.sub_valor_proposta, l.sub_comissao_prevista ?? 0).desagio > 0 && (
+                            <span className="text-gold-bright"> · deságio {moeda(desagioFinance(l.sub_valor_proposta, l.sub_comissao_prevista ?? 0).desagio)}</span>
+                          )}
                         </p>
                       )}
                       {l.sub_mesmo_fundo === false && <p className="text-xs text-warning-bright">Mudou de fundo → {l.sub_fundo_novo}</p>}

@@ -2,6 +2,27 @@
 // A venda pedida pelo consultor fica "aguardando aprovação" e só vira venda efetiva (tabela `vendas`)
 // quando o Head do Finance ou o Diretor aprovam. Só lógica pura aqui (sem banco).
 
+import { FINANCE } from "@/lib/comissao-negocio";
+
+/** Margem base do Finance (% do valor de desembolso). Fixa: o vendedor não altera. */
+export const MARGEM_FINANCE_PCT = FINANCE.margemBase;
+
+const arred = (v: number) => Math.round(v * 100) / 100;
+
+/** Margem base e deságio: o que a comissão passa da margem (6% do desembolso) é deságio; abaixo da margem não há deságio. */
+export function desagioFinance(desembolso: number, comissao: number): { pct: number; margem: number; desagio: number } {
+  const margem = arred((Math.max(0, desembolso) * MARGEM_FINANCE_PCT) / 100);
+  return { pct: MARGEM_FINANCE_PCT, margem, desagio: Math.max(0, arred(Math.max(0, comissao) - margem)) };
+}
+
+/** Lê um valor digitado em formato BR (1.234,56) ou simples (1234.56). */
+export function parseValorBR(v: string): number {
+  const bruto = v.trim().replace(/\s/g, "").replace(/^R\$/, "");
+  const normal = bruto.includes(",") ? bruto.replace(/\./g, "").replace(",", ".") : bruto;
+  const n = Number(normal);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export type EtapaFinance = "validacao_entrevista" | "subido" | "resolvendo_pendencia" | "venda_pendente" | "venda_aprovada" | "perdido";
 
 /** Colunas do kanban. A coluna "Venda" reúne a venda aguardando aprovação e a aprovada. */
