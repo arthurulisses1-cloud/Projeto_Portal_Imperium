@@ -19,6 +19,15 @@ export const CARGO_LABEL: Record<CargoNegocio, string> = {
   outro: "Outro",
 };
 
+/**
+ * Rótulo do cargo de alguém num negócio. O Diretor aparece como Diretor Comercial em todos os negócios,
+ * mesmo onde o vínculo dele é de Head (pedido do Diretor, 17/11/2026).
+ */
+export function rotuloCargo(cargo: string, role?: string | null): string {
+  if (role === "diretor") return "Diretor Comercial";
+  return CARGO_LABEL[cargo as CargoNegocio] ?? cargo;
+}
+
 export type Negocio = {
   id: string;
   slug: string;

@@ -99,6 +99,8 @@ export type PessoaPace = {
   vendas: number;
   /** Meta individual (divisão igual entre closers e executivos); null para Head (meta da unidade) e pré-vendas. */
   meta: number | null;
+  /** Papel no portal (o Diretor aparece como Diretor Comercial). */
+  role?: string | null;
 };
 
 export type PaceNegocio = {
@@ -137,19 +139,20 @@ export async function buscarPaceNegocios(
   const [{ data: metas }, { data: vendas }, { data: membros }, ganhosCrm] = await Promise.all([
     supabase.from("metas_negocio").select("negocio_id, meta_recebimento").eq("ano", ano).eq("mes", mes).in("negocio_id", ids),
     supabase.from("vendas").select("negocio_id, profile_id, valor, data").in("negocio_id", ids).gte("data", inicio).lt("data", fimExcl).range(0, 19999),
-    supabase.from("profile_negocios").select("negocio_id, cargo, profiles!inner(id, full_name, ativo)").in("negocio_id", ids),
+    supabase.from("profile_negocios").select("negocio_id, cargo, profiles!inner(id, full_name, ativo, role)").in("negocio_id", ids),
     buscarGanhosCrm(lista, inicio, fimExcl),
   ]);
 
   const metaPor = new Map((metas ?? []).map((m) => [m.negocio_id as string, Number(m.meta_recebimento)]));
 
-  type M = { negocio_id: string; cargo: string; profiles: { id: string; full_name: string; ativo: boolean } | { id: string; full_name: string; ativo: boolean }[] };
-  const membrosPor = new Map<string, { id: string; nome: string; cargo: string }[]>();
+  type P = { id: string; full_name: string; ativo: boolean; role: string | null };
+  type M = { negocio_id: string; cargo: string; profiles: P | P[] };
+  const membrosPor = new Map<string, { id: string; nome: string; cargo: string; role: string | null }[]>();
   for (const m of (membros ?? []) as unknown as M[]) {
     const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     if (!p || !p.ativo) continue;
     const arr = membrosPor.get(m.negocio_id) ?? [];
-    arr.push({ id: p.id, nome: p.full_name, cargo: m.cargo });
+    arr.push({ id: p.id, nome: p.full_name, cargo: m.cargo, role: p.role ?? null });
     membrosPor.set(m.negocio_id, arr);
   }
 
@@ -189,6 +192,7 @@ export async function buscarPaceNegocios(
         id: m.id,
         nome: m.nome,
         cargo: m.cargo,
+        role: m.role,
         recebido: porPessoa.get(m.id) ?? 0,
         vendas: qtdPorPessoa.get(m.id) ?? 0,
         meta: CARGOS_QUE_VENDEM.includes(m.cargo) ? metaIndividual : null,

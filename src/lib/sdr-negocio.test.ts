@@ -1,0 +1,147 @@
+import { describe, expect, it } from "vitest";
+import { lerDataReuniao, mesmaPessoa, montarCarteira, resumirReunioes, statusRqa, tabelaDiaria, usuarioCrmDoPerfil } from "./sdr-negocio";
+import type { LeadAuditoria } from "./integracoes/auditoria";
+
+const lead = (p: Partial<LeadAuditoria>): LeadAuditoria =>
+  ({
+    id: Math.random().toString(36).slice(2),
+    seq: null,
+    nome: "Lead",
+    empresa: null,
+    canal: "outbound",
+    status: "open",
+    etapa: "",
+    funil: "",
+    responsavel: null,
+    preVendas: "Jorge Abudi",
+    closer: "Arthur Ulisses",
+    vendedor: null,
+    faturamento: null,
+    cargo: null,
+    necessidade: null,
+    timing: null,
+    rqa: null,
+    temperatura: null,
+    valor: 0,
+    mrr: null,
+    produtos: null,
+    previsao: null,
+    motivoPerda: null,
+    tags: [],
+    reuniaoMarcada: null,
+    agendadaEm: null,
+    realizadaEm: null,
+    propostaEm: null,
+    vendaEm: null,
+    noShowEm: null,
+    perdidaEm: null,
+    situacao: "a_acontecer",
+    passos: [],
+    ...p,
+  }) as LeadAuditoria;
+
+describe("nomes portal x Pipefácil", () => {
+  it("casa primeiro nome e último sobrenome, sem acento", () => {
+    expect(mesmaPessoa("Vinícius Ferreira", "Vinicius Anastácio Ferreira")).toBe(true);
+    expect(mesmaPessoa("Marcus Ryquelme", "Marcus Ryquelme")).toBe(true);
+    expect(mesmaPessoa("Marcus Ryquelme", "Marcus Silva")).toBe(false);
+  });
+  it("prefere o vínculo por e-mail e recusa nome ambíguo", () => {
+    const nomes = { u1: "Jorge Abudi", u2: "Jorge da Silva Abudi" };
+    expect(usuarioCrmDoPerfil({ u2: "p1" }, nomes, "p1", "Jorge Abudi")).toBe("u2");
+    expect(usuarioCrmDoPerfil(null, nomes, "p1", "Jorge Abudi")).toBeNull();
+    expect(usuarioCrmDoPerfil(null, { u1: "Jorge Abudi" }, "p1", "Jorge Abudi")).toBe("u1");
+  });
+});
+
+describe("RQA e no-show", () => {
+  it("lê o campo do closer", () => {
+    expect(statusRqa("Sim")).toBe("validada");
+    expect(statusRqa("true")).toBe("validada");
+    expect(statusRqa("Não")).toBe("recusada");
+    expect(statusRqa(null)).toBe("aguardando");
+  });
+  it("conta no-show sobre as reuniões do mês com desfecho e paga RQA validada pelo canal", () => {
+    const leads = [
+      lead({ agendadaEm: "2026-11-03T13:00:00Z", realizadaEm: "2026-11-05T15:00:00Z", situacao: "realizada", rqa: "sim" }),
+      lead({ agendadaEm: "2026-11-04T13:00:00Z", realizadaEm: "2026-11-06T15:00:00Z", situacao: "realizada", canal: "inbound" }),
+      lead({ agendadaEm: "2026-11-04T13:00:00Z", situacao: "no_show" }),
+      lead({ agendadaEm: "2026-11-10T13:00:00Z", situacao: "a_acontecer" }),
+      lead({ agendadaEm: "2026-11-10T13:00:00Z", situacao: "no_show", preVendas: "Outro" }),
+      // agendada em outubro, realizada em novembro: entra na RQA de novembro, não no no-show
+      lead({ agendadaEm: "2026-10-30T13:00:00Z", realizadaEm: "2026-11-03T15:00:00Z", situacao: "realizada", rqa: "não" }),
+    ];
+    const r = resumirReunioes(leads, "Jorge Abudi", "vorp", 2026, 11);
+    expect(r.noShow).toEqual({ qtd: 1, base: 3, pct: 1 / 3 });
+    expect(r.realizadas).toHaveLength(3);
+    expect(r.rqa).toEqual({ validadas: 1, aguardando: 1, recusadas: 1, valorValidado: 20, valorAguardando: 10 });
+  });
+  it("usa a data de Brasília (23h de 30/11 em BRT ainda é novembro)", () => {
+    const r = resumirReunioes([lead({ realizadaEm: "2026-12-01T02:00:00Z", situacao: "realizada" })], "Jorge Abudi", "vorp", 2026, 11);
+    expect(r.realizadas).toHaveLength(1);
+  });
+});
+
+describe("reuniões a acontecer", () => {
+  it("lê a data da reunião em ISO ou no formato brasileiro", () => {
+    expect(lerDataReuniao("2026-11-20T17:00:00.000Z")).toBe("2026-11-20T17:00:00.000Z");
+    expect(lerDataReuniao("20/11/2026 14:00")).toBe("2026-11-20T17:00:00.000Z");
+    expect(lerDataReuniao("2026-11-20")).toBe("2026-11-20T03:00:00.000Z");
+    expect(lerDataReuniao("quinta à tarde")).toBeNull();
+  });
+  it("lista as dele ainda por acontecer, da mais próxima para a mais distante, sem data por último", () => {
+    const r = resumirReunioes(
+      [
+        lead({ nome: "Sem data", situacao: "a_acontecer", reuniaoMarcada: "a combinar" }),
+        lead({ nome: "Dia 25", situacao: "a_acontecer", reuniaoMarcada: "25/11/2026 10:00" }),
+        lead({ nome: "Dia 19", situacao: "a_acontecer", reuniaoMarcada: "2026-11-19T13:00:00Z" }),
+        lead({ nome: "Realizada", situacao: "realizada" }),
+        lead({ nome: "De outro", situacao: "a_acontecer", preVendas: "Outro" }),
+      ],
+      "Jorge Abudi",
+      "vorp",
+      2026,
+      11,
+    );
+    expect(r.aAcontecer.map((x) => x.nome)).toEqual(["Dia 19", "Dia 25", "Sem data"]);
+    expect(r.aAcontecer[2].quandoTexto).toBe("a combinar");
+  });
+});
+
+describe("tabela diária", () => {
+  it("meta do dia só em dia útil e acumulado corrido até hoje", () => {
+    // novembro/2026: 19 dias úteis (feriados 02, 15 (dom) e 20)
+    const { linhas, total } = tabelaDiaria([{ chave: "a", label: "A", meta: 19, datas: ["2026-11-03", "2026-11-03", "2026-11-04"] }], 2026, 11, "2026-11-04");
+    expect(linhas).toHaveLength(30);
+    expect(linhas[0]).toMatchObject({ data: "2026-11-01", util: false });
+    expect(linhas[1].celulas[0]).toEqual({ real: 0, meta: 0, acum: 0 }); // 02/11 feriado
+    expect(linhas[2].celulas[0]).toEqual({ real: 2, meta: 1, acum: 1 });
+    expect(linhas[3].celulas[0]).toEqual({ real: 1, meta: 1, acum: 1 });
+    expect(linhas[4].celulas[0].acum).toBeNull(); // futuro
+    expect(total[0].real).toBe(3);
+    expect(total[0].meta).toBeCloseTo(19);
+    expect(total[0].acum).toBe(1);
+  });
+});
+
+describe("carteira de recorrência", () => {
+  it("agrupa por cliente, usa o último MRR e marca ativo pelo último lançamento", () => {
+    const base = { crm_deal_id: null, canal: "outbound", primeiro_contrato: true, valor: 1000 };
+    const c = montarCarteira(
+      [
+        { ...base, data: "2026-09-10", cliente: "ACME", mrr: 1000, profile_id: "c", indicador_id: "me" },
+        { ...base, data: "2026-11-10", cliente: "Acme ", mrr: 1200, profile_id: "c", indicador_id: "me" },
+        { ...base, data: "2026-08-10", cliente: "Velha", mrr: 500, profile_id: "me", indicador_id: null },
+        { ...base, data: "2026-11-01", cliente: "De outro", mrr: 500, profile_id: "x", indicador_id: "y" },
+      ],
+      "me",
+      "2026-11-17",
+      (papel) => (papel === "sdr" ? 3 : 4),
+    );
+    expect(c.map((x) => [x.cliente, x.ativo, x.mrr, x.porMes, x.papel])).toEqual([
+      ["ACME", true, 1200, 36, "sdr"],
+      ["Velha", false, 500, 20, "closer"],
+    ]);
+    expect(c[0].recebidoNoMes).toBe(1000);
+  });
+});

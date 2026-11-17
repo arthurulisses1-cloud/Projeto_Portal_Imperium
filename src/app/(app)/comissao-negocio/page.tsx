@@ -7,6 +7,9 @@ import { getViewerContext } from "@/lib/preview";
 import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe, veConsolidado } from "@/lib/negocios";
 import { buscarComissoesNegocios, type ComissaoNegocio, type PapelComissao } from "@/lib/comissao-negocio";
+import { buscarCarteira, buscarPainelSdr, vinculoPreVendas } from "@/lib/sdr-negocio";
+import { ExplicacaoComissaoVorp, PainelComissaoSdr, pctVorp } from "@/components/negocio/ComissaoSdr";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +81,27 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
   const sufixo = foco ? `&negocio=${foco.slug}` : "";
   const totalGeral = dados.filter(veTudo).reduce((s, d) => s + d.totalComissao, 0);
 
+  // A explicação do Finance só aparece para quem tem comissão do Finance na tela (ou vê o Finance inteiro).
+  const mostraFinance = dados.some((d) => d.slug === "vorp-finance" && (veTudo(d) || d.pessoas.some((p) => p.id === user.id)));
+
+  // SDR da Acrópole: regras da Acrópole, RQA do mês, comissão de venda padrão e carteira de recorrência.
+  const preVendas = ehDiretor ? null : await vinculoPreVendas(supabase, user.id);
+  let blocoSdr: React.ReactNode = null;
+  if (preVendas && (!foco || foco.slug === preVendas.slug)) {
+    const admin = createAdminClient();
+    const [painel, carteira] = await Promise.all([
+      buscarPainelSdr(admin, preVendas, { id: user.id, nome: viewer.effectiveNome }, { ano, mes, hoje }),
+      buscarCarteira(admin, preVendas.id, user.id, hoje, pctVorp),
+    ]);
+    const comissaoVendas = dados.find((d) => d.slug === preVendas.slug)?.pessoas.find((p) => p.id === user.id)?.total ?? 0;
+    blocoSdr = (
+      <>
+        <ExplicacaoComissaoVorp />
+        <PainelComissaoSdr reunioes={painel.reunioes} comissaoVendas={comissaoVendas} carteira={carteira} atualizadoEm={painel.atualizadoEm} />
+      </>
+    );
+  }
+
   return (
     <main className="mx-auto max-w-4xl space-y-5 px-6 py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -101,7 +125,9 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
         Fechamentos até outubro/2026 seguem o modelo antigo: <Link href="/comissao?ano=2026&mes=10" className="text-gold hover:underline">ver outubro</Link>.
       </p>
 
-      {(visiveis.some((n) => n.slug === "vorp-finance") || dadosExternos.some((d) => d.slug === "vorp-finance")) && <ExplicacaoComissaoFinance completo={ehDiretor || headDe.has("vorp-finance")} />}
+      {mostraFinance && <ExplicacaoComissaoFinance completo={ehDiretor || headDe.has("vorp-finance")} />}
+
+      {blocoSdr}
 
       {visiveis.length > 1 && (
         <div className="flex flex-wrap gap-2 text-sm">

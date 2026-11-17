@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { CARGO_LABEL, NEGOCIO_COR, nomeEquipe, type CargoNegocio } from "@/lib/negocios";
+import { NEGOCIO_COR, nomeEquipe, rotuloCargo, type CargoNegocio } from "@/lib/negocios";
+import { CARGOS_PRE_VENDAS } from "@/lib/sdr-negocio";
 import { buscarComissoesNegocios, percentuais } from "@/lib/comissao-negocio";
 import { buscarPaceNegocios, calcularPace } from "@/lib/pace-negocio";
 import { hojeBR } from "@/lib/data-br";
@@ -42,7 +43,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   const principal = vinculos[0] ?? null;
 
   const ehDiretor = profile.role === "diretor";
-  const cargoLabel = ehDiretor ? "Diretor" : principal ? CARGO_LABEL[principal.cargo] ?? principal.cargo : "Time";
+  const cargoLabel = ehDiretor ? "Diretor Comercial" : principal ? rotuloCargo(principal.cargo) : "Time";
   const cor = principal ? NEGOCIO_COR[principal.negocio.slug] ?? "201 162 74" : "201 162 74";
 
   const { data: quotes } = await supabase.from("sage_quotes").select("texto, fonte").eq("ativo", true);
@@ -64,7 +65,8 @@ export default async function SidebarRight({ userId }: { userId: string }) {
       desagio += eu.itens.filter((i) => i.tipo === "desagio").reduce((s, i) => s + i.valor, 0);
     }
     let noPace: number | null = null;
-    if (!ehDiretor && principal) {
+    // SDR (pré-vendas) não ganha % de closer: a estimativa pelo pace não vale para ele (a comissão dele é RQA + venda originada).
+    if (!ehDiretor && principal && !CARGOS_PRE_VENDAS.includes(principal.cargo)) {
       const [pn] = await buscarPaceNegocios(supabase, ano, mes, hoje, [principal.negocio.slug]);
       const eu = pn?.pessoas.find((p) => p.id === userId);
       if (eu && eu.meta !== null) {
@@ -87,19 +89,25 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   }
 
   // ---------- Meu time: quem está no mesmo negócio ----------
-  type Membro = { id: string; nome: string; cargo: CargoNegocio; avatarUrl: string | null };
+  type Membro = { id: string; nome: string; cargo: CargoNegocio; role: string | null; avatarUrl: string | null };
   let time: Membro[] = [];
   if (principal) {
     const { data: membrosRaw } = await supabase
       .from("profile_negocios")
-      .select("cargo, profiles!inner(id, full_name, avatar_url, ativo)")
+      .select("cargo, profiles!inner(id, full_name, avatar_url, ativo, role)")
       .eq("negocio_id", principal.negocio.id);
-    type M = { cargo: CargoNegocio; profiles: { id: string; full_name: string; avatar_url: string | null; ativo: boolean } | { id: string; full_name: string; avatar_url: string | null; ativo: boolean }[] };
+    type P = { id: string; full_name: string; avatar_url: string | null; ativo: boolean; role: string | null };
+    type M = { cargo: CargoNegocio; profiles: P | P[] };
     time = ((membrosRaw ?? []) as unknown as M[])
       .map((m) => ({ m, p: Array.isArray(m.profiles) ? m.profiles[0] : m.profiles }))
       .filter((x) => x.p && x.p.ativo)
-      .map((x) => ({ id: x.p.id, nome: x.p.full_name, cargo: x.m.cargo, avatarUrl: x.p.avatar_url }))
-      .sort((a, b) => Number(b.cargo === "head") - Number(a.cargo === "head") || a.nome.localeCompare(b.nome, "pt-BR"));
+      .map((x) => ({ id: x.p.id, nome: x.p.full_name, cargo: x.m.cargo, role: x.p.role ?? null, avatarUrl: x.p.avatar_url }))
+      .sort(
+        (a, b) =>
+          Number(b.role === "diretor") - Number(a.role === "diretor") ||
+          Number(b.cargo === "head") - Number(a.cargo === "head") ||
+          a.nome.localeCompare(b.nome, "pt-BR"),
+      );
   }
 
   return (
@@ -171,7 +179,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs text-stone-200">{m.nome}</p>
-                  <p className="text-[10px] uppercase tracking-wide text-stone-500">{CARGO_LABEL[m.cargo] ?? m.cargo}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-stone-500">{rotuloCargo(m.cargo, m.role)}</p>
                 </div>
               </li>
             ))}
