@@ -10,8 +10,11 @@ import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
 import { buscarResumoSunne, type SunneResumo } from "@/lib/sunne";
 import { buscarLigacoesSunne, type LigacoesResumo } from "@/lib/api4com";
 import type { StatusPace } from "@/lib/pace-negocio";
+import { BotaoAtualizarRealizado } from "@/components/negocio/BotaoAtualizarRealizado";
 
 export const dynamic = "force-dynamic";
+// O botão "Atualizar agora" roda a sincronização do negócio (3C Plus + Pipefácil) nesta rota.
+export const maxDuration = 60;
 
 const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const CANAL: Record<MixCanal["canal"], string> = { outbound: "Outbound", inbound: "Inbound", indicacao: "Indicação", sem_canal: "Sem canal" };
@@ -242,6 +245,12 @@ export default async function NegocioDashboardPage({ searchParams }: { searchPar
                     : ultimaSyncFunil
                       ? `Realizado: 3C Plus e Pipefácil · atualizado ${new Date(ultimaSyncFunil).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
                       : "Realizado: 3C Plus e Pipefácil · aguardando a primeira sincronização"}
+                {integradas.size > 0 && (
+                  <>
+                    {" "}
+                    <BotaoAtualizarRealizado slug={atual.slug} />
+                  </>
+                )}
               </p>
             )}
             {atual.slug === "vorp-energy" && (

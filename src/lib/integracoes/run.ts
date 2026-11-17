@@ -18,6 +18,10 @@ export type OpcoesSync = {
   simular?: boolean;
   /** Só estes negócios (slugs). Sem lista: todos menos os de `syncSeparado`. */
   negocios?: string[];
+  /** Mesmo que `negocios` (botão "Atualizar agora" do dashboard). */
+  slugs?: string[];
+  /** Quem disparou, para o registro (padrão: agendamento). */
+  origem?: string;
 };
 
 type Resultado = Record<string, unknown>;
@@ -331,8 +335,9 @@ export async function runSyncIntegracoes(opts: OpcoesSync = {}): Promise<Resulta
   const supabase = createAdminClient();
   const hoje = hojeBR();
   // Sem lista, roda todos menos os de sincronização separada (chamados com ?negocio=slug).
+  const lista = opts.negocios ?? opts.slugs;
   const slugs = Array.from(new Set([...Object.keys(TRESC_POR_NEGOCIO), ...Object.keys(CRM_POR_NEGOCIO)])).filter((s) =>
-    opts.negocios ? opts.negocios.includes(s) : !CRM_POR_NEGOCIO[s]?.syncSeparado,
+    lista ? lista.includes(s) : !CRM_POR_NEGOCIO[s]?.syncSeparado,
   );
   const { data: negocios } = await supabase.from("negocios").select("id, slug").in("slug", slugs);
   const resultado: Resultado = {};
@@ -372,7 +377,7 @@ export async function runSyncIntegracoes(opts: OpcoesSync = {}): Promise<Resulta
     await supabase.from("sync_log").insert({
       fonte: "integracoes:3c+pipefacil",
       status: erros.length ? "erro" : "ok",
-      detalhe: erros.length ? erros.join(" | ") : null,
+      detalhe: [opts.origem, ...erros].filter(Boolean).join(" | ") || null,
     });
   }
   return { ok: erros.length === 0, erros, ...resultado };

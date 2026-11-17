@@ -1,16 +1,13 @@
 name: Sincronizar planilha
 
-# Chama o endpoint de sync do próprio app em horário comercial, de 30 em
-# 30 minutos, sem precisar de ninguém clicando manualmente. Além do cron
-# automático de 1x/dia que já roda no Vercel (madrugada), isso cobre o
-# dia inteiro sem custar nada (GitHub Actions é grátis pra esse volume de
-# chamadas — cada execução é só um curl, dura segundos; ~24 rodadas/dia
-# fica bem longe do limite gratuito de minutos do GitHub Actions).
+# Reserva manual das sincronizações (botão "Run workflow" no GitHub).
+# O realizado das integrações (3C Plus + Pipefácil) agora é agendado de 30 em
+# 30 min (8h-20h de Brasília) no próprio Supabase, via pg_cron (migrations
+# 0111/0112): o cron do GitHub atrasava ou pulava horários e acabava rodando
+# umas duas vezes por dia. A planilha (/api/sync) já tem outro agendador. No portal, o botão
+# "Atualizar agora" do Dashboard do Negócio também força a atualização.
 on:
-  schedule:
-    # Todo horário em UTC. 11h-23h UTC = 8h-20h em Brasília (UTC-3).
-    - cron: "*/30 11-23 * * *"
-  workflow_dispatch: {} # também dá pra rodar na mão, pelo botão "Run workflow" no GitHub
+  workflow_dispatch: {}
 
 jobs:
   sync:
