@@ -583,11 +583,14 @@ function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: Esfo
         <CartaoIndicador titulo="Reuniões realizadas" p={esforco.time.reunioes_realizadas.pace} fmt={dec} canais={esforco.time.reunioes_realizadas.canais} leads={esforco.time.reunioes_realizadas.leads} />
       </div>
 
-      {/* Pré-vendas: o pace total de cada um (um canal compensa o outro) e os canais embaixo */}
-      {esforco.preVendas.length > 0 && (
+      {/* Time comercial: pré-vendas (pace total de cada um; um canal compensa o outro) e closers (recebido,
+          vendas e ticket contra o planejado), lado a lado */}
+      {(esforco.preVendas.length > 0 || closers.length > 0) && (
         <div>
-          <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">Pré-vendas · meta do canal dividida entre quem trabalha nele</p>
-          <div className="grid gap-4 md:grid-cols-3">
+          <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">
+            Time comercial · pré-vendas: meta do canal dividida entre quem trabalha nele · closer: meta de recebido
+          </p>
+          <div className={`grid gap-4 md:grid-cols-2 ${esforco.preVendas.length + closers.length >= 4 ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
             {esforco.preVendas.map((pv) => (
               <section key={pv.id} className="space-y-3 rounded-lg border border-imperium-line bg-imperium-surface p-4">
                 <div className="flex items-center gap-2.5">
@@ -603,36 +606,6 @@ function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: Esfo
                 <BlocoPessoa titulo="Reuniões realizadas" ind={pv.indicadores.reunioes_realizadas} />
               </section>
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Funis do mês: Agendadas → Realizadas → Vendas, do time e de cada pré-vendas */}
-      <div>
-        <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">Agendadas → realizadas → vendas · conversão ideal pelas metas do forecast</p>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <FunilPace titulo="Time" subtitulo="todos os canais" ind={esforco.time} ideal={esforco.ideal} cor={cor} destaque />
-          {esforco.preVendas.map((pv) => (
-            <FunilPace key={pv.id} titulo={pv.nome} subtitulo="vendas originadas: as que ele agendou" ind={pv.indicadores} ideal={pv.ideal} cor={cor} />
-          ))}
-        </div>
-      </div>
-
-      {/* Esperado × realizado acumulado, dia útil a dia útil */}
-      <div>
-        <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">Esperado × realizado, dia útil a dia útil</p>
-        <div className="grid gap-4 md:grid-cols-3">
-          <GraficoSerie titulo="Recebido" serie={serieRecebido} cor={cor} fmt={moeda} />
-          <GraficoSerie titulo="Reuniões agendadas" serie={esforco.time.reunioes_agendadas.serie ?? []} cor={cor} fmt={dec} />
-          <GraficoSerie titulo="Reuniões realizadas" serie={esforco.time.reunioes_realizadas.serie ?? []} cor={cor} fmt={dec} />
-        </div>
-      </div>
-
-      {/* Closer: recebido com pace, vendas e ticket contra o planejado */}
-      {closers.length > 0 && (
-        <div>
-          <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">Closer</p>
-          <div className="grid gap-4 md:grid-cols-3">
             {closers.map((c) => {
               const pc = calcularPace({ meta: c.meta ?? 0, recebido: c.recebido, hoje, ano, mes });
               const ticket = c.vendas > 0 ? c.recebido / c.vendas : null;
@@ -675,6 +648,28 @@ function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: Esfo
           </div>
         </div>
       )}
+
+      {/* Funis do mês: Agendadas → Realizadas → Vendas, do time e de cada pré-vendas */}
+      <div>
+        <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">Agendadas → realizadas → vendas · conversão ideal pelas metas do forecast</p>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <FunilPace titulo="Time" subtitulo="todos os canais" ind={esforco.time} ideal={esforco.ideal} cor={cor} destaque />
+          {esforco.preVendas.map((pv) => (
+            <FunilPace key={pv.id} titulo={pv.nome} subtitulo="vendas originadas: as que ele agendou" ind={pv.indicadores} ideal={pv.ideal} cor={cor} />
+          ))}
+        </div>
+      </div>
+
+      {/* Esperado × realizado acumulado, dia útil a dia útil */}
+      <div>
+        <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">Esperado × realizado, dia útil a dia útil</p>
+        <div className="grid gap-4 md:grid-cols-3">
+          <GraficoSerie titulo="Recebido" serie={serieRecebido} cor={cor} fmt={moeda} />
+          <GraficoSerie titulo="Reuniões agendadas" serie={esforco.time.reunioes_agendadas.serie ?? []} cor={cor} fmt={dec} />
+          <GraficoSerie titulo="Reuniões realizadas" serie={esforco.time.reunioes_realizadas.serie ?? []} cor={cor} fmt={dec} />
+        </div>
+      </div>
+
     </div>
   );
 }
