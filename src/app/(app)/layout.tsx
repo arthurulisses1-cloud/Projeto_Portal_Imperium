@@ -148,15 +148,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const cookieStore = await cookies();
 
-  // Multinegócio (2026-11): negócios que a pessoa pode abrir e o que está em foco.
-  // Se a migration 0096 ainda não rodou, volta lista vazia e o seletor não aparece.
-  const negociosVisiveis = user ? await buscarNegociosVisiveis(supabase, user.id, profile?.role) : [];
-  const negocioFoco = negocioEmFoco(cookieStore.get(COOKIE_NEGOCIO)?.value, negociosVisiveis);
-  const visualEscolhido = cookieStore.get(COOKIE_VISUAL)?.value ?? VISUAL_AUTO;
-  const visualAplicado = visualEfetivo(visualEscolhido, negocioFoco?.slug ?? null);
-  const modoEscolhido = cookieStore.get(COOKIE_MODO)?.value ?? MODO_AUTO;
-  const modoAplicado = modoEfetivo(modoEscolhido, visualAplicado);
-
   // Pré-visualização (Diretor virar outra pessoa/papel pra revisar telas)
   // foi desativada a pedido (2026-08-22) — "só quero usar minha conta como
   // Diretor". Continua lendo preview_profile_id só de forma defensiva, pra
@@ -175,6 +166,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       .maybeSingle();
     if (encontrada) previewPessoa = { id: encontrada.id, nome: encontrada.full_name, role: encontrada.role, tribo_id: encontrada.tribo_id };
   }
+
+  // Multinegócio (2026-11): negócios que a pessoa pode abrir e o que está em foco. Em "ver como", valem os
+  // negócios da pessoa vista (o Diretor não vê "todos" por ela).
+  // Se a migration 0096 ainda não rodou, volta lista vazia e o seletor não aparece.
+  const negociosVisiveis = user ? await buscarNegociosVisiveis(supabase, previewPessoa?.id ?? user.id, previewPessoa?.role ?? profile?.role) : [];
+  const negocioFoco = negocioEmFoco(cookieStore.get(COOKIE_NEGOCIO)?.value, negociosVisiveis);
+  const visualEscolhido = cookieStore.get(COOKIE_VISUAL)?.value ?? VISUAL_AUTO;
+  const visualAplicado = visualEfetivo(visualEscolhido, negocioFoco?.slug ?? null);
+  const modoEscolhido = cookieStore.get(COOKIE_MODO)?.value ?? MODO_AUTO;
+  const modoAplicado = modoEfetivo(modoEscolhido, visualAplicado);
 
   // Diretor pode "ver como" qualquer pessoa ativa (reativado em 2026-11-17, para revisar os fluxos).
   let pessoasPreview: { id: string; nome: string; detalhe: string }[] = [];
@@ -353,7 +354,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               visualEscolhido={visualEscolhido}
               modo={modoAplicado}
               modoEscolhido={modoEscolhido}
-              podeConsolidado={veConsolidado(profile?.role)}
+              podeConsolidado={veConsolidado(previewPessoa?.role ?? profile?.role)}
             />
           )}
           {user && <MencoesBell mencoes={mencoesPendentes} />}

@@ -11,7 +11,10 @@ export default function MetaExecutivo({
   cor,
   mesLabel,
   mesAtual,
+  time = false,
 }: {
+  /** Head: mostra a meta e o pace do time do negócio, não os individuais. */
+  time?: boolean;
   pace: PaceCalculado;
   equipe: string;
   cor: string;
@@ -29,13 +32,13 @@ export default function MetaExecutivo({
     <section className="rounded-lg border bg-imperium-surface p-4" style={{ borderColor: `rgb(${cor} / 0.55)` }}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-[10px] uppercase tracking-widest text-stone-500">
-          Sua meta · {equipe} · {mesLabel}
+          {time ? "Meta do time" : "Sua meta"} · {equipe} · {mesLabel}
         </p>
         {meta > 0 && <p className="text-2xl font-semibold text-stone-100">{Math.round((recebido / meta) * 100)}%</p>}
       </div>
 
       {meta <= 0 ? (
-        <p className="mt-2 text-sm text-stone-400">Sua meta do mês ainda não foi definida.</p>
+        <p className="mt-2 text-sm text-stone-400">{time ? "A meta do time" : "Sua meta"} do mês ainda não foi definida.</p>
       ) : (
         <>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -50,7 +53,7 @@ export default function MetaExecutivo({
               </div>
             )}
             <div>
-              <p className="text-[10px] uppercase tracking-widest text-stone-500">Onde você está</p>
+              <p className="text-[10px] uppercase tracking-widest text-stone-500">{time ? "Onde o time está" : "Onde você está"}</p>
               <p className={`mt-0.5 text-lg font-semibold ${mesAtual ? (noRitmo ? "text-success-bright" : "text-wine-bright") : "text-gold-bright"}`}>
                 {moeda(recebido)}
               </p>

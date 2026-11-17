@@ -249,20 +249,23 @@ export default async function MuralPage({
   if (meRole !== "diretor" && meRole !== "investidor") {
     const { data: vinculos } = await supabase
       .from("profile_negocios")
-      .select("principal, negocios(slug, status)")
+      .select("principal, cargo, negocios(slug, status)")
       .eq("profile_id", meId);
-    type VP = { principal: boolean; negocios: { slug: string; status: string } | { slug: string; status: string }[] | null };
+    type VP = { principal: boolean; cargo: string; negocios: { slug: string; status: string } | { slug: string; status: string }[] | null };
     const ativos = ((vinculos ?? []) as unknown as VP[])
-      .map((v) => ({ principal: v.principal, n: Array.isArray(v.negocios) ? v.negocios[0] : v.negocios }))
+      .map((v) => ({ principal: v.principal, cargo: v.cargo, n: Array.isArray(v.negocios) ? v.negocios[0] : v.negocios }))
       .filter((v) => v.n && v.n.status === "ativo")
-      .sort((a, b) => Number(b.principal) - Number(a.principal));
+      // Head primeiro: quem chefia um negócio abre o Mural com o pace do time.
+      .sort((a, b) => Number(b.cargo === "head") - Number(a.cargo === "head") || Number(b.principal) - Number(a.principal));
     for (const v of ativos) {
       const [pn] = await buscarPaceNegocios(supabase, ano, mes, hoje, [v.n!.slug]);
       const eu = pn?.pessoas.find((p) => p.id === meId);
-      if (!pn || !eu || eu.meta === null) continue;
+      const time = v.cargo === "head";
+      if (!pn || (!time && (!eu || eu.meta === null))) continue;
       metaExecutivo = (
         <MetaExecutivo
-          pace={calcularPace({ meta: eu.meta, recebido: eu.recebido, hoje, ano, mes })}
+          time={time}
+          pace={time ? pn.pace : calcularPace({ meta: eu!.meta!, recebido: eu!.recebido, hoje, ano, mes })}
           equipe={nomeEquipe(pn.negocio)}
           cor={NEGOCIO_COR[pn.negocio.slug] ?? "201 162 74"}
           mesLabel={MESES[mes - 1] + " de " + ano}

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
+import { getViewerContext } from "@/lib/preview";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { buscarDashboardNegocio, RANKINGS, type MixCanal } from "@/lib/dashboard-negocio";
 import { etapasIntegradas, funilUnicoDoNegocio, funisDoMes, leadsPorQualificacao, montarFunisDaVisao, type LeadEtapa } from "@/lib/funil-negocio";
@@ -67,12 +68,11 @@ export default async function NegocioDashboardPage({
   const qualificacao: Qualificacao = searchParams.visao === "completo" || searchParams.visao === "nao_mql" ? searchParams.visao : "mql";
   const recorte: Recorte = searchParams.recorte === "mes" ? "mes" : "todos";
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  const { data: eu } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (!eu) redirect("/");
+  // "Ver como": o Diretor enxerga os negócios e o papel da pessoa escolhida, não os dele.
+  const viewer = await getViewerContext(supabase);
+  if (!viewer) redirect("/login");
+  const user = { id: viewer.effectiveId };
+  const eu = { role: viewer.effectiveRole };
 
   const visiveis = (await buscarNegociosVisiveis(supabase, user.id, eu.role)).filter((n) => n.status === "ativo");
   if (visiveis.length === 0) {
