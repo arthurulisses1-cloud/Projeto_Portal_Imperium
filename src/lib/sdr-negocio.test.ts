@@ -203,3 +203,14 @@ describe("plano pago de uma vez (Match Sales)", () => {
     expect(montarCarteira([venda], "p", "2026-11-18", () => 10)[0].antecipado).toBe(false);
   });
 });
+
+describe("Tipo de Contrato manda no plano", () => {
+  it("Semestral/Anual só contam como pagos se o recebido cobre o período", () => {
+    expect(mesesPagosDaVenda({ valor: 715, mrr: 119.2, tipo_contrato: "Semestral" })).toBe(6);
+    expect(mesesPagosDaVenda({ valor: 119.2, mrr: 119.2, tipo_contrato: "Semestral" })).toBe(1); // semestral pago mês a mês
+    expect(mesesPagosDaVenda({ valor: 1267, mrr: 105, tipo_contrato: "Anual" })).toBe(12);
+  });
+  it("Mensal é sempre 1, mesmo que o valor lembre um semestre", () => {
+    expect(mesesPagosDaVenda({ valor: 715, mrr: 119.2, tipo_contrato: "Mensal" })).toBe(1);
+  });
+});

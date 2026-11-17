@@ -24,6 +24,8 @@ export type DealCrm = {
   pipeline_id?: string | null;
   /** Valor da implantação/setup cadastrado no lead (só em memória; vai para a venda, não para crm_deals). */
   implantacao?: number | null;
+  /** Tipo de contrato cadastrado no lead (só em memória; vai para a venda). */
+  tipo_contrato?: string | null;
   status: string | null;
   stage_id: string | null;
   valor: number | null;
@@ -341,6 +343,8 @@ export type VendaCrm = {
   mrr: number | null;
   /** Valor da implantação (setup) cadastrado no CRM; null = não preenchido. */
   implantacao: number | null;
+  /** Tipo de contrato (Mensal, Semestral, Anual…) cadastrado no CRM; null = não preenchido. */
+  tipo_contrato: string | null;
   cliente: string | null;
   produto: string | null;
   closer_user_id: string | null;
@@ -377,6 +381,7 @@ export function vendasGanhas(deals: DealCrm[], eventos: EventoCrm[], cfg: Config
       valor: Number(d.valor ?? 0),
       mrr: d.mrr != null && Number(d.mrr) > 0 ? Number(d.mrr) : null,
       implantacao: d.implantacao != null && Number(d.implantacao) > 0 ? Number(d.implantacao) : null,
+      tipo_contrato: d.tipo_contrato?.trim() ? d.tipo_contrato.trim() : null,
       cliente: d.empresa || d.nome,
       produto: d.produtos && d.produtos.length > 0 ? d.produtos.join(", ") : null,
       closer_user_id: responsavelNoGanho?.get(d.deal_id) ?? d.responsavel_user_id,

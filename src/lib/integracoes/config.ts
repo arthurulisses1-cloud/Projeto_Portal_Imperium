@@ -33,7 +33,7 @@ export type ConfigCrm = {
   /** Valor do campo Canal (canal_origem) → canal do portal. Canais ausentes daqui ficam fora do negócio. */
   canais: Record<string, CanalPortal>;
   /** Slug dos campos do Pipefácil usados na qualificação (cada workspace tem os seus). */
-  campos: { faturamento?: string; cargo?: string; tamanhoTime?: string; /** Campo de MRR (padrão "mrr"). */ mrr?: string; /** Campo "Valor da implantação" (setup); sem ele, procura uma propriedade com "implanta" no nome. */ implantacao?: string; /** Origem do lead quando difere do canal (aparece na lista do hover). */ origem?: string };
+  campos: { faturamento?: string; cargo?: string; tamanhoTime?: string; /** Campo de MRR (padrão "mrr"). */ mrr?: string; /** Campo "Tipo de Contrato" (Mensal, Semestral, Anual…); sem ele, procura uma propriedade com "tipo" e "contrato" no nome. */ tipoContrato?: string; /** Campo "Valor da implantação" (setup); sem ele, procura uma propriedade com "implanta" no nome. */ implantacao?: string; /** Origem do lead quando difere do canal (aparece na lista do hover). */ origem?: string };
   /** MQL (inbound): valores aceitos de cada critério; o lead precisa atender todos os critérios definidos. */
   mql: Partial<Record<CriterioMql, string[]>>;
   /** Canal alternativo cuja venda só entra se o closer que fez a call (campo Closer; sem ele, o responsável

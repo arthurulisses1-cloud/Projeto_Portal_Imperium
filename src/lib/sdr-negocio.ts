@@ -372,20 +372,23 @@ export type ContratoCarteira = {
 
 /** Planos cobrados de uma vez e a quantidade de meses que cobrem. */
 const PLANOS_MESES = [12, 6, 3];
-const DICA_PLANO: [RegExp, number][] = [[/anual/i, 12], [/semestral/i, 6], [/trimestral/i, 3]];
+const DICA_PLANO: [RegExp, number][] = [[/anual/i, 12], [/semestral/i, 6], [/trimestral/i, 3], [/mensal/i, 1]];
 
 /**
  * Quantos meses de contrato o recebimento da venda já cobre (pura). Cruza o valor recebido de uma vez (sem o
  * setup) com o MRR: 6 x MRR = semestral, 12 x MRR = anual. O nome do produto ("semestral", "anual") ajuda quando
  * o valor não fecha exato. 1 = mensal (ou não dá para saber).
  */
-export function mesesPagosDaVenda(v: { valor: number; mrr: number | null; valor_implantacao?: number | null; produto?: string | null }): number {
+export function mesesPagosDaVenda(v: { valor: number; mrr: number | null; valor_implantacao?: number | null; produto?: string | null; tipo_contrato?: string | null }): number {
   const mrr = Number(v.mrr ?? 0);
   if (!(mrr > 0)) return 1;
   const base = Math.max(0, Number(v.valor) - Number(v.valor_implantacao ?? 0));
   const razao = base / mrr;
+  // Tipo de Contrato do CRM manda: Mensal = 1; Semestral/Anual só contam como pagos se o recebido cobre o período.
+  const tipo = DICA_PLANO.find(([re]) => re.test(v.tipo_contrato ?? ""))?.[1];
+  if (tipo !== undefined) return tipo > 1 && razao >= tipo * 0.9 ? tipo : 1;
   const dica = DICA_PLANO.find(([re]) => re.test(v.produto ?? ""))?.[1];
-  if (dica && razao >= dica * 0.9) return dica;
+  if (dica && dica > 1 && razao >= dica * 0.9) return dica;
   return PLANOS_MESES.find((c) => Math.abs(razao - c) <= c * 0.08) ?? 1;
 }
 
@@ -410,6 +413,7 @@ type LinhaVendaCarteira = {
   primeiro_contrato: boolean | null;
   valor_implantacao?: number | null;
   produto?: string | null;
+  tipo_contrato?: string | null;
 };
 
 /**
@@ -452,7 +456,7 @@ export function montarCarteira(
     };
     // Match Sales: plano semestral/anual pago de uma vez cobre o contrato todo; conta pela 1ª venda do cliente.
     if (detectarPrepago && !porChave.has(chave)) {
-      c.mesesPagos = mesesPagosDaVenda({ valor: Number(v.valor), mrr: Number(v.mrr), valor_implantacao: v.valor_implantacao, produto: v.produto });
+      c.mesesPagos = mesesPagosDaVenda({ valor: Number(v.valor), mrr: Number(v.mrr), valor_implantacao: v.valor_implantacao, produto: v.produto, tipo_contrato: v.tipo_contrato });
       if (c.mesesPagos > 1) c.pagoAte = somaMesesData(v.data, c.mesesPagos);
     }
     c.ultimo = v.data;
@@ -480,13 +484,17 @@ export async function buscarCarteira(
   pctDe: (papel: "sdr" | "closer", canal: string | null, comIndicador?: boolean) => number,
   detectarPrepago = false,
 ): Promise<ContratoCarteira[]> {
-  const { data } = await admin
-    .from("vendas")
-    .select("data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato, valor_implantacao, produto")
-    .eq("negocio_id", negocioId)
-    .or(`indicador_id.eq.${profileId},profile_id.eq.${profileId}`)
-    .gt("mrr", 0)
-    .order("data")
-    .range(0, 4999);
-  return montarCarteira((data ?? []) as LinhaVendaCarteira[], profileId, hoje, pctDe, detectarPrepago);
+  const consulta = (colunas: string) =>
+    admin
+      .from("vendas")
+      .select(colunas)
+      .eq("negocio_id", negocioId)
+      .or(`indicador_id.eq.${profileId},profile_id.eq.${profileId}`)
+      .gt("mrr", 0)
+      .order("data")
+      .range(0, 4999);
+  // tipo_contrato é da migration 0117: sem ela, lê sem a coluna e o plano sai só pelo valor.
+  let { data, error } = await consulta("data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato, valor_implantacao, produto, tipo_contrato");
+  if (error) ({ data, error } = await consulta("data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato, valor_implantacao, produto"));
+  return montarCarteira((data ?? []) as unknown as LinhaVendaCarteira[], profileId, hoje, pctDe, detectarPrepago);
 }

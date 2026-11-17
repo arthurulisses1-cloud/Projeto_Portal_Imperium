@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CRM_POR_NEGOCIO, TRESC_POR_NEGOCIO } from "./config";
 import { calcularFunilUnico, calcularRealizadoCrm, contarPorDia, dataBR, detalharVisoes, ehMql, leadsDoRealizado, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { contarAlosConexoes, segundos } from "./tresc";
-import { canalDoDeal, valorDaImplantacao } from "./run";
+import { canalDoDeal, tipoDeContrato, valorDaImplantacao } from "./run";
 import { aplicarLeads, aplicarRealizado, leadsPorQualificacao, montarFunisDaVisao, etapasIntegradas, funilUnicoDoNegocio, funisDoMes } from "../funil-negocio";
 import { ganhosDoMes } from "../recebido-crm";
 
@@ -667,5 +667,14 @@ describe("cards de valor (vendido e follow)", () => {
       ["Sem temp", 5000, null, "jorge"],
     ]);
     expect(f.vendas["2026-11"].map((v) => [v.nome, v.valor, v.pessoa, v.data])).toEqual([["Ganho", 7000, "ryq", "2026-11-10"]]);
+  });
+});
+
+describe("tipoDeContrato", () => {
+  it("lê o campo configurado ou o primeiro com 'tipo' e 'contrato' no nome", () => {
+    expect(tipoDeContrato({ tipo_de_contrato: "Semestral" })).toBe("Semestral");
+    expect(tipoDeContrato({ tipo_contrato: ["Anual"] })).toBe("Anual");
+    expect(tipoDeContrato({ canal_origem: "x" })).toBeNull();
+    expect(tipoDeContrato({ qualquer: "Mensal" }, "qualquer")).toBe("Mensal");
   });
 });
