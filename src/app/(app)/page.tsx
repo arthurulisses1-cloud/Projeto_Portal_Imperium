@@ -141,6 +141,16 @@ export default async function MuralPage({
     escopoCentral = { tipo: "individual", profileId: meId };
   }
 
+  // Fora o Diretor (e analista/investidor), a Central mostra só as pessoas dos negócios de quem está vendo:
+  // closer, SDR e head de uma BU não enxergam quem é de outra empresa.
+  let apenasIdsCentral: string[] | undefined;
+  if (meRole === "closer" || meRole === "sdr" || meRole === "lider") {
+    const { data: meusNegocios } = await supabase.from("profile_negocios").select("negocio_id").eq("profile_id", meId);
+    const idsNegocios = Array.from(new Set((meusNegocios ?? []).map((n) => n.negocio_id as string)));
+    const { data: timeNegocios } = idsNegocios.length ? await supabase.from("profile_negocios").select("profile_id").in("negocio_id", idsNegocios) : { data: [] };
+    apenasIdsCentral = Array.from(new Set([meId, ...(timeNegocios ?? []).map((t) => t.profile_id as string)]));
+  }
+
   // Pra filtro "Apenas as que estou envolvido" em CampanhasFeed (pedido do
   // Diretor, 2026-08-27) — Tribo/Exército de quem tá vendo, quando aplicável.
   const meTriboId = triboAtual?.id ?? null;
@@ -432,7 +442,7 @@ export default async function MuralPage({
 
       {!isAcademyRh &&
         (meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
-          <CentralNotificacoes escopo={escopoCentral} viewerId={meId} />
+          <CentralNotificacoes escopo={escopoCentral} viewerId={meId} apenasIds={apenasIdsCentral} />
         )}
 
       {!metaExecutivo && meRole === "sdr" && metaIndividual > 0 && (

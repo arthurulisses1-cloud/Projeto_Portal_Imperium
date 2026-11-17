@@ -77,7 +77,10 @@ export default async function CentralNotificacoes({
   escopo = null,
   viewerId,
   ocultarLegado = true,
+  apenasIds,
 }: {
+  /** Só as pessoas do time (negócio) de quem vê: fora delas ninguém aparece, e os números da firma inteira somem. Só o Diretor vê tudo. */
+  apenasIds?: string[];
   escopo?: Escopo;
   viewerId?: string;
   /** Limpeza do CRM antigo (2026-11): esconde "Como cada Exército/Tribo está no mês" e "Subidos pro compliance". */
@@ -94,6 +97,7 @@ export default async function CentralNotificacoes({
 
   type TriboRef = { id: string; nome: string; exercito_id: string };
   const pessoasEscopo = (pessoasRaw ?? []).filter((p) => {
+    if (apenasIds && !apenasIds.includes(p.id)) return false;
     if (!escopo) return true;
     const tribo = p.tribo as unknown as TriboRef | null;
     if (escopo.tipo === "individual") return p.id === escopo.profileId;
@@ -354,7 +358,7 @@ export default async function CentralNotificacoes({
   const rAssinadoOntem = (opsAssinadoOntem ?? []).reduce((s, o) => s + Number(o.valor), 0);
   const rPagoOntem = (opsPagoOntem ?? []).reduce((s, o) => s + Number(o.valor), 0);
 
-  const temAlgumaMeta = Object.values(metaOntemPorEtapa).some((v) => v !== null);
+  const temAlgumaMeta = !apenasIds && Object.values(metaOntemPorEtapa).some((v) => v !== null);
   // Sempre mostra a seção pra quem tem escopo pessoal/time (mesmo sem ter
   // lançado ainda — vira um call-to-action, igual o card antigo fazia).
   const temCompromissoPraMostrar = pessoal || mostrarCompromissoTime;
@@ -363,7 +367,7 @@ export default async function CentralNotificacoes({
   // seu time está fazendo", só que quebrada por Exército/Tribo, só na visão
   // do Diretor (escopo=null=firma inteira; Líder/Closer/SDR já têm o
   // próprio recorte acima, não precisam ver o detalhe dos outros times).
-  const statusPorTime = !escopo ? await buscarStatusPorTime(supabase, hojeStr, diasNoMes) : [];
+  const statusPorTime = !escopo && !apenasIds ? await buscarStatusPorTime(supabase, hojeStr, diasNoMes) : [];
 
   if (
     naoLancaram.length === 0 &&
