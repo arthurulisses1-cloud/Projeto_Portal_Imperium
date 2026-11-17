@@ -1,0 +1,51 @@
+import { describe, expect, it } from "vitest";
+import { canalDaOrigem, nomeArquivoSeguro, podeAprovarVenda, validarSubido, validarVenda } from "./leads-finance";
+
+const ok = { valorPrecatorio: 100000, valorProposta: 60000, comissaoPrevista: 6000, mesmoFundo: true, fundoNovo: null };
+
+describe("validarSubido", () => {
+  it("aceita um subido completo", () => expect(validarSubido(ok)).toBeNull());
+  it("exige os três valores e a proposta não pode passar do precatório", () => {
+    expect(validarSubido({ ...ok, valorPrecatorio: 0 })).toMatch(/precatório/);
+    expect(validarSubido({ ...ok, valorProposta: 0 })).toMatch(/proposta/);
+    expect(validarSubido({ ...ok, valorProposta: 120000 })).toMatch(/maior/);
+    expect(validarSubido({ ...ok, comissaoPrevista: 0 })).toMatch(/comissão/);
+  });
+  it("exige confirmar o fundo; se mudou, informar qual", () => {
+    expect(validarSubido({ ...ok, mesmoFundo: null })).toMatch(/fundo/);
+    expect(validarSubido({ ...ok, mesmoFundo: false })).toMatch(/fundo/);
+    expect(validarSubido({ ...ok, mesmoFundo: false, fundoNovo: "Fundo B" })).toBeNull();
+  });
+});
+
+describe("validarVenda", () => {
+  it("valida valores e data", () => {
+    expect(validarVenda({ valorRecebido: 6000, valorCliente: 60000, data: "2026-11-17" }, "2026-11-17")).toBeNull();
+    expect(validarVenda({ valorRecebido: 0, valorCliente: 60000, data: "2026-11-17" }, "2026-11-17")).toMatch(/comissão/);
+    expect(validarVenda({ valorRecebido: 6000, valorCliente: 0, data: "2026-11-17" }, "2026-11-17")).toMatch(/cliente/);
+    expect(validarVenda({ valorRecebido: 6000, valorCliente: 60000, data: "2026-11-18" }, "2026-11-17")).toMatch(/Data/);
+    expect(validarVenda({ valorRecebido: 6000, valorCliente: 60000, data: "17/11/2026" }, "2026-11-17")).toMatch(/Data/);
+  });
+});
+
+describe("canalDaOrigem", () => {
+  it("mapeia a origem da planilha", () => {
+    expect(canalDaOrigem("Inbound")).toBe("inbound");
+    expect(canalDaOrigem("INDICAÇÃO")).toBe("indicacao");
+    expect(canalDaOrigem("Parceiros")).toBe("indicacao");
+    expect(canalDaOrigem("Disparo")).toBe("outbound");
+    expect(canalDaOrigem(null)).toBe("outbound");
+  });
+});
+
+describe("aprovação e arquivo", () => {
+  it("só Diretor ou Head do negócio aprovam", () => {
+    expect(podeAprovarVenda({ diretor: true, headDoNegocio: false })).toBe(true);
+    expect(podeAprovarVenda({ diretor: false, headDoNegocio: true })).toBe(true);
+    expect(podeAprovarVenda({ diretor: false, headDoNegocio: false })).toBe(false);
+  });
+  it("nome de arquivo sem acento nem espaço", () => {
+    expect(nomeArquivoSeguro("Proposta João (final).pdf")).toBe("Proposta_Joao_final_.pdf");
+    expect(nomeArquivoSeguro("???")).toBe("anexo");
+  });
+});

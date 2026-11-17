@@ -9,11 +9,76 @@ import { classificarBalde, type StatusManual } from "@/lib/forecast";
 import { inicioMesBR, hojeBR } from "@/lib/data-br";
 import { ETAPAS_ABERTAS } from "@/lib/leads-cobranca";
 import { podeVerArea } from "@/lib/permissoes-analista";
+import LeadsFinanceView, { type LeadFinance, type MotivoFinance } from "@/components/leads/LeadsFinanceView";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ViewerContext } from "@/lib/preview";
 
-export default async function LeadsPage({ searchParams }: { searchParams: { visao?: string } }) {
+const COLUNAS_FINANCE =
+  "id, data, lead_nome, lead_telefone, sdr_profile_id, closer_profile_id, entrevistado, origem, tipo_precatorio, fundo_destino, status_followup, sub_valor_precatorio, sub_valor_proposta, sub_comissao_prevista, sub_mesmo_fundo, sub_fundo_novo, sub_anexo_path, subido_obs, venda_valor_recebido, venda_valor_cliente, venda_data, venda_obs, venda_recusa_motivo";
+
+/** Meus Leads do Vorp Finance (2026-11-17): Entrevista -> Subido -> Resolvendo pendência -> Venda. */
+async function LeadsFinance({ supabase, viewer }: { supabase: SupabaseClient; viewer: ViewerContext }) {
+  const { data: fin } = await supabase.from("negocios").select("id").eq("slug", "vorp-finance").maybeSingle();
+  const { data: vinc } = fin
+    ? await supabase.from("profile_negocios").select("cargo").eq("profile_id", viewer.effectiveId).eq("negocio_id", fin.id).maybeSingle()
+    : { data: null };
+  const diretor = viewer.effectiveRole === "diretor";
+  if (!fin || (!vinc && !diretor)) {
+    return (
+      <main className="mx-auto max-w-2xl px-6 py-16 text-center">
+        <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>
+        <p className="mt-2 text-sm text-stone-400">Meus Leads é do time do Vorp Finance.</p>
+      </main>
+    );
+  }
+  await supabase.from("profiles").update({ leads_visto_em: new Date().toISOString() }).eq("id", viewer.authUserId);
+
+  const [{ data: leadsRaw, error }, { data: motivosRaw }] = await Promise.all([
+    supabase.from("entrevistas_leads").select(COLUNAS_FINANCE).eq("negocio_id", fin.id).order("data", { ascending: false }).limit(1500),
+    supabase.from("motivos_perda_lead").select("id, nome, etapa").eq("ativo", true).order("ordem"),
+  ]);
+  logErroSupabase("LeadsPage: entrevistas_leads (Finance)", error);
+  const leads = (leadsRaw ?? []) as unknown as LeadFinance[];
+
+  const ids = Array.from(new Set(leads.flatMap((l) => [l.sdr_profile_id, l.closer_profile_id]).filter((x): x is string => !!x)));
+  const { data: pessoas } = ids.length > 0 ? await supabase.from("profiles").select("id, full_name").in("id", ids) : { data: [] as { id: string; full_name: string }[] };
+  const nomePorId = Object.fromEntries((pessoas ?? []).map((p) => [p.id, p.full_name as string]));
+
+  // Anexos ficam em bucket privado: gera links temporários (1 h).
+  const caminhos = leads.map((l) => l.sub_anexo_path).filter((p): p is string => !!p);
+  const anexoUrls: Record<string, string> = {};
+  if (caminhos.length > 0) {
+    const { data: urls } = await supabase.storage.from("leads-anexos").createSignedUrls(caminhos, 3600);
+    const porCaminho = new Map((urls ?? []).map((u) => [u.path, u.signedUrl]));
+    for (const l of leads) if (l.sub_anexo_path && porCaminho.get(l.sub_anexo_path)) anexoUrls[l.id] = porCaminho.get(l.sub_anexo_path)!;
+  }
+
+  return (
+    <main className="mx-auto max-w-[1600px] space-y-6 px-6 py-8">
+      <div>
+        <h1 className="font-display text-2xl text-gold-bright">Meus Leads</h1>
+        <p className="kicker mt-1">Vorp Finance — entrevistas, subidos, pendências e vendas (a venda conta depois da aprovação do Head)</p>
+      </div>
+      <LeadsFinanceView
+        leads={leads}
+        nomePorId={nomePorId}
+        podeAprovar={diretor || vinc?.cargo === "head"}
+        motivos={(motivosRaw ?? []) as MotivoFinance[]}
+        anexoUrls={anexoUrls}
+        hoje={hojeBR()}
+      />
+    </main>
+  );
+}
+
+export default async function LeadsPage({ searchParams }: { searchParams: { visao?: string; legado?: string } }) {
   const supabase = await createClient();
   const viewer = await getViewerContext(supabase);
   if (!viewer) return null;
+  // Meus Leads agora é o funil do Vorp Finance. O funil antigo (Matri) fica só para o Diretor, em ?legado=matri.
+  if (!(searchParams.legado === "matri" && viewer.realRole === "diretor" && !viewer.isPreview)) {
+    return <LeadsFinance supabase={supabase} viewer={viewer} />;
+  }
   const meRole = viewer.effectiveRole;
   const analistaLiberado = meRole === "analista" && (await podeVerArea(supabase, viewer.effectiveId, meRole, "leads"));
 

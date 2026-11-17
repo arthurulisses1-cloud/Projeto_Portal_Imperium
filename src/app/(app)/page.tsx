@@ -285,6 +285,15 @@ export default async function MuralPage({
     );
   }
 
+  // Meus Leads (cobranças de atualização) agora é só do time do Vorp Finance.
+  const { data: finMembro } = await supabase
+    .from("profile_negocios")
+    .select("negocio_id, negocios!inner(slug)")
+    .eq("profile_id", meId)
+    .eq("negocios.slug", "vorp-finance")
+    .limit(1);
+  const ehFinance = (finMembro ?? []).length > 0;
+
   // Head de um negócio (ex.: Arthur Barbosa, Vorp Finance) também lança vendas no Mural,
   // só do(s) negócio(s) que chefia (a RLS de vendas já restringe o insert a Diretor/Head).
   let lancarVendaHead: React.ReactNode = null;
@@ -384,7 +393,7 @@ export default async function MuralPage({
         <TarefasMuralWidget userId={meId} />
       )}
 
-      {(meRole === "closer" || meRole === "lider") && <LeadsCobrancaMural userId={meId} role={meRole} />}
+      {ehFinance && (meRole === "closer" || meRole === "lider") && <LeadsCobrancaMural userId={meId} role={meRole} />}
 
       {isAcademyRh && aulasCobrancaRh && <CobrancaFechamento aulas={aulasCobrancaRh} />}
 

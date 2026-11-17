@@ -11,6 +11,7 @@ import { nomeEquipe, buscarNegociosVisiveis, negocioEmFoco, veConsolidado, visua
 import MencoesBell from "@/components/ui/MencoesBell";
 import MinervaWidget from "@/components/minerva/MinervaWidget";
 import { limparPreview } from "./preview-actions";
+import PreviewPessoaSelector from "@/components/ui/PreviewPessoaSelector";
 import { IconLaurel, IconEye } from "@/components/ui/icons";
 import { buscarPendencias, temNovidadeMural, temNovidadeLeads } from "@/lib/pendencias";
 import { buscarUltimaSyncOk } from "@/lib/sync/status";
@@ -48,7 +49,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/tarefas", label: "Tarefas", roles: ["sdr", "closer", "lider", "diretor", "analista"], area: "tarefas" },
   // SDR só vê o funil de Repasse de Entrevistas (mesma rota, visão restrita).
-  { type: "link", href: "/leads", label: "Repasse de Entrevistas", roles: ["sdr"] },
   { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
   { type: "link", href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
   { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
@@ -177,6 +177,37 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     if (encontrada) previewPessoa = { id: encontrada.id, nome: encontrada.full_name, role: encontrada.role, tribo_id: encontrada.tribo_id };
   }
 
+  // Diretor pode "ver como" qualquer pessoa ativa (reativado em 2026-11-17, para revisar os fluxos).
+  let pessoasPreview: { id: string; nome: string; detalhe: string }[] = [];
+  if (profile?.role === "diretor" && user) {
+    const [{ data: pessoas }, { data: vinculos }] = await Promise.all([
+      supabase.from("profiles").select("id, full_name, role").neq("id", user.id).eq("ativo", true).neq("role", "diretor").order("full_name"),
+      supabase.from("profile_negocios").select("profile_id, principal, cargo, negocios(slug, nome, equipe_nome, status)"),
+    ]);
+    type V = { profile_id: string; principal: boolean; cargo: string; negocios: { nome: string; equipe_nome: string | null; status: string } | { nome: string; equipe_nome: string | null; status: string }[] | null };
+    const equipePor = new Map<string, string>();
+    for (const v of (vinculos ?? []) as unknown as V[]) {
+      const n = Array.isArray(v.negocios) ? v.negocios[0] : v.negocios;
+      if (!n || n.status !== "ativo") continue;
+      if (!equipePor.has(v.profile_id) || v.principal) equipePor.set(v.profile_id, (n.equipe_nome || n.nome) + (v.cargo === "head" ? " · Head" : ""));
+    }
+    const ROLE_LABEL: Record<string, string> = { lider: "Líder", closer: "Closer", sdr: "SDR", analista: "Analista", investidor: "Investidor" };
+    pessoasPreview = (pessoas ?? []).map((p) => ({ id: p.id, nome: p.full_name, detalhe: equipePor.get(p.id) ?? ROLE_LABEL[p.role] ?? p.role }));
+  }
+
+  // Meus Leads (funil do Vorp Finance): só para quem está no Finance (e o Diretor). Vale para a pessoa
+  // "vista" quando o Diretor está em pré-visualização.
+  let ehConsultorFinance = false;
+  if (user && profile) {
+    const { data: fin } = await supabase
+      .from("profile_negocios")
+      .select("negocio_id, negocios!inner(slug)")
+      .eq("profile_id", previewPessoa?.id ?? user.id)
+      .eq("negocios.slug", "vorp-finance")
+      .limit(1);
+    ehConsultorFinance = (fin ?? []).length > 0;
+  }
+
   const papelVisualizado = previewPessoa?.role ?? profile?.role;
 
   const papelAtual = papelVisualizado ?? profile?.role;
@@ -194,7 +225,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     return rolesDoItem.includes(papelAtual ?? profile.role);
   }
 
-  const itensVisiveis: NavEntry[] = NAV_ITEMS.filter((item) => visivelParaMim(item.roles, item.area)).map((entry) => {
+  const itensVisiveis: NavEntry[] = NAV_ITEMS.filter((item) => visivelParaMim(item.roles, item.area)).flatMap((entry) => {
     const { roles, area, ...rest } = entry;
     void roles;
     void area;
@@ -220,6 +251,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
     return rest;
   });
+  // Meus Leads: Finance (consultores e Head) e o Diretor; entra logo depois de Tarefas.
+  if (ehConsultorFinance || (papelAtual === "diretor" && !previewPessoa)) {
+    const pos = itensVisiveis.findIndex((i) => i.type === "link" && i.href === "/tarefas");
+    itensVisiveis.splice(pos >= 0 ? pos + 1 : 1, 0, { type: "link", href: "/leads", label: "Meus Leads" });
+  }
 
   // Exceção pontual (ver src/lib/acessos-especiais.ts): Forecast liberado
   // pra 2 SDRs específicos, sem virar um papel novo — não usa
@@ -284,6 +320,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </p>
             </div>
           </div>
+
+          {profile?.role === "diretor" && <PreviewPessoaSelector pessoas={pessoasPreview} atual={previewProfileId} />}
 
           <div className="overflow-y-auto p-3">
             <AppNav items={itensVisiveis} pendencias={pendencias} destaques={destaques} />
