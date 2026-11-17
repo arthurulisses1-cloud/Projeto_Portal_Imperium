@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 // as contagens batem com o funil e o ranking. Só Diretor, Líder e Analista com acesso a Dados.
 
 const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-const CANAL: Record<string, string> = { outbound: "Outbound", inbound: "Inbound", indicacao: "Indicação" };
+const CANAL: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", alternativo: "Canais alternativos" };
 const SITUACAO: Record<SituacaoReuniao, { texto: string; classe: string }> = {
   a_acontecer: { texto: "A acontecer", classe: "border-gold/50 text-gold-bright" },
   realizada: { texto: "Realizada", classe: "border-success/50 text-success-bright" },

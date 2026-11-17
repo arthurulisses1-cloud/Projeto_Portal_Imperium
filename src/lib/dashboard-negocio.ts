@@ -5,7 +5,16 @@ import { buscarPaceNegocios, limitesDoMes, type PaceNegocio } from "@/lib/pace-n
 import { PARAMETROS, indiceMes, vendasDoMes } from "@/lib/forecast-negocios";
 import { buscarGanhosCrm } from "@/lib/recebido-crm";
 
-export type MixCanal = { canal: "outbound" | "inbound" | "indicacao" | "sem_canal"; qtd: number; valor: number };
+export type MixCanal = { canal: "outbound" | "inbound" | "indicacao" | "alternativo" | "sem_canal"; qtd: number; valor: number };
+
+/** Vendas de canais alternativos (fora dos funis): somam no recebido, aparecem num bloco sem funil. */
+export type VendasAlternativas = {
+  qtd: number;
+  valor: number;
+  mrr: number;
+  porCanal: { canal: string; qtd: number; valor: number; mrr: number }[];
+  vendas: { id: string; data: string; cliente: string | null; canal: string; valor: number; mrr: number | null; vendedor: string }[];
+};
 
 export type EsforcoKpi = {
   chave: string;
@@ -30,6 +39,7 @@ export type DashboardNegocio = {
   previsto: { vendas: number; outbound: number; inbound: number; referidos: number } | null;
   esforco: EsforcoKpi[];
   ultimas: { id: string; data: string; cliente: string | null; valor: number; vendedor: string }[];
+  alternativas: VendasAlternativas;
 };
 
 export async function buscarDashboardNegocio(supabase: SupabaseClient, slug: string, ano: number, mes: number, hoje: string): Promise<DashboardNegocio | null> {
@@ -42,7 +52,7 @@ export async function buscarDashboardNegocio(supabase: SupabaseClient, slug: str
   const [{ data: vendas }, { data: kpis }, { data: perfis }, { data: defs }, ganhosCrm] = await Promise.all([
     supabase
       .from("vendas")
-      .select("id, valor, canal, data, cliente, profile_id")
+      .select("id, valor, canal, canal_origem, mrr, data, cliente, profile_id")
       .eq("negocio_id", negocioId)
       .gte("data", inicio)
       .lt("data", fimExcl)
@@ -58,7 +68,8 @@ export async function buscarDashboardNegocio(supabase: SupabaseClient, slug: str
 
   // Negócio com recebidoPeloCrm (Energy): vendas do mês = Ganhos do CRM (mesma fonte do Recebido).
   const crm = ganhosCrm.get(negocioId);
-  const lista: { id: string; valor: number; canal: string | null; data: string; cliente: string | null; profile_id: string | null }[] = crm
+  type LinhaVenda = { id: string; valor: number; canal: string | null; canal_origem?: string | null; mrr?: number | null; data: string; cliente: string | null; profile_id: string | null };
+  const lista: LinhaVenda[] = crm
     ? crm.map((g) => ({ id: g.id, valor: g.valor, canal: g.canal, data: g.data, cliente: g.cliente, profile_id: null }))
     : vendas ?? [];
   const qtd = lista.length;
@@ -104,6 +115,7 @@ export async function buscarDashboardNegocio(supabase: SupabaseClient, slug: str
     vendas: { qtd, ticketMedio: qtd > 0 ? total / qtd : 0, mix: Array.from(mixMap.values()).sort((a, b) => b.valor - a.valor) },
     previsto,
     esforco: Array.from(porKpi.values()),
+    alternativas: montarAlternativas(lista.filter((v) => v.canal === "alternativo"), nomePor),
     ultimas: lista.slice(0, 8).map((v) => ({
       id: v.id,
       data: v.data,
@@ -111,5 +123,37 @@ export async function buscarDashboardNegocio(supabase: SupabaseClient, slug: str
       valor: Number(v.valor),
       vendedor: (v.profile_id && nomePor.get(v.profile_id)) || "—",
     })),
+  };
+}
+
+function montarAlternativas(
+  vendas: { id: string; valor: number; canal_origem?: string | null; mrr?: number | null; data: string; cliente: string | null; profile_id: string | null }[],
+  nomePor: Map<string, string>,
+): VendasAlternativas {
+  const porCanal = new Map<string, { canal: string; qtd: number; valor: number; mrr: number }>();
+  for (const v of vendas) {
+    const canal = v.canal_origem ?? "sem_canal";
+    const atual = porCanal.get(canal) ?? { canal, qtd: 0, valor: 0, mrr: 0 };
+    atual.qtd += 1;
+    atual.valor += Number(v.valor);
+    atual.mrr += Number(v.mrr ?? 0);
+    porCanal.set(canal, atual);
+  }
+  return {
+    qtd: vendas.length,
+    valor: vendas.reduce((s, v) => s + Number(v.valor), 0),
+    mrr: vendas.reduce((s, v) => s + Number(v.mrr ?? 0), 0),
+    porCanal: Array.from(porCanal.values()).sort((a, b) => b.valor - a.valor),
+    vendas: vendas
+      .map((v) => ({
+        id: v.id,
+        data: v.data,
+        cliente: v.cliente,
+        canal: v.canal_origem ?? "sem_canal",
+        valor: Number(v.valor),
+        mrr: v.mrr == null ? null : Number(v.mrr),
+        vendedor: (v.profile_id && nomePor.get(v.profile_id)) || "—",
+      }))
+      .sort((a, b) => b.data.localeCompare(a.data)),
   };
 }

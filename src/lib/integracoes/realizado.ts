@@ -326,7 +326,9 @@ export function calcularFunilUnico(deals: DealCrm[], eventos: EventoCrm[], funil
 export type VendaCrm = {
   deal_id: string;
   data: string;
-  canal: CanalPortal;
+  /** Canal do funil, ou "alternativo" (canal do CRM fora dos funis, em canal_origem). */
+  canal: CanalPortal | "alternativo";
+  canal_origem: string | null;
   valor: number;
   mrr: number | null;
   cliente: string | null;
@@ -346,14 +348,22 @@ export function vendasGanhas(deals: DealCrm[], eventos: EventoCrm[], cfg: Config
   const out: VendaCrm[] = [];
   for (const d of deals) {
     if (d.status !== "won" || !d.stage_id || !cfg.stagesGanhoVenda.includes(d.stage_id)) continue;
-    const canal = canalPortal(d, cfg);
+    // Canal fora dos funis (Social Selling, Google, Parceiros…): venda de canal alternativo, conta no recebido.
+    const canal = canalPortal(d, cfg) ?? (d.canal ? "alternativo" : null);
     if (!canal) continue;
+    // Canal com closers definidos (ex.: Social Selling na Acrópole): só entra se quem fez a call for do time.
+    const permitidos = canal === "alternativo" && d.canal ? cfg.closersPorCanal?.[d.canal] : undefined;
+    if (permitidos) {
+      const daCall = d.closer_user_id ?? responsavelNoGanho?.get(d.deal_id) ?? d.responsavel_user_id;
+      if (!daCall || !permitidos.includes(daCall)) continue;
+    }
     const quando = chegada.get(d.deal_id)?.[NIVEL.venda] ?? d.fechado_em;
     if (!quando) continue;
     out.push({
       deal_id: d.deal_id,
       data: dataBR(quando),
       canal,
+      canal_origem: canal === "alternativo" ? d.canal : null,
       valor: Number(d.valor ?? 0),
       mrr: d.mrr != null && Number(d.mrr) > 0 ? Number(d.mrr) : null,
       cliente: d.empresa || d.nome,

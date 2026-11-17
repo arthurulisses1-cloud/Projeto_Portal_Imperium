@@ -402,6 +402,7 @@ async function sincronizarVendas(
       tipo: "individual",
       origem: "pipefacil",
       canal: g.canal,
+      ...(g.canal_origem ? { canal_origem: g.canal_origem } : {}),
       valor: g.valor,
       valor_antecipado: g.valor,
       mrr: g.mrr,
@@ -416,7 +417,9 @@ async function sincronizarVendas(
     manter.add(g.deal_id);
     const id = idPorDeal.get(g.deal_id);
     // Sem a migration 0113 (vendas.profile_id opcional), venda sem dono é recusada pelo banco: fica de fora.
-    const semDonoRecusada = (e: { code?: string } | null) => !closer && e?.code === "23502";
+    // Sem a migration 0115 (canal "alternativo" e canal_origem), a venda de canal alternativo é recusada.
+    const semDonoRecusada = (e: { code?: string } | null) =>
+      (!closer && e?.code === "23502") || (g.canal === "alternativo" && (e?.code === "23514" || e?.code === "42703" || e?.code === "PGRST204"));
     if (id) {
       const { error } = await supabase.from("vendas").update(campos).eq("id", id);
       if (semDonoRecusada(error)) continue;

@@ -28,7 +28,7 @@ export type LeadEtapa = { nome: string; responsavel: string | null; preVendas: s
 
 export type FunilDoCanal = { canal: CanalDoFunil; titulo: string; etapas: EtapaFunil[] };
 
-const TITULO: Record<CanalDoFunil, string> = { outbound: "Outbound", inbound: "Inbound", indicacao: "Indicação" };
+const TITULO: Record<CanalDoFunil, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos" };
 
 function etapasDe(slug: string, canal: "outbound" | "inbound"): string[] {
   const reuniao = slug === "vorp-finance" ? "Entrevistas" : "Reuniões";
@@ -66,7 +66,7 @@ export function funisDoMes(slug: string, ano: number, mes: number): FunilDoCanal
     funis.push({
       canal: "indicacao",
       titulo: TITULO.indicacao,
-      etapas: montar(["Leads indicados", "Reuniões realizadas", "Vendas"], ETAPAS_PORTAL.indicacao, { volume: leads / ramp, taxas: p.referidos.taxas }, ramp),
+      etapas: montar(["Leads referidos", "Reuniões realizadas", "Vendas"], ETAPAS_PORTAL.indicacao, { volume: leads / ramp, taxas: p.referidos.taxas }, ramp),
     });
   }
   return funis;

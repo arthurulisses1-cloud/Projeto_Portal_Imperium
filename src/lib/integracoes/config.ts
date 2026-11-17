@@ -5,7 +5,9 @@
 export const NIVEL = { entrada: 0, conectado: 1, agendada: 2, realizada: 3, proposta: 4, venda: 5 } as const;
 export type Nivel = (typeof NIVEL)[keyof typeof NIVEL];
 
-/** Canal do portal. No CRM: outbound = "outbound", inbound = "trafego" (Tráfego Pago), indicação = "indicacao". */
+/** Canal do portal (funis com taxas). No CRM: outbound = "outbound", inbound = "trafego" (Tráfego Pago),
+ *  indicacao = "referido" (Referidos: indicação pega na call de vendas). Qualquer outro canal preenchido é
+ *  "canal alternativo": a venda entra no recebido, sem funil (17/11/2026). */
 export type CanalPortal = "outbound" | "inbound" | "indicacao";
 
 export type ConfigCrm = {
@@ -34,6 +36,9 @@ export type ConfigCrm = {
   campos: { faturamento?: string; cargo?: string; tamanhoTime?: string; /** Campo de MRR (padrão "mrr"). */ mrr?: string };
   /** MQL (inbound): valores aceitos de cada critério; o lead precisa atender todos os critérios definidos. */
   mql: Partial<Record<CriterioMql, string[]>>;
+  /** Canal alternativo cuja venda só entra se o closer que fez a call (campo Closer; sem ele, o responsável
+   *  no Ganho) for um destes usuários do Pipefácil. */
+  closersPorCanal?: Record<string, string[]>;
   /** E-mail do Pipefácil → e-mail do login no portal, para quem ainda está com e-mails diferentes. Plano B:
    *  vale só se o e-mail do Pipefácil não tiver conta no portal. */
   emailsAlternativos?: Record<string, string>;
@@ -100,12 +105,22 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "15f65232-76e8-4c24-93d0-a52c6c477998": NIVEL.entrada, // Inbound SDR: SEM CONEXÃO
     },
     regressaoDesfaz: true,
+    // Social Selling só entra com closer do comercial que fez a call (17/11/2026). Bruno Brito (closer novo)
+    // entra aqui quando tiver usuário no Pipefácil.
+    closersPorCanal: {
+      social_selling: [
+        "cmq9hl04y007540mzmda6ebng", // Arthur Ulisses
+        "efaa951d-455a-4148-ba3a-fa3b5f4bafd9", // Jorge Abudi
+        "2acc1ce9-0160-4bf9-8526-4f799604143a", // Vinícius Anastácio Ferreira
+        "7d0660e3-9acb-4266-93db-cfdee71e2289", // Marcus Ryquelme
+      ],
+    },
     // Login do portal ainda com outro e-mail (17/11/2026), até ajustarem lá.
     emailsAlternativos: { "arthur.ulisses@grupovorp.com": "arthurulisses1@gmail.com" },
     motivosLeadFalso: ["Lead Falso"], // motivo de perda criado no Pipefácil em 16/11/2026
     pipelinesSemNivelNaCriacao: ["cmq9wwt6u024441npj37o5f2y"], // [Vorp] Funil de Vendas
     stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],
-    canais: { outbound: "outbound", trafego: "inbound", indicacao: "indicacao" },
+    canais: { outbound: "outbound", trafego: "inbound", referido: "indicacao" },
     campos: { faturamento: "quanto_sua_empresa_fatura_por_mes", cargo: "qual_seu_cargo_atual" },
     mql: {
       faturamento: [
@@ -150,16 +165,9 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "8c448cb1-7c1a-4244-bb64-690a70f453d0": NIVEL.venda, // Ganho
     },
     stagesGanhoVenda: ["8c448cb1-7c1a-4244-bb64-690a70f453d0", "31aab8a9-79f7-4824-b229-4d1a4eac8319"],
-    // Inbound = só Tráfego Pago (Google, Instagram, WhatsApp IA ficam fora).
-    canais: {
-      outbound: "outbound",
-      trafego: "inbound",
-      indicacao_cliente: "indicacao",
-      indicacao_investidor: "indicacao",
-      parceiros: "indicacao",
-      "Indicação Cliente": "indicacao",
-      "Indicação Investidor": "indicacao",
-    },
+    // Inbound = só Tráfego Pago; Referidos = "Referido". Google, Instagram, WhatsApp IA, Parceiros, Indicação
+    // de cliente/investidor etc. são canais alternativos (vendas sem funil).
+    canais: { outbound: "outbound", trafego: "inbound", referido: "indicacao" },
     campos: { faturamento: "faturamento_mensal", cargo: "cargo", tamanhoTime: "tamanho_do_time", mrr: "mrr_competencia" }, // "MRR Competência" (aba Principal)
     // MQL: faturamento a partir de 50 mil/mês e mais de 2 vendedores.
     mql: {

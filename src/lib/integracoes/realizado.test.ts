@@ -267,12 +267,13 @@ describe("Galáticos (MatchSales)", () => {
     expect(ehMql({ faturamento: "entre_100_e_150_mil", cargo: "dono_socio", tamanho_time: null }, ms)).toBe(false);
   });
 
-  it("inbound só Tráfego Pago; indicação de cliente/investidor e parceiros; Google fica fora", () => {
+  it("inbound só Tráfego Pago; Referidos só o canal Referido; Google, indicação de cliente e parceiros ficam fora dos funis", () => {
     const deals = [
       deal({ deal_id: "t", canal: "trafego", criado_em: "2026-11-05T13:00:00Z", faturamento: "entre_150_e_300_mil", tamanho_time: "entre_5_e_20_vendedores" }),
       deal({ deal_id: "g", canal: "google", criado_em: "2026-11-05T13:00:00Z" }),
       deal({ deal_id: "i", canal: "indicacao_cliente", criado_em: "2026-11-05T13:00:00Z" }),
       deal({ deal_id: "p", canal: "parceiros", criado_em: "2026-11-06T13:00:00Z" }),
+      deal({ deal_id: "r", canal: "referido", criado_em: "2026-11-06T13:00:00Z" }),
     ];
     const eventos = [
       ev("t", MS.atendimentoIa, "2026-11-05T13:05:00Z"), // conversa com a IA não é conexão
@@ -287,7 +288,7 @@ describe("Galáticos (MatchSales)", () => {
     expect(r.find((x) => x.canal === "inbound" && x.etapa === "conectados")?.data).toBe("2026-11-06");
     expect(total(r, "inbound", "reunioes_realizadas")).toBe(1);
     expect(total(r, "inbound", "propostas")).toBe(1);
-    expect(total(r, "indicacao", "leads_indicados")).toBe(2);
+    expect(total(r, "indicacao", "leads_indicados")).toBe(1); // só o Referido
   });
 
   it("Ganho do Inbound e do Outbound viram venda; closer = responsável", () => {
@@ -538,5 +539,37 @@ describe("venda desfeita", () => {
     const r = calcularRealizadoCrm([deal({ deal_id: "w", status: "won" }), deal({ deal_id: "l", status: "lost" })], eventos, cfg, "2026-11-01", "2026-12-01");
     expect(total(r, "outbound", "vendas")).toBe(1);
     expect(total(r, "outbound", "propostas")).toBe(2); // a proposta e a reunião aconteceram
+  });
+});
+
+describe("vendas de canais alternativos", () => {
+  it("Ganho de canal fora dos funis vira venda 'alternativo' com o canal do CRM; sem canal não vira venda", () => {
+    const deals = [
+      deal({ deal_id: "ss", canal: "network", status: "won", stage_id: ST.ganhoVendas, valor: 5000 }),
+      deal({ deal_id: "ref", canal: "referido", status: "won", stage_id: ST.ganhoVendas, valor: 3000 }),
+      deal({ deal_id: "nada", canal: null, status: "won", stage_id: ST.ganhoVendas, valor: 1000 }),
+    ];
+    const eventos = deals.map((d) => ev(d.deal_id, ST.ganhoVendas, "2026-11-10T15:00:00Z"));
+    const v = vendasGanhas(deals, eventos, cfg);
+    expect(v.map((x) => [x.deal_id, x.canal, x.canal_origem])).toEqual([
+      ["ss", "alternativo", "network"],
+      ["ref", "indicacao", null],
+    ]);
+    // no funil, o canal alternativo não conta
+    const r = calcularRealizadoCrm(deals, eventos, cfg, "2026-11-01", "2026-12-01");
+    expect(r.some((x) => x.etapa === "vendas" && x.canal !== "indicacao")).toBe(false);
+  });
+});
+
+describe("Social Selling na Acrópole", () => {
+  it("venda de Social Selling só entra se o closer que fez a call for do comercial", () => {
+    const JORGE = "efaa951d-455a-4148-ba3a-fa3b5f4bafd9";
+    const deals = [
+      deal({ deal_id: "com", canal: "social_selling", status: "won", stage_id: ST.ganhoVendas, valor: 5000, closer_user_id: JORGE }),
+      deal({ deal_id: "fora", canal: "social_selling", status: "won", stage_id: ST.ganhoVendas, valor: 4000, closer_user_id: "outra-pessoa" }),
+      deal({ deal_id: "rede", canal: "network", status: "won", stage_id: ST.ganhoVendas, valor: 3000, closer_user_id: "outra-pessoa" }),
+    ];
+    const eventos = deals.map((d) => ev(d.deal_id, ST.ganhoVendas, "2026-11-10T15:00:00Z"));
+    expect(vendasGanhas(deals, eventos, cfg).map((v) => v.deal_id)).toEqual(["com", "rede"]); // a regra é só do Social Selling
   });
 });

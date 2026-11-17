@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-const CANAL: Record<MixCanal["canal"], string> = { outbound: "Outbound", inbound: "Inbound", indicacao: "Indicação", sem_canal: "Sem canal" };
+const CANAL: Record<MixCanal["canal"], string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", alternativo: "Canais alternativos", sem_canal: "Sem canal" };
 const STATUS: Record<StatusPace, { texto: string; classe: string }> = {
   sem_meta: { texto: "Sem meta", classe: "border-imperium-line text-stone-400" },
   adiantado: { texto: "Adiantado", classe: "border-success/50 text-success-bright" },
@@ -188,7 +188,7 @@ export default async function NegocioDashboardPage({
       console.error("ranking do CRM falhou:", e);
     }
   }
-  const CANAL_LEAD: Record<string, string> = { outbound: "Outbound", inbound: "Inbound", indicacao: "Indicação" };
+  const CANAL_LEAD: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos" };
   const rankings = (RANKINGS[atual.slug] ?? [])
     .map((k) => dados.esforco.find((e) => e.chave === k) ?? (rankingCrm?.[k] ? { chave: k, label: LABEL_RANKING[k] ?? k, meta: 0, realizado: 0, porPessoa: [] } : undefined))
     .filter((e): e is NonNullable<typeof e> => !!e)
@@ -486,6 +486,53 @@ export default async function NegocioDashboardPage({
       {/* Energy: contas na plataforma Sunne (todos os canais) até a validação e o desfecho */}
       {atual.slug === "vorp-energy" && sunne && <ContasSunne contas={sunne.contas} consolidado={sunne.consolidado} cor={cor} mesLabel={`${String(mes).padStart(2, "0")}/${ano}`} />}
 
+      {/* Vendas de canais alternativos: fora dos funis, somam no recebido */}
+      {comVisoes && (
+        <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Vendas de canais alternativos · fora dos funis, somam no recebido</p>
+            <p className="text-xs text-stone-400">
+              <span className="text-stone-100">{dados.alternativas.qtd}</span> {dados.alternativas.qtd === 1 ? "venda" : "vendas"} ·{" "}
+              <span className="text-stone-100">{moeda(dados.alternativas.valor)}</span>
+              {dados.alternativas.mrr > 0 && (
+                <>
+                  {" "}
+                  · MRR <span className="text-stone-100">{moeda(dados.alternativas.mrr)}</span>
+                </>
+              )}
+            </p>
+          </div>
+          {dados.alternativas.qtd === 0 ? (
+            <p className="mt-2 text-sm text-stone-500">Nenhuma venda de canal alternativo no mês.</p>
+          ) : (
+            <>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {dados.alternativas.porCanal.map((c) => (
+                  <span key={c.canal} className="rounded-md border border-imperium-line bg-imperium-raised px-2.5 py-1.5 text-xs">
+                    <span className="text-stone-300">{nomeCanalOrigem(c.canal)}</span> <span className="font-semibold text-stone-100">{c.qtd}</span>
+                    <span className="text-stone-500"> · {moeda(c.valor)}</span>
+                  </span>
+                ))}
+              </div>
+              <ul className="mt-3 divide-y divide-imperium-line/60 text-sm">
+                {dados.alternativas.vendas.map((v) => (
+                  <li key={v.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5">
+                    <span className="w-12 shrink-0 text-xs text-stone-500">
+                      {v.data.slice(8, 10)}/{v.data.slice(5, 7)}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-stone-200">{v.cliente ?? "—"}</span>
+                    <span className="w-36 shrink-0 text-xs text-stone-400">{nomeCanalOrigem(v.canal)}</span>
+                    <span className="w-40 shrink-0 truncate text-xs text-stone-500">{v.vendedor}</span>
+                    <span className="w-24 shrink-0 text-right text-stone-100">{moeda(v.valor)}</span>
+                    <span className="w-28 shrink-0 text-right text-xs text-stone-500">{v.mrr ? `MRR ${moeda(v.mrr)}` : ""}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
+
       {/* Rankings dos indicadores-chave */}
       {rankings.length > 0 && (
         <div className={`grid gap-4 ${rankings.length >= 3 ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
@@ -731,6 +778,22 @@ const MEDALHAS: ({ cor: string; brilho: string } | undefined)[] = [
   { cor: "#a8b0ba", brilho: "#f4f6f8" },
   { cor: "#b8733a", brilho: "#f6d2b0" },
 ];
+
+/** Nome do canal do CRM (valor do campo Canal) para exibir. */
+const CANAIS_CRM: Record<string, string> = {
+  social_selling: "Social Selling",
+  indicacao: "Indicação",
+  indicacao_cliente: "Indicação Cliente",
+  indicacao_investidor: "Indicação Investidor",
+  base_de_clientes: "Base de Clientes",
+  base_de_leads: "Base de Leads",
+  whatsapp_ia: "WhatsApp IA",
+  linkedin: "LinkedIn",
+  sem_canal: "Sem canal",
+};
+function nomeCanalOrigem(c: string) {
+  return CANAIS_CRM[c] ?? c.split("_").map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+}
 
 const LABEL_RANKING: Record<string, string> = { reunioes_agendadas: "Reuniões agendadas", reunioes_realizadas: "Reuniões realizadas" };
 
