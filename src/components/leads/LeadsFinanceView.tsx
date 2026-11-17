@@ -261,6 +261,7 @@ export default function LeadsFinanceView({
       <div className="grid gap-4 lg:grid-cols-4">
         {COLUNAS_FINANCE.map((col) => {
           const cards = abertos.filter((l) => (col.etapas as string[]).includes(l.status_followup));
+          const comissao = cards.reduce((t, l) => t + (l.sub_comissao_prevista ?? 0), 0);
           return (
             <section
               key={col.chave}
@@ -271,9 +272,12 @@ export default function LeadsFinanceView({
                 if (l) soltar(l, col.chave);
               }}
             >
-              <div className="mb-2 flex items-baseline justify-between">
-                <p className="text-sm font-semibold text-stone-100">{col.label}</p>
-                <span className="text-xs text-stone-500">{cards.length}</span>
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <p className="min-w-0 text-sm font-semibold text-stone-100">
+                  {col.label}
+                  {comissao > 0 && <span className="ml-2 font-semibold text-gold-bright" title="Soma da comissão prevista dos leads desta etapa">{moeda(comissao)}</span>}
+                </p>
+                <span className="shrink-0 text-xs text-stone-500">{cards.length}</span>
               </div>
               <div className="space-y-2">
                 {cards.length === 0 && <p className="text-xs text-stone-600">Nenhum lead.</p>}
