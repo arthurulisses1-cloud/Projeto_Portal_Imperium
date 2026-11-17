@@ -7,7 +7,7 @@ import { hojeBR } from "@/lib/data-br";
 import { CRM_POR_NEGOCIO, INICIO_HISTORICO, INICIO_REALIZADO, TRESC_POR_NEGOCIO, type ConfigCrm } from "./config";
 import { buscarLigacoesDoDia, contarAlosConexoes, contarPorPessoa } from "./tresc";
 import { Pipefacil, type AtividadePipefacil, type DealPipefacil } from "./pipefacil";
-import { calcularFunilUnico, contarPorDia, creditarPessoas, detalharVisoes, etapaBase, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
+import { calcularFunilUnico, contarPorDia, creditarPessoas, detalharVisoes, etapaBase, montarFollow, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { ETAPAS_COM_LISTA } from "./leads-funil";
 import { montarAuditoria } from "./auditoria";
 import { identidadesDosDeals } from "./contatos";
@@ -121,6 +121,7 @@ function dealParaLinha(negocioId: string, d: DealPipefacil, cfg: ConfigCrm): Dea
     fechado_em: d.closedAt,
     motivo_perda: TEXTO(d.lostReason),
     origem: campos.origem ? TEXTO(p[campos.origem]) : null,
+    temperatura: cfg.follow ? TEXTO(p[cfg.follow.campoTemperatura]) : null,
     synced_at: new Date().toISOString(),
   };
 }
@@ -181,6 +182,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
       delete linha.tamanho_time;
       delete linha.motivo_perda;
       delete linha.origem;
+      delete linha.temperatura;
       delete linha.implantacao;
       if (identidade) {
         linha.telefone_hash = identidade.lista[i].telefoneHash;
@@ -304,6 +306,11 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
         Object.entries(ranking).map(([etapa, pessoas]) => [etapa, pessoas.map((p) => ({ nome: (p.pessoa && nomesUsuarios[p.pessoa]) || "Sem responsável", total: p.leads.length, leads: p.leads }))]),
       );
       await supabase.from("integracao_estado").upsert({ chave: `ranking:${slug}:${mes}`, valor, atualizado_em: new Date().toISOString() });
+    }
+    // Cards de valor do Dashboard (negócios com follow): vendido de cada mês e follow de agora.
+    if (cfg.follow) {
+      const valor = { atualizado_em: new Date().toISOString(), ...montarFollow(linhasDeals, eventos, cfg, responsaveis, visoesTime) };
+      await supabase.from("integracao_estado").upsert({ chave: `follow:${slug}`, valor, atualizado_em: valor.atualizado_em });
     }
     for (let mes = inicio.slice(0, 7); mes < fimExcl.slice(0, 7); mes = inicioDoMes(`${mes}-01`, 1).slice(0, 7)) {
       const lista = porMes.get(mes) ?? {};

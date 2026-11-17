@@ -18,6 +18,10 @@ export type DealCrm = {
   motivo_perda?: string | null;
   /** Origem do lead quando difere do canal (só em memória; vai para as listas do hover). */
   origem?: string | null;
+  /** Temperatura do lead no follow (só em memória; vai para os cards de valor). */
+  temperatura?: string | null;
+  /** Funil em que o lead está (id do Pipefácil). */
+  pipeline_id?: string | null;
   /** Valor da implantação/setup cadastrado no lead (só em memória; vai para a venda, não para crm_deals). */
   implantacao?: number | null;
   status: string | null;
@@ -417,4 +421,38 @@ export function creditarPessoas(itens: LeadDoRealizado[], eventos: EventoCrm[], 
     if (quem) out.push({ ...it, etapa: `pv:${quem}:${it.etapa}` });
   }
   return out;
+}
+
+// ---------------------------------------------------------------- cards de valor (vendido e follow)
+export type LeadValor = { canal: CanalPortal; nome: string; valor: number; temperatura: string | null; pessoa: string | null; data?: string };
+export type FollowGravado = { atualizado_em: string; abertos: LeadValor[]; vendas: Record<string, LeadValor[]> };
+
+/**
+ * Follow (foto de agora): os leads abertos no funil do follow (Funil de Vendas), com valor e temperatura.
+ * Vendido: as vendas de cada mês do intervalo (as mesmas da etapa Vendas do funil). Os dois com o
+ * pré-vendas que agendou (mesma regra do filtro do funil). Só os canais com funil (outbound e inbound).
+ */
+export function montarFollow(
+  deals: DealCrm[],
+  eventos: EventoCrm[],
+  cfg: ConfigCrm,
+  responsaveis: Map<string, [string, string][]>,
+  vendasDoPeriodo: LeadDoRealizado[],
+): Omit<FollowGravado, "atualizado_em"> {
+  const marcos = marcosPorLead(eventos, cfg);
+  const quem = (d: DealCrm) => responsavelNoAgendamento(d, marcos.get(d.deal_id), responsaveis.get(d.deal_id));
+  const nome = (d: DealCrm) => d.nome || d.empresa || "(sem nome)";
+  const comFunil = (c: CanalPortal | null): c is "outbound" | "inbound" => c === "outbound" || c === "inbound";
+  const abertos: LeadValor[] = [];
+  for (const d of deals) {
+    const canal = canalPortal(d, cfg);
+    if (!cfg.follow || d.pipeline_id !== cfg.follow.pipelineId || d.status !== "open" || !comFunil(canal)) continue;
+    abertos.push({ canal, nome: nome(d), valor: Number(d.valor ?? 0), temperatura: d.temperatura ?? null, pessoa: quem(d) });
+  }
+  const vendas: Record<string, LeadValor[]> = {};
+  for (const v of vendasDoPeriodo) {
+    if (etapaBase(v.etapa) !== "vendas" || v.etapa.includes(":") || !comFunil(v.canal)) continue;
+    (vendas[v.data.slice(0, 7)] ??= []).push({ canal: v.canal, nome: nome(v.deal), valor: Number(v.deal.valor ?? 0), temperatura: v.deal.temperatura ?? null, pessoa: quem(v.deal), data: v.data });
+  }
+  return { abertos: abertos.sort((a, b) => b.valor - a.valor), vendas };
 }
