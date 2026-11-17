@@ -51,10 +51,10 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   const quote = quotes && quotes.length > 0 ? quotes[(dayOfYear + 1) % quotes.length] : null;
 
   // ---------- Comissão do mês: o que a pessoa tem agora x o que teria no pace ----------
-  const slugs = vinculos.map((v) => v.negocio.slug);
   let comissao: { atual: number; base: number; desagio: number; noPace: number | null; equipe: string | null } | null = null;
   try {
-    const dados = ehDiretor ? await buscarComissoesNegocios(supabase, ano, mes) : slugs.length > 0 ? await buscarComissoesNegocios(supabase, ano, mes, slugs) : [];
+    // Todos os negócios: a pessoa também recebe de vendas de outras BUs em que participou.
+    const dados = await buscarComissoesNegocios(supabase, ano, mes);
     let atual = 0;
     let desagio = 0;
     for (const d of dados) {

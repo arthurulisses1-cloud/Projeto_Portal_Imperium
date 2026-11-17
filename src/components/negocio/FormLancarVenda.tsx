@@ -65,6 +65,15 @@ export default function FormLancarVenda({
                   {v.nome} · {CARGO_LABEL[v.cargo] ?? v.cargo}
                 </option>
               ))}
+              <optgroup label="Consultor de outra BU">
+                {todos
+                  .filter((p) => !vendedores.some((v) => v.id === p.id))
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.full_name}
+                    </option>
+                  ))}
+              </optgroup>
             </select>
           </label>
           <label className="text-xs text-stone-400">

@@ -2,9 +2,10 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import ExplicacaoComissaoFinance from "@/components/negocio/ExplicacaoComissaoFinance";
 import { getViewerContext } from "@/lib/preview";
 import { hojeBR } from "@/lib/data-br";
-import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
+import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe, veConsolidado } from "@/lib/negocios";
 import { buscarComissoesNegocios, type ComissaoNegocio, type PapelComissao } from "@/lib/comissao-negocio";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +53,20 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
 
   const foco = negocioEmFoco(searchParams.negocio ?? cookies().get(COOKIE_NEGOCIO)?.value, visiveis);
   const escolhidos = foco ? [foco] : visiveis;
-  const dados = await buscarComissoesNegocios(supabase, ano, mes, escolhidos.map((n) => n.slug));
+  const dadosProprios = await buscarComissoesNegocios(supabase, ano, mes, escolhidos.map((n) => n.slug));
+
+  // Venda de outra BU em que a pessoa participou (ex.: consultor de outro negócio que fechou ou indicou
+  // uma venda do Vorp Finance): aparece como valor a receber daquela equipe, só as linhas dela.
+  let dadosExternos: ComissaoNegocio[] = [];
+  if (!veConsolidado(eu.role)) {
+    const visiveisSlugs = new Set(visiveis.map((n) => n.slug));
+    const { data: outros } = await supabase.from("negocios").select("slug").eq("status", "ativo");
+    const slugsOutros = (outros ?? []).map((o) => o.slug as string).filter((s) => !visiveisSlugs.has(s));
+    if (slugsOutros.length > 0) {
+      dadosExternos = (await buscarComissoesNegocios(supabase, ano, mes, slugsOutros)).filter((d) => d.pessoas.some((p) => p.id === user.id));
+    }
+  }
+  const dados = [...dadosProprios, ...dadosExternos];
 
   // Diretor vê tudo; Head vê o negócio que chefia; os demais só as próprias linhas.
   const ehDiretor = eu.role === "diretor";
@@ -87,6 +101,8 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
         Fechamentos até outubro/2026 seguem o modelo antigo: <Link href="/comissao?ano=2026&mes=10" className="text-gold hover:underline">ver outubro</Link>.
       </p>
 
+      {(visiveis.some((n) => n.slug === "vorp-finance") || dadosExternos.some((d) => d.slug === "vorp-finance")) && <ExplicacaoComissaoFinance />}
+
       {visiveis.length > 1 && (
         <div className="flex flex-wrap gap-2 text-sm">
           <Link
@@ -119,12 +135,14 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
         const completo = veTudo(d);
         const pessoas = completo ? d.pessoas : d.pessoas.filter((p) => p.id === user.id);
         const nome = d.equipeNome || d.nome;
+        const externo = dadosExternos.includes(d);
         return (
           <section key={d.slug} className="rounded-lg border bg-imperium-surface p-4" style={{ borderColor: `rgb(${cor} / 0.55)` }}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="text-base font-semibold" style={{ color: `rgb(${cor})` }}>
                 {nome}
               </p>
+              {externo && <p className="text-xs text-stone-400">Venda de outra equipe · a receber de {nome}</p>}
               {completo && (
                 <p className="text-sm text-stone-400">
                   Recebido {moeda(d.recebido)} · comissões <span className="text-stone-100">{moeda(d.totalComissao)}</span>

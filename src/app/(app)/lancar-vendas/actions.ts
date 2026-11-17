@@ -63,9 +63,13 @@ async function lerFormulario(formData: FormData) {
     .eq("profile_id", vendedorId)
     .eq("negocio_id", negocio.id)
     .maybeSingle();
-  if (!vinc) throw new Error("Esse vendedor não pertence ao negócio escolhido.");
+  // Consultor de outra BU pode participar de uma venda do negócio (comissão a receber dele); precisa ser alguém ativo.
+  if (!vinc) {
+    const { data: externo } = await supabase.from("profiles").select("id, ativo").eq("id", vendedorId).maybeSingle();
+    if (!externo || externo.ativo === false) throw new Error("Vendedor inválido ou inativo.");
+  }
 
-  const papel = ["sdr", "bdr", "pre_vendas"].includes(vinc.cargo) ? "sdr" : "closer";
+  const papel = vinc && ["sdr", "bdr", "pre_vendas"].includes(vinc.cargo) ? "sdr" : "closer";
 
   const campos = {
     profile_id: vendedorId,
