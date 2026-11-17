@@ -101,7 +101,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
         Fechamentos até outubro/2026 seguem o modelo antigo: <Link href="/comissao?ano=2026&mes=10" className="text-gold hover:underline">ver outubro</Link>.
       </p>
 
-      {(visiveis.some((n) => n.slug === "vorp-finance") || dadosExternos.some((d) => d.slug === "vorp-finance")) && <ExplicacaoComissaoFinance />}
+      {(visiveis.some((n) => n.slug === "vorp-finance") || dadosExternos.some((d) => d.slug === "vorp-finance")) && <ExplicacaoComissaoFinance completo={ehDiretor || headDe.has("vorp-finance")} />}
 
       {visiveis.length > 1 && (
         <div className="flex flex-wrap gap-2 text-sm">

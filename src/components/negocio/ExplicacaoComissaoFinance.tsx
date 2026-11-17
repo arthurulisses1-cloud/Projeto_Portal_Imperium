@@ -5,7 +5,7 @@ function moeda(v: number) {
 }
 
 /** "Como é calculada a sua comissão" do Vorp Finance. Os percentuais vêm da mesma regra que calcula o pagamento. */
-export default function ExplicacaoComissaoFinance() {
+export default function ExplicacaoComissaoFinance({ completo = false }: { completo?: boolean }) {
   const { margemBase, base, desagio } = FINANCE;
   // Exemplo: desembolso (valor pago ao cliente) de R$ 100.000 e comissão recebida de R$ 10.000.
   const desembolso = 100000;
@@ -33,20 +33,33 @@ export default function ExplicacaoComissaoFinance() {
 
         <div>
           <p className="text-[10px] uppercase tracking-widest text-stone-500">2 · Comissão base</p>
-          <p className="mt-1">
-            Da margem, <strong>25%</strong> é dividido entre o time: <strong>{base.comExecutivo.executivo}% para o executivo</strong>,{" "}
-            {base.comExecutivo.lider}% para o líder e {base.comExecutivo.diretor}% para o diretor. Quando o próprio líder vende, ele fica com {base.liderVendendo.lider}% e o diretor com{" "}
-            {base.liderVendendo.diretor}%.
-          </p>
+          {completo ? (
+            <p className="mt-1">
+              Da margem, <strong>25%</strong> é dividido entre o time: <strong>{base.comExecutivo.executivo}% para o executivo</strong>, {base.comExecutivo.lider}% para o líder e{" "}
+              {base.comExecutivo.diretor}% para o diretor. Quando o próprio líder vende, ele fica com {base.liderVendendo.lider}% e o diretor com {base.liderVendendo.diretor}%.
+            </p>
+          ) : (
+            <p className="mt-1">
+              A sua comissão base é de <strong>{base.comExecutivo.executivo}% da margem</strong> de cada venda sua.
+            </p>
+          )}
         </div>
 
         <div>
           <p className="text-[10px] uppercase tracking-widest text-stone-500">3 · Deságio</p>
-          <p className="mt-1">
-            Tudo o que a comissão recebida <strong>passar dos {margemBase}%</strong> de margem é deságio, e ele paga melhor:{" "}
-            <strong>{desagio.comExecutivo.executivo}% para o executivo</strong>, {desagio.comExecutivo.lider}% para o líder e {desagio.comExecutivo.diretor}% para o diretor
-            (líder vendendo: {desagio.liderVendendo.lider}% para ele e {desagio.liderVendendo.diretor}% para o diretor). Se a comissão ficar <strong>igual ou abaixo</strong> de {margemBase}%, não há deságio.
-          </p>
+          {completo ? (
+            <p className="mt-1">
+              Tudo o que a comissão recebida <strong>passar dos {margemBase}%</strong> de margem é deságio, e ele paga melhor:{" "}
+              <strong>{desagio.comExecutivo.executivo}% para o executivo</strong>, {desagio.comExecutivo.lider}% para o líder e {desagio.comExecutivo.diretor}% para o diretor (líder
+              vendendo: {desagio.liderVendendo.lider}% para ele e {desagio.liderVendendo.diretor}% para o diretor). Se a comissão ficar <strong>igual ou abaixo</strong> de {margemBase}%,
+              não há deságio.
+            </p>
+          ) : (
+            <p className="mt-1">
+              Tudo o que a comissão recebida <strong>passar dos {margemBase}%</strong> de margem é deságio, e ele paga melhor: você recebe{" "}
+              <strong>{desagio.comExecutivo.executivo}% do deságio</strong>. Se a comissão ficar <strong>igual ou abaixo</strong> de {margemBase}%, não há deságio.
+            </p>
+          )}
         </div>
 
         <div className="rounded border border-imperium-line/70 bg-imperium-bg/40 p-3">
