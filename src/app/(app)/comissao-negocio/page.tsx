@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getViewerContext } from "@/lib/preview";
 import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { buscarComissoesNegocios, type ComissaoNegocio, type PapelComissao } from "@/lib/comissao-negocio";
@@ -25,12 +26,11 @@ function dataBR(iso: string) {
 
 export default async function ComissaoNegocioPage({ searchParams }: { searchParams: { negocio?: string; mes?: string } }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  const { data: eu } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (!eu) redirect("/");
+  // Pessoa "vista": respeita o "Ver como" do Diretor; só vê os negócios em que a pessoa está.
+  const viewer = await getViewerContext(supabase);
+  if (!viewer) redirect("/login");
+  const user = { id: viewer.effectiveId };
+  const eu = { role: viewer.effectiveRole };
 
   const visiveis = (await buscarNegociosVisiveis(supabase, user.id, eu.role)).filter((n) => n.status === "ativo");
   if (visiveis.length === 0) {
@@ -146,6 +146,14 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
                         <span className="hidden text-xs text-stone-500 sm:inline">
                           {(Object.entries(p.porPapel) as [PapelComissao, number][]).map(([k, v]) => `${PAPEL[k]} ${moeda(v)}`).join(" · ")}
                         </span>
+                        {(() => {
+                          const desagio = p.itens.filter((i) => i.tipo === "desagio").reduce((s, i) => s + i.valor, 0);
+                          return desagio > 0 ? (
+                            <span className="shrink-0 text-xs text-stone-500">
+                              base {moeda(p.total - desagio)} · deságio {moeda(desagio)}
+                            </span>
+                          ) : null;
+                        })()}
                         <span className="shrink-0 font-semibold text-gold-bright">{moeda(p.total)}</span>
                       </summary>
                       <table className="mt-2 w-full text-xs text-stone-400">

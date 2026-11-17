@@ -10,6 +10,7 @@ import {
   NEGOCIO_COR,
   buscarNegociosVisiveis,
   negocioEmFoco,
+  veConsolidado,
   nomeEquipe,
   type CargoNegocio,
 } from "@/lib/negocios";
@@ -18,6 +19,7 @@ import { buscarEsforcoNegocio, serieDoMes, type EsforcoNegocio, type IdealFunil,
 import { RealizadoComLeads } from "@/components/negocio/RealizadoComLeads";
 import { PARAMETROS, indiceMes, vendasDoMes } from "@/lib/forecast-negocios";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getViewerContext } from "@/lib/preview";
 
 export const dynamic = "force-dynamic";
 
@@ -144,12 +146,11 @@ function CartaoPace({ n, ano, mes, aberto }: { n: PaceNegocio; ano: number; mes:
 
 export default async function PaceNegocioPage({ searchParams }: { searchParams: { negocio?: string; mes?: string } }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-  const { data: eu } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  if (!eu) redirect("/");
+  // Pessoa "vista": respeita o "Ver como" do Diretor.
+  const viewer = await getViewerContext(supabase);
+  if (!viewer) redirect("/login");
+  const user = { id: viewer.effectiveId };
+  const eu = { role: viewer.effectiveRole };
   if (eu.role === "analista" && !(await podeVerArea(supabase, user.id, eu.role, "dados"))) redirect("/");
 
   const visiveis = (await buscarNegociosVisiveis(supabase, user.id, eu.role)).filter((n) => n.status === "ativo");
@@ -182,13 +183,54 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
     }
   }
 
+  const ant = mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, "0")}`;
+  const seg = mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;
+  // Executivo (não é Head nem visão consolidada): vê só o próprio pace, com o negócio como referência.
+  const cargoNoFoco = foco?.cargo ?? null;
+  const individual = !veConsolidado(eu.role) && !!foco && cargoNoFoco !== "head" && dados.length === 1;
+  if (individual && foco) {
+    const d = dados[0];
+    const eu = d.pessoas.find((p) => p.id === user.id);
+    return (
+      <main className="mx-auto max-w-3xl space-y-5 px-6 py-8">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="font-display text-2xl text-gold-bright">Meu pace</h1>
+            <p className="mt-1 text-sm text-stone-400">
+              {nomeEquipe(foco)} · {MESES[mes]} de {ano}. Dias úteis de segunda a sexta, sem feriados.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <Link href={`/pace-negocio?mes=${ant}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
+              ← {MESES[mes === 1 ? 12 : mes - 1]}
+            </Link>
+            <Link href={`/pace-negocio?mes=${seg}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
+              {MESES[mes === 12 ? 1 : mes + 1]} →
+            </Link>
+          </div>
+        </div>
+        {eu && eu.meta !== null ? (
+          <PaceIndividual
+            meu={calcularPace({ meta: eu.meta, recebido: eu.recebido, hoje, ano, mes })}
+            vendas={eu.vendas}
+            negocio={d.pace}
+            equipe={nomeEquipe(foco)}
+            cor={NEGOCIO_COR[foco.slug] ?? "201 162 74"}
+          />
+        ) : (
+          <p className="rounded-lg border border-imperium-line bg-imperium-surface p-4 text-sm text-stone-400">
+            Sua meta individual neste negócio ainda não foi definida.
+          </p>
+        )}
+      </main>
+    );
+  }
+
   const metaTotal = dados.reduce((s, d) => s + d.pace.meta, 0);
   const recebidoTotal = dados.reduce((s, d) => s + d.pace.recebido, 0);
   const esperadoTotal = dados.reduce((s, d) => s + d.pace.esperadoAteHoje, 0);
   const projecaoTotal = dados.reduce((s, d) => s + d.pace.projecao, 0);
 
-  const ant = mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, "0")}`;
-  const seg = mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;
   const sufixo = foco ? `&negocio=${foco.slug}` : "";
 
   return (
@@ -259,6 +301,65 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
         ))}
       </div>
     </main>
+  );
+}
+
+// ------------------------------------------------------------ Pace individual (executivo)
+
+function PaceIndividual({ meu, vendas, negocio, equipe, cor }: { meu: PaceCalculado; vendas: number; negocio: PaceCalculado; equipe: string; cor: string }) {
+  const pctMeu = meu.meta > 0 ? Math.round((meu.recebido / meu.meta) * 100) : null;
+  const pctNegocio = negocio.meta > 0 ? Math.round((negocio.recebido / negocio.meta) * 100) : null;
+  const esperadoPct = meu.diasUteisTotal > 0 ? Math.round((meu.diasUteisDecorridos / meu.diasUteisTotal) * 100) : 0;
+  return (
+    <>
+      <section className="rounded-lg border bg-imperium-surface p-4" style={{ borderColor: `rgb(${cor} / 0.55)` }}>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Você · recebido</p>
+          <SeloStatus status={meu.status} />
+        </div>
+        <p className="mt-1 text-3xl font-semibold text-stone-100">
+          {moeda(meu.recebido)} <span className="text-base font-normal text-stone-500">de {moeda(meu.meta)}</span>
+        </p>
+        <BarraPace p={meu} />
+        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Deveria estar em</p>
+            <p className="text-stone-100">{moeda(meu.esperadoAteHoje)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Projeção do mês</p>
+            <p className="text-stone-100">{meu.diasUteisDecorridos > 0 ? moeda(meu.projecao) : "—"}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Falta</p>
+            <p className="text-stone-100">{meu.falta > 0 ? moeda(meu.falta) : "meta batida"}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Por dia útil</p>
+            <p className="text-stone-100">{meu.necessarioPorDia !== null && meu.falta > 0 ? moeda(meu.necessarioPorDia) : "—"}</p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-stone-500">
+          {vendas} {vendas === 1 ? "venda" : "vendas"} no mês · {pctMeu ?? 0}% da sua meta · {esperadoPct}% dos dias úteis já passaram
+        </p>
+      </section>
+
+      <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+        <p className="text-[10px] uppercase tracking-widest text-stone-500">Para comparar · resultado de {equipe}</p>
+        <p className="mt-1 text-lg font-semibold text-stone-100">
+          {moeda(negocio.recebido)} <span className="text-sm font-normal text-stone-500">de {moeda(negocio.meta)}</span>
+          {pctNegocio !== null && <span className="ml-2 text-sm text-stone-400">{pctNegocio}%</span>}
+        </p>
+        <BarraPace p={negocio} />
+        <p className="mt-1.5 text-xs text-stone-500">
+          {pctMeu !== null && pctNegocio !== null
+            ? pctMeu >= pctNegocio
+              ? `Você está ${pctMeu - pctNegocio} p.p. à frente do negócio.`
+              : `Você está ${pctNegocio - pctMeu} p.p. atrás do negócio.`
+            : ""}
+        </p>
+      </section>
+    </>
   );
 }
 
