@@ -33,8 +33,12 @@ async function LeadsFinance({ supabase, viewer }: { supabase: SupabaseClient; vi
   }
   await supabase.from("profiles").update({ leads_visto_em: new Date().toISOString() }).eq("id", viewer.authUserId);
 
+  // Executivo vê só os próprios leads (SDR ou closer); o Head e o Diretor veem o funil inteiro.
+  const veTudo = diretor || vinc?.cargo === "head";
+  let consultaLeads = supabase.from("entrevistas_leads").select(COLUNAS_FINANCE).eq("negocio_id", fin.id);
+  if (!veTudo) consultaLeads = consultaLeads.or(`sdr_profile_id.eq.${viewer.effectiveId},closer_profile_id.eq.${viewer.effectiveId}`);
   const [{ data: leadsRaw, error }, { data: motivosRaw }] = await Promise.all([
-    supabase.from("entrevistas_leads").select(COLUNAS_FINANCE).eq("negocio_id", fin.id).order("data", { ascending: false }).limit(1500),
+    consultaLeads.order("data", { ascending: false }).limit(1500),
     supabase.from("motivos_perda_lead").select("id, nome, etapa").eq("ativo", true).order("ordem"),
   ]);
   logErroSupabase("LeadsPage: entrevistas_leads (Finance)", error);

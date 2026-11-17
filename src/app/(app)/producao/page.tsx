@@ -10,6 +10,7 @@ import BarraProgresso from "@/components/ui/BarraProgresso";
 import { getViewerContext } from "@/lib/preview";
 import { IconAlert, IconCheck, IconBook } from "@/components/ui/icons";
 import { hojeBR } from "@/lib/data-br";
+import ProducaoFinance from "@/components/negocio/ProducaoFinance";
 
 type Periodo = "hoje" | "semana" | "mes" | "personalizado";
 type Visao = "total" | "individual" | "tribo";
@@ -37,6 +38,15 @@ export default async function ProducaoPage({
   const viewer = await getViewerContext(supabase);
   if (!viewer) return null;
   const meId = viewer.effectiveId;
+
+  // Vorp Finance: a produção é o funil de Meus Leads (Entrevistas, Subidos, Em pendência, Ganhos) + meta de pagos.
+  const { data: vincFinance } = await supabase
+    .from("profile_negocios")
+    .select("negocio_id, negocios!inner(slug)")
+    .eq("profile_id", meId)
+    .eq("negocios.slug", "vorp-finance")
+    .limit(1);
+  if ((vincFinance ?? []).length > 0) return <ProducaoFinance supabase={supabase} meId={meId} hoje={hojeBR()} />;
 
   const { data: profile } = await supabase
     .from("profiles")
