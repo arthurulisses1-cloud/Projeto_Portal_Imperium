@@ -52,7 +52,13 @@ export function funisDoMes(slug: string, ano: number, mes: number): FunilDoCanal
   if (!p || i < 0) return [];
   const ramp = RAMP_UP[`${ano}-${String(mes).padStart(2, "0")}`] ?? 1;
   const funis: FunilDoCanal[] = [];
-  if (p.outbound) funis.push({ canal: "outbound", titulo: TITULO.outbound, etapas: montar(etapasDe(slug, "outbound"), ETAPAS_PORTAL.outbound, p.outbound, ramp) });
+  if (p.outbound) {
+    let etapas = montar(etapasDe(slug, "outbound"), ETAPAS_PORTAL.outbound, p.outbound, ramp);
+    // Finance (2026-11-17): sem Alôs, Conexões e Entrevistas agendadas — o funil começa em Entrevistas
+    // (vindas da planilha do formulário). A meta de Entrevistas segue a do forecast (já passou pelas 3 etapas).
+    if (slug === "vorp-finance") etapas = etapas.slice(3).map((e, idx) => (idx === 0 ? { ...e, conversaoMeta: null } : e));
+    funis.push({ canal: "outbound", titulo: TITULO.outbound, etapas });
+  }
   if (p.inbound) funis.push({ canal: "inbound", titulo: TITULO.inbound, etapas: montar(etapasDe(slug, "inbound"), ETAPAS_PORTAL.inbound, p.inbound, ramp) });
   if (p.referidos) {
     const diretas = vendasDoMes(p, i);

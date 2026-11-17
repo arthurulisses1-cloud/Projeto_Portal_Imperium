@@ -17,7 +17,12 @@ describe("funisDoMes", () => {
     expect(funisDoMes("vorp", 2026, 11)[0].etapas[0].meta).toBe(1980);
   });
   it("rótulos próprios: Finance com Entrevistas/Subidos, Energy com Contas subidas", () => {
-    expect(funisDoMes("vorp-finance", 2026, 12)[0].etapas.map((x) => x.label)).toEqual(["Alôs", "Conexões", "Entrevistas agendadas", "Entrevistas", "Subidos", "Vendas"]);
+    expect(funisDoMes("vorp-finance", 2026, 12)[0].etapas.map((x) => x.label)).toEqual(["Entrevistas", "Subidos", "Vendas"]);
+    const fin = funisDoMes("vorp-finance", 2026, 12)[0].etapas;
+    expect(fin[0].conversaoMeta).toBeNull();
+    expect(fin[0].meta).toBeCloseTo(3960 * 0.15 * 0.25 * 0.7); // 104,0 entrevistas
+    expect(fin[1].conversaoMeta).toBe(0.7);
+    expect(fin[2].conversaoMeta).toBe(0.2);
     expect(funisDoMes("vorp-energy", 2026, 12)[1].etapas.map((x) => x.label)).toContain("Contas subidas");
   });
   it("sem forecast antes de novembro", () => {
