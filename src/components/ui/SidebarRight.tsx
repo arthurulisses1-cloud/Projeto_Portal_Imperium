@@ -1,21 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { RANK_LABELS } from "@/lib/labels";
-import {
-  STAR_PACE,
-  NEXT_RANK,
-  avaliarProntidaoPromocao,
-  inicioSemanaISO,
-  resultadoSemanaEstrela,
-  type Rank,
-} from "@/lib/carreira";
-import { proximoTier } from "@/lib/comissao";
-import { buscarRemuneracaoMes } from "@/lib/remuneracao";
-import { buscarProgressoMarcos } from "@/lib/marcos";
-import { paraRomano } from "@/lib/numerals";
-import { EXERCITO_CREST } from "@/lib/exercito-crests";
-import { hojeBR, inicioMesBR } from "@/lib/data-br";
-import { IconLock, IconGift } from "./icons";
-import RankBadge from "./RankBadge";
+import { CARGO_LABEL, NEGOCIO_COR, nomeEquipe, type CargoNegocio } from "@/lib/negocios";
+import { buscarComissoesNegocios, percentuais } from "@/lib/comissao-negocio";
+import { buscarPaceNegocios, calcularPace } from "@/lib/pace-negocio";
+import { hojeBR } from "@/lib/data-br";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 
 function moeda(v: number) {
@@ -26,273 +13,110 @@ function iniciais(nome: string) {
   return nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 }
 
+type Vinculo = {
+  cargo: CargoNegocio;
+  principal: boolean;
+  negocio: { id: string; slug: string; nome: string; equipe_nome: string | null; equipe_bandeira: string | null; status: string };
+};
+
+/** Lateral direita no modelo multinegócio: cargo no negócio, comissão do mês (com o pace) e o time. */
 export default async function SidebarRight({ userId }: { userId: string }) {
   const supabase = await createClient();
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("rank, stars_total, tribo_id, role")
-    .eq("id", userId)
-    .single();
+  const { data: profile, error: profileError } = await supabase.from("profiles").select("role, full_name").eq("id", userId).single();
   logErroSupabase(`SidebarRight: profiles (userId=${userId})`, profileError);
-
   if (!profile) return null;
-  const rank = profile.rank as Rank;
-  // Mesma régua de /estrelas: STAR_PACE é "rumo a X", pega pelo PRÓXIMO
-  // rank, não pelo atual (achado 2026-09-07).
-  const proximoRankPace = NEXT_RANK[rank];
-  const pace = proximoRankPace ? STAR_PACE[proximoRankPace] : { estrelas: 0, cheia: 0, meia: 0 };
-  const totalEstrelas = pace.estrelas || 6;
 
-  // Mini-indicador da semana atual de Estrelas (SDR/Closer só) — mesmo
-  // cálculo de /estrelas, pra dar o "check rápido" sem precisar entrar na aba.
-  // Achado 2026-09-07: só conta PAGO (via weekly_operacoes.status, pela
-  // data de pago_em) e pesa pelo multiplicador de ticket — ver /estrelas
-  // pro comentário completo da regra.
-  let semanaEstrelas: { qtd: number } | null = null;
-  if ((profile.role === "sdr" || profile.role === "closer") && pace.cheia > 0) {
-    const inicioSemanaAtual = inicioSemanaISO(hojeBR());
-    const { data: vendasSemanaBrutas } = await supabase
-      .from("vendas")
-      .select("data, multiplicador, weekly_operacao_id")
-      .eq("profile_id", userId)
-      .in("papel", profile.role === "sdr" ? ["sdr", "ambos"] : ["closer", "ambos"])
-      .gte("data", inicioSemanaAtual);
-    const opIdsSemana = Array.from(
-      new Set((vendasSemanaBrutas ?? []).map((v) => v.weekly_operacao_id).filter((id): id is string => !!id))
-    );
-    const { data: opsSemana } = opIdsSemana.length
-      ? await supabase.from("weekly_operacoes").select("id, status, pago_em").in("id", opIdsSemana)
-      : { data: [] };
-    const opPorIdSemana = new Map((opsSemana ?? []).map((o) => [o.id, o]));
-    const qtd = (vendasSemanaBrutas ?? []).reduce((soma, v) => {
-      const op = v.weekly_operacao_id ? opPorIdSemana.get(v.weekly_operacao_id) : null;
-      if (op && op.status !== "PAGO") return soma;
-      const dataRef = op?.pago_em ?? v.data;
-      if (dataRef < inicioSemanaAtual) return soma; // pago fora dessa semana
-      return soma + (v.multiplicador ?? 1);
-    }, 0);
-    semanaEstrelas = { qtd };
-  }
+  const hoje = hojeBR();
+  const [ano, mes] = hoje.split("-").map(Number);
 
-  // Resumo do Plano de Carreira (SDR/Closer só — líder não tem "próximo
-  // rank" no mesmo sentido) — mesma avaliação de /carreira, pra nunca dar
-  // número diferente entre a lateral e a tela cheia.
-  const carreiraResumo = await avaliarProntidaoPromocao(supabase, userId, profile.role, rank, profile.stars_total, profile.tribo_id);
+  const { data: vincRaw } = await supabase
+    .from("profile_negocios")
+    .select("cargo, principal, negocios(id, slug, nome, equipe_nome, equipe_bandeira, status)")
+    .eq("profile_id", userId);
+  type L = { cargo: CargoNegocio; principal: boolean; negocios: Vinculo["negocio"] | Vinculo["negocio"][] | null };
+  const vinculos: Vinculo[] = ((vincRaw ?? []) as unknown as L[])
+    .map((l) => ({ cargo: l.cargo, principal: l.principal, negocio: Array.isArray(l.negocios) ? l.negocios[0] : l.negocios }))
+    .filter((v): v is Vinculo => !!v.negocio && v.negocio.status === "ativo")
+    .sort((a, b) => Number(b.principal) - Number(a.principal));
+  const principal = vinculos[0] ?? null;
+
+  const ehDiretor = profile.role === "diretor";
+  const cargoLabel = ehDiretor ? "Diretor" : principal ? CARGO_LABEL[principal.cargo] ?? principal.cargo : "Time";
+  const cor = principal ? NEGOCIO_COR[principal.negocio.slug] ?? "201 162 74" : "201 162 74";
 
   const { data: quotes } = await supabase.from("sage_quotes").select("texto, fonte").eq("ativo", true);
-  const anoAtualStr = Number(hojeBR().slice(0, 4));
-  const dayOfYear = Math.floor(
-    (Date.now() - new Date(Date.UTC(anoAtualStr, 0, 0)).getTime()) / 86400000
-  );
+  const anoAtualStr = Number(hoje.slice(0, 4));
+  const dayOfYear = Math.floor((Date.now() - new Date(Date.UTC(anoAtualStr, 0, 0)).getTime()) / 86400000);
   const quote = quotes && quotes.length > 0 ? quotes[(dayOfYear + 1) % quotes.length] : null;
 
-  // Marcos não fazem sentido pro Diretor (sem meta de crédito pessoal como
-  // executivo) — a pedido, sai da visão dele (2026-08-22).
-  const { marcos } = profile.role !== "diretor" ? await buscarProgressoMarcos(supabase, userId, profile.role) : { marcos: [] };
-
-  const inicioMes = inicioMesBR();
-  const { tiers: tiersOrdenados, remuneracao, producaoPrincipal, papelPrincipal } = await buscarRemuneracaoMes(
-    supabase,
-    userId,
-    profile.role,
-    rank,
-    inicioMes
-  );
-  const tierAtual = remuneracao;
-  const proximo = remuneracao ? proximoTier(tiersOrdenados, producaoPrincipal, papelPrincipal) : null;
-
-  // ---------- Minha Tribo (com o Tribuno/Pretor em destaque) + Meu Exército ----------
-  type Pessoa = { id: string; nome: string; rank: Rank; avatarUrl: string | null };
-  let nomeTribo: string | null = null;
-  let logoTribo: string | null = null;
-  let closer: Pessoa | null = null;
-  let sdrsDaTribo: (Pessoa & { producao: number })[] = [];
-  let exercito: { nome: string; legado: Pessoa | null } | null = null;
-
-  if (profile.tribo_id) {
-    const { data: tribo } = await supabase
-      .from("tribos")
-      .select(
-        "nome, logo_url, exercito_id, closer:profiles!tribos_closer_id_fkey(id, full_name, rank, avatar_url)"
-      )
-      .eq("id", profile.tribo_id)
-      .single();
-
-    nomeTribo = tribo?.nome ?? null;
-    logoTribo = tribo?.logo_url ?? null;
-    const closerRow = tribo?.closer as unknown as { id: string; full_name: string; rank: Rank; avatar_url: string | null } | null;
-    closer = closerRow
-      ? { id: closerRow.id, nome: closerRow.full_name, rank: closerRow.rank, avatarUrl: closerRow.avatar_url }
-      : null;
-
-    const { data: membros } = await supabase
-      .from("profiles")
-      .select("id, full_name, rank, avatar_url")
-      .eq("tribo_id", profile.tribo_id)
-      .eq("role", "sdr")
-      .eq("ativo", true);
-
-    const idsMembros = (membros ?? []).map((m) => m.id);
-    const { data: vendasMembros } =
-      idsMembros.length > 0
-        ? await supabase.from("vendas").select("profile_id, valor").in("profile_id", idsMembros).gte("data", inicioMes)
-        : { data: [] };
-    const producaoPorMembro = new Map<string, number>();
-    for (const v of vendasMembros ?? []) {
-      producaoPorMembro.set(v.profile_id, (producaoPorMembro.get(v.profile_id) ?? 0) + Number(v.valor));
+  // ---------- Comissão do mês: o que a pessoa tem agora x o que teria no pace ----------
+  const slugs = vinculos.map((v) => v.negocio.slug);
+  let comissao: { atual: number; base: number; desagio: number; noPace: number | null; equipe: string | null } | null = null;
+  try {
+    const dados = ehDiretor ? await buscarComissoesNegocios(supabase, ano, mes) : slugs.length > 0 ? await buscarComissoesNegocios(supabase, ano, mes, slugs) : [];
+    let atual = 0;
+    let desagio = 0;
+    for (const d of dados) {
+      const eu = d.pessoas.find((p) => p.id === userId);
+      if (!eu) continue;
+      atual += eu.total;
+      desagio += eu.itens.filter((i) => i.tipo === "desagio").reduce((s, i) => s + i.valor, 0);
     }
-    sdrsDaTribo = (membros ?? [])
-      .map((m) => ({
-        id: m.id,
-        nome: m.full_name,
-        rank: m.rank as Rank,
-        avatarUrl: m.avatar_url,
-        producao: producaoPorMembro.get(m.id) ?? 0,
-      }))
-      .sort((a, b) => b.producao - a.producao);
-
-    if (tribo?.exercito_id) {
-      const { data: ex } = await supabase
-        .from("exercitos")
-        .select("nome, legado:profiles!exercitos_legado_id_fkey(id, full_name, rank, avatar_url)")
-        .eq("id", tribo.exercito_id)
-        .single();
-      const legadoRow = ex?.legado as unknown as { id: string; full_name: string; rank: Rank; avatar_url: string | null } | null;
-      exercito = ex
-        ? {
-            nome: ex.nome,
-            legado: legadoRow
-              ? { id: legadoRow.id, nome: legadoRow.full_name, rank: legadoRow.rank, avatarUrl: legadoRow.avatar_url }
-              : null,
-          }
-        : null;
+    let noPace: number | null = null;
+    if (!ehDiretor && principal) {
+      const [pn] = await buscarPaceNegocios(supabase, ano, mes, hoje, [principal.negocio.slug]);
+      const eu = pn?.pessoas.find((p) => p.id === userId);
+      if (eu && eu.meta !== null) {
+        const esperadoRecebido = calcularPace({ meta: eu.meta, recebido: eu.recebido, hoje, ano, mes }).esperadoAteHoje;
+        const pcts = percentuais(principal.negocio.slug, {
+          id: "pace",
+          valor: 100,
+          canal: "outbound",
+          closerId: userId,
+          closerCargo: principal.cargo === "head" ? "head" : "executivo",
+          indicadorId: null,
+        });
+        const taxa = pcts ? (principal.cargo === "head" ? pcts.closer : pcts.closer) / 100 : 0;
+        noPace = taxa > 0 ? esperadoRecebido * taxa : null;
+      }
     }
+    comissao = { atual, base: atual - desagio, desagio, noPace, equipe: principal ? nomeEquipe(principal.negocio) : null };
+  } catch (e) {
+    console.error("SidebarRight: comissão do mês falhou", e);
   }
 
-  // ---------- Líder de Exército: não tem tribo_id (lidera o Exército inteiro,
-  // não uma Tribo específica) — em vez de "Minha Tribo", mostra o Exército
-  // como um todo: "Minhas Tribos" (logo + Closer de cada Tribo) e "Meu Time"
-  // (todo mundo — SDR e Closer — de todas as Tribos, com foto e Tribo).
-  type TriboDoExercito = { id: string; nome: string; logoUrl: string | null; closer: Pessoa | null; producao: number };
-  type MembroDoExercito = Pessoa & { role: string; triboNome: string };
-  let exercitoLiderado: { nome: string; tribos: TriboDoExercito[]; membros: MembroDoExercito[] } | null = null;
-
-  if (profile.role === "lider" && !profile.tribo_id) {
-    const { data: ex } = await supabase.from("exercitos").select("id, nome").eq("legado_id", userId).maybeSingle();
-    if (ex) {
-      const { data: tribosDoExercito } = await supabase
-        .from("tribos")
-        .select("id, nome, logo_url, closer:profiles!tribos_closer_id_fkey(id, full_name, rank, avatar_url)")
-        .eq("exercito_id", ex.id)
-        .order("nome");
-      const triboIds = (tribosDoExercito ?? []).map((t) => t.id);
-      const nomeTriboPorId = new Map((tribosDoExercito ?? []).map((t) => [t.id, t.nome]));
-
-      const closerIds = (tribosDoExercito ?? [])
-        .map((t) => (t.closer as unknown as { id: string } | null)?.id)
-        .filter((id): id is string => !!id);
-      const { data: vendasClosers } =
-        closerIds.length > 0
-          ? await supabase.from("vendas").select("profile_id, valor").in("profile_id", closerIds).gte("data", inicioMes)
-          : { data: [] };
-      const producaoPorCloser = new Map<string, number>();
-      for (const v of vendasClosers ?? []) {
-        producaoPorCloser.set(v.profile_id, (producaoPorCloser.get(v.profile_id) ?? 0) + Number(v.valor));
-      }
-
-      const { data: membrosDoExercito } =
-        triboIds.length > 0
-          ? await supabase
-              .from("profiles")
-              .select("id, full_name, rank, avatar_url, role, tribo_id")
-              .in("tribo_id", triboIds)
-              .in("role", ["sdr", "closer"])
-              .eq("ativo", true)
-              .order("full_name")
-          : { data: [] };
-
-      exercitoLiderado = {
-        nome: ex.nome,
-        tribos: (tribosDoExercito ?? []).map((t) => {
-          const closerRow = t.closer as unknown as { id: string; full_name: string; rank: Rank; avatar_url: string | null } | null;
-          return {
-            id: t.id,
-            nome: t.nome,
-            logoUrl: t.logo_url,
-            closer: closerRow
-              ? { id: closerRow.id, nome: closerRow.full_name, rank: closerRow.rank, avatarUrl: closerRow.avatar_url }
-              : null,
-            producao: closerRow ? producaoPorCloser.get(closerRow.id) ?? 0 : 0,
-          };
-        }),
-        membros: (membrosDoExercito ?? []).map((m) => ({
-          id: m.id,
-          nome: m.full_name,
-          rank: m.rank as Rank,
-          avatarUrl: m.avatar_url,
-          role: m.role,
-          triboNome: (m.tribo_id && nomeTriboPorId.get(m.tribo_id)) || "—",
-        })),
-      };
-    }
+  // ---------- Meu time: quem está no mesmo negócio ----------
+  type Membro = { id: string; nome: string; cargo: CargoNegocio; avatarUrl: string | null };
+  let time: Membro[] = [];
+  if (principal) {
+    const { data: membrosRaw } = await supabase
+      .from("profile_negocios")
+      .select("cargo, profiles!inner(id, full_name, avatar_url, ativo)")
+      .eq("negocio_id", principal.negocio.id);
+    type M = { cargo: CargoNegocio; profiles: { id: string; full_name: string; avatar_url: string | null; ativo: boolean } | { id: string; full_name: string; avatar_url: string | null; ativo: boolean }[] };
+    time = ((membrosRaw ?? []) as unknown as M[])
+      .map((m) => ({ m, p: Array.isArray(m.profiles) ? m.profiles[0] : m.profiles }))
+      .filter((x) => x.p && x.p.ativo)
+      .map((x) => ({ id: x.p.id, nome: x.p.full_name, cargo: x.m.cargo, avatarUrl: x.p.avatar_url }))
+      .sort((a, b) => Number(b.cargo === "head") - Number(a.cargo === "head") || a.nome.localeCompare(b.nome, "pt-BR"));
   }
 
   return (
     <aside className="hidden w-72 shrink-0 space-y-6 border-l border-imperium-line bg-imperium-surface p-5 xl:block">
-      <div className="watermark-spqr text-center">
-        <p className="kicker mb-3">Cargo Atual</p>
-        <RankBadge rank={rank} size="lg" />
-        <p className="mt-2 font-display text-base text-gold-bright">{RANK_LABELS[rank]}</p>
-        {profile.role !== "diretor" && (
-          <p className="mt-1 text-lg tracking-widest">
-            {Array.from({ length: totalEstrelas }).map((_, i) => (
-              <span key={i} className={i < profile.stars_total ? "text-gold" : "text-imperium-line-strong"}>
-                ★
-              </span>
-            ))}
+      <div className="text-center">
+        <p className="kicker mb-3">Meu cargo</p>
+        {principal?.negocio.equipe_bandeira && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={principal.negocio.equipe_bandeira} alt="" className="mx-auto mb-2 h-16 w-16 rounded-md object-cover" />
+        )}
+        <p className="font-display text-base text-gold-bright">{cargoLabel}</p>
+        {principal && !ehDiretor && (
+          <p className="mt-0.5 text-xs" style={{ color: `rgb(${cor})` }}>
+            {nomeEquipe(principal.negocio)}
           </p>
         )}
       </div>
-
-      {semanaEstrelas &&
-        (() => {
-          const r = resultadoSemanaEstrela(semanaEstrelas.qtd, pace);
-          return (
-            <a
-              href="/estrelas"
-              className="block rounded border border-imperium-line px-3 py-2 text-center text-xs transition hover:border-gold/50 hover:bg-gold/5"
-            >
-              <span className="text-stone-500">Essa semana: </span>
-              <span className={r.cor}>
-                {r.icone} {r.label}
-              </span>
-              <span className="text-stone-600"> · {semanaEstrelas.qtd}/{pace.cheia} pagos</span>
-            </a>
-          );
-        })()}
-
-      {carreiraResumo && (
-        <a
-          href="/carreira"
-          className="block rounded border border-imperium-line p-3 transition hover:border-gold/50 hover:bg-gold/5"
-        >
-          <div className="flex items-center justify-between">
-            <p className="kicker">Plano de Carreira</p>
-            <span className="text-[10px] text-gold">ver tudo →</span>
-          </div>
-          <p className="mt-1.5 text-xs text-stone-300">
-            Rumo a <span className="text-gold-bright">{RANK_LABELS[carreiraResumo.proximoRank]}</span>:{" "}
-            <span className="text-gold-bright">{carreiraResumo.ok}</span>/{carreiraResumo.total} critérios
-          </p>
-          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-imperium-line">
-            <div
-              className="h-full rounded-full bg-gold"
-              style={{ width: `${(carreiraResumo.ok / carreiraResumo.total) * 100}%` }}
-            />
-          </div>
-        </a>
-      )}
 
       {quote && (
         <div className="border-t border-imperium-line pt-4 text-center">
@@ -302,255 +126,57 @@ export default async function SidebarRight({ userId }: { userId: string }) {
         </div>
       )}
 
-      {tierAtual && (
-        <a
-          href="/comissao"
-          className="block border-t border-imperium-line pt-4 transition hover:opacity-80"
-        >
+      {comissao && (comissao.atual > 0 || comissao.noPace !== null) && (
+        <a href="/comissao-negocio" className="block border-t border-imperium-line pt-4 transition hover:opacity-80">
           <div className="flex items-center justify-between">
             <p className="kicker">Comissão do mês</p>
             <span className="text-[10px] text-gold">ver tudo →</span>
           </div>
           <p className="mt-1.5 text-xs text-stone-300">
-            Tier <span className="text-gold-bright">{paraRomano(tierAtual.tierIdx + 1)}</span> de{" "}
-            {paraRomano(tiersOrdenados.length)}
-            {proximo ? (
-              <>
-                {" "}
-                — faltam <span className="text-gold">{moeda(proximo.faltaProducao)}</span> pro próximo
-              </>
-            ) : (
-              <span className="text-success-bright"> — tier máximo</span>
-            )}
+            Você está com <span className="text-lg font-semibold text-gold-bright">{moeda(comissao.atual)}</span>
           </p>
+          {comissao.desagio > 0 && (
+            <p className="text-[11px] text-stone-500">
+              {moeda(comissao.base)} de comissão base + {moeda(comissao.desagio)} de deságio
+            </p>
+          )}
+          {comissao.noPace !== null && (
+            <p className="mt-1 text-xs text-stone-400">
+              No seu pace deveria estar com <span className="text-stone-200">{moeda(comissao.noPace)}</span>
+              {" · "}
+              <span className={comissao.atual >= comissao.noPace ? "text-success-bright" : "text-wine-bright"}>
+                {comissao.atual >= comissao.noPace
+                  ? `${moeda(comissao.atual - comissao.noPace)} à frente`
+                  : `${moeda(comissao.noPace - comissao.atual)} abaixo`}
+              </span>
+            </p>
+          )}
+          {comissao.noPace !== null && <p className="mt-1 text-[10px] text-stone-600">Estimativa pela comissão base do seu cargo sobre o recebido esperado.</p>}
         </a>
       )}
 
-      {(marcos.length > 0 || nomeTribo || exercito || exercitoLiderado) && (
-        <details open className="border-t border-imperium-line pt-4 group">
-          <summary className="kicker flex cursor-pointer list-none items-center justify-between [&::-webkit-details-marker]:hidden">
-            <span>Time e Marcos</span>
-            <span className="text-[10px] normal-case text-stone-500 transition group-open:rotate-180">▾</span>
-          </summary>
-
-          {marcos.length > 0 && (
-            <div className="mt-3">
-              <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Sistema de Marcos</p>
-              <div className="grid grid-cols-3 gap-2">
-                {marcos.map((m) =>
-                  m.imagemUrl ? (
-                    <div
-                      key={m.id}
-                      className={`relative aspect-square overflow-hidden rounded-lg border ${
-                        m.alcancado
-                          ? "border-gold"
-                          : m.elegivel
-                            ? "border-gold/50 border-dashed"
-                            : "border-imperium-line-strong opacity-50 grayscale"
-                      }`}
-                      title={m.elegivel ? `${m.nome} — disponível este mês, fale com o Diretor` : m.nome}
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={m.imagemUrl} alt={m.nome} className="h-full w-full object-cover" />
-                      {!m.alcancado && !m.elegivel && (
-                        <span className="absolute inset-0 flex items-center justify-center bg-black/40">
-                          <IconLock className="h-4 w-4 text-stone-300" />
-                        </span>
-                      )}
-                      {m.elegivel && (
-                        <span className="absolute -bottom-1 -right-1 rounded-full bg-imperium-surface p-0.5">
-                          <IconGift className="h-3 w-3 text-gold" />
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <div
-                      key={m.id}
-                      className={`relative flex aspect-square items-center justify-center rounded-full border text-lg ${
-                        m.alcancado
-                          ? "border-gold bg-gold/10"
-                          : m.elegivel
-                            ? "border-gold/50 border-dashed bg-gold/5"
-                            : "border-imperium-line-strong bg-imperium-bg/40 opacity-50"
-                      }`}
-                      title={m.elegivel ? `${m.nome} — disponível este mês, fale com o Diretor` : m.nome}
-                    >
-                      {m.icone}
-                      {!m.alcancado && !m.elegivel && (
-                        <span className="absolute -bottom-1 -right-1 rounded-full bg-imperium-surface p-0.5">
-                          <IconLock className="h-3 w-3 text-stone-500" />
-                        </span>
-                      )}
-                      {m.elegivel && (
-                        <span className="absolute -bottom-1 -right-1 rounded-full bg-imperium-surface p-0.5">
-                          <IconGift className="h-3 w-3 text-gold" />
-                        </span>
-                      )}
-                    </div>
-                  )
-                )}
-              </div>
-            </div>
-          )}
-
-          {nomeTribo && (
-            <div className="mt-4">
-              <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Minha Tribo · {nomeTribo}</p>
-
-              <div className="mb-3 flex items-center gap-3 rounded border border-gold/30 bg-gold/5 p-2.5">
-                {logoTribo ? (
+      {time.length > 0 && principal && (
+        <div className="border-t border-imperium-line pt-4">
+          <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Meu time · {nomeEquipe(principal.negocio)}</p>
+          <ul className="space-y-2">
+            {time.map((m) => (
+              <li key={m.id} className="flex items-center gap-2.5">
+                {m.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={logoTribo}
-                    alt={nomeTribo}
-                    className="h-11 w-11 shrink-0 rounded-full border border-gold/50 object-cover"
-                  />
+                  <img src={m.avatarUrl} alt={m.nome} className="h-7 w-7 shrink-0 rounded-full border border-imperium-line-strong object-cover" />
                 ) : (
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-dashed border-gold/40 text-[9px] text-stone-600">
-                    Bandeira
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-[9px] text-stone-500">
+                    {iniciais(m.nome)}
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  {closer ? (
-                    <>
-                      <p className="truncate text-sm text-gold-bright">{closer.nome}</p>
-                      <p className="text-[10px] uppercase tracking-wide text-stone-500">
-                        {RANK_LABELS[closer.rank] ?? closer.rank} · líder da Tribo
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-xs text-stone-600">Tribo sem Closer definido</p>
-                  )}
+                  <p className="truncate text-xs text-stone-200">{m.nome}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-stone-500">{CARGO_LABEL[m.cargo] ?? m.cargo}</p>
                 </div>
-              </div>
-
-              {sdrsDaTribo.length > 0 ? (
-                <ul className="space-y-2">
-                  {sdrsDaTribo.map((m) => (
-                    <li key={m.id} className="flex items-center gap-2.5">
-                      {m.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={m.avatarUrl}
-                          alt={m.nome}
-                          className="h-7 w-7 shrink-0 rounded-full border border-imperium-line-strong object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-[9px] text-stone-500">
-                          {iniciais(m.nome)}
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs text-stone-200">{m.nome}</p>
-                      </div>
-                      <span className="shrink-0 text-[10px] text-gold">{moeda(m.producao)}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-stone-600">Nenhum SDR na Tribo ainda.</p>
-              )}
-            </div>
-          )}
-
-          {exercito && (
-            <div className="mt-4">
-              <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Meu Exército · {exercito.nome}</p>
-
-              <div className="flex items-center gap-3 rounded border border-wine/30 bg-wine/5 p-2.5">
-                {EXERCITO_CREST[exercito.nome] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={EXERCITO_CREST[exercito.nome]}
-                    alt={exercito.nome}
-                    className="h-11 w-11 shrink-0 rounded-full border border-wine/50 object-cover"
-                  />
-                ) : (
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-dashed border-wine/40 text-[9px] text-stone-600">
-                    Bandeira
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  {exercito.legado ? (
-                    <>
-                      <p className="truncate text-sm text-gold-bright">{exercito.legado.nome}</p>
-                      <p className="text-[10px] uppercase tracking-wide text-stone-500">Legado do Exército</p>
-                    </>
-                  ) : (
-                    <p className="text-xs text-stone-600">Exército sem Legado definido</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {exercitoLiderado && (
-            <div className="mt-4">
-              <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Meu Exército · {exercitoLiderado.nome}</p>
-
-              <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Minhas Tribos</p>
-              {exercitoLiderado.tribos.length > 0 ? (
-                <ul className="space-y-3">
-                  {exercitoLiderado.tribos.map((t) => (
-                    <li key={t.id} className="flex items-center gap-2.5">
-                      {t.logoUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={t.logoUrl}
-                          alt={t.nome}
-                          className="h-9 w-9 shrink-0 rounded-full border border-gold/40 object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-dashed border-gold/40 text-[8px] text-stone-600">
-                          Bandeira
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs text-gold-bright">{t.nome}</p>
-                        <p className="truncate text-[10px] text-stone-500">
-                          {t.closer ? t.closer.nome : "sem Closer definido"}
-                        </p>
-                      </div>
-                      {t.closer && <span className="shrink-0 text-[10px] text-gold">{moeda(t.producao)}</span>}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-stone-600">Nenhuma Tribo neste Exército ainda.</p>
-              )}
-
-              <p className="mb-2 mt-4 text-[10px] uppercase tracking-wide text-stone-500">
-                Meu Time ({exercitoLiderado.membros.length})
-              </p>
-              {exercitoLiderado.membros.length > 0 ? (
-                <ul className="max-h-80 space-y-2 overflow-y-auto pr-1">
-                  {exercitoLiderado.membros.map((m) => (
-                    <li key={m.id} className="flex items-center gap-2.5">
-                      {m.avatarUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={m.avatarUrl}
-                          alt={m.nome}
-                          className="h-7 w-7 shrink-0 rounded-full border border-imperium-line-strong object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-imperium-line-strong bg-imperium-bg text-[9px] text-stone-500">
-                          {iniciais(m.nome)}
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs text-stone-200">{m.nome}</p>
-                        <p className="truncate text-[10px] text-stone-500">{m.triboNome}</p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-stone-600">Nenhum membro nas Tribos ainda.</p>
-              )}
-            </div>
-          )}
-        </details>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </aside>
   );

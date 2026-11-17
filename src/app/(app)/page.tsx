@@ -26,6 +26,8 @@ import { buscarPainelNegocios, buscarOpcoesLancamento } from "@/lib/negocio-pain
 import FormLancarVenda from "@/components/negocio/FormLancarVenda";
 import LancarVendaMural from "@/components/negocio/LancarVendaMural";
 import { NEGOCIO_COR, nomeEquipe } from "@/lib/negocios";
+import MetaExecutivo from "@/components/negocio/MetaExecutivo";
+import { buscarPaceNegocios, calcularPace } from "@/lib/pace-negocio";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -242,6 +244,35 @@ export default async function MuralPage({
     );
   }
 
+  // Executivo de um negócio: a primeira coisa do Mural é a meta individual, onde deveria estar (pace) e onde está.
+  let metaExecutivo: React.ReactNode = null;
+  if (meRole !== "diretor" && meRole !== "investidor") {
+    const { data: vinculos } = await supabase
+      .from("profile_negocios")
+      .select("principal, negocios(slug, status)")
+      .eq("profile_id", meId);
+    type VP = { principal: boolean; negocios: { slug: string; status: string } | { slug: string; status: string }[] | null };
+    const ativos = ((vinculos ?? []) as unknown as VP[])
+      .map((v) => ({ principal: v.principal, n: Array.isArray(v.negocios) ? v.negocios[0] : v.negocios }))
+      .filter((v) => v.n && v.n.status === "ativo")
+      .sort((a, b) => Number(b.principal) - Number(a.principal));
+    for (const v of ativos) {
+      const [pn] = await buscarPaceNegocios(supabase, ano, mes, hoje, [v.n!.slug]);
+      const eu = pn?.pessoas.find((p) => p.id === meId);
+      if (!pn || !eu || eu.meta === null) continue;
+      metaExecutivo = (
+        <MetaExecutivo
+          pace={calcularPace({ meta: eu.meta, recebido: eu.recebido, hoje, ano, mes })}
+          equipe={nomeEquipe(pn.negocio)}
+          cor={NEGOCIO_COR[pn.negocio.slug] ?? "201 162 74"}
+          mesLabel={MESES[mes - 1] + " de " + ano}
+          mesAtual={mesEhAtual}
+        />
+      );
+      break;
+    }
+  }
+
   // Meus Leads (cobranças de atualização) agora é só do time do Vorp Finance.
   const { data: finMembro } = await supabase
     .from("profile_negocios")
@@ -283,6 +314,7 @@ export default async function MuralPage({
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       {searchParams.lancado && <p className="rounded border border-success/50 px-3 py-2 text-sm text-success-bright">Venda lançada.</p>}
+      {metaExecutivo}
       {lancarVendaHead}
       {painelNegocios.length > 0 && (
         <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} ritmoPct={ritmoPct} lancar={lancarVenda} />
@@ -359,13 +391,13 @@ export default async function MuralPage({
           <CentralNotificacoes escopo={escopoCentral} viewerId={meId} />
         )}
 
-      {meRole === "sdr" && metaIndividual > 0 && (
+      {!metaExecutivo && meRole === "sdr" && metaIndividual > 0 && (
         <Card title={mesEhAtual ? "Meta do mês" : `Meta de ${MESES[mes - 1]}/${ano}`}>
           <BarraMeta realizado={pagosMes} meta={metaIndividual} mesFechado={!mesEhAtual} />
         </Card>
       )}
 
-      {meRole === "closer" && (metaTribo > 0 || metaIndividual > 0) && (
+      {!metaExecutivo && meRole === "closer" && (metaTribo > 0 || metaIndividual > 0) && (
         <Card title={mesEhAtual ? "Meta do mês" : `Meta de ${MESES[mes - 1]}/${ano}`}>
           <BarraMetaToggle
             individual={{ realizado: pagosMes, meta: metaIndividual }}
@@ -376,7 +408,7 @@ export default async function MuralPage({
         </Card>
       )}
 
-      {meRole === "lider" && metaExercito > 0 && (
+      {!metaExecutivo && meRole === "lider" && metaExercito > 0 && (
         <Card
           title={`Meta ${mesEhAtual ? "do mês" : `de ${MESES[mes - 1]}/${ano}`} · ${escopoCentral?.tipo === "exercito" ? "Exército" : "time"}`}
         >

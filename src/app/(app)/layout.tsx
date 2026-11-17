@@ -53,7 +53,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
   { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
   { type: "link", href: "/minha-producao", label: "Minha Produção", roles: ["lider"] },
-  { type: "link", href: "/carreira", label: "Plano de Carreira", roles: ["sdr", "closer", "lider"] },
+  // Plano de Carreira e Corrida dos Marcos ficam ocultos por ora (2026-11-17): o modelo de ranks acabou.
   // "analista" liberado aqui pro Igor Lobato (Analista de Growth) ver a
   // própria comissão — pedido do Diretor, 2026-09-24. Os outros Analistas
   // também ganham o link (é por papel, não por pessoa), mas a página fica
@@ -125,7 +125,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
     items: [
       { href: "/estrelas", label: "Estrelas", roles: ["sdr", "closer"] },
       { href: "/estrelas/time", label: "Estrelas do Time", roles: ["lider", "diretor"] },
-      { href: "/marcos", label: "Corrida dos Marcos", roles: ["sdr", "closer", "lider", "diretor", "investidor"] },
       { href: "/legado", label: "Meu Legado", roles: ["diretor"] },
       { href: "/gestao", label: "Gestão de Pessoas", roles: ["diretor"] },
     ],
