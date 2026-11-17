@@ -251,7 +251,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     return rest;
   });
   // Meus Leads: Finance (consultores e Head) e o Diretor; entra logo depois de Tarefas.
-  if (ehConsultorFinance || (papelAtual === "diretor" && !previewPessoa)) {
+  if (ehConsultorFinance || (papelAtual === "diretor" && !previewPessoa) || permissoesAnalista?.leads.ver) {
     const pos = itensVisiveis.findIndex((i) => i.type === "link" && i.href === "/tarefas");
     itensVisiveis.splice(pos >= 0 ? pos + 1 : 1, 0, { type: "link", href: "/leads", label: "Meus Leads" });
   }

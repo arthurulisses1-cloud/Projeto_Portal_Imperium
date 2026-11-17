@@ -23,7 +23,9 @@ async function LeadsFinance({ supabase, viewer }: { supabase: SupabaseClient; vi
     ? await supabase.from("profile_negocios").select("cargo").eq("profile_id", viewer.effectiveId).eq("negocio_id", fin.id).maybeSingle()
     : { data: null };
   const diretor = viewer.effectiveRole === "diretor";
-  if (!fin || (!vinc && !diretor)) {
+  // Analista com a área "Meus Leads" liberada vê o funil inteiro (a edição segue analista_permissoes.pode_editar).
+  const analista = viewer.effectiveRole === "analista" && (await podeVerArea(supabase, viewer.effectiveId, viewer.effectiveRole, "leads"));
+  if (!fin || (!vinc && !diretor && !analista)) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center">
         <h1 className="font-display text-xl text-gold-bright">Acesso restrito</h1>
@@ -34,7 +36,7 @@ async function LeadsFinance({ supabase, viewer }: { supabase: SupabaseClient; vi
   await supabase.from("profiles").update({ leads_visto_em: new Date().toISOString() }).eq("id", viewer.authUserId);
 
   // Executivo vê só os próprios leads (SDR ou closer); o Head e o Diretor veem o funil inteiro.
-  const veTudo = diretor || vinc?.cargo === "head";
+  const veTudo = diretor || analista || vinc?.cargo === "head";
   let consultaLeads = supabase.from("entrevistas_leads").select(COLUNAS_FINANCE).eq("negocio_id", fin.id);
   if (!veTudo) consultaLeads = consultaLeads.or(`sdr_profile_id.eq.${viewer.effectiveId},closer_profile_id.eq.${viewer.effectiveId}`);
   const [{ data: leadsRaw, error }, { data: motivosRaw }] = await Promise.all([
