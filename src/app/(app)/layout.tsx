@@ -96,6 +96,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
     items: [
       { href: "/negocio", label: "Dashboard do Negócio", roles: ["closer", "lider", "diretor", "investidor"] },
       { href: "/pace-negocio", label: "Pace", roles: ["sdr", "closer", "lider", "diretor", "analista"] },
+      { href: "/auditoria-comercial", label: "Auditoria", roles: ["lider", "diretor", "analista"] },
       { href: "/compromissos", label: "Compromissos", roles: ["diretor", "lider", "analista"] },
       { href: "/metas", label: "Metas Mensais", roles: ["diretor", "analista"] },
       { href: "/lancar-vendas", label: "Lançar Vendas", roles: ["closer", "lider", "diretor"] },

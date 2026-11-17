@@ -229,6 +229,20 @@ export function contarPorDia(itens: { data: string; canal: CanalPortal; etapa: s
 }
 
 // ---------------------------------------------------------------- ranking de pré-vendas
+/** Responsável num instante, pelo histórico [instante, responsável] do lead (`folgaMs` depois do instante). */
+export function responsavelEm(hist: [string, string][] | undefined, iso: string, folgaMs = 1000): string | null {
+  if (!hist) return null;
+  let r: string | null = null;
+  for (const [em, quem] of hist) if (Date.parse(em) <= Date.parse(iso) + folgaMs) r = quem;
+  return r;
+}
+
+/** Quem agendou: o responsável quando o lead chegou em Reunião Agendada; sem histórico, o pré-vendas do
+ *  lead, senão o responsável atual. */
+export function responsavelNoAgendamento(d: DealCrm, marcos: Partial<Record<Nivel, string>> | undefined, hist: [string, string][] | undefined): string | null {
+  const t = marcos?.[NIVEL.agendada];
+  return (t ? responsavelEm(hist, t) : null) ?? d.sdr_user_id ?? d.responsavel_user_id;
+}
 export type PessoaRanking = { pessoa: string | null; leads: { nome: string; data: string; canal: CanalPortal }[] };
 
 /**
@@ -245,16 +259,7 @@ export function rankingPreVendas(
   etapas: string[] = ["reunioes_agendadas", "reunioes_realizadas", "vendas"],
 ): Record<string, PessoaRanking[]> {
   const marcos = marcosPorLead(eventos, cfg);
-  const quemAgendou = (d: DealCrm): string | null => {
-    const t = marcos.get(d.deal_id)?.[NIVEL.agendada];
-    const hist = responsaveis.get(d.deal_id);
-    if (t && hist) {
-      let r: string | null = null;
-      for (const [em, quem] of hist) if (Date.parse(em) <= Date.parse(t) + 1000) r = quem;
-      if (r) return r;
-    }
-    return d.sdr_user_id ?? d.responsavel_user_id;
-  };
+  const quemAgendou = (d: DealCrm) => responsavelNoAgendamento(d, marcos.get(d.deal_id), responsaveis.get(d.deal_id));
   const out: Record<string, PessoaRanking[]> = {};
   for (const etapa of etapas) {
     const porPessoa = new Map<string | null, PessoaRanking>();

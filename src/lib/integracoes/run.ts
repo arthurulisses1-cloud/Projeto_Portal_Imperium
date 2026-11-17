@@ -9,6 +9,7 @@ import { buscarLigacoesDoDia, contarAlosConexoes } from "./tresc";
 import { Pipefacil, type AtividadePipefacil, type DealPipefacil } from "./pipefacil";
 import { calcularFunilUnico, contarPorDia, detalharVisoes, etapaBase, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { ETAPAS_COM_LISTA } from "./leads-funil";
+import { montarAuditoria } from "./auditoria";
 import type { LeadEtapa } from "@/lib/funil-negocio";
 
 export type OpcoesSync = {
@@ -236,6 +237,14 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const inicio = mesAnterior < INICIO_REALIZADO ? INICIO_REALIZADO : mesAnterior;
   const fimExcl = inicioDoMes(hoje, 1);
   // Negócio com funil próprio (Energy): as etapas do funil do CRM, sem divisão por canal.
+  // Responsável de cada lead em cada evento do histórico relido (ranking, auditoria).
+  const responsaveis = new Map<string, [string, string][]>();
+  for (const a of [...atividades].sort((x, y) => Date.parse(x.occurredAt) - Date.parse(y.occurredAt))) {
+    if (!a.metadata?.responsibleUserId) continue;
+    const h = responsaveis.get(a.dealId) ?? [];
+    h.push([a.occurredAt, a.metadata.responsibleUserId]);
+    responsaveis.set(a.dealId, h);
+  }
   // Funis por canal: a visão padrão e as visões ("Leads do mês", MQL/não MQL) saem da mesma passada.
   const visoes = cfg.funilUnico ? [] : detalharVisoes(linhasDeals, eventos, cfg, inicio, fimExcl);
   const contagens = cfg.funilUnico ? calcularFunilUnico(linhasDeals, eventos, cfg.funilUnico, inicio, fimExcl) : contarPorDia(visoes);
@@ -255,13 +264,6 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
     }
     // Ranking de pré-vendas (agendadas e realizadas, todos os leads e canais): quem era o responsável no
     // momento do agendamento, pelo histórico relido (cada evento traz o responsável daquele instante).
-    const responsaveis = new Map<string, [string, string][]>();
-    for (const a of [...atividades].sort((x, y) => Date.parse(x.occurredAt) - Date.parse(y.occurredAt))) {
-      if (!a.metadata?.responsibleUserId) continue;
-      const h = responsaveis.get(a.dealId) ?? [];
-      h.push([a.occurredAt, a.metadata.responsibleUserId]);
-      responsaveis.set(a.dealId, h);
-    }
     const padrao = visoes.filter((v) => !v.etapa.includes(":"));
     for (let mes = inicio.slice(0, 7); mes < fimExcl.slice(0, 7); mes = inicioDoMes(`${mes}-01`, 1).slice(0, 7)) {
       const ranking = rankingPreVendas(padrao.filter((v) => v.data.startsWith(mes)), eventos, cfg, responsaveis);
@@ -304,6 +306,28 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
     if (a.metadata?.responsibleUserId && etapa && cfg.stagesGanhoVenda.includes(etapa)) responsavelNoGanho.set(a.dealId, a.metadata.responsibleUserId);
   }
   const ganhas = cfg.recebidoPeloCrm ? [] : vendasGanhas(linhasDeals, eventos, cfg, responsavelNoGanho).filter((g) => g.data >= inicioVendas);
+
+  // 5) Base da Auditoria comercial (Dados → Auditoria): leads que chegaram a Reunião Agendada, com campos,
+  // marcos (mesma regra do Dashboard), situação da reunião e linha do tempo.
+  if (!simular && !cfg.funilUnico) {
+    const etapas = new Map<string, { nome: string; funil: string }>();
+    for (const f of await api.funis()) for (const st of f.stages ?? []) etapas.set(st.id, { nome: st.name, funil: f.name });
+    const leads = montarAuditoria({
+      deals: linhasDeals,
+      extras: new Map(deals.map((d) => [d.id, d])),
+      eventos,
+      cfg,
+      etapas,
+      responsaveis,
+      vendedores: responsavelNoGanho,
+      nomes: nomesUsuarios,
+    });
+    await supabase.from("integracao_estado").upsert({
+      chave: `auditoria:${slug}`,
+      valor: { atualizado_em: new Date().toISOString(), leads },
+      atualizado_em: new Date().toISOString(),
+    });
+  }
   let vendas: Resultado = { ganhas: ganhas.length, criadas: 0, atualizadas: 0, removidas: 0, semVinculo: [] as string[] };
   if (opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas);
 

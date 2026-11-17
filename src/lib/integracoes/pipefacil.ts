@@ -17,7 +17,10 @@ export type DealPipefacil = {
   createdAt: string;
   closedAt: string | null;
   lostReason?: string | null;
+  expectedCloseAt?: string | null;
 };
+
+export type FunilPipefacil = { id: string; seq: number; name: string; stages: { id: string; name: string }[] };
 
 export type AtividadePipefacil = {
   id: string;
@@ -96,6 +99,12 @@ export class Pipefacil {
       cursor = r.data.nextCursor;
     }
     return out;
+  }
+
+  /** Funis da conta com as etapas (nomes para a auditoria). */
+  async funis(): Promise<FunilPipefacil[]> {
+    const r = await this.get<{ data: FunilPipefacil[] | { items: FunilPipefacil[] } }>("/pipelines");
+    return Array.isArray(r.data) ? r.data : r.data.items ?? [];
   }
 
   async membros(): Promise<MembroPipefacil[]> {
