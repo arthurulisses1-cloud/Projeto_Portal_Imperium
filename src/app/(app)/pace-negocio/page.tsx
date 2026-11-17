@@ -468,7 +468,7 @@ function linhaFalta(p: PaceCalculado, fmt: (v: number) => string) {
 }
 
 /** Cartão de um indicador do time no topo (recebido, agendadas, realizadas). */
-function CartaoIndicador({ titulo, p, fmt, canais }: { titulo: string; p: PaceCalculado; fmt: (v: number) => string; canais?: IndicadorEsforco["canais"] }) {
+function CartaoIndicador({ titulo, p, fmt, canais, leads }: { titulo: string; p: PaceCalculado; fmt: (v: number) => string; canais?: IndicadorEsforco["canais"]; leads?: IndicadorEsforco["leads"] }) {
   return (
     <div className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
       <div className="flex items-center justify-between gap-2">
@@ -476,7 +476,7 @@ function CartaoIndicador({ titulo, p, fmt, canais }: { titulo: string; p: PaceCa
         <SeloStatus status={p.status} />
       </div>
       <p className="mt-1 text-2xl font-semibold text-stone-100">
-        {fmt(p.recebido)} {p.meta > 0 && <span className="text-sm font-normal text-stone-500">de {fmt(p.meta)}</span>}
+        <RealizadoComLeads valor={fmt(p.recebido)} leads={leads} alinhar="esquerda" /> {p.meta > 0 && <span className="text-sm font-normal text-stone-500">de {fmt(p.meta)}</span>}
       </p>
       <BarraPace p={p} />
       <p className="mt-1.5 text-[11px] text-stone-400">
@@ -508,7 +508,7 @@ function BlocoPessoa({ titulo, ind }: { titulo: string; ind: IndicadorEsforco })
         <SeloStatus status={p.status} />
       </div>
       <p className="mt-0.5 text-lg font-semibold text-stone-100">
-        {dec(p.recebido)} {p.meta > 0 && <span className="text-xs font-normal text-stone-500">de {dec(p.meta)}</span>}
+        <RealizadoComLeads valor={dec(p.recebido)} leads={ind.leads} alinhar="esquerda" /> {p.meta > 0 && <span className="text-xs font-normal text-stone-500">de {dec(p.meta)}</span>}
       </p>
       <BarraPace p={p} />
       <p className="mt-1 text-[11px] text-stone-500">
@@ -579,8 +579,8 @@ function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: Esfo
       {/* Topo: recebido, agendadas e realizadas do time */}
       <div className="grid gap-4 md:grid-cols-3">
         <CartaoIndicador titulo="Recebido" p={p} fmt={moeda} />
-        <CartaoIndicador titulo="Reuniões agendadas" p={esforco.time.reunioes_agendadas.pace} fmt={dec} canais={esforco.time.reunioes_agendadas.canais} />
-        <CartaoIndicador titulo="Reuniões realizadas" p={esforco.time.reunioes_realizadas.pace} fmt={dec} canais={esforco.time.reunioes_realizadas.canais} />
+        <CartaoIndicador titulo="Reuniões agendadas" p={esforco.time.reunioes_agendadas.pace} fmt={dec} canais={esforco.time.reunioes_agendadas.canais} leads={esforco.time.reunioes_agendadas.leads} />
+        <CartaoIndicador titulo="Reuniões realizadas" p={esforco.time.reunioes_realizadas.pace} fmt={dec} canais={esforco.time.reunioes_realizadas.canais} leads={esforco.time.reunioes_realizadas.leads} />
       </div>
 
       {/* Pré-vendas: o pace total de cada um (um canal compensa o outro) e os canais embaixo */}
