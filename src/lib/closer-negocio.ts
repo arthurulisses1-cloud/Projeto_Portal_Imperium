@@ -99,13 +99,9 @@ export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, a
   };
 }
 
-/**
- * Setup/implantação recebido numa venda: o que passa da mensalidade (valor recebido − MRR do contrato). Sem MRR lançado
- * não dá para separar, então conta 0 (pura).
- */
-export function setupDaVenda(v: { valor: number | null; mrr: number | null }): number {
-  const mrr = Number(v.mrr ?? 0);
-  return mrr > 0 ? Math.max(0, Number(v.valor ?? 0) - mrr) : 0;
+/** Setup/implantação de uma venda: o "Valor da implantação" cadastrado no CRM (vendas.valor_implantacao); sem ele, 0 (pura). */
+export function setupDaVenda(v: { valor_implantacao?: number | null }): number {
+  return Math.max(0, Number(v.valor_implantacao ?? 0));
 }
 
 export type PainelCloser = {
@@ -166,7 +162,11 @@ export async function buscarPainelCloser(
 
   const deHoje = (vendas ?? []).filter((v) => v.data === ctx.hoje);
   const metaSetupNegocio = metaSetupForecast(negocio.slug, ctx.ano, ctx.mes);
-  const setupMes = (vendas ?? []).reduce((s, v) => s + setupDaVenda(v as { valor: number | null; mrr: number | null }), 0);
+  // Lido à parte: antes da migration 0116 a coluna não existe e a leitura falha sem derrubar o resto do painel.
+  const { data: implantacoes, error: erroImpl } = metaSetupNegocio > 0
+    ? await admin.from("vendas").select("valor_implantacao").eq("negocio_id", negocio.id).eq("profile_id", pessoa.id).gte("data", inicio).lt("data", fimExcl)
+    : { data: [], error: null };
+  const setupMes = erroImpl ? 0 : (implantacoes ?? []).reduce((s, v) => s + setupDaVenda(v as { valor_implantacao?: number | null }), 0);
   return {
     slug: negocio.slug,
     setup: metaSetupNegocio > 0 ? calcularPace({ meta: metaMrrDaPessoa(metaSetupNegocio, eu?.meta ?? null, pn?.pace.meta ?? 0), recebido: setupMes, ...base }) : null,
@@ -195,8 +195,8 @@ export async function setupDoNegocio(
   if (!(meta > 0)) return null;
   const { inicio, fim } = limitesDoMes(ctx.ano, ctx.mes);
   const fimExcl = new Date(Date.parse(fim + "T00:00:00Z") + 86400_000).toISOString().slice(0, 10);
-  const { data } = await admin.from("vendas").select("valor, mrr").eq("negocio_id", negocio.id).gte("data", inicio).lt("data", fimExcl).range(0, 19999);
-  const realizado = (data ?? []).reduce((s, v) => s + setupDaVenda(v as { valor: number | null; mrr: number | null }), 0);
+  const { data, error } = await admin.from("vendas").select("valor_implantacao").eq("negocio_id", negocio.id).gte("data", inicio).lt("data", fimExcl).range(0, 19999);
+  const realizado = error ? 0 : (data ?? []).reduce((s, v) => s + setupDaVenda(v as { valor_implantacao?: number | null }), 0);
   return calcularPace({ meta, recebido: realizado, hoje: ctx.hoje, ano: ctx.ano, mes: ctx.mes });
 }
 

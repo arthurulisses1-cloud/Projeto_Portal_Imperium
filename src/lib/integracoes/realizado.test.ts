@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CRM_POR_NEGOCIO, TRESC_POR_NEGOCIO } from "./config";
 import { calcularFunilUnico, calcularRealizadoCrm, contarPorDia, dataBR, detalharVisoes, ehMql, leadsDoRealizado, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { contarAlosConexoes, segundos } from "./tresc";
-import { canalDoDeal } from "./run";
+import { canalDoDeal, valorDaImplantacao } from "./run";
 import { aplicarLeads, aplicarRealizado, leadsPorQualificacao, montarFunisDaVisao, etapasIntegradas, funilUnicoDoNegocio, funisDoMes } from "../funil-negocio";
 import { ganhosDoMes } from "../recebido-crm";
 
@@ -633,5 +633,15 @@ describe("3C por pré-vendas", () => {
     expect(Object.fromEntries(r)).toEqual({ marcus: { alos: 2, conexoes: 1 }, vini: { alos: 1, conexoes: 1 }, ninguem: { alos: 0, conexoes: 0 } });
     // o agente 3 (sem de-para) fica só no total
     expect(contarAlosConexoes(ligs, 60)).toEqual({ alos: 4, conexoes: 3 });
+  });
+});
+
+describe("valorDaImplantacao", () => {
+  it("lê o campo configurado ou o primeiro com 'implanta' no nome", () => {
+    expect(valorDaImplantacao({ valor_da_implantacao: 2500 })).toBe(2500);
+    expect(valorDaImplantacao({ valor_implantacao: "R$ 2.500,50" })).toBe(2500.5);
+    expect(valorDaImplantacao({ mrr_competencia: 600, outro: 1 })).toBeNull();
+    expect(valorDaImplantacao({ x_setup: 100, impl: 3 }, "x_setup")).toBe(100);
+    expect(valorDaImplantacao({ valor_implantacao: "" })).toBeNull();
   });
 });
