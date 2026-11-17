@@ -32,6 +32,13 @@ export type SunneDeal = {
   createdAt: string;
   closedAt: string | null;
   averageConsumption: number | null;
+  /** Onde o negócio estava ao ser perdido (funil e etapa). */
+  lostFromFunnel?: string | null;
+  lostFromStageKey?: string | null;
+  /** A validação da Sunne está esperando um retorno interno (não é pendência do parceiro). */
+  waitingNote?: boolean;
+  /** Pendências abertas ou em reanálise (só buscadas para negócios em validação). */
+  pendenciasAbertas?: number;
 };
 
 export type SunneOrganizacao = { id: string; nome: string | null };
@@ -50,7 +57,31 @@ export type SunneOrganizacaoResumo = {
   kwh: number;
 };
 
+/** Funil das contas subidas no mês (todos os canais), pelo estado atual de cada negócio. */
+export type FunilContasSunne = {
+  /** Contas subidas (negócios criados no mês). */
+  subidas: number;
+  /** Chegaram a "Contrato enviado" ou além. */
+  avancaram: number;
+  /** Chegaram a "Validação": o contrato foi assinado. */
+  validacao: number;
+  /** Das validações: virou ganho (fechado). */
+  ganho: number;
+  /** Das validações: com pendência aberta ou em reanálise. */
+  pendencia: number;
+  /** Das validações: aguardando retorno interno da Sunne. */
+  aguardando: number;
+  /** Das validações: em análise, sem pendência. */
+  emAnalise: number;
+  /** Das validações: perdidos de fato. */
+  perdidoAposValidacao: number;
+  /** Perdidos de contas subidas no mês, em qualquer etapa. */
+  perdidos: number;
+  porOrganizacao: { organizationId: string; nome: string; pessoa: string | null; subidas: number; avancaram: number; validacao: number; ganho: number; pendencia: number; perdidos: number }[];
+};
+
 export type SunneResumo = {
+  contas: FunilContasSunne;
   criados: number;
   fechados: number;
   consumoMedioFechado: number;
@@ -86,6 +117,9 @@ function lerDeal(bruto: unknown): SunneDeal {
     createdAt: d.createdAt,
     closedAt: textoOuNulo(d.closedAt),
     averageConsumption: typeof d.averageConsumption === "number" && Number.isFinite(d.averageConsumption) ? d.averageConsumption : null,
+    lostFromFunnel: textoOuNulo((d.lostFrom as Record<string, unknown> | null | undefined)?.funnel),
+    lostFromStageKey: textoOuNulo((d.lostFrom as Record<string, unknown> | null | undefined)?.stageKey),
+    waitingNote: texto(d.waitingNote) && d.waitingNote.trim() !== "",
   };
 }
 
@@ -118,6 +152,25 @@ async function listarTudo<T extends { id: string }>(token: string, caminho: stri
   throw new Error(`Limite de paginação Sunne excedido em /${caminho}`);
 }
 
+/** Em validação o negócio pode ter pendência aberta; a listagem não informa, então lê o detalhe só desses (poucos). */
+async function contarPendencias(token: string, deals: SunneDeal[]): Promise<void> {
+  const emValidacao = deals.filter((d) => d.funnel === "sales" && d.stageKey === "validation" && !d.isClosed && !d.isLost).slice(0, 80);
+  for (let i = 0; i < emValidacao.length; i += 5) {
+    await Promise.all(
+      emValidacao.slice(i, i + 5).map(async (d) => {
+        try {
+          const resposta = await fetch(new URL(`${BASE}/deals/${d.id}`), { headers: { "s-api-key": token }, cache: "no-store", signal: AbortSignal.timeout(15000) });
+          if (!resposta.ok) return;
+          const corpo = (await resposta.json()) as { pendencies?: { status?: string }[] } | null;
+          d.pendenciasAbertas = (corpo?.pendencies ?? []).filter((p) => p.status === "open" || p.status === "in_review").length;
+        } catch {
+          // Sem o detalhe, o negócio cai em "em análise": a contagem de pendências é um refinamento, não derruba o painel.
+        }
+      }),
+    );
+  }
+}
+
 /** Negócios de GD da rede e o nome de cada organização (que vem das comissões). Sem cache. */
 export async function lerRedeSunne(): Promise<SunneRede> {
   const token = process.env.SUNNE_SYS_API_TOKEN;
@@ -126,6 +179,7 @@ export async function lerRedeSunne(): Promise<SunneRede> {
     listarTudo(token, "deals", "deals", { product: PRODUTO_KWH }, lerDeal),
     listarTudo(token, "commissions", "commissions", {}, lerComissao),
   ]);
+  await contarPendencias(token, deals);
   const nomes = new Map<string, string | null>();
   for (const d of deals) if (!nomes.has(d.organizationId)) nomes.set(d.organizationId, null);
   for (const c of comissoes) if (c.organizationName) nomes.set(c.organizationId, c.organizationName);
@@ -133,7 +187,7 @@ export async function lerRedeSunne(): Promise<SunneRede> {
 }
 
 /** Mesma leitura, guardada em cache no servidor por alguns minutos. */
-export const redeSunneEmCache = unstable_cache(lerRedeSunne, ["sunne-rede-v1"], { revalidate: CACHE_SUNNE_SEGUNDOS, tags: ["sunne"] });
+export const redeSunneEmCache = unstable_cache(lerRedeSunne, ["sunne-rede-v2"], { revalidate: CACHE_SUNNE_SEGUNDOS, tags: ["sunne"] });
 
 // ---------------------------------------------------------------- vendedor de cada organização
 
@@ -170,12 +224,70 @@ function mesLocal(data: string | null): string | null {
   return `${partes.find((p) => p.type === "year")?.value}-${partes.find((p) => p.type === "month")?.value}`;
 }
 
+const ORDEM_VENDAS = ["referral_sent", "accepted_by_team", "meeting_scheduled", "proposal_sent", "contract_sent", "validation"];
+
+/** Até onde o negócio chegou: 0..5 = etapa do funil de vendas; 6 = validado/fechado ou além; -1 = não dá para saber. */
+export function alcanceDoNegocio(d: SunneDeal): number {
+  if (d.isClosed || d.funnel === "connection" || d.funnel === "post_sales") return 6;
+  if (d.isLost) {
+    if (d.lostFromFunnel === "connection" || d.lostFromFunnel === "post_sales") return 6;
+    const i = ORDEM_VENDAS.indexOf(d.lostFromStageKey ?? "");
+    return i >= 0 ? i : -1;
+  }
+  const i = ORDEM_VENDAS.indexOf(d.stageKey);
+  return i >= 0 ? i : 0;
+}
+
+/** Funil das contas subidas no mês, independente do canal: subidas → avançaram → validação → ganho, pendência ou perdido. */
+export function funilDasContas(deals: SunneDeal[], ano: number, mes: number, vendedores: Map<string, SunneVendedor> = new Map()): FunilContasSunne {
+  const periodo = `${ano}-${String(mes).padStart(2, "0")}`;
+  const vazio = () => ({ subidas: 0, avancaram: 0, validacao: 0, ganho: 0, pendencia: 0, perdidos: 0 });
+  const porOrg = new Map<string, ReturnType<typeof vazio> & { organizationId: string; nome: string; pessoa: string | null }>();
+  const f: FunilContasSunne = { subidas: 0, avancaram: 0, validacao: 0, ganho: 0, pendencia: 0, aguardando: 0, emAnalise: 0, perdidoAposValidacao: 0, perdidos: 0, porOrganizacao: [] };
+
+  for (const d of deals) {
+    if (d.product !== PRODUTO_KWH || mesLocal(d.createdAt) !== periodo) continue;
+    const v = vendedores.get(d.organizationId);
+    let org = porOrg.get(d.organizationId);
+    if (!org) {
+      org = { ...vazio(), organizationId: d.organizationId, nome: v?.nome || `Organização ${d.organizationId.slice(0, 6)}`, pessoa: v?.pessoa ?? null };
+      porOrg.set(d.organizationId, org);
+    }
+    const alcance = alcanceDoNegocio(d);
+    f.subidas++;
+    org.subidas++;
+    if (alcance >= 4) {
+      f.avancaram++;
+      org.avancaram++;
+    }
+    if (alcance >= 5) {
+      f.validacao++;
+      org.validacao++;
+      if (d.isLost) f.perdidoAposValidacao++;
+      else if (d.isClosed) {
+        f.ganho++;
+        org.ganho++;
+      } else if ((d.pendenciasAbertas ?? 0) > 0) {
+        f.pendencia++;
+        org.pendencia++;
+      } else if (d.waitingNote) f.aguardando++;
+      else f.emAnalise++;
+    }
+    if (d.isLost) {
+      f.perdidos++;
+      org.perdidos++;
+    }
+  }
+  f.porOrganizacao = Array.from(porOrg.values()).sort((a, b) => b.subidas - a.subidas || b.ganho - a.ganho || a.nome.localeCompare(b.nome, "pt-BR"));
+  return f;
+}
+
 /**
  * Contas subidas (negócios criados), fechados não perdidos e o consumo médio
  * (kWh/mês) desses fechados no mês, no total e por organização (vendedor).
  * As etapas são a posição atual dos negócios não perdidos, de qualquer mês.
  */
-export function resumirSunne(deals: SunneDeal[], ano: number, mes: number, vendedores: Map<string, SunneVendedor> = new Map()): Omit<SunneResumo, "lidoEm"> {
+export function resumirSunne(deals: SunneDeal[], ano: number, mes: number, vendedores: Map<string, SunneVendedor> = new Map()): Omit<SunneResumo, "lidoEm" | "contas"> {
   const periodo = `${ano}-${String(mes).padStart(2, "0")}`;
   const porOrg = new Map<string, SunneOrganizacaoResumo>();
   const daOrg = (id: string) => {
@@ -231,7 +343,8 @@ export function resumirSunne(deals: SunneDeal[], ano: number, mes: number, vende
 export async function buscarResumoSunne(supabase: SupabaseClient, ano: number, mes: number): Promise<SunneResumo> {
   const [rede, { data: perfis, error }] = await Promise.all([redeSunneEmCache(), supabase.from("profiles").select("id, full_name, nomes_planilha").eq("ativo", true)]);
   if (error) throw new Error("Erro lendo profiles: " + error.message);
-  return { ...resumirSunne(rede.deals, ano, mes, vendedoresSunne(rede.organizacoes, perfis ?? [])), lidoEm: rede.lidoEm };
+  const vendedores = vendedoresSunne(rede.organizacoes, perfis ?? []);
+  return { ...resumirSunne(rede.deals, ano, mes, vendedores), contas: funilDasContas(rede.deals, ano, mes, vendedores), lidoEm: rede.lidoEm };
 }
 
 /** kWh (consumo médio) dos negócios fechados no mês, para a meta de kWh do Energy. */

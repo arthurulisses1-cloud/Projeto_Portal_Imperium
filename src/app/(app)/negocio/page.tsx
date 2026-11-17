@@ -12,6 +12,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { RealizadoComLeads } from "@/components/negocio/RealizadoComLeads";
 import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
 import { buscarResumoSunne, type SunneResumo } from "@/lib/sunne";
+import ContasSunne from "@/components/negocio/ContasSunne";
 import { buscarLigacoesSunne, type LigacoesResumo } from "@/lib/api4com";
 import type { StatusPace } from "@/lib/pace-negocio";
 import { BotaoAtualizarRealizado } from "@/components/negocio/BotaoAtualizarRealizado";
@@ -481,6 +482,9 @@ export default async function NegocioDashboardPage({
           </div>
         )}
       </section>
+
+      {/* Energy: contas na plataforma Sunne (todos os canais) até a validação e o desfecho */}
+      {atual.slug === "vorp-energy" && sunne && <ContasSunne contas={sunne.contas} cor={cor} mesLabel={`${String(mes).padStart(2, "0")}/${ano}`} />}
 
       {/* Rankings dos indicadores-chave */}
       {rankings.length > 0 && (

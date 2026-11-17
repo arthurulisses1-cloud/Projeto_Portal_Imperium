@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { casarOrganizacao, lerRedeSunne, resumirSunne, vendedoresSunne, type SunneDeal } from "./sunne";
+import { alcanceDoNegocio, casarOrganizacao, funilDasContas, lerRedeSunne, resumirSunne, vendedoresSunne, type SunneDeal } from "./sunne";
 
 // Dados fictícios: nenhum identificador, nome ou valor vem da Sunne real.
 const base: SunneDeal = {
@@ -66,6 +66,35 @@ describe("resumirSunne", () => {
       ["Jose da Silva", "José da Silva", "p-a", 300, 1],
       ["Organização org-c-", null, null, 0, 1],
     ]);
+  });
+});
+
+describe("funilDasContas", () => {
+  const vendedores = new Map([["org-a", { nome: "Vendedor A", profileId: "p-a", pessoa: "Vendedor A" }]]);
+  const d = (id: string, extra: Partial<SunneDeal>): SunneDeal => ({ ...base, id, stage: "x", stageKey: "proposal_sent", ...extra });
+
+  it("conta subidas, avançaram, validação e o desfecho de cada uma, independente do canal", () => {
+    const deals = [
+      d("a", { stageKey: "proposal_sent" }), // subida, não avançou
+      d("b", { stageKey: "contract_sent" }), // avançou
+      d("c", { stageKey: "validation", pendenciasAbertas: 2 }), // validação com pendência
+      d("e", { stageKey: "validation", waitingNote: true }), // validação aguardando a Sunne
+      d("f", { stageKey: "validation" }), // validação em análise
+      d("g", { funnel: "connection", stageKey: "send_to_plant", isClosed: true, closedAt: "2026-11-05T12:00:00Z" }), // ganho
+      d("h", { funnel: "lost", stageKey: "lost", isLost: true, lostFromFunnel: "sales", lostFromStageKey: "validation" }), // perdido após validação
+      d("i", { funnel: "lost", stageKey: "lost", isLost: true, lostFromFunnel: "sales", lostFromStageKey: "proposal_sent" }), // perdido antes
+      d("j", { createdAt: "2026-10-20T12:00:00Z" }), // outro mês: fora
+      d("k", { product: "alugsol" }), // outro produto: fora
+    ];
+    const f = funilDasContas(deals, 2026, 11, vendedores);
+    expect(f).toMatchObject({ subidas: 8, avancaram: 6, validacao: 5, ganho: 1, pendencia: 1, aguardando: 1, emAnalise: 1, perdidoAposValidacao: 1, perdidos: 2 });
+    expect(f.porOrganizacao[0]).toMatchObject({ nome: "Vendedor A", subidas: 8, validacao: 5, ganho: 1, pendencia: 1, perdidos: 2 });
+  });
+
+  it("até onde o negócio chegou", () => {
+    expect(alcanceDoNegocio(d("1", { stageKey: "meeting_scheduled" }))).toBe(2);
+    expect(alcanceDoNegocio(d("2", { funnel: "post_sales", stageKey: "active" }))).toBe(6);
+    expect(alcanceDoNegocio(d("3", { isLost: true, funnel: "lost", stageKey: "lost" }))).toBe(-1);
   });
 });
 
