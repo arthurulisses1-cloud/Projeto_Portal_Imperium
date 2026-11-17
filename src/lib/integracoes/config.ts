@@ -169,7 +169,7 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     // Inbound = só Tráfego Pago; Referidos = "Referido". Google, Instagram, WhatsApp IA, Parceiros, Indicação
     // de cliente/investidor etc. são canais alternativos (vendas sem funil).
     canais: { outbound: "outbound", trafego: "inbound", referido: "indicacao" },
-    campos: { faturamento: "faturamento_mensal", cargo: "cargo", tamanhoTime: "tamanho_do_time", mrr: "mrr_competencia" }, // "MRR Competência" (aba Principal)
+    campos: { faturamento: "faturamento_mensal", cargo: "cargo", tamanhoTime: "tamanho_do_time", mrr: "mrr_competencia", origem: "origem_lead" }, // "MRR Competência" (aba Principal)
     // MQL: faturamento a partir de 50 mil/mês e mais de 2 vendedores.
     mql: {
       faturamento: [

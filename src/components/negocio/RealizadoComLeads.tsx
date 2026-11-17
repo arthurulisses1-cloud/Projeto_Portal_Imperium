@@ -1,7 +1,14 @@
 import type { LeadEtapa } from "@/lib/funil-negocio";
 
 /** Nome de cada valor do campo "Origem do lead" do CRM. */
-const ORIGEM: Record<string, string> = { trafego: "Tráfego Pago", base_fria: "Base fria", indicacao: "Indicação", evento: "Evento" };
+const ORIGEM: Record<string, string> = {
+  trafego: "Tráfego Pago",
+  // Galáticos: lead antigo de tráfego da Vorp (listas "Base Vorp"), separado do tráfego da própria Match Sales.
+  trafego_vorp: "Tráfego Pago Vorp",
+  base_fria: "Base fria",
+  indicacao: "Indicação",
+  evento: "Evento",
+};
 const nomeOrigem = (o: string) => ORIGEM[o] ?? o;
 
 /** Número do realizado; com leads, mostra a lista (data, lead, responsável e pré-vendas) ao passar o mouse.
