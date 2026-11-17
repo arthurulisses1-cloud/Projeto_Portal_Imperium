@@ -2,6 +2,7 @@
 // reuniões previstas, reuniões do dia (horário e SDR) e pace de reuniões realizadas.
 import type { PainelCloser, ReuniaoDoDia } from "@/lib/closer-negocio";
 import PaceAlternavel from "@/components/negocio/PaceAlternavel";
+import DestaqueSetup from "@/components/negocio/DestaqueSetup";
 import { BarraMes, PaceEsforcoCard, ReunioesAAcontecer } from "@/components/negocio/PainelSdr";
 
 function hora(iso: string | null, texto: string | null): string {
@@ -69,8 +70,12 @@ export function MuralCloser({
         opcoes={[
           { chave: "recebido", rotulo: "Recebido", conteudo: <PaceEsforcoCard titulo="Recebido no mês" p={painel.recebido} cor={cor} mesAtual={mesAtual} formato="moeda" /> },
           { chave: "mrr", rotulo: "MRR", conteudo: <PaceEsforcoCard titulo="MRR vendido no mês" p={painel.mrr} cor={cor} mesAtual={mesAtual} formato="moeda" /> },
+          ...(painel.setup
+            ? [{ chave: "setup", rotulo: "Setup", conteudo: <PaceEsforcoCard titulo="Setup / implantação no mês" p={painel.setup} cor={cor} mesAtual={mesAtual} formato="moeda" /> }]
+            : []),
         ]}
       />
+      {painel.setup && <DestaqueSetup setup={painel.setup} recebidoMeta={painel.recebido.meta} cor={cor} />}
       <div className="grid gap-4 md:grid-cols-3">
         <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões previstas pra acontecer</p>

@@ -9,7 +9,7 @@
 //  - meta de reuniões realizadas: a do forecast (todos os canais) dividida em partes iguais entre os closers.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuditoriaGravada, LeadAuditoria } from "@/lib/integracoes/auditoria";
-import { metaMrrForecast } from "@/lib/forecast-negocios";
+import { metaMrrForecast, metaSetupForecast } from "@/lib/forecast-negocios";
 import { calcularPace, limitesDoMes, buscarPaceNegocios, type PaceCalculado } from "@/lib/pace-negocio";
 import { TIMES_POR_CANAL, metasPorCanal } from "@/lib/pace-esforco";
 import { lerDataReuniao, statusRqa, usuarioCrmDoPerfil, type ReuniaoFutura, type StatusRqa } from "@/lib/sdr-negocio";
@@ -99,8 +99,19 @@ export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, a
   };
 }
 
+/**
+ * Setup/implantação recebido numa venda: o que passa da mensalidade (valor recebido − MRR do contrato). Sem MRR lançado
+ * não dá para separar, então conta 0 (pura).
+ */
+export function setupDaVenda(v: { valor: number | null; mrr: number | null }): number {
+  const mrr = Number(v.mrr ?? 0);
+  return mrr > 0 ? Math.max(0, Number(v.valor ?? 0) - mrr) : 0;
+}
+
 export type PainelCloser = {
   slug: string;
+  /** Setup/implantação (Match Sales): parte da meta de recebido, com o realizado. null = negócio sem setup. */
+  setup: PaceCalculado | null;
   nomeCrm: string | null;
   recebido: PaceCalculado;
   mrr: PaceCalculado;
@@ -154,8 +165,11 @@ export async function buscarPainelCloser(
   const reunioes = nomeCrm && auditoria ? resumirReunioesCloser(auditoria.leads ?? [], nomeCrm, ctx.ano, ctx.mes, ctx.hoje, negocio.slug !== SLUG_VORP) : null;
 
   const deHoje = (vendas ?? []).filter((v) => v.data === ctx.hoje);
+  const metaSetupNegocio = metaSetupForecast(negocio.slug, ctx.ano, ctx.mes);
+  const setupMes = (vendas ?? []).reduce((s, v) => s + setupDaVenda(v as { valor: number | null; mrr: number | null }), 0);
   return {
     slug: negocio.slug,
+    setup: metaSetupNegocio > 0 ? calcularPace({ meta: metaMrrDaPessoa(metaSetupNegocio, eu?.meta ?? null, pn?.pace.meta ?? 0), recebido: setupMes, ...base }) : null,
     nomeCrm,
     recebido: calcularPace({ meta: eu?.meta ?? 0, recebido: recebidoMes, ...base }),
     mrr: calcularPace({ meta: metaMrrDaPessoa(metaMrrForecast(negocio.slug, ctx.ano, ctx.mes), eu?.meta ?? null, pn?.pace.meta ?? 0), recebido: mrrMes, ...base }),
@@ -169,6 +183,21 @@ export async function buscarPainelCloser(
       mrr: deHoje.reduce((s, v) => s + Number(v.mrr ?? 0), 0),
     },
   };
+}
+
+/** Setup/implantação do negócio inteiro no mês (meta do forecast e realizado), para o Mural do Head. null = negócio sem setup. */
+export async function setupDoNegocio(
+  admin: SupabaseClient,
+  negocio: { id: string; slug: string },
+  ctx: { ano: number; mes: number; hoje: string },
+): Promise<PaceCalculado | null> {
+  const meta = metaSetupForecast(negocio.slug, ctx.ano, ctx.mes);
+  if (!(meta > 0)) return null;
+  const { inicio, fim } = limitesDoMes(ctx.ano, ctx.mes);
+  const fimExcl = new Date(Date.parse(fim + "T00:00:00Z") + 86400_000).toISOString().slice(0, 10);
+  const { data } = await admin.from("vendas").select("valor, mrr").eq("negocio_id", negocio.id).gte("data", inicio).lt("data", fimExcl).range(0, 19999);
+  const realizado = (data ?? []).reduce((s, v) => s + setupDaVenda(v as { valor: number | null; mrr: number | null }), 0);
+  return calcularPace({ meta, recebido: realizado, hoje: ctx.hoje, ano: ctx.ano, mes: ctx.mes });
 }
 
 /** Vínculo de closer/executivo da pessoa num negócio com visão de closer (Acrópole, Match Sales). null = não tem. */

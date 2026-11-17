@@ -31,7 +31,8 @@ import { buscarPaceNegocios, calcularPace } from "@/lib/pace-negocio";
 import { buscarPainelSdr, vinculoPreVendas } from "@/lib/sdr-negocio";
 import { MuralSdr } from "@/components/negocio/PainelSdr";
 import { MuralCloser } from "@/components/negocio/PainelCloser";
-import { buscarPainelCloser, vinculoCloser } from "@/lib/closer-negocio";
+import { buscarPainelCloser, setupDoNegocio, vinculoCloser } from "@/lib/closer-negocio";
+import DestaqueSetup from "@/components/negocio/DestaqueSetup";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -313,7 +314,9 @@ export default async function MuralPage({
       const eu = pn?.pessoas.find((p) => p.id === meId);
       const time = v.cargo === "head";
       if (!pn || (!time && (!eu || eu.meta === null))) continue;
+      const setupTime = time ? await setupDoNegocio(createAdminClient(), pn.negocio, { ano, mes, hoje }) : null;
       metaExecutivo = (
+        <>
         <MetaExecutivo
           time={time}
           pace={time ? pn.pace : calcularPace({ meta: eu!.meta!, recebido: eu!.recebido, hoje, ano, mes })}
@@ -322,6 +325,8 @@ export default async function MuralPage({
           mesLabel={MESES[mes - 1] + " de " + ano}
           mesAtual={mesEhAtual}
         />
+        {setupTime && <DestaqueSetup setup={setupTime} recebidoMeta={pn.pace.meta} time cor={NEGOCIO_COR[pn.negocio.slug] ?? "201 162 74"} />}
+        </>
       );
       break;
     }

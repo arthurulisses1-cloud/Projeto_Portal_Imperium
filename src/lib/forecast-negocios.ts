@@ -153,6 +153,15 @@ export function metaKwhForecast(slug: string, ano: number, mes: number): number 
   return META_KWH_FIXA[slug]?.[chaveMes(i)] ?? vendasDoMes(p, i).total * ENERGY_KWH_POR_VENDA;
 }
 
+/** Parte da meta de recebimento que é setup/implantação (só Match Sales): vendas do mês x R$ 2.500. */
+export function metaSetupForecast(slug: string, ano: number, mes: number): number {
+  if (slug !== "matchsales") return 0;
+  const p = PARAMETROS[slug];
+  const i = indiceMes(ano, mes);
+  if (!p || i < 0) return 0;
+  return vendasDoMes(p, i).total * MATCH_SETUP;
+}
+
 /** Meta de MRR (R$) do mês — só Vorp e MatchSales têm contrato recorrente. É a parte recorrente da meta de recebimento (sem o setup). */
 export function metaMrrForecast(slug: string, ano: number, mes: number): number {
   if (slug !== "vorp" && slug !== "matchsales") return 0;

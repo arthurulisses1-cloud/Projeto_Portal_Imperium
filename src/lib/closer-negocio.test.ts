@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { metaMrrDaPessoa, resumirReunioesCloser } from "./closer-negocio";
+import { metaMrrDaPessoa, resumirReunioesCloser, setupDaVenda } from "./closer-negocio";
 import type { LeadAuditoria } from "./integracoes/auditoria";
 
 const lead = (p: Partial<LeadAuditoria>): LeadAuditoria =>
@@ -78,5 +78,16 @@ describe("resumirReunioesCloser no Match Sales (dono da reunião)", () => {
   });
   it("sem o modo dono (Vorp), só vale o campo closer", () => {
     expect(resumirReunioesCloser(leads, "Arthur Soares", 2026, 11, "2026-11-18").previstas).toHaveLength(0);
+  });
+});
+
+describe("setupDaVenda", () => {
+  it("setup = o que o recebido passa da mensalidade", () => {
+    expect(setupDaVenda({ valor: 3100, mrr: 600 })).toBe(2500);
+  });
+  it("recorrência (recebido = MRR), sem MRR lançado ou recebido menor, é zero", () => {
+    expect(setupDaVenda({ valor: 600, mrr: 600 })).toBe(0);
+    expect(setupDaVenda({ valor: 3100, mrr: null })).toBe(0);
+    expect(setupDaVenda({ valor: 500, mrr: 600 })).toBe(0);
   });
 });
