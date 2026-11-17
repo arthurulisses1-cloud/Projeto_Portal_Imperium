@@ -12,11 +12,31 @@ type LeadCrm = { deal_id: string; status: string; fechado_em: string | null; tel
 export type CanaisEnergy = {
   /** Ids de negócios da Sunne que são o mesmo lead de um lead do Pipefácil. */
   viaPipefacil: Set<string>;
+  /** Ids (deal_id) dos leads do Pipefácil que têm um negócio correspondente na Sunne. */
+  leadsCasados: Set<string>;
   /** Vendas (ganhos) do Pipefácil no mês sem negócio correspondente na Sunne. */
   ganhosPipefacilSemSunne: number;
   /** Quantos leads do Pipefácil têm telefone identificado (cobertura do casamento). */
   leadsComTelefone: number;
 };
+
+/** Até esta produção no mês (kWh), a Vorp recebe 80% da primeira fatura; acima, 100% (regra do forecast). */
+export const KWH_MES_LIMITE_80 = 80000;
+export const PCT_VORP_PRIMEIRA_FATURA = 0.8;
+/** Valor do kWh usado quando a Sunne não informa o valor da primeira fatura. */
+export const VALOR_KWH_PADRAO = 0.55;
+
+/** Primeira fatura do cliente: o valor que a Sunne informa (kWh compensáveis x valor do kWh); sem ele, kWh compensáveis x R$ 0,55. */
+export function primeiraFaturaSunne(d: Pick<SunneDeal, "referenceValue" | "compensableKwh" | "averageConsumption">): number {
+  if (typeof d.referenceValue === "number" && d.referenceValue > 0) return d.referenceValue;
+  const kwh = d.compensableKwh ?? d.averageConsumption ?? 0;
+  return kwh * VALOR_KWH_PADRAO;
+}
+
+/** Fatia da primeira fatura que a Vorp recebe (80%; 100% se o mês passar de 80 mil kWh). */
+export function pctVorpPrimeiraFatura(kwhNoMes: number): number {
+  return kwhNoMes > KWH_MES_LIMITE_80 ? 1 : PCT_VORP_PRIMEIRA_FATURA;
+}
 
 function mesLocal(data: string | null): string | null {
   if (!data || !Number.isFinite(Date.parse(data))) return null;
@@ -45,6 +65,7 @@ export function casarCanais(deals: SunneDeal[], leads: LeadCrm[], periodo: strin
   const ganhos = leads.filter((l) => l.status === "won" && mesLocal(l.fechado_em) === periodo);
   return {
     viaPipefacil,
+    leadsCasados,
     ganhosPipefacilSemSunne: ganhos.filter((l) => !leadsCasados.has(l.deal_id)).length,
     leadsComTelefone: porTelefone.size === 0 ? 0 : leads.filter((l) => !!l.telefone_hash).length,
   };

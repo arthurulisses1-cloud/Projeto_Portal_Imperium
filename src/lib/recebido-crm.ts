@@ -5,6 +5,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CRM_POR_NEGOCIO } from "@/lib/integracoes/config";
 import { dataBR } from "@/lib/integracoes/realizado";
+import { casarComPipefacil, pctVorpPrimeiraFatura, primeiraFaturaSunne } from "@/lib/energy-canais";
+import { PRODUTO_KWH, redeSunneEmCache, type SunneDeal } from "@/lib/sunne";
 
 /** Ganho do CRM no formato que os painéis usam para vendas. */
 export type GanhoCrm = { id: string; negocio_id: string; data: string; valor: number; cliente: string | null; canal: "outbound" };
@@ -32,6 +34,45 @@ export function ganhosDoMes(linhas: LinhaDeal[], stagesGanho: string[], inicio: 
   return out.sort((a, b) => b.data.localeCompare(a.data));
 }
 
+const arredonda = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * Energy: o Recebido é o que a Vorp recebe da primeira fatura de cada venda (80% de kWh compensáveis x valor do kWh),
+ * somando as vendas fechadas na Sunne (todos os canais) e as ganhas no Pipefácil que NÃO estão na Sunne (pura).
+ * "casados" = leads do Pipefácil que já têm negócio na Sunne (null = ainda sem telefone para casar: o Pipefácil
+ * fica de fora, para não contar a mesma venda duas vezes).
+ */
+export function consolidarGanhosEnergy(deals: SunneDeal[], ganhosPipefacil: GanhoCrm[], casados: ReadonlySet<string> | null, negocioId: string, inicio: string, fimExcl: string): GanhoCrm[] {
+  const fechados = deals.filter((d) => {
+    if (d.product !== PRODUTO_KWH || !d.isClosed || d.isLost || !d.closedAt) return false;
+    const dia = dataBR(d.closedAt);
+    return dia >= inicio && dia < fimExcl;
+  });
+  const pct = pctVorpPrimeiraFatura(fechados.reduce((s, d) => s + (d.compensableKwh ?? d.averageConsumption ?? 0), 0));
+  const daSunne: GanhoCrm[] = fechados.map((d) => ({
+    id: d.id,
+    negocio_id: negocioId,
+    data: dataBR(d.closedAt as string),
+    valor: arredonda(primeiraFaturaSunne(d) * pct),
+    cliente: null,
+    canal: "outbound",
+  }));
+  const doPipefacil: GanhoCrm[] = casados ? ganhosPipefacil.filter((g) => !casados.has(g.id)).map((g) => ({ ...g, valor: arredonda(g.valor * pct) })) : [];
+  return [...daSunne, ...doPipefacil].sort((a, b) => b.data.localeCompare(a.data));
+}
+
+/** Energy: Sunne (todos os canais) + Pipefácil sem negócio na Sunne. Se a Sunne não responder, fica só o Pipefácil, como antes. */
+async function ganhosEnergy(negocioId: string, doPipefacil: GanhoCrm[], inicio: string, fimExcl: string): Promise<GanhoCrm[]> {
+  try {
+    const rede = await redeSunneEmCache();
+    const canais = await casarComPipefacil(createAdminClient(), rede.deals, Number(inicio.slice(0, 4)), Number(inicio.slice(5, 7)));
+    return consolidarGanhosEnergy(rede.deals, doPipefacil, canais?.leadsCasados ?? null, negocioId, inicio, fimExcl);
+  } catch (e) {
+    console.error("Recebido do Energy pela Sunne indisponível, usando só o Pipefácil:", e);
+    return doPipefacil;
+  }
+}
+
 /**
  * Ganhos do mês por negócio (id → lista), só dos negócios com `recebidoPeloCrm`. Os demais ficam fora
  * do mapa e seguem pela tabela vendas. Falha na leitura também os deixa fora (o painel não quebra).
@@ -56,7 +97,8 @@ export async function buscarGanhosCrm(negocios: { id: string; slug: string }[], 
     return out;
   }
   for (const n of alvos) {
-    out.set(n.id, ganhosDoMes((data ?? []).filter((d) => d.negocio_id === n.id) as LinhaDeal[], CRM_POR_NEGOCIO[n.slug].stagesGanhoVenda, inicio, fimExcl));
+    const doPipefacil = ganhosDoMes((data ?? []).filter((d) => d.negocio_id === n.id) as LinhaDeal[], CRM_POR_NEGOCIO[n.slug].stagesGanhoVenda, inicio, fimExcl);
+    out.set(n.id, n.slug === "vorp-energy" ? await ganhosEnergy(n.id, doPipefacil, inicio, fimExcl) : doPipefacil);
   }
   return out;
 }

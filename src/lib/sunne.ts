@@ -43,6 +43,9 @@ export type SunneDeal = {
   pendenciasAbertas?: number;
   /** Códigos (nunca o dado) do telefone e das palavras do nome do cliente, para casar com o Pipefácil. */
   identidade?: IdentidadeLead;
+  /** kWh compensáveis e valor da primeira fatura (kWh compensáveis x valor do kWh) informados pela Sunne. */
+  compensableKwh?: number | null;
+  referenceValue?: number | null;
 };
 
 export type SunneOrganizacao = { id: string; nome: string | null };
@@ -110,6 +113,10 @@ function textoOuNulo(v: unknown): string | null {
   return typeof v === "string" ? v : null;
 }
 
+function numeroOuNulo(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
 function lerDeal(bruto: unknown): SunneDeal {
   const d = (bruto ?? {}) as Record<string, unknown>;
   if (!texto(d.id) || !texto(d.organizationId) || !texto(d.product) || !texto(d.funnel) || !texto(d.stageKey) || typeof d.isClosed !== "boolean" || typeof d.isLost !== "boolean" || !texto(d.createdAt) || !Number.isFinite(Date.parse(d.createdAt))) {
@@ -131,6 +138,8 @@ function lerDeal(bruto: unknown): SunneDeal {
     lostFromStageKey: textoOuNulo((d.lostFrom as Record<string, unknown> | null | undefined)?.stageKey),
     waitingNote: texto(d.waitingNote) && d.waitingNote.trim() !== "",
     identidade: identidadeDe(d.phone, [d.contactName, d.companyName].filter(texto).join(" ")),
+    compensableKwh: numeroOuNulo(d.compensableKwh),
+    referenceValue: numeroOuNulo(d.referenceValue),
   };
 }
 
@@ -198,7 +207,7 @@ export async function lerRedeSunne(): Promise<SunneRede> {
 }
 
 /** Mesma leitura, guardada em cache no servidor por alguns minutos. */
-export const redeSunneEmCache = unstable_cache(lerRedeSunne, ["sunne-rede-v3"], { revalidate: CACHE_SUNNE_SEGUNDOS, tags: ["sunne"] });
+export const redeSunneEmCache = unstable_cache(lerRedeSunne, ["sunne-rede-v4"], { revalidate: CACHE_SUNNE_SEGUNDOS, tags: ["sunne"] });
 
 // ---------------------------------------------------------------- vendedor de cada organização
 
