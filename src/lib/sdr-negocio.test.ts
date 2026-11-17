@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { lerDataReuniao, mesmaPessoa, montarCarteira, resumirReunioes, statusRqa, tabelaDiaria, usuarioCrmDoPerfil } from "./sdr-negocio";
+import { lerDataReuniao, mesmaPessoa, montarCarteira, resumirReunioes, somarPreVendas, statusRqa, tabelaDiaria, usuarioCrmDoPerfil } from "./sdr-negocio";
+import { calcularPace } from "./pace-negocio";
 import type { LeadAuditoria } from "./integracoes/auditoria";
 
 const lead = (p: Partial<LeadAuditoria>): LeadAuditoria =>
@@ -143,5 +144,29 @@ describe("carteira de recorrência", () => {
       ["Velha", false, 500, 20, "closer"],
     ]);
     expect(c[0].recebidoNoMes).toBe(1000);
+  });
+});
+
+describe("somarPreVendas", () => {
+  const ind = (meta: number, datas: string[]) => ({
+    pace: calcularPace({ meta, recebido: datas.length, hoje: "2026-11-18", ano: 2026, mes: 11 }),
+    canais: [],
+    leads: datas.map((data) => ({ nome: "L", data, responsavel: null, preVendas: null })),
+  });
+  const pv = (id: string, a: [number, string[]], r: [number, string[]], v: [number, string[]]) => ({
+    id,
+    nome: id,
+    indicadores: { reunioes_agendadas: ind(...a), reunioes_realizadas: ind(...r), vendas: ind(...v) },
+    ideal: { realizadas: null, vendas: null },
+  });
+  it("soma metas e junta os leads de todos os SDRs", () => {
+    const soma = somarPreVendas(
+      [pv("a", [10, ["2026-11-03", "2026-11-05"]], [5, ["2026-11-04"]], [1, []]), pv("b", [20, ["2026-11-03"]], [8, []], [2, ["2026-11-10"]])],
+      { ano: 2026, mes: 11, hoje: "2026-11-18" },
+    );
+    expect(soma.indicadores.reunioes_agendadas.pace.meta).toBe(30);
+    expect(soma.indicadores.reunioes_agendadas.pace.recebido).toBe(3);
+    expect(soma.indicadores.reunioes_agendadas.leads?.map((l) => l.data)).toEqual(["2026-11-03", "2026-11-03", "2026-11-05"]);
+    expect(soma.indicadores.vendas.pace.recebido).toBe(1);
   });
 });

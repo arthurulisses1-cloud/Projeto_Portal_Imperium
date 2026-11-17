@@ -176,7 +176,7 @@ function Ating({ real, meta }: { real: number; meta: number }) {
 }
 
 /** Tabela do Pace diário etapa por etapa (realizado do dia, meta, % de atingimento e acumulado), como na Matri. */
-export function TabelaPaceDiario({ painel, ano, mes, hoje }: { painel: PainelSdr; ano: number; mes: number; hoje: string }) {
+export function TabelaPaceDiario({ painel, ano, mes, hoje, titulo = "Pace diário · etapa por etapa" }: { painel: Pick<PainelSdr, "pv">; ano: number; mes: number; hoje: string; titulo?: string }) {
   if (!painel.pv) return null;
   const etapas = ETAPAS.map((e) => ({
     chave: e,
@@ -187,7 +187,7 @@ export function TabelaPaceDiario({ painel, ano, mes, hoje }: { painel: PainelSdr
   const { linhas, total } = tabelaDiaria(etapas, ano, mes, hoje);
   return (
     <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
-      <p className="text-[10px] uppercase tracking-widest text-stone-500">Pace diário · etapa por etapa</p>
+      <p className="text-[10px] uppercase tracking-widest text-stone-500">{titulo}</p>
       <p className="mt-0.5 text-[11px] text-stone-500">
         Meta do dia = meta do mês ÷ dias úteis. Acumulado = soma de (realizado − meta) até o dia: verde, acima do ritmo; vermelho, abaixo.
       </p>

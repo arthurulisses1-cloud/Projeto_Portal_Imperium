@@ -14,7 +14,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CanalPortal } from "@/lib/integracoes/config";
 import type { AuditoriaGravada, LeadAuditoria } from "@/lib/integracoes/auditoria";
 import { buscarEsforcoNegocio, diasUteisDoMes, type EtapaEsforco, type PreVendasPace } from "@/lib/pace-esforco";
-import { limitesDoMes } from "@/lib/pace-negocio";
+import { calcularPace, limitesDoMes } from "@/lib/pace-negocio";
 
 /** Cargos de pré-vendas no negócio (quem agenda reunião). */
 export const CARGOS_PRE_VENDAS = ["sdr", "bdr", "pre_vendas"];
@@ -196,6 +196,20 @@ export function resumirReunioes(leads: LeadAuditoria[], nomeCrm: string, slug: s
       valorAguardando: de("aguardando").reduce((s, r) => s + r.valorRqa, 0),
     },
   };
+}
+
+/**
+ * Soma dos pré-vendas (SDRs) do negócio como se fossem uma pessoa só: a meta é a soma das metas individuais e o
+ * realizado, a união dos leads de cada um. Usada na visão do closer (pura).
+ */
+export function somarPreVendas(lista: PreVendasPace[], ctx: { ano: number; mes: number; hoje: string }): PreVendasPace {
+  const indicadores = {} as PreVendasPace["indicadores"];
+  for (const e of ["reunioes_agendadas", "reunioes_realizadas", "vendas"] as EtapaEsforco[]) {
+    const leads = lista.flatMap((p) => p.indicadores[e].leads ?? []).sort((a, b) => a.data.localeCompare(b.data));
+    const meta = lista.reduce((s, p) => s + p.indicadores[e].pace.meta, 0);
+    indicadores[e] = { pace: calcularPace({ meta, recebido: leads.length, ...ctx }), canais: [], leads };
+  }
+  return { id: "todos", nome: "Todos os SDRs", indicadores, ideal: { realizadas: null, vendas: null } };
 }
 
 // ------------------------------------------------------------------ tabela diária (Pace da Matri)
