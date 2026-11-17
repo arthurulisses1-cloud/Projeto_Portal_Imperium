@@ -97,7 +97,7 @@ export function quandoReuniao(r: ReuniaoFutura): string {
 }
 
 /** Número de reuniões a acontecer; ao passar o mouse, a data de cada reunião e o lead. */
-export function ReunioesAAcontecer({ lista }: { lista: ReuniaoFutura[] }) {
+export function ReunioesAAcontecer({ lista, rotulo = "SDR" }: { lista: ReuniaoFutura[]; rotulo?: string }) {
   const agora = Date.now();
   if (lista.length === 0) return <p className="mt-1 text-3xl font-semibold text-stone-400">0</p>;
   return (
@@ -114,7 +114,7 @@ export function ReunioesAAcontecer({ lista }: { lista: ReuniaoFutura[] }) {
               <span key={r.id} className="block text-[11px] leading-tight">
                 <span className={passou ? "text-wine-bright" : "text-gold-bright"}>{quandoReuniao(r)}</span> <span className="text-stone-100">{r.nome}</span>
                 {r.empresa && r.empresa !== r.nome && <span className="text-stone-500"> · {r.empresa}</span>}
-                {r.sdr && <span className="text-stone-500"> · SDR {r.sdr}</span>}
+                {r.sdr && <span className="text-stone-500"> · {rotulo} {r.sdr}</span>}
                 {passou && <span className="block text-wine-bright">a data já passou: atualize a etapa no CRM</span>}
               </span>
             );

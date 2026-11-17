@@ -63,7 +63,7 @@ export default function CompromissoCloser({ painel, hoje }: { painel: PainelClos
         </section>
       </div>
 
-      <ReunioesDoDia lista={doDia} />
+      <ReunioesDoDia lista={doDia} rotulo={painel.slug === "vorp" ? "SDR" : "agendada por"} />
     </main>
   );
 }

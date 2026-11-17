@@ -64,3 +64,19 @@ describe("metaMrrDaPessoa", () => {
     expect(metaMrrDaPessoa(60000, 25000, 0)).toBe(0);
   });
 });
+
+describe("resumirReunioesCloser no Match Sales (dono da reunião)", () => {
+  const leads = [
+    lead({ nome: "Minha, sem closer", closer: null, preVendas: "Arthur Soares", reuniaoMarcada: "18/11/2026 10:00" }),
+    lead({ nome: "Minha, levada pelo Davi", closer: "Davi Ximenes", preVendas: "Arthur Soares", reuniaoMarcada: "18/11/2026 11:00" }),
+    lead({ nome: "De outro", closer: null, preVendas: "Leonardo", reuniaoMarcada: "18/11/2026 12:00" }),
+  ];
+  it("conta as reuniões que ele agendou, tocadas por ele ou por outro", () => {
+    const r = resumirReunioesCloser(leads, "Arthur Soares", 2026, 11, "2026-11-18", true);
+    expect(r.previstas.map((x) => x.nome)).toEqual(["Minha, sem closer", "Minha, levada pelo Davi"]);
+    expect(r.doDia).toHaveLength(2);
+  });
+  it("sem o modo dono (Vorp), só vale o campo closer", () => {
+    expect(resumirReunioesCloser(leads, "Arthur Soares", 2026, 11, "2026-11-18").previstas).toHaveLength(0);
+  });
+});

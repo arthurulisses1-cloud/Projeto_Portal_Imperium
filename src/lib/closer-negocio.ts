@@ -11,12 +11,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AuditoriaGravada, LeadAuditoria } from "@/lib/integracoes/auditoria";
 import { metaMrrForecast } from "@/lib/forecast-negocios";
 import { calcularPace, limitesDoMes, buscarPaceNegocios, type PaceCalculado } from "@/lib/pace-negocio";
-import { metasPorCanal } from "@/lib/pace-esforco";
+import { TIMES_POR_CANAL, metasPorCanal } from "@/lib/pace-esforco";
 import { lerDataReuniao, statusRqa, usuarioCrmDoPerfil, type ReuniaoFutura, type StatusRqa } from "@/lib/sdr-negocio";
 
 /** Cargos de closer no negócio (quem faz a reunião e fecha). */
 export const CARGOS_CLOSER = ["closer", "executivo"];
 export const SLUG_VORP = "vorp";
+/** Negócios com a visão de closer (Mural, Comissão, Compromisso). No Match Sales o executivo agenda a própria reunião. */
+export const SLUGS_PAINEL_CLOSER = ["vorp", "matchsales"];
+export const ehPainelCloser = (slug: string) => SLUGS_PAINEL_CLOSER.includes(slug);
 
 const dataBR = (iso: string | null) =>
   !iso ? null : iso.length <= 10 ? iso : new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
@@ -47,10 +50,11 @@ export type ResumoReunioesCloser = {
 };
 
 /** Resume as reuniões de um closer (pura). `hoje` = AAAA-MM-DD (Brasil). */
-export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, ano: number, mes: number, hoje: string): ResumoReunioesCloser {
+export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, ano: number, mes: number, hoje: string, donoDaReuniao = false): ResumoReunioesCloser {
   const { inicio, fim } = limitesDoMes(ano, mes);
   const fimExcl = new Date(Date.parse(fim + "T00:00:00Z") + 86400_000).toISOString().slice(0, 10);
-  const meus = leads.filter((l) => l.closer === nomeCrm);
+  // Match Sales: o executivo é dono das reuniões que ele agendou (tocando ele ou levando para outro); o campo closer quase não é preenchido.
+  const meus = leads.filter((l) => l.closer === nomeCrm || (donoDaReuniao && l.preVendas === nomeCrm));
 
   const previstas: ReuniaoFutura[] = meus
     .filter((l) => l.situacao === "a_acontecer")
@@ -144,8 +148,10 @@ export async function buscarPainelCloser(
   const base = { hoje: ctx.hoje, ano: ctx.ano, mes: ctx.mes };
 
   const metasRealizadas = Object.values(metasPorCanal(negocio.slug, ctx.ano, ctx.mes).reunioes_realizadas).reduce((s, v) => s + (v ?? 0), 0);
-  const nClosers = Math.max(1, (closers ?? []).length);
-  const reunioes = nomeCrm && auditoria ? resumirReunioesCloser(auditoria.leads ?? [], nomeCrm, ctx.ano, ctx.mes, ctx.hoje) : null;
+  // Vorp: a meta de reuniões realizadas se divide entre os closers; Match: entre quem agenda (time do negócio).
+  const idsTime = new Set(Object.values(TIMES_POR_CANAL[negocio.slug] ?? {}).flat());
+  const nClosers = negocio.slug !== SLUG_VORP && idsTime.size > 0 ? idsTime.size : Math.max(1, (closers ?? []).length);
+  const reunioes = nomeCrm && auditoria ? resumirReunioesCloser(auditoria.leads ?? [], nomeCrm, ctx.ano, ctx.mes, ctx.hoje, negocio.slug !== SLUG_VORP) : null;
 
   const deHoje = (vendas ?? []).filter((v) => v.data === ctx.hoje);
   return {
@@ -165,8 +171,8 @@ export async function buscarPainelCloser(
   };
 }
 
-/** Vínculo de closer da pessoa no Vorp (Acrópole). null = não é closer de lá. */
-export async function vinculoCloserVorp(
+/** Vínculo de closer/executivo da pessoa num negócio com visão de closer (Acrópole, Match Sales). null = não tem. */
+export async function vinculoCloser(
   supabase: SupabaseClient,
   profileId: string,
 ): Promise<{ id: string; slug: string; nome: string; equipe_nome: string | null } | null> {
@@ -178,6 +184,6 @@ export async function vinculoCloserVorp(
   type N = { id: string; slug: string; nome: string; equipe_nome: string | null; status: string };
   const achado = ((data ?? []) as unknown as { negocios: N | N[] | null }[])
     .map((l) => (Array.isArray(l.negocios) ? l.negocios[0] : l.negocios))
-    .find((n) => n && n.status === "ativo" && n.slug === SLUG_VORP);
+    .find((n) => n && n.status === "ativo" && ehPainelCloser(n.slug));
   return achado ? { id: achado.id, slug: achado.slug, nome: achado.nome, equipe_nome: achado.equipe_nome } : null;
 }

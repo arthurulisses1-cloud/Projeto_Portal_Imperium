@@ -13,7 +13,7 @@ import { IconFlame, IconCheck, IconAlert } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
 import CompromissoKpis from "@/components/CompromissoKpis";
 import { buscarContextoKpis, buscarLinhasKpis } from "@/lib/compromisso-kpis";
-import { buscarPainelCloser, vinculoCloserVorp } from "@/lib/closer-negocio";
+import { buscarPainelCloser, vinculoCloser } from "@/lib/closer-negocio";
 import { createAdminClient } from "@/lib/supabase/admin";
 import CompromissoCloser from "@/components/negocio/CompromissoCloser";
 
@@ -57,8 +57,8 @@ export default async function CompromissoPage() {
   const hoje = hojeBR();
 
   // Closer da Acrópole (Vorp): compromisso automático (reuniões realizadas ÷ previstas do dia e vendas).
-  if (profile?.role === "closer") {
-    const closerVorp = await vinculoCloserVorp(supabase, meId);
+  {
+    const closerVorp = await vinculoCloser(supabase, meId);
     if (closerVorp) {
       try {
         const painel = await buscarPainelCloser(createAdminClient(), closerVorp, { id: meId, nome: viewer.effectiveNome }, { ano: Number(hoje.slice(0, 4)), mes: Number(hoje.slice(5, 7)), hoje });

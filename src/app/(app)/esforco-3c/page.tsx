@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
 import { podeVerArea } from "@/lib/permissoes-analista";
-import { vinculoCloserVorp } from "@/lib/closer-negocio";
+import { vinculoCloser } from "@/lib/closer-negocio";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { TRESC_POR_NEGOCIO } from "@/lib/integracoes/config";
 import { MAX_DIAS, agregar, buscarAtividade, buscarLigacoes, somarAtividade, type Atividade, type PainelEsforco } from "@/lib/esforco-3c";
@@ -51,7 +51,7 @@ export default async function Esforco3cPage({ searchParams }: { searchParams: Pa
   const { data: eu } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (!eu) redirect("/");
   // Closer da Acrópole (Vorp) também vê, só com os dados do Vorp (pelos vínculos dele).
-  const closerVorp = eu.role === "closer" && !!(await vinculoCloserVorp(supabase, user.id));
+  const closerVorp = !!(await vinculoCloser(supabase, user.id));
   const pode = eu.role === "diretor" || eu.role === "lider" || closerVorp || (eu.role === "analista" && (await podeVerArea(supabase, user.id, eu.role, "dados")));
   if (!pode) redirect("/");
 

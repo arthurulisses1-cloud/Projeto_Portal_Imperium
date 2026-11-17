@@ -27,7 +27,12 @@ export const RQA_VALOR: Record<string, Record<CanalPortal, number>> = {
   vorp: { outbound: 20, inbound: 10, indicacao: 10 },
 };
 
+/** Negócios com a visão do pré-vendas (Mural, Pace, Produção). Só a Acrópole paga RQA. */
+export const SLUGS_PAINEL_SDR = ["vorp", "matchsales"];
 export function temPainelSdr(slug: string): boolean {
+  return SLUGS_PAINEL_SDR.includes(slug);
+}
+export function temRqa(slug: string): boolean {
   return !!RQA_VALOR[slug];
 }
 
@@ -356,6 +361,8 @@ export type ContratoCarteira = {
   porMes: number;
   recebidoNoMes: number;
   ativo: boolean;
+  /** A venda teve pré-vendas (muda o % do executivo no Match Sales). */
+  comIndicador: boolean;
 };
 
 type LinhaVendaCarteira = {
@@ -379,7 +386,7 @@ export function montarCarteira(
   vendas: LinhaVendaCarteira[],
   profileId: string,
   hoje: string,
-  pctDe: (papel: "sdr" | "closer", canal: string | null) => number,
+  pctDe: (papel: "sdr" | "closer", canal: string | null, comIndicador?: boolean) => number,
 ): ContratoCarteira[] {
   const mesAtual = hoje.slice(0, 7);
   const [a, m] = mesAtual.split("-").map(Number);
@@ -402,6 +409,7 @@ export function montarCarteira(
       porMes: 0,
       recebidoNoMes: 0,
       ativo: false,
+      comIndicador: !!v.indicador_id,
     };
     c.ultimo = v.data;
     c.mrr = Number(v.mrr);
@@ -411,7 +419,7 @@ export function montarCarteira(
   }
   return Array.from(porChave.values())
     .map((c) => {
-      const pct = pctDe(c.papel, c.canal);
+      const pct = pctDe(c.papel, c.canal, c.comIndicador);
       const ativo = c.ultimo.startsWith(mesAtual) || c.ultimo.startsWith(mesAnterior);
       return { ...c, pct, porMes: (c.mrr * pct) / 100, ativo };
     })
@@ -423,7 +431,7 @@ export async function buscarCarteira(
   negocioId: string,
   profileId: string,
   hoje: string,
-  pctDe: (papel: "sdr" | "closer", canal: string | null) => number,
+  pctDe: (papel: "sdr" | "closer", canal: string | null, comIndicador?: boolean) => number,
 ): Promise<ContratoCarteira[]> {
   const { data } = await admin
     .from("vendas")

@@ -250,12 +250,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     return rest;
   });
   // Closer da Acrópole (Vorp): em Dados ganha o Esforço 3C Plus e a Auditoria (só com os dados do Vorp, pelos vínculos dele).
-  if (user && papelAtual === "closer") {
+  if (user && (papelAtual === "closer" || papelAtual === "sdr")) {
     const { data: vorp } = await supabase
       .from("profile_negocios")
       .select("negocio_id, negocios!inner(slug)")
       .eq("profile_id", previewPessoa?.id ?? user.id)
-      .eq("negocios.slug", "vorp")
+      .in("negocios.slug", ["vorp", "matchsales"])
       .in("cargo", ["closer", "executivo"])
       .limit(1);
     if ((vorp ?? []).length > 0) {
@@ -268,6 +268,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         const pos = dados.items.findIndex((i) => i.href === "/pace-negocio");
         dados.items.splice(pos >= 0 ? pos + 1 : dados.items.length, 0, ...extras);
       }
+      // Executivo/closer não usa a Minha Produção do SDR.
+      const iProd = itensVisiveis.findIndex((i) => i.type === "link" && i.href === "/producao");
+      if (iProd >= 0) itensVisiveis.splice(iProd, 1);
     }
   }
   // Meus Leads: Finance (consultores e Head) e o Diretor; entra logo depois de Tarefas.

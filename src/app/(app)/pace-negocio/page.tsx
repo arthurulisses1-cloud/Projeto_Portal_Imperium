@@ -21,7 +21,7 @@ import { buscarAcumuladoKwhSunne } from "@/lib/sunne";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getViewerContext } from "@/lib/preview";
 import { CARGOS_PRE_VENDAS, buscarPainelSdr, somarPreVendas, temPainelSdr } from "@/lib/sdr-negocio";
-import { CARGOS_CLOSER, SLUG_VORP } from "@/lib/closer-negocio";
+import { CARGOS_CLOSER, SLUG_VORP, ehPainelCloser } from "@/lib/closer-negocio";
 import { AvisoSdr, BarraMes, PaceEsforcoCard, QuadradosSdr, TabelaPaceDiario } from "@/components/negocio/PainelSdr";
 
 export const dynamic = "force-dynamic";
@@ -223,7 +223,7 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
   const foco =
     negocioEmFoco(searchParams.negocio ?? cookieStore.get(COOKIE_NEGOCIO)?.value, visiveis) ??
     (!veConsolidado(eu.role)
-      ? visiveis.find((n) => CARGOS_PRE_VENDAS.includes(n.cargo) && temPainelSdr(n.slug)) ?? visiveis.find((n) => n.slug === SLUG_VORP && CARGOS_CLOSER.includes(n.cargo)) ?? null
+      ? visiveis.find((n) => CARGOS_PRE_VENDAS.includes(n.cargo) && temPainelSdr(n.slug)) ?? visiveis.find((n) => ehPainelCloser(n.slug) && CARGOS_CLOSER.includes(n.cargo)) ?? null
       : null);
   const escolhidos = foco ? [foco] : visiveis;
 
@@ -244,7 +244,9 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
   const cargoNoFoco = foco?.cargo ?? null;
   const individual = !veConsolidado(eu.role) && !!foco && cargoNoFoco !== "head" && dados.length === 1;
   // SDR (pré-vendas) de negócio com CRM: pace de reuniões e a tabela diária etapa por etapa, como na Matri.
-  if (individual && foco && cargoNoFoco && CARGOS_PRE_VENDAS.includes(cargoNoFoco) && temPainelSdr(foco.slug)) {
+  // No Match Sales o executivo agenda a própria reunião: usa a mesma visão do pré-vendas (agendadas, realizadas, vendas).
+  const executivoQueAgenda = !!cargoNoFoco && foco?.slug === "matchsales" && CARGOS_CLOSER.includes(cargoNoFoco);
+  if (individual && foco && cargoNoFoco && ((CARGOS_PRE_VENDAS.includes(cargoNoFoco) && temPainelSdr(foco.slug)) || executivoQueAgenda)) {
     const painel = await buscarPainelSdr(createAdminClient(), foco, { id: user.id, nome: viewer.effectiveNome }, { ano, mes, hoje });
     const cor = NEGOCIO_COR[foco.slug] ?? "201 162 74";
     const mesAtual = hoje.slice(0, 7) === `${ano}-${String(mes).padStart(2, "0")}`;

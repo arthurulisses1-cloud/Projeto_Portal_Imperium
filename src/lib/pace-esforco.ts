@@ -22,6 +22,23 @@ export const TIMES_POR_CANAL: Record<string, Partial<Record<CanalPortal, string[
     ],
     inbound: ["efaa951d-455a-4148-ba3a-fa3b5f4bafd9"], // Jorge Abudi
   },
+  // Match Sales (Galácticos): o BDR e os executivos agendam as próprias reuniões; o Head (Davi) não entra na divisão.
+  matchsales: {
+    outbound: [
+      "b58b3ad3-8f28-48a3-a103-4c65db9307b4", // Fernando César (BDR)
+      "cmpy5vxa2026g3ukcydv7ddke", // Nicolas Roberto
+      "1b2cd3b8-5b6c-48e0-83a5-3d4fa3e8f94f", // Matheus Mesquita
+      "fd4b8d73-5438-4c60-a985-87f3394721e6", // Leonardo Enzo
+      "605125ac-10bc-40ae-9ced-2c88cf747a20", // Arthur Soares
+    ],
+    inbound: [
+      "b58b3ad3-8f28-48a3-a103-4c65db9307b4",
+      "cmpy5vxa2026g3ukcydv7ddke",
+      "1b2cd3b8-5b6c-48e0-83a5-3d4fa3e8f94f",
+      "fd4b8d73-5438-4c60-a985-87f3394721e6",
+      "605125ac-10bc-40ae-9ced-2c88cf747a20",
+    ],
+  },
 };
 
 /** Etapas com cartão de pace (topo e pré-vendas). */

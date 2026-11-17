@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hojeBR } from "@/lib/data-br";
 import { podeVerArea } from "@/lib/permissoes-analista";
-import { vinculoCloserVorp } from "@/lib/closer-negocio";
+import { vinculoCloser } from "@/lib/closer-negocio";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { CRM_POR_NEGOCIO } from "@/lib/integracoes/config";
 import type { AuditoriaGravada, LeadAuditoria, SituacaoReuniao } from "@/lib/integracoes/auditoria";
@@ -82,7 +82,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
   const { data: eu } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (!eu) redirect("/");
   // Closer da Acrópole (Vorp) também vê, só com os dados do Vorp (pelos vínculos dele).
-  const closerVorp = eu.role === "closer" && !!(await vinculoCloserVorp(supabase, user.id));
+  const closerVorp = !!(await vinculoCloser(supabase, user.id));
   const pode = eu.role === "diretor" || eu.role === "lider" || closerVorp || (eu.role === "analista" && (await podeVerArea(supabase, user.id, eu.role, "dados")));
   if (!pode) redirect("/");
 

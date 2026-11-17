@@ -7,9 +7,9 @@ import { getViewerContext } from "@/lib/preview";
 import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe, veConsolidado } from "@/lib/negocios";
 import { buscarComissoesNegocios, type ComissaoNegocio, type PapelComissao } from "@/lib/comissao-negocio";
-import { buscarCarteira, buscarPainelSdr, vinculoPreVendas } from "@/lib/sdr-negocio";
-import { ExplicacaoComissaoCloserVorp, ExplicacaoComissaoVorp, PainelComissaoSdr, pctVorp } from "@/components/negocio/ComissaoSdr";
-import { vinculoCloserVorp } from "@/lib/closer-negocio";
+import { buscarCarteira, buscarPainelSdr, temRqa, vinculoPreVendas } from "@/lib/sdr-negocio";
+import { ExplicacaoComissaoCloserVorp, ExplicacaoComissaoMatch, ExplicacaoComissaoVorp, PainelComissaoSdr, pctNegocio } from "@/components/negocio/ComissaoSdr";
+import { vinculoCloser } from "@/lib/closer-negocio";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -95,25 +95,25 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
     const admin = createAdminClient();
     const [painel, carteira] = await Promise.all([
       buscarPainelSdr(admin, preVendas, { id: user.id, nome: viewer.effectiveNome }, { ano, mes, hoje }),
-      buscarCarteira(admin, preVendas.id, user.id, hoje, pctVorp),
+      buscarCarteira(admin, preVendas.id, user.id, hoje, pctNegocio(preVendas.slug)),
     ]);
     const comissaoVendas = dados.find((d) => d.slug === preVendas.slug)?.pessoas.find((p) => p.id === user.id)?.total ?? 0;
     blocoSdr = (
       <>
-        <ExplicacaoComissaoVorp />
-        <PainelComissaoSdr reunioes={painel.reunioes} comissaoVendas={comissaoVendas} carteira={carteira} atualizadoEm={painel.atualizadoEm} />
+        {preVendas.slug === "vorp" ? <ExplicacaoComissaoVorp /> : <ExplicacaoComissaoMatch papel="bdr" />}
+        <PainelComissaoSdr reunioes={painel.reunioes} comissaoVendas={comissaoVendas} carteira={carteira} atualizadoEm={painel.atualizadoEm} temRqa={temRqa(preVendas.slug)} />
       </>
     );
   }
 
   // Closer da Acrópole: regras de closer da Acrópole, comissão de venda padrão e carteira de recorrência.
-  const closerVorp = ehDiretor ? null : await vinculoCloserVorp(supabase, user.id);
+  const closerVorp = ehDiretor ? null : await vinculoCloser(supabase, user.id);
   if (!blocoSdr && closerVorp && (!foco || foco.slug === closerVorp.slug)) {
-    const carteira = await buscarCarteira(createAdminClient(), closerVorp.id, user.id, hoje, pctVorp);
+    const carteira = await buscarCarteira(createAdminClient(), closerVorp.id, user.id, hoje, pctNegocio(closerVorp.slug));
     const comissaoVendas = dados.find((d) => d.slug === closerVorp.slug)?.pessoas.find((p) => p.id === user.id)?.total ?? 0;
     blocoSdr = (
       <>
-        <ExplicacaoComissaoCloserVorp />
+        {closerVorp.slug === "vorp" ? <ExplicacaoComissaoCloserVorp /> : <ExplicacaoComissaoMatch papel="executivo" />}
         <PainelComissaoSdr papel="closer" reunioes={null} comissaoVendas={comissaoVendas} carteira={carteira} atualizadoEm={null} />
       </>
     );

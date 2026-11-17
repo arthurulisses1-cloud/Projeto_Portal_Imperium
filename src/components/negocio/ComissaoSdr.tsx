@@ -21,6 +21,59 @@ export function pctVorp(papel: "sdr" | "closer", canal: string | null): number {
   return p ? (papel === "sdr" ? p.sdr : p.closer) : 0;
 }
 
+/** % do pré-vendas/BDR e do executivo de um negócio, lidos da mesma regra que calcula o pagamento (Match: o % do executivo muda com BDR). */
+export function pctNegocio(slug: string) {
+  return (papel: "sdr" | "closer", canal: string | null, comIndicador = true): number => {
+    const p = percentuais(slug, {
+      id: "",
+      valor: 0,
+      canal: canal === "outbound" ? "outbound" : "inbound",
+      closerId: "x",
+      closerCargo: "executivo",
+      indicadorId: comIndicador || slug === "vorp" ? "y" : null,
+    });
+    return p ? (papel === "sdr" ? (slug === "matchsales" ? p.bdr : p.sdr) : p.closer) : 0;
+  };
+}
+
+/** "Como sua comissão é calculada" do Match Sales (Galácticos), para o BDR ou o executivo. */
+export function ExplicacaoComissaoMatch({ papel }: { papel: "bdr" | "executivo" }) {
+  const p = pctNegocio("matchsales");
+  const sem = (c: string) => pctNegocio("matchsales")("closer", c, false);
+  return (
+    <details className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+      <summary className="cursor-pointer text-sm font-semibold text-gold-bright">Como sua comissão é calculada · Galácticos</summary>
+      <div className="mt-3 space-y-4 text-sm text-stone-300">
+        {papel === "bdr" ? (
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">1 · Comissão de venda</p>
+            <p className="mt-1">
+              Quando uma reunião que você agendou vira venda, você recebe <strong>{p("sdr", "outbound")}%</strong> sobre o valor recebido da venda (setup e mensalidade, conforme cada
+              recebimento).
+            </p>
+          </div>
+        ) : (
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">1 · Comissão de venda</p>
+            <p className="mt-1">
+              Em cada venda sua, você recebe <strong>{sem("outbound")}% no outbound</strong> e <strong>{sem("inbound")}% no inbound</strong> sobre o valor recebido. Se a reunião
+              veio de um BDR, o seu % passa a ser <strong>{p("closer", "outbound", true)}%</strong> e o BDR fica com {p("sdr", "outbound")}%.
+            </p>
+          </div>
+        )}
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">2 · Recorrência</p>
+          <p className="mt-1">
+            A comissão segue a cada recebimento do cliente da sua carteira e termina quando o contrato deixa de ser lançado (cancelamento ou encerramento). Não há teto de 3 meses no
+            Match Sales.
+          </p>
+        </div>
+        <p className="text-xs text-stone-500">O pagamento sai no dia 15 do mês seguinte ao recebimento.</p>
+      </div>
+    </details>
+  );
+}
+
 /** "Como sua comissão é calculada" da Acrópole, para o SDR. */
 export function ExplicacaoComissaoVorp() {
   const out = pctVorp("sdr", "outbound");
@@ -104,8 +157,11 @@ export function PainelComissaoSdr({
   carteira,
   atualizadoEm,
   papel = "sdr",
+  temRqa = true,
 }: {
   papel?: "sdr" | "closer";
+  /** Só a Acrópole paga RQA; nos outros negócios a tela é só de vendas e carteira. */
+  temRqa?: boolean;
   reunioes: ResumoReunioes | null;
   comissaoVendas: number;
   carteira: ContratoCarteira[];
@@ -113,7 +169,7 @@ export function PainelComissaoSdr({
 }) {
   const rqa = reunioes?.rqa ?? { validadas: 0, aguardando: 0, recusadas: 0, valorValidado: 0, valorAguardando: 0 };
   const ativos = carteira.filter((c) => c.ativo);
-  const closer = papel === "closer";
+  const closer = papel === "closer" || !temRqa;
   const recorrenciaMes = ativos.reduce((s, c) => s + c.porMes, 0);
   return (
     <div className="space-y-4">

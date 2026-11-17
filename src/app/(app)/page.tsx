@@ -31,7 +31,7 @@ import { buscarPaceNegocios, calcularPace } from "@/lib/pace-negocio";
 import { buscarPainelSdr, vinculoPreVendas } from "@/lib/sdr-negocio";
 import { MuralSdr } from "@/components/negocio/PainelSdr";
 import { MuralCloser } from "@/components/negocio/PainelCloser";
-import { buscarPainelCloser, vinculoCloserVorp } from "@/lib/closer-negocio";
+import { buscarPainelCloser, vinculoCloser } from "@/lib/closer-negocio";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -280,7 +280,7 @@ export default async function MuralPage({
     }
   }
   // Closer da Acrópole (Vorp): pace de recebido/MRR e as reuniões (previstas, do dia e realizadas).
-  const closerVorp = !metaExecutivo && meRole !== "diretor" && meRole !== "investidor" ? await vinculoCloserVorp(supabase, meId) : null;
+  const closerVorp = !metaExecutivo && meRole !== "diretor" && meRole !== "investidor" ? await vinculoCloser(supabase, meId) : null;
   if (closerVorp) {
     try {
       const painel = await buscarPainelCloser(createAdminClient(), closerVorp, { id: meId, nome: profile?.full_name ?? "" }, { ano, mes, hoje });

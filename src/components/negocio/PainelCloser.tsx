@@ -16,7 +16,7 @@ const SITUACAO: Record<ReuniaoDoDia["situacao"], { texto: string; classe: string
   no_show: { texto: "no-show", classe: "text-wine-bright" },
 };
 
-export function ReunioesDoDia({ lista }: { lista: ReuniaoDoDia[] }) {
+export function ReunioesDoDia({ lista, rotulo = "SDR" }: { lista: ReuniaoDoDia[]; rotulo?: string }) {
   return (
     <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
       <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões do dia</p>
@@ -29,7 +29,7 @@ export function ReunioesDoDia({ lista }: { lista: ReuniaoDoDia[] }) {
             <li key={r.id} className="text-[11px] leading-tight">
               <span className="font-semibold text-gold-bright">{hora(r.quando, r.quandoTexto)}</span> <span className="text-stone-100">{r.nome}</span>
               <span className="block text-stone-500">
-                SDR {r.sdr ?? "—"} · <span className={SITUACAO[r.situacao].classe}>{SITUACAO[r.situacao].texto}</span>
+                {rotulo} {r.sdr ?? "—"} · <span className={SITUACAO[r.situacao].classe}>{SITUACAO[r.situacao].texto}</span>
               </span>
             </li>
           ))}
@@ -53,6 +53,7 @@ export function MuralCloser({
   mesAtual: boolean;
 }) {
   const previstas = painel.reunioes?.previstas ?? null;
+  const rotulo = painel.slug === "vorp" ? "SDR" : "agendada por";
   return (
     <div className="space-y-4">
       <p className="text-[10px] uppercase tracking-widest text-stone-500">
@@ -73,10 +74,10 @@ export function MuralCloser({
       <div className="grid gap-4 md:grid-cols-3">
         <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões previstas pra acontecer</p>
-          {previstas ? <ReunioesAAcontecer lista={previstas} /> : <p className="mt-1 text-3xl font-semibold text-stone-400">—</p>}
+          {previstas ? <ReunioesAAcontecer lista={previstas} rotulo={rotulo} /> : <p className="mt-1 text-3xl font-semibold text-stone-400">—</p>}
           <p className="mt-1 text-xs text-stone-500">{previstas && previstas.length > 0 ? "passe o mouse no número para ver quais e quando" : "agendadas para você no CRM"}</p>
         </section>
-        <ReunioesDoDia lista={painel.reunioes?.doDia ?? []} />
+        <ReunioesDoDia lista={painel.reunioes?.doDia ?? []} rotulo={rotulo} />
         <PaceEsforcoCard titulo="Reuniões realizadas" p={painel.realizadas} cor={cor} mesAtual={mesAtual} />
       </div>
     </div>
