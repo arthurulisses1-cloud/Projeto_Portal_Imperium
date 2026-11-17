@@ -194,7 +194,12 @@ export type VendaCrm = {
 };
 
 /** Leads ganhos no funil de vendas → vendas do portal ("Valor" do CRM = valor antecipado = recebido). */
-export function vendasGanhas(deals: DealCrm[], eventos: EventoCrm[], cfg: ConfigCrm): VendaCrm[] {
+/**
+ * Leads ganhos no funil de vendas → vendas do portal. A venda é de quem era o responsável pelo lead
+ * no momento do Ganho (`responsavelNoGanho`, lido do histórico); sem histórico, o responsável atual.
+ * O campo Closer registra quem fez a call e não decide o dono da venda (regra de 16/11/2026).
+ */
+export function vendasGanhas(deals: DealCrm[], eventos: EventoCrm[], cfg: ConfigCrm, responsavelNoGanho?: Map<string, string>): VendaCrm[] {
   const chegada = marcosPorLead(eventos, cfg);
   const out: VendaCrm[] = [];
   for (const d of deals) {
@@ -211,7 +216,7 @@ export function vendasGanhas(deals: DealCrm[], eventos: EventoCrm[], cfg: Config
       mrr: d.mrr != null && Number(d.mrr) > 0 ? Number(d.mrr) : null,
       cliente: d.empresa || d.nome,
       produto: d.produtos && d.produtos.length > 0 ? d.produtos.join(", ") : null,
-      closer_user_id: d.closer_user_id ?? d.responsavel_user_id,
+      closer_user_id: responsavelNoGanho?.get(d.deal_id) ?? d.responsavel_user_id,
       sdr_user_id: d.sdr_user_id,
     });
   }

@@ -24,7 +24,7 @@ export type AtividadePipefacil = {
   type: string;
   field?: string | null;
   changes: { to?: unknown; from?: unknown } | null;
-  metadata: { stageId?: string; pipelineId?: string } | null;
+  metadata: { stageId?: string; pipelineId?: string; responsibleUserId?: string } | null;
   occurredAt: string;
 };
 

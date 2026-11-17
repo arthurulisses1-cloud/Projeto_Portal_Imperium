@@ -226,7 +226,14 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
 
   // 4) Vendas a partir dos Ganhos (negócio com recebidoPeloCrm lê o Ganho direto do espelho: sem vendas).
   const inicioVendas = cfg.inicioVendas ?? INICIO_REALIZADO;
-  const ganhas = cfg.recebidoPeloCrm ? [] : vendasGanhas(linhasDeals, eventos, cfg).filter((g) => g.data >= inicioVendas);
+  // Dono da venda: o responsável no momento do último Ganho do funil de vendas (o histórico relido
+  // a cada execução cobre os últimos 3 meses; antes disso vale o responsável atual).
+  const responsavelNoGanho = new Map<string, string>();
+  for (const a of [...atividades].sort((x, y) => Date.parse(x.occurredAt) - Date.parse(y.occurredAt))) {
+    const etapa = etapaDoEvento(a);
+    if (a.metadata?.responsibleUserId && etapa && cfg.stagesGanhoVenda.includes(etapa)) responsavelNoGanho.set(a.dealId, a.metadata.responsibleUserId);
+  }
+  const ganhas = cfg.recebidoPeloCrm ? [] : vendasGanhas(linhasDeals, eventos, cfg, responsavelNoGanho).filter((g) => g.data >= inicioVendas);
   let vendas: Resultado = { ganhas: ganhas.length, criadas: 0, atualizadas: 0, removidas: 0, semVinculo: [] as string[] };
   if (opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas);
 

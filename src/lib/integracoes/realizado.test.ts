@@ -217,6 +217,14 @@ describe("vendas a partir do Ganho", () => {
     expect(v).toHaveLength(1);
     expect(v[0]).toMatchObject({ deal_id: "v1", data: "2026-11-10", canal: "outbound", valor: 24000, mrr: 8000, cliente: "ACME" });
   });
+
+  it("a venda é do responsável no momento do Ganho, não do campo Closer (quem fez a call)", () => {
+    const deals = [deal({ deal_id: "r1", status: "won", stage_id: ST.ganhoVendas, valor: 9000, closer_user_id: "mateus", responsavel_user_id: "atual" })];
+    const eventos = [ev("r1", ST.ganhoVendas, "2026-11-20T15:00:00Z")];
+    expect(vendasGanhas(deals, eventos, cfg, new Map([["r1", "jorge"]]))[0].closer_user_id).toBe("jorge");
+    // sem histórico do Ganho: o responsável atual
+    expect(vendasGanhas(deals, eventos, cfg)[0].closer_user_id).toBe("atual");
+  });
 });
 
 describe("funil do dashboard", () => {
