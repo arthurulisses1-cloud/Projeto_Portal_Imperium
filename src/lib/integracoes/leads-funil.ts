@@ -10,6 +10,8 @@ import { leadsDoRealizado, type DealCrm, type EventoCrm } from "./realizado";
 /** Etapas com lista de leads. */
 export const ETAPAS_COM_LISTA = ["reunioes_agendadas", "reunioes_realizadas", "propostas", "vendas"];
 
+/** Lê em páginas de 1000. A consulta PRECISA ter .order() numa coluna única: sem ordem fixa o banco
+ *  repete e pula linhas entre as páginas (16/11/2026: 1.279 eventos distintos de 1.661). */
 async function lerTudo<T>(consulta: (de: number, ate: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
   const out: T[] = [];
   for (let de = 0; ; de += 1000) {
@@ -39,9 +41,10 @@ export async function buscarLeadsDoFunil(
         .from("crm_deals")
         .select("deal_id, canal, faturamento, cargo, status, stage_id, valor, mrr, nome, empresa, produtos, responsavel_user_id, closer_user_id, sdr_user_id, criado_em, fechado_em")
         .eq("negocio_id", negocioId)
+        .order("deal_id")
         .range(de, ate),
     ),
-    lerTudo<EventoCrm>((de, ate) => admin.from("crm_eventos").select("deal_id, stage_id, ocorrido_em, tipo, pipeline_id").eq("negocio_id", negocioId).range(de, ate)),
+    lerTudo<EventoCrm>((de, ate) => admin.from("crm_eventos").select("deal_id, stage_id, ocorrido_em, tipo, pipeline_id").eq("negocio_id", negocioId).order("id").range(de, ate)),
     admin.from("integracao_estado").select("valor").eq("chave", `pipefacil:${slug}:membros`).maybeSingle(),
   ]);
   const nomes = (estado.data?.valor as Record<string, string> | null) ?? {};

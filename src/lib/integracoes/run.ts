@@ -44,6 +44,8 @@ function inicioDoMes(dia: string, deslocamento = 0): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Lê em páginas de 1000. A consulta PRECISA ter .order() numa coluna única: sem ordem fixa o banco
+ *  repete e pula linhas entre as páginas (era a causa dos "eventos faltando" da auditoria de 16/11/2026). */
 async function lerTudo<T>(consulta: (de: number, ate: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
   const out: T[] = [];
   for (let de = 0; ; de += 1000) {
@@ -205,7 +207,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const eventosBanco = simular
     ? []
     : await lerTudo<EventoCrm>((de, ate) =>
-        supabase.from("crm_eventos").select("deal_id, stage_id, ocorrido_em, tipo, pipeline_id").eq("negocio_id", negocioId).range(de, ate),
+        supabase.from("crm_eventos").select("deal_id, stage_id, ocorrido_em, tipo, pipeline_id").eq("negocio_id", negocioId).order("id").range(de, ate),
       );
   const vistos = new Set<string>();
   const eventos: EventoCrm[] = [];
