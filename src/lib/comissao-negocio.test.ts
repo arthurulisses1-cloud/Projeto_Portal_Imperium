@@ -50,6 +50,30 @@ describe("comissaoDaVenda", () => {
     const l = comissaoDaVenda("vorp-finance", { ...base, valor: 5000, valorCliente: 100000 }, ctx);
     expect(l.some((x) => x.tipo === "desagio")).toBe(false);
   });
+  it("Finance com participante de outra BU: a parte da liderança (15% da margem) é dividida em 3", () => {
+    // margem 4.260 (sem deságio): executivo 10% = 426; liderança 15% = 639 -> 213 para Head, Diretor e o participante
+    const v = { ...base, valor: 4260, valorCliente: 71000, closerId: "c", indicadorId: "p" };
+    const l = comissaoDaVenda("vorp-finance", v, { ...ctx, membrosIds: new Set(["c", "h"]) });
+    expect(l.find((x) => x.beneficiarioId === "c")?.valor).toBeCloseTo(426);
+    expect(l.find((x) => x.beneficiarioId === "p")?.valor).toBeCloseTo(213);
+    expect(l.find((x) => x.beneficiarioId === "h")?.valor).toBeCloseTo(213);
+    expect(l.find((x) => x.beneficiarioId === "d")?.valor).toBeCloseTo(213);
+    expect(soma(l)).toBeCloseTo(426 + 639);
+  });
+  it("Finance: o deságio também divide a liderança em 3 com participante de outra BU", () => {
+    // margem 6.000, comissão 10.000 -> deságio 4.000: executivo 20% = 800; liderança 30% = 1.200 -> 400 cada
+    const v = { ...base, valor: 10000, valorCliente: 100000, closerId: "c", indicadorId: "p" };
+    const l = comissaoDaVenda("vorp-finance", v, { ...ctx, membrosIds: new Set(["c", "h"]) });
+    const d = l.filter((x) => x.tipo === "desagio");
+    expect(d.find((x) => x.beneficiarioId === "c")?.valor).toBeCloseTo(800);
+    for (const id of ["p", "h", "d"]) expect(d.find((x) => x.beneficiarioId === id)?.valor).toBeCloseTo(400);
+  });
+  it("Finance: SDR do próprio time não divide a liderança", () => {
+    const v = { ...base, valor: 6000, valorCliente: 100000, closerId: "c", indicadorId: "s" };
+    const l = comissaoDaVenda("vorp-finance", v, { ...ctx, membrosIds: new Set(["c", "h", "s"]) });
+    expect(l.find((x) => x.beneficiarioId === "s")).toBeUndefined();
+    expect(l.find((x) => x.beneficiarioId === "h")?.valor).toBeCloseTo(600);
+  });
   it("MatchSales outbound 10 + líder 2; inbound 8 + 2; com BDR 5/5/2", () => {
     expect(soma(comissaoDaVenda("matchsales", base, ctx))).toBeCloseTo(1200);
     expect(soma(comissaoDaVenda("matchsales", { ...base, canal: "inbound" }, ctx))).toBeCloseTo(1000);

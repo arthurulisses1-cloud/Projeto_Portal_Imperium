@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
-import { canalDaOrigem, etapaDePerda, nomeArquivoSeguro, podeAprovarVenda, validarSubido, validarVenda } from "@/lib/leads-finance";
+import { canalDaOrigem, definirExecutivo, etapaDePerda, nomeArquivoSeguro, podeAprovarVenda, validarSubido, validarVenda } from "@/lib/leads-finance";
 
 // Funil de leads do Vorp Finance (migration 0113). As ações devolvem { erro } em vez de lançar,
 // para o formulário mostrar a mensagem sem derrubar a página.
@@ -178,10 +178,19 @@ export async function aprovarVendaFinance(leadId: string): Promise<EstadoForm> {
     return { erro: "Dados da venda incompletos." };
   }
 
+  // Executivo da venda: quem é do Finance (ver definirExecutivo); o outro nome do formulário vira participante.
+  const { data: membrosFinance } = await supabase.from("profile_negocios").select("profile_id").eq("negocio_id", lead.negocio_id);
+  const { executivoId, participanteId } = definirExecutivo(
+    lead.sdr_profile_id,
+    lead.closer_profile_id,
+    new Set((membrosFinance ?? []).map((m) => m.profile_id as string))
+  );
+  if (!executivoId) return { erro: "O lead está sem executivo na planilha." };
+
   const { data: venda, error: vendaErro } = await supabase
     .from("vendas")
     .insert({
-      profile_id: lead.closer_profile_id,
+      profile_id: executivoId,
       tipo: "individual",
       valor: lead.venda_valor_recebido,
       valor_cliente: lead.venda_valor_cliente,
@@ -190,7 +199,7 @@ export async function aprovarVendaFinance(leadId: string): Promise<EstadoForm> {
       produto: lead.tipo_precatorio,
       observacao: lead.venda_obs,
       canal: canalDaOrigem(lead.origem),
-      indicador_id: lead.sdr_profile_id && lead.sdr_profile_id !== lead.closer_profile_id ? lead.sdr_profile_id : null,
+      indicador_id: participanteId,
       papel: "closer",
       origem: "lead aprovado",
       negocio_id: lead.negocio_id,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canalDaOrigem, desagioFinance, nomeArquivoSeguro, parseValorBR, podeAprovarVenda, validarSubido, validarVenda } from "./leads-finance";
+import { canalDaOrigem, definirExecutivo, desagioFinance, nomeArquivoSeguro, parseValorBR, podeAprovarVenda, validarSubido, validarVenda } from "./leads-finance";
 
 const ok = { valorPrecatorio: 100000, valorProposta: 60000, comissaoPrevista: 6000, mesmoFundo: true, fundoNovo: null };
 
@@ -44,6 +44,24 @@ describe("parseValorBR", () => {
     expect(parseValorBR("R$ 1.234,56")).toBeCloseTo(1234.56);
     expect(parseValorBR("1234.56")).toBeCloseTo(1234.56);
     expect(parseValorBR("abc")).toBe(0);
+  });
+});
+
+describe("definirExecutivo", () => {
+  const finance = new Set(["ikaro", "stefani"]);
+  it("SDR do Finance e closer de outra BU: o executivo é o do Finance", () => {
+    expect(definirExecutivo("ikaro", "rafael", finance)).toEqual({ executivoId: "ikaro", participanteId: "rafael" });
+  });
+  it("closer do Finance e SDR de outra BU: vale o closer", () => {
+    expect(definirExecutivo("fernando", "ikaro", finance)).toEqual({ executivoId: "ikaro", participanteId: "fernando" });
+  });
+  it("os dois do Finance, ou nenhum: vale o closer", () => {
+    expect(definirExecutivo("stefani", "ikaro", finance).executivoId).toBe("ikaro");
+    expect(definirExecutivo("davi", "rafael", finance).executivoId).toBe("rafael");
+  });
+  it("sem SDR ou com a mesma pessoa nos dois campos", () => {
+    expect(definirExecutivo(null, "ikaro", finance)).toEqual({ executivoId: "ikaro", participanteId: null });
+    expect(definirExecutivo("ikaro", "ikaro", finance)).toEqual({ executivoId: "ikaro", participanteId: null });
   });
 });
 

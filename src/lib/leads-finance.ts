@@ -77,6 +77,22 @@ export function canalDaOrigem(origem: string | null): "outbound" | "inbound" | "
   return "outbound";
 }
 
+/**
+ * Quem leva o crédito de executivo numa venda do Finance. Se SDR e Closer do formulário são pessoas
+ * diferentes e só um deles é do time do Finance, o executivo é o do Finance e o outro entra como
+ * participante (a parte da liderança é dividida em 3 com ele). Se os dois (ou nenhum) são do Finance,
+ * vale o Closer. `membros` = quem está no Finance.
+ */
+export function definirExecutivo(sdrId: string | null, closerId: string | null, membros: ReadonlySet<string>): { executivoId: string | null; participanteId: string | null } {
+  if (sdrId && closerId && sdrId !== closerId) {
+    const sdrDentro = membros.has(sdrId);
+    const closerDentro = membros.has(closerId);
+    if (sdrDentro && !closerDentro) return { executivoId: sdrId, participanteId: closerId };
+    return { executivoId: closerId, participanteId: sdrId };
+  }
+  return { executivoId: closerId ?? sdrId, participanteId: null };
+}
+
 /** Quem aprova a venda: Diretor, ou Head do negócio do lead. */
 export function podeAprovarVenda(papel: { diretor: boolean; headDoNegocio: boolean }): boolean {
   return papel.diretor || papel.headDoNegocio;

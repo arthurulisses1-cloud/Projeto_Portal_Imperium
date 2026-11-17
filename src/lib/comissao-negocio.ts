@@ -76,6 +76,8 @@ export type ContextoNegocio = {
   /** Head do negócio, se houver. */
   headId: string | null;
   diretorId: string | null;
+  /** Quem é do negócio (para saber se o participante de uma venda é de outra BU). Ausente = ninguém é do negócio. */
+  membrosIds?: ReadonlySet<string>;
 };
 
 type Pcts = { closer: number; sdr: number; gestao: number };
@@ -175,8 +177,18 @@ function comissaoFinance(venda: VendaParaComissao, ctx: ContextoNegocio): LinhaC
       add(ctx.diretorId, "diretor", t.liderVendendo.diretor, base, tipo);
     } else {
       add(venda.closerId, "closer", t.comExecutivo.executivo, base, tipo);
-      add(ctx.headId && ctx.headId !== venda.closerId ? ctx.headId : null, "head", t.comExecutivo.lider, base, tipo);
-      add(ctx.diretorId, "diretor", t.comExecutivo.diretor, base, tipo);
+      // Venda com um participante de outra BU (o outro nome do formulário): a parte da liderança
+      // (líder + diretor) é dividida em 3 — Diretor, Head e o participante (decisão do Diretor, 2026-11-17).
+      const participante = venda.indicadorId && venda.indicadorId !== venda.closerId && !ctx.membrosIds?.has(venda.indicadorId) ? venda.indicadorId : null;
+      if (participante) {
+        const parte = (t.comExecutivo.lider + t.comExecutivo.diretor) / 3;
+        add(participante, "closer", parte, base, tipo);
+        add(ctx.headId ?? ctx.diretorId, ctx.headId ? "head" : "diretor", parte, base, tipo);
+        add(ctx.diretorId, "diretor", parte, base, tipo);
+      } else {
+        add(ctx.headId && ctx.headId !== venda.closerId ? ctx.headId : null, "head", t.comExecutivo.lider, base, tipo);
+        add(ctx.diretorId, "diretor", t.comExecutivo.diretor, base, tipo);
+      }
     }
   };
   aplicar(margem, "base");
@@ -261,7 +273,11 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
     const membrosN = (membros ?? []).filter((m) => m.negocio_id === n.id);
     const head = membrosN.find((m) => m.cargo === "head");
     // Vorp sem Head: o Diretor ocupa a Gestão (e o % de Head some).
-    const ctx: ContextoNegocio = { headId: head && head.profile_id !== diretorId ? head.profile_id : null, diretorId };
+    const ctx: ContextoNegocio = {
+      headId: head && head.profile_id !== diretorId ? head.profile_id : null,
+      diretorId,
+      membrosIds: new Set(membrosN.map((m) => m.profile_id as string)),
+    };
     const cargoDe = new Map(membrosN.map((m) => [m.profile_id as string, m.cargo as string]));
 
     const doNegocio = (vendas ?? []).filter((v) => v.negocio_id === n.id);
