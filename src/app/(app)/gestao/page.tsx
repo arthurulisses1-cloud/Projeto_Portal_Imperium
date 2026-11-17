@@ -2,11 +2,11 @@ import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { RANK_LABELS, ROLE_LABELS } from "@/lib/labels";
-import { RANK_ORDER } from "@/lib/carreira";
+import { ROLE_LABELS } from "@/lib/labels";
+import { CARGO_LABEL, NEGOCIO_COR, nomeEquipe, type CargoNegocio } from "@/lib/negocios";
 import { listarNomesPlanilha } from "@/lib/sync/nomes";
 import { buscarUltimaSyncOk } from "@/lib/sync/status";
-import { atualizarCargo, atualizarTribo, atualizarLegado, salvarPermissoesAnalista } from "./actions";
+import { atualizarCargo, removerVinculoNegocio, salvarPermissoesAnalista, salvarVinculoNegocio } from "./actions";
 import { AREAS_ANALISTA, buscarPermissoesAnalistaEmLote } from "@/lib/permissoes-analista";
 import Card from "@/components/ui/Card";
 import SincronizarPlanilha from "@/components/ui/SincronizarPlanilha";
@@ -17,7 +17,10 @@ import CriarUsuarioForm from "@/components/ui/CriarUsuarioForm";
 import ExcluirUsuarioButton from "@/components/ui/ExcluirUsuarioButton";
 
 const ROLES = ["sdr", "closer", "lider", "diretor", "investidor", "analista"] as const;
-const RANKS = [...RANK_ORDER, "diretor"] as const;
+const CARGOS = Object.keys(CARGO_LABEL) as CargoNegocio[];
+
+type Negocio = { id: string; slug: string; nome: string; equipe_nome: string | null };
+type Vinculo = { profile_id: string; negocio_id: string; cargo: CargoNegocio; principal: boolean };
 
 export default async function GestaoPage() {
   const supabase = await createClient();
@@ -44,16 +47,22 @@ export default async function GestaoPage() {
   // queries a página demorava tanto que parecia travada, e o Diretor
   // clicava várias vezes achando que o clique não tinha registrado (achado
   // 2026-09-29).
-  const [{ data: pessoas }, { data: tribos }, { data: exercitos }, nomesPlanilha, ultimaSync, { data: usersData }] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, role, rank, tribo_id, nomes_planilha").order("full_name"),
-    supabase.from("tribos").select("id, nome, exercito:exercitos(nome)").order("nome"),
-    supabase.from("exercitos").select("id, nome, legado_id").order("nome"),
+  const [{ data: pessoas }, { data: negociosRaw }, { data: vinculosRaw }, nomesPlanilha, ultimaSync, { data: usersData }] = await Promise.all([
+    supabase.from("profiles").select("id, full_name, role, ativo, nomes_planilha").order("full_name"),
+    supabase.from("negocios").select("id, slug, nome, equipe_nome").eq("status", "ativo").order("ordem"),
+    supabase.from("profile_negocios").select("profile_id, negocio_id, cargo, principal"),
     listarNomesPlanilha(),
     buscarUltimaSyncOk(supabase),
     admin.auth.admin.listUsers({ perPage: 200 }),
   ]);
 
-  const lideres = (pessoas ?? []).filter((p) => p.role === "lider");
+  const negocios = (negociosRaw ?? []) as Negocio[];
+  const negocioPorId = new Map(negocios.map((n) => [n.id, n]));
+  const vinculosPorPessoa = new Map<string, Vinculo[]>();
+  for (const v of (vinculosRaw ?? []) as Vinculo[]) {
+    if (!negocioPorId.has(v.negocio_id)) continue; // só negócios ativos
+    vinculosPorPessoa.set(v.profile_id, [...(vinculosPorPessoa.get(v.profile_id) ?? []), v]);
+  }
   const emailPorId = new Map((usersData?.users ?? []).map((u) => [u.id, u.email ?? null]));
 
   // Permissão customizada por Analista (pedido do Diretor, 2026-09-21) —
@@ -67,53 +76,24 @@ export default async function GestaoPage() {
     <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
       <div>
         <h1 className="font-display text-2xl text-gold-bright">Gestão de Pessoas</h1>
-        <p className="kicker mt-1">Cargo, Tribo e Exército de cada membro — acesso total do Diretor</p>
+        <p className="kicker mt-1">Papel, negócios e cargos de cada membro — acesso total do Diretor</p>
       </div>
 
       <Card title="Cadastrar novo usuário">
-        <CriarUsuarioForm
-          tribos={(tribos ?? []).map((t) => ({
-            id: t.id,
-            nome: t.nome,
-            exercitoNome: (t.exercito as unknown as { nome: string } | null)?.nome ?? null,
-          }))}
-        />
+        <CriarUsuarioForm negocios={negocios.map((n) => ({ id: n.id, nome: nomeEquipe(n) }))} />
       </Card>
 
       <Card title="Sincronização com a Planilha">
         <SincronizarPlanilha ultimaSyncInicial={ultimaSync} />
       </Card>
 
-      <Card title="Exércitos e seus Legados">
-        <div className="grid gap-3 sm:grid-cols-2">
-          {(exercitos ?? []).map((e) => (
-            <form key={e.id} action={atualizarLegado} className="flex items-end gap-2 rounded border border-imperium-line p-3">
-              <input type="hidden" name="exercito_id" value={e.id} />
-              <div className="flex-1">
-                <p className="mb-1 text-sm text-stone-200">{e.nome}</p>
-                <select name="legado_id" defaultValue={e.legado_id ?? ""} className="input-imp text-sm">
-                  <option value="">— sem Legado —</option>
-                  {lideres.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.full_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <button type="submit" className="btn-outline px-3 py-2 text-xs">
-                Salvar
-              </button>
-            </form>
-          ))}
-        </div>
-      </Card>
-
       <Card title="Todos os membros">
         <div className="space-y-3">
           {(pessoas ?? [])
-            .filter((p) => p.role !== "diretor")
+            .filter((p) => p.role !== "diretor" && p.ativo !== false)
             .map((p) => {
-              const tribo = (tribos ?? []).find((t) => t.id === p.tribo_id);
+              const vinculos = vinculosPorPessoa.get(p.id) ?? [];
+              const livres = negocios.filter((n) => !vinculos.some((v) => v.negocio_id === n.id));
               return (
                 <div key={p.id} className="rounded border border-imperium-line bg-imperium-bg/40 p-3">
                   <p className="mb-2 text-sm text-stone-100">{p.full_name}</p>
@@ -130,48 +110,80 @@ export default async function GestaoPage() {
                           ))}
                         </select>
                       </div>
-                      <div>
-                        <label className="mb-1 block text-[10px] uppercase text-stone-500">Cargo</label>
-                        <select name="rank" defaultValue={p.rank} className="input-imp text-xs">
-                          {RANKS.map((r) => (
-                            <option key={r} value={r}>
-                              {RANK_LABELS[r] ?? r}
+                      <button type="submit" className="btn-outline px-3 py-1.5 text-xs">
+                        Salvar
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="mt-3">
+                    <p className="mb-1.5 text-[10px] uppercase tracking-wide text-stone-500">Negócios e cargo em cada um</p>
+                    <div className="space-y-1.5">
+                      {vinculos.length === 0 && <p className="text-xs text-stone-600">Sem negócio vinculado.</p>}
+                      {vinculos.map((v) => {
+                        const n = negocioPorId.get(v.negocio_id)!;
+                        const cor = NEGOCIO_COR[n.slug] ?? "201 162 74";
+                        return (
+                          <div key={v.negocio_id} className="flex flex-wrap items-center gap-2">
+                            <form action={salvarVinculoNegocio} className="flex flex-wrap items-center gap-2">
+                              <input type="hidden" name="profile_id" value={p.id} />
+                              <input type="hidden" name="negocio_id" value={v.negocio_id} />
+                              <span className="w-36 truncate text-xs" style={{ color: `rgb(${cor})` }}>
+                                {nomeEquipe(n)}
+                              </span>
+                              <select name="cargo" defaultValue={v.cargo} className="input-imp text-xs">
+                                {CARGOS.map((c) => (
+                                  <option key={c} value={c}>
+                                    {CARGO_LABEL[c]}
+                                  </option>
+                                ))}
+                              </select>
+                              <label className="flex items-center gap-1 text-[11px] text-stone-400">
+                                <input type="checkbox" name="principal" defaultChecked={v.principal} /> Principal
+                              </label>
+                              <button type="submit" className="btn-outline px-2 py-1 text-xs">
+                                Salvar
+                              </button>
+                            </form>
+                            <form action={removerVinculoNegocio}>
+                              <input type="hidden" name="profile_id" value={p.id} />
+                              <input type="hidden" name="negocio_id" value={v.negocio_id} />
+                              <button type="submit" className="px-2 py-1 text-xs text-wine-bright hover:underline">
+                                Tirar do negócio
+                              </button>
+                            </form>
+                          </div>
+                        );
+                      })}
+                      {livres.length > 0 && (
+                        <form action={salvarVinculoNegocio} className="flex flex-wrap items-center gap-2 pt-1">
+                          <input type="hidden" name="profile_id" value={p.id} />
+                          <select name="negocio_id" defaultValue="" required className="input-imp text-xs">
+                            <option value="" disabled>
+                              + Adicionar a um negócio…
                             </option>
-                          ))}
-                        </select>
-                      </div>
-                      <button type="submit" className="btn-outline px-3 py-1.5 text-xs">
-                        Salvar
-                      </button>
-                    </form>
-
-                    <form action={atualizarTribo} className="flex items-end gap-2">
-                      <input type="hidden" name="profile_id" value={p.id} />
-                      <div>
-                        <label className="mb-1 block text-[10px] uppercase text-stone-500">Tribo</label>
-                        <select name="tribo_id" defaultValue={p.tribo_id ?? ""} className="input-imp text-xs">
-                          <option value="">— sem Tribo —</option>
-                          {(tribos ?? []).map((t) => {
-                            const ex = t.exercito as unknown as { nome: string } | null;
-                            return (
-                              <option key={t.id} value={t.id}>
-                                {ex?.nome ? `${ex.nome} · ` : ""}
-                                {t.nome}
+                            {livres.map((n) => (
+                              <option key={n.id} value={n.id}>
+                                {nomeEquipe(n)}
                               </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-                      <button type="submit" className="btn-outline px-3 py-1.5 text-xs">
-                        Salvar
-                      </button>
-                    </form>
-
-                    {tribo && (
-                      <span className="text-xs text-stone-500">
-                        atual: {(tribo.exercito as unknown as { nome: string } | null)?.nome} · {tribo.nome}
-                      </span>
-                    )}
+                            ))}
+                          </select>
+                          <select name="cargo" defaultValue="executivo" className="input-imp text-xs">
+                            {CARGOS.map((c) => (
+                              <option key={c} value={c}>
+                                {CARGO_LABEL[c]}
+                              </option>
+                            ))}
+                          </select>
+                          <label className="flex items-center gap-1 text-[11px] text-stone-400">
+                            <input type="checkbox" name="principal" defaultChecked={vinculos.length === 0} /> Principal
+                          </label>
+                          <button type="submit" className="btn-outline px-2 py-1 text-xs">
+                            Adicionar
+                          </button>
+                        </form>
+                      )}
+                    </div>
                   </div>
 
                   <div className="mt-3">

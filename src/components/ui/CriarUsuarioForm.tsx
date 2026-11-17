@@ -2,21 +2,23 @@
 
 import { useState, useTransition } from "react";
 import { criarUsuario } from "@/app/(app)/gestao/actions";
-import { RANK_LABELS, ROLE_LABELS } from "@/lib/labels";
-import { RANK_ORDER } from "@/lib/carreira";
+import { ROLE_LABELS } from "@/lib/labels";
+import { CARGO_LABEL, type CargoNegocio } from "@/lib/negocios";
 import { IconCheck } from "./icons";
 
 const ROLES = ["sdr", "closer", "lider", "analista"] as const;
 
-type Tribo = { id: string; nome: string; exercitoNome: string | null };
+type NegocioOpcao = { id: string; nome: string };
 
-export default function CriarUsuarioForm({ tribos }: { tribos: Tribo[] }) {
+const CARGOS = Object.keys(CARGO_LABEL) as CargoNegocio[];
+
+export default function CriarUsuarioForm({ negocios }: { negocios: NegocioOpcao[] }) {
   const [isPending, startTransition] = useTransition();
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<(typeof ROLES)[number]>("sdr");
-  const [rank, setRank] = useState<string>("legionario");
-  const [triboId, setTriboId] = useState("");
+  const [negocioId, setNegocioId] = useState("");
+  const [cargo, setCargo] = useState<CargoNegocio>("executivo");
   const [resultado, setResultado] = useState<{ email: string; senha: string } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
@@ -29,15 +31,15 @@ export default function CriarUsuarioForm({ tribos }: { tribos: Tribo[] }) {
     fd.set("full_name", nome.trim());
     fd.set("email", email.trim());
     fd.set("role", role);
-    fd.set("rank", rank);
-    fd.set("tribo_id", triboId);
+    fd.set("negocio_id", negocioId);
+    fd.set("cargo_negocio", cargo);
     startTransition(async () => {
       try {
         const r = await criarUsuario(fd);
         setResultado(r);
         setNome("");
         setEmail("");
-        setTriboId("");
+        setNegocioId("");
       } catch (e) {
         setErro(e instanceof Error ? e.message : "Erro ao criar conta.");
       }
@@ -83,30 +85,31 @@ export default function CriarUsuarioForm({ tribos }: { tribos: Tribo[] }) {
           </select>
         </div>
         {role !== "analista" && (
-          <div>
-            <label className="mb-1 block text-[10px] uppercase text-stone-500">Cargo inicial</label>
-            <select value={rank} onChange={(e) => setRank(e.target.value)} className="input-imp text-sm">
-              {RANK_ORDER.map((r) => (
-                <option key={r} value={r}>
-                  {RANK_LABELS[r] ?? r}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        {role !== "analista" && (
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-[10px] uppercase text-stone-500">Tribo (opcional)</label>
-            <select value={triboId} onChange={(e) => setTriboId(e.target.value)} className="input-imp text-sm">
-              <option value="">— sem Tribo —</option>
-              {tribos.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.exercitoNome ? `${t.exercitoNome} · ` : ""}
-                  {t.nome}
-                </option>
-              ))}
-            </select>
-          </div>
+          <>
+            <div>
+              <label className="mb-1 block text-[10px] uppercase text-stone-500">Negócio</label>
+              <select value={negocioId} onChange={(e) => setNegocioId(e.target.value)} className="input-imp text-sm">
+                <option value="">— sem negócio —</option>
+                {negocios.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.nome}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {negocioId && (
+              <div>
+                <label className="mb-1 block text-[10px] uppercase text-stone-500">Cargo no negócio</label>
+                <select value={cargo} onChange={(e) => setCargo(e.target.value as CargoNegocio)} className="input-imp text-sm">
+                  {CARGOS.map((c) => (
+                    <option key={c} value={c}>
+                      {CARGO_LABEL[c]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </>
         )}
       </div>
 

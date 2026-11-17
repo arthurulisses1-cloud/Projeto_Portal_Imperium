@@ -61,35 +61,42 @@ export async function atualizarCargo(formData: FormData) {
   const supabase = await exigirDiretor();
   const profileId = String(formData.get("profile_id"));
   const role = String(formData.get("role"));
-  const rank = String(formData.get("rank"));
+  if (!["sdr", "closer", "lider", "diretor", "investidor", "analista"].includes(role)) throw new Error("Papel inválido.");
 
-  const { error } = await supabase.from("profiles").update({ role, rank }).eq("id", profileId);
+  // O rank (Legionário etc.) não é mais usado: o cargo agora é por negócio (profile_negocios).
+  const { error } = await supabase.from("profiles").update({ role }).eq("id", profileId);
   if (error) throw new Error(error.message);
   revalidatePath("/gestao");
 }
 
-export async function atualizarTribo(formData: FormData) {
-  const supabase = await exigirDiretor();
-  const profileId = String(formData.get("profile_id"));
-  const triboId = String(formData.get("tribo_id") ?? "");
+const CARGOS_NEGOCIO = ["head", "executivo", "closer", "sdr", "bdr", "pre_vendas", "gestor", "outro"];
 
+/** Põe a pessoa em um negócio (ou muda o cargo dela nele). `principal` = o negócio que abre por padrão. */
+export async function salvarVinculoNegocio(formData: FormData) {
+  const supabase = await exigirDiretor();
+  const profileId = String(formData.get("profile_id") ?? "");
+  const negocioId = String(formData.get("negocio_id") ?? "");
+  const cargo = String(formData.get("cargo") ?? "");
+  const principal = formData.get("principal") === "on";
+  if (!profileId || !negocioId) throw new Error("Escolha a pessoa e o negócio.");
+  if (!CARGOS_NEGOCIO.includes(cargo)) throw new Error("Cargo inválido.");
+
+  if (principal) {
+    await supabase.from("profile_negocios").update({ principal: false }).eq("profile_id", profileId);
+  }
   const { error } = await supabase
-    .from("profiles")
-    .update({ tribo_id: triboId || null })
-    .eq("id", profileId);
+    .from("profile_negocios")
+    .upsert({ profile_id: profileId, negocio_id: negocioId, cargo, principal }, { onConflict: "profile_id,negocio_id" });
   if (error) throw new Error(error.message);
   revalidatePath("/gestao");
 }
 
-export async function atualizarLegado(formData: FormData) {
+export async function removerVinculoNegocio(formData: FormData) {
   const supabase = await exigirDiretor();
-  const exercitoId = String(formData.get("exercito_id"));
-  const legadoId = String(formData.get("legado_id") ?? "");
-
-  const { error } = await supabase
-    .from("exercitos")
-    .update({ legado_id: legadoId || null })
-    .eq("id", exercitoId);
+  const profileId = String(formData.get("profile_id") ?? "");
+  const negocioId = String(formData.get("negocio_id") ?? "");
+  if (!profileId || !negocioId) throw new Error("Vínculo inválido.");
+  const { error } = await supabase.from("profile_negocios").delete().eq("profile_id", profileId).eq("negocio_id", negocioId);
   if (error) throw new Error(error.message);
   revalidatePath("/gestao");
 }
@@ -190,9 +197,10 @@ export async function criarUsuario(formData: FormData) {
   const nome = String(formData.get("full_name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const role = String(formData.get("role") ?? "sdr");
-  const rank = String(formData.get("rank") ?? "legionario");
-  const triboId = String(formData.get("tribo_id") ?? "") || null;
+  const negocioId = String(formData.get("negocio_id") ?? "") || null;
+  const cargoNegocio = String(formData.get("cargo_negocio") ?? "executivo");
   if (!nome || !email) throw new Error("Nome e email são obrigatórios.");
+  if (negocioId && !CARGOS_NEGOCIO.includes(cargoNegocio)) throw new Error("Cargo inválido.");
 
   const { randomInt } = await import("crypto");
   const senha = "Imperium#" + randomInt(100000, 999999);
@@ -208,9 +216,15 @@ export async function criarUsuario(formData: FormData) {
 
   const { error: updateError } = await admin
     .from("profiles")
-    .update({ full_name: nome, role, rank, tribo_id: triboId })
+    .update({ full_name: nome, role })
     .eq("id", created.user.id);
-  if (updateError) throw new Error("Conta criada, mas falhou ao ajustar papel/tribo: " + updateError.message);
+  if (updateError) throw new Error("Conta criada, mas falhou ao ajustar o papel: " + updateError.message);
+  if (negocioId) {
+    const { error: vincError } = await admin
+      .from("profile_negocios")
+      .upsert({ profile_id: created.user.id, negocio_id: negocioId, cargo: cargoNegocio, principal: true }, { onConflict: "profile_id,negocio_id" });
+    if (vincError) throw new Error("Conta criada, mas falhou ao vincular ao negócio: " + vincError.message);
+  }
 
   revalidatePath("/gestao");
   return { email, senha };
