@@ -50,7 +50,10 @@ export type LeadCobravel = {
 export type Cobranca =
   | { tipo: "pendencia_vencida"; dias: number }
   | { tipo: "atualizar_status"; dias: number }
-  | { tipo: "recuperacao_nova"; dias: number };
+  | { tipo: "recuperacao_nova"; dias: number }
+  // Vorp Finance (leads-cobranca-finance.ts): lead parado há muito tempo e venda esperando aprovação.
+  | { tipo: "estagnado"; dias: number }
+  | { tipo: "aprovar_venda"; dias: number };
 
 export function dataBR(timestamp: string): string {
   return new Date(timestamp).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });

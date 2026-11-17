@@ -134,9 +134,8 @@ export async function buscarPendencias(
     if (c3) pend["/contestacoes"] = c3;
   }
 
-  // Leads que precisam de atualização de status (subidos, fechamento, leads
-  // novos em recuperação) — pedido do Diretor, 2026-10-09.
-  if (role === "closer" || role === "lider") {
+  // Leads do Vorp Finance que precisam de atualização, estão estagnados ou têm venda para aprovar.
+  if (role !== "diretor") {
     const cobrancas = await buscarCobrancasLeads(supabase, userId, role);
     if (cobrancas.length > 0) pend["/leads"] = cobrancas.length;
   }

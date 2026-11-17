@@ -85,7 +85,8 @@ export async function atribuirRepassesDeEntrevista(supabase: SupabaseClient): Pr
   const { data: recusadasRaw, error } = await supabase
     .from("entrevistas_leads")
     .select("id, lead_nome, status_followup, recusada_em, repasse_sdr_id, repasse_etapa, repasse_desde, sdr_profile_id, repasse_tentaram")
-    .eq("status_followup", "entrevista_recusada");
+    .eq("status_followup", "entrevista_recusada")
+    .is("negocio_id", null); // Vorp Finance não tem repasse entre vendedores
   logErroSupabase("atribuirRepassesDeEntrevista: recusadas", error);
 
   type Linha = LeadParaRepasse & { id: string; lead_nome: string };

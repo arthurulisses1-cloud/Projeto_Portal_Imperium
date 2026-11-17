@@ -6,6 +6,8 @@ import type { Cobranca } from "@/lib/leads-cobranca";
 function rotulo(c: Cobranca): string {
   if (c.tipo === "pendencia_vencida") return `pendência vencida há ${c.dias}d`;
   if (c.tipo === "recuperacao_nova") return "novo na sua carteira (recuperação)";
+  if (c.tipo === "estagnado") return `parado há ${c.dias}d`;
+  if (c.tipo === "aprovar_venda") return c.dias <= 1 ? "venda para aprovar" : `venda aguardando aprovação há ${c.dias}d`;
   return c.dias <= 1 ? "atualizar status" : `sem atualização há ${c.dias}d`;
 }
 
@@ -32,7 +34,7 @@ export default async function LeadsCobrancaMural({ userId, role }: { userId: str
         {itens.slice(0, 6).map(({ lead, cobranca }) => (
           <li key={lead.id} className="flex items-center justify-between gap-3 text-sm">
             <span className="truncate text-stone-200">{lead.lead_nome}</span>
-            <span className={`shrink-0 text-xs ${cobranca.tipo === "pendencia_vencida" ? "text-wine-bright" : "text-stone-500"}`}>
+            <span className={`shrink-0 text-xs ${cobranca.tipo === "pendencia_vencida" || cobranca.tipo === "estagnado" ? "text-wine-bright" : "text-stone-500"}`}>
               {rotulo(cobranca)}
             </span>
           </li>

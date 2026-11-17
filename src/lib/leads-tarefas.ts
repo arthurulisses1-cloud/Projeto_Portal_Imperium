@@ -37,6 +37,7 @@ export async function gerarTarefasDeValidacao(supabase: SupabaseClient): Promise
     .from("entrevistas_leads")
     .select("id, lead_nome, closer_profile_id, data, repasse_etapa")
     .eq("status_followup", "validacao_entrevista")
+    .is("negocio_id", null) // leads do Vorp Finance seguem o funil próprio (sem tarefa de validação)
     .not("closer_profile_id", "is", null)
     .or(`data.gte.${TAREFA_VALIDACAO_DESDE},repasse_etapa.eq.entrevista_recuperada`);
   logErroSupabase("gerarTarefasDeValidacao: leads", error);

@@ -30,6 +30,7 @@ export async function rotacionarLeadsParados(supabase: SupabaseClient): Promise<
         "id, lead_nome, status_followup, em_reanalise, compliance_comportamento, closer_profile_id, ultimo_movimento_em, rot_desde, rot_fase, rot_etapa, rot_tentaram, rot_responsavel_id, rot_ciclos"
       )
       .in("status_followup", Array.from(ETAPAS_ROTACAO_CLOSER))
+      .is("negocio_id", null) // Vorp Finance não tem rodízio de leads entre vendedores
       .eq("em_reanalise", false),
     supabase.from("profiles").select("id").eq("role", "closer").eq("ativo", true),
   ]);

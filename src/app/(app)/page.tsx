@@ -382,7 +382,7 @@ export default async function MuralPage({
         <TarefasMuralWidget userId={meId} />
       )}
 
-      {ehFinance && (meRole === "closer" || meRole === "lider") && <LeadsCobrancaMural userId={meId} role={meRole} />}
+      {ehFinance && <LeadsCobrancaMural userId={meId} role={meRole} />}
 
       {isAcademyRh && aulasCobrancaRh && <CobrancaFechamento aulas={aulasCobrancaRh} />}
 
