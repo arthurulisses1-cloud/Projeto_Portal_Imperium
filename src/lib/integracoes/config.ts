@@ -228,12 +228,35 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
 
 
 /** Discador 3C Plus: alôs e conexões do Outbound. Tudo que vem do 3C é Outbound. */
-export type Config3c = { tokenEnv: string; segundosConexao: number };
+export type Config3c = {
+  tokenEnv: string;
+  segundosConexao: number;
+  /** Agente do 3C (agent_id) → usuário do Pipefácil, para o funil por pré-vendas. Quem entra no
+   *  discador: acrescentar aqui. Agente fora do mapa conta só no total do time. */
+  agentes?: Record<number, string>;
+};
 export const TRESC_POR_NEGOCIO: Record<string, Config3c> = {
   // Conta "Grupo Vorp". Alô = ligação atendida que falou com o BDR; conexão = conversa de 60s ou mais.
-  vorp: { tokenEnv: "TCP_API_TOKEN", segundosConexao: 60 },
+  vorp: {
+    tokenEnv: "TCP_API_TOKEN",
+    segundosConexao: 60,
+    agentes: {
+      134502: "7d0660e3-9acb-4266-93db-cfdee71e2289", // Marcus Ryquelme
+      272989: "2acc1ce9-0160-4bf9-8526-4f799604143a", // Vinicius Ferreira → Vinícius Anastácio Ferreira
+      252689: "efaa951d-455a-4148-ba3a-fa3b5f4bafd9", // Jorge Abudi
+    },
+  },
   // Conta própria da Galáticos (MatchSales), mesmas regras.
-  matchsales: { tokenEnv: "TCP_API_TOKEN_MATCH", segundosConexao: 60 },
+  matchsales: {
+    tokenEnv: "TCP_API_TOKEN_MATCH",
+    segundosConexao: 60,
+    agentes: {
+      273159: "b58b3ad3-8f28-48a3-a103-4c65db9307b4", // Fernando → Fernando César F. Honorato
+      273160: "fd4b8d73-5438-4c60-a985-87f3394721e6", // Leonardo
+      273158: "1b2cd3b8-5b6c-48e0-83a5-3d4fa3e8f94f", // Matheus → Matheus Mesquita
+      273390: "cmpy5vxa2026g3ukcydv7ddke", // Nicolas → Nicolas Roberto
+    },
+  },
 };
 
 /** Chave de cada etapa do portal, por canal (mesma ordem de funil-negocio.ts). */

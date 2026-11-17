@@ -14,6 +14,7 @@ export type Ligacao3c = {
   status_id?: number;
   speaking_with_agent_time: string; // "00:01:25"
   agent: string;
+  agent_id?: number | null;
 };
 
 const STATUS_NAO_ATENDIDA = [5, 8];
@@ -34,6 +35,21 @@ export function contarAlosConexoes(ligacoes: Ligacao3c[], segundosConexao: numbe
     if (segundos(l.speaking_with_agent_time) >= segundosConexao) conexoes += 1;
   }
   return { alos, conexoes };
+}
+
+/** Alôs e conexões de cada pré-vendas (agente do 3C → usuário do Pipefácil pelo `agentes`). Todo mapeado
+ *  aparece, com zero se não ligou (a gravação sobrescreve o dia inteiro). */
+export function contarPorPessoa(ligacoes: Ligacao3c[], segundosConexao: number, agentes: Record<number, string>): Map<string, { alos: number; conexoes: number }> {
+  const out = new Map<string, { alos: number; conexoes: number }>();
+  for (const id of Object.values(agentes)) out.set(id, { alos: 0, conexoes: 0 });
+  const porPessoa = new Map<string, Ligacao3c[]>();
+  for (const l of ligacoes) {
+    const quem = l.agent_id != null ? agentes[Number(l.agent_id)] : undefined;
+    if (!quem) continue;
+    porPessoa.set(quem, [...(porPessoa.get(quem) ?? []), l]);
+  }
+  porPessoa.forEach((ls, quem) => out.set(quem, contarAlosConexoes(ls, segundosConexao)));
+  return out;
 }
 
 /** Todas as ligações de um dia (YYYY-MM-DD), paginando de 1000 em 1000. */

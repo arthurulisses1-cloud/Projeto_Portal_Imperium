@@ -193,10 +193,11 @@ export function leadsDoRealizado(
 export type Recorte = "todos" | "mes";
 export type Qualificacao = "completo" | "mql" | "nao_mql";
 
-/** Etapa gravada para uma visão. A qualificação só existe no Inbound. */
-export function chaveVisao(etapa: string, canal: string, recorte: Recorte, qualificacao: Qualificacao): string {
+/** Etapa gravada para uma visão. A qualificação só existe no Inbound. Com `pessoa` (usuário do Pipefácil),
+ *  a visão daquele pré-vendas: "pv:<id>:" na frente de tudo. */
+export function chaveVisao(etapa: string, canal: string, recorte: Recorte, qualificacao: Qualificacao, pessoa?: string | null): string {
   const q = canal === "inbound" && qualificacao !== "completo" ? `${qualificacao}:` : "";
-  return `${recorte === "mes" ? "mes:" : ""}${q}${etapa}`;
+  return `${pessoa ? `pv:${pessoa}:` : ""}${recorte === "mes" ? "mes:" : ""}${q}${etapa}`;
 }
 
 /** Etapa sem o prefixo da visão. */
@@ -377,6 +378,43 @@ export function vendasGanhas(deals: DealCrm[], eventos: EventoCrm[], cfg: Config
       closer_user_id: responsavelNoGanho?.get(d.deal_id) ?? d.responsavel_user_id,
       sdr_user_id: d.sdr_user_id,
     });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- funil por pré-vendas
+const ETAPAS_DO_AGENDAMENTO = ["reunioes_agendadas", "reunioes_realizadas", "propostas", "vendas"];
+
+/**
+ * Quem leva cada contagem no funil por pré-vendas (as regras do Pace e do sistema antigo): da reunião
+ * agendada em diante, quem era o responsável pelo lead no agendamento (a realizada, a proposta e a venda
+ * vão para quem agendou); leads e MQL, o responsável na criação; conectados, o responsável na conexão.
+ * Sem histórico do momento, o pré-vendas do lead, senão o responsável atual. Referidos não têm pré-vendas.
+ */
+export function pessoaDaContagem(
+  it: LeadDoRealizado,
+  marcos: Partial<Record<Nivel, string>> | undefined,
+  hist: [string, string][] | undefined,
+): string | null {
+  if (it.canal === "indicacao") return null;
+  const d = it.deal;
+  const base = etapaBase(it.etapa);
+  if (ETAPAS_DO_AGENDAMENTO.includes(base)) return responsavelNoAgendamento(d, marcos, hist);
+  if (base === "conectados") {
+    const t = marcos?.[NIVEL.conectado];
+    return (t ? responsavelEm(hist, t) : null) ?? d.sdr_user_id ?? d.responsavel_user_id;
+  }
+  if (base === "leads" || base === "mql") return (d.criado_em ? responsavelEm(hist, d.criado_em) : null) ?? d.responsavel_user_id;
+  return null;
+}
+
+/** As contagens de cada visão também na visão do pré-vendas que as leva ("pv:<id>:" na etapa). */
+export function creditarPessoas(itens: LeadDoRealizado[], eventos: EventoCrm[], cfg: ConfigCrm, responsaveis: Map<string, [string, string][]>): LeadDoRealizado[] {
+  const marcos = marcosPorLead(eventos, cfg);
+  const out: LeadDoRealizado[] = [];
+  for (const it of itens) {
+    const quem = pessoaDaContagem(it, marcos.get(it.deal.deal_id), responsaveis.get(it.deal.deal_id));
+    if (quem) out.push({ ...it, etapa: `pv:${quem}:${it.etapa}` });
   }
   return out;
 }

@@ -5,9 +5,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hojeBR } from "@/lib/data-br";
 import { CRM_POR_NEGOCIO, INICIO_HISTORICO, INICIO_REALIZADO, TRESC_POR_NEGOCIO, type ConfigCrm } from "./config";
-import { buscarLigacoesDoDia, contarAlosConexoes } from "./tresc";
+import { buscarLigacoesDoDia, contarAlosConexoes, contarPorPessoa } from "./tresc";
 import { Pipefacil, type AtividadePipefacil, type DealPipefacil } from "./pipefacil";
-import { calcularFunilUnico, contarPorDia, detalharVisoes, etapaBase, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
+import { calcularFunilUnico, contarPorDia, creditarPessoas, detalharVisoes, etapaBase, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { ETAPAS_COM_LISTA } from "./leads-funil";
 import { montarAuditoria } from "./auditoria";
 import { identidadesDosDeals } from "./contatos";
@@ -132,27 +132,30 @@ function etapaDoEvento(a: AtividadePipefacil): string | null {
 
 // ---------------------------------------------------------------- 3C Plus
 
-async function sync3c(supabase: SupabaseClient, negocioId: string, token: string, segundosConexao: number, desde: string, simular: boolean) {
+async function sync3c(supabase: SupabaseClient, negocioId: string, token: string, segundosConexao: number, desde: string, simular: boolean, agentes: Record<number, string> = {}) {
   const hoje = hojeBR();
   const dias: string[] = [];
   for (let d = desde; d <= hoje; d = somaDias(d, 1)) dias.push(d);
-  const porDia: { data: string; alos: number; conexoes: number }[] = [];
+  const porDia: { data: string; alos: number; conexoes: number; porPessoa: Map<string, { alos: number; conexoes: number }> }[] = [];
   for (const dia of dias) {
     const ligacoes = await buscarLigacoesDoDia(token, dia);
-    porDia.push({ data: dia, ...contarAlosConexoes(ligacoes, segundosConexao) });
+    porDia.push({ data: dia, ...contarAlosConexoes(ligacoes, segundosConexao), porPessoa: contarPorPessoa(ligacoes, segundosConexao, agentes) });
   }
   if (!simular) {
     const agora = new Date().toISOString();
+    const linha = (data: string, etapa: string, quantidade: number) => ({ negocio_id: negocioId, data, canal: "outbound", etapa, quantidade, fonte: "3c", synced_at: agora });
+    // Total do time e, para o funil por pré-vendas, cada pessoa ("pv:<usuário do Pipefácil>:alos").
     const linhas = porDia.flatMap((d) => [
-      { negocio_id: negocioId, data: d.data, canal: "outbound", etapa: "alos", quantidade: d.alos, fonte: "3c", synced_at: agora },
-      { negocio_id: negocioId, data: d.data, canal: "outbound", etapa: "conexoes", quantidade: d.conexoes, fonte: "3c", synced_at: agora },
+      linha(d.data, "alos", d.alos),
+      linha(d.data, "conexoes", d.conexoes),
+      ...Array.from(d.porPessoa, ([quem, c]) => [linha(d.data, `pv:${quem}:alos`, c.alos), linha(d.data, `pv:${quem}:conexoes`, c.conexoes)]).flat(),
     ]);
     for (const lote of chunk(linhas, 500)) {
       const { error } = await supabase.from("funil_realizado").upsert(lote, { onConflict: "negocio_id,data,canal,etapa" });
       if (error) throw new Error("Erro gravando 3C: " + error.message);
     }
   }
-  return porDia;
+  return porDia.map(({ porPessoa, ...d }) => ({ ...d, porPessoa: Object.fromEntries(porPessoa) }));
 }
 
 // ---------------------------------------------------------------- Pipefácil
@@ -274,7 +277,9 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
     responsaveis.set(a.dealId, h);
   }
   // Funis por canal: a visão padrão e as visões ("Leads do mês", MQL/não MQL) saem da mesma passada.
-  const visoes = cfg.funilUnico ? [] : detalharVisoes(linhasDeals, eventos, cfg, inicio, fimExcl);
+  const visoesTime = cfg.funilUnico ? [] : detalharVisoes(linhasDeals, eventos, cfg, inicio, fimExcl);
+  // Cada contagem também na visão do pré-vendas que a leva ("pv:<id>:…"), para o filtro do Dashboard.
+  const visoes = [...visoesTime, ...creditarPessoas(visoesTime, eventos, cfg, responsaveis)];
   const contagens = cfg.funilUnico ? calcularFunilUnico(linhasDeals, eventos, cfg.funilUnico, inicio, fimExcl) : contarPorDia(visoes);
   if (!simular && visoes.length > 0) {
     // Lista de leads de cada número (agendadas, realizadas, propostas, vendas), por mês e visão.
@@ -499,7 +504,7 @@ export async function runSyncIntegracoes(opts: OpcoesSync = {}): Promise<Resulta
         const token = process.env[c3.tokenEnv];
         try {
           if (!token) throw new Error(`${c3.tokenEnv} não configurado`);
-          r.tresc = await sync3c(supabase, n.id, token, c3.segundosConexao, opts.desde3c ?? somaDias(hoje, -1), !!opts.simular);
+          r.tresc = await sync3c(supabase, n.id, token, c3.segundosConexao, opts.desde3c ?? somaDias(hoje, -1), !!opts.simular, c3.agentes);
         } catch (e) {
           const msg = `${n.slug}/3c: ${e instanceof Error ? e.message : String(e)}`;
           erros.push(msg);
