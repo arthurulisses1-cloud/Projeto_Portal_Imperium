@@ -19,6 +19,7 @@ export default async function TarefasMuralWidget({ userId }: { userId: string })
     .from("tasks")
     .select("id, titulo, due_date, prioridade, exige_lead_movido")
     .eq("profile_id", userId)
+    .not("exige_lead_movido", "is", true)
     .neq("coluna", "concluido")
     .lte("due_date", hoje)
     .order("due_date", { ascending: true });

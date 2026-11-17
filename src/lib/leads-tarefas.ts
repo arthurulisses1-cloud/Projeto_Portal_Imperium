@@ -25,12 +25,17 @@ export function prazoValidacao(hoje: string): string {
   return proximoDiaUtil(hoje);
 }
 
+export const GERAR_TAREFA_VALIDACAO = false;
+
 export const TITULO_VALIDACAO = "Validar entrevista:";
 
 // Idempotente (roda em todo sync): cria a tarefa pra cada lead em Validação de
 // Entrevista que ainda não tem uma tarefa de validação aberta. Também cobre a
 // entrevista RECUPERADA por um SDR, que volta pro closer validar de novo.
 export async function gerarTarefasDeValidacao(supabase: SupabaseClient): Promise<{ criadas: number }> {
+  // Desligada (2026-11-18): o fluxo de validação de entrevista era do Matri, arquivado. Meus Leads agora é só do
+  // Vorp Finance, que tem funil próprio; um closer de outro negócio (ex.: Acrópole) não pode movimentar esses leads.
+  if (!GERAR_TAREFA_VALIDACAO) return { criadas: 0 };
   const hoje = hojeBR();
 
   const { data: leadsRaw, error } = await supabase

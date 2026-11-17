@@ -52,6 +52,8 @@ export default async function TarefasPage() {
     .select(
       "id, titulo, descricao, due_date, due_time, coluna, prioridade, privado, profile_id, atribuido_por, tags, tempo_estimado_min, tempo_gasto_seg, cronometro_iniciado_em, updated_at, lead_id, lead:entrevistas_leads(lead_nome)"
     )
+    // Tarefa automática de "Validar entrevista" (fluxo do Matri, arquivado) fica fora da visão: o lead dela não existe mais em Meus Leads.
+    .not("exige_lead_movido", "is", true)
     .in("profile_id", idsVisiveis)
     .order("due_date", { ascending: true, nullsFirst: false });
 

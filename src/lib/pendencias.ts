@@ -65,6 +65,7 @@ export async function buscarPendencias(
       .from("tasks")
       .select("id", { count: "exact", head: true })
       .eq("profile_id", userId)
+      .not("exige_lead_movido", "is", true)
       .lte("due_date", hoje)
       .neq("coluna", "concluido");
     if (tarefasCount) pend["/tarefas"] = tarefasCount;
@@ -118,6 +119,7 @@ export async function buscarPendencias(
       .from("tasks")
       .select("id", { count: "exact", head: true })
       .eq("profile_id", userId)
+      .not("exige_lead_movido", "is", true)
       .lte("due_date", hoje)
       .neq("coluna", "concluido");
     if (tarefasCount) pend["/tarefas"] = tarefasCount;
