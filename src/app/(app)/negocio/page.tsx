@@ -15,7 +15,9 @@ import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
 import { buscarResumoSunne, type SunneResumo } from "@/lib/sunne";
 import ContasSunne from "@/components/negocio/ContasSunne";
 import { buscarLigacoesSunne, type LigacoesResumo } from "@/lib/api4com";
-import type { StatusPace } from "@/lib/pace-negocio";
+import { calcularPace, type PaceCalculado, type StatusPace } from "@/lib/pace-negocio";
+import { metaKwhForecast } from "@/lib/forecast-negocios";
+import { buscarAcumuladoKwhSunne } from "@/lib/sunne";
 import { BotaoAtualizarRealizado } from "@/components/negocio/BotaoAtualizarRealizado";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +33,10 @@ const STATUS: Record<StatusPace, { texto: string; classe: string }> = {
   atrasado: { texto: "Atrasado", classe: "border-wine/60 text-wine-bright" },
   critico: { texto: "Crítico", classe: "border-wine/80 bg-wine/10 text-wine-bright" },
 };
+
+function kwh(v: number) {
+  return `${v.toLocaleString("pt-BR", { maximumFractionDigits: 0 })} kWh`;
+}
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -114,6 +120,20 @@ export default async function NegocioDashboardPage({
 
   const ehGestor = eu.role === "diretor" || atual.cargo === "head";
   const comissao = ehGestor ? (await buscarComissoesNegocios(supabase, ano, mes, [atual.slug]))[0] : null;
+
+  // Energy: a mesma visão do financeiro em kWh fechados (Sunne) contra a meta de kWh do mês.
+  let paceKwh: PaceCalculado | null = null;
+  if (atual.slug === "vorp-energy") {
+    const metaKwh = Math.round(metaKwhForecast(atual.slug, ano, mes));
+    if (metaKwh > 0) {
+      try {
+        const acumulado = await buscarAcumuladoKwhSunne(ano, mes, hoje);
+        paceKwh = calcularPace({ meta: metaKwh, recebido: acumulado[acumulado.length - 1]?.valor ?? 0, hoje, ano, mes });
+      } catch (e) {
+        console.error("kWh da Sunne indisponível no Dashboard:", e);
+      }
+    }
+  }
 
   const { pace } = dados.pace;
   const cor = NEGOCIO_COR[atual.slug] ?? "201 162 74";
@@ -297,6 +317,44 @@ export default async function NegocioDashboardPage({
           </div>
         </div>
       </section>
+
+      {paceKwh && (
+        <section className="rounded-lg border bg-imperium-surface p-4" style={{ borderColor: `rgb(${cor} / 0.55)` }}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-stone-500">kWh vendidos</p>
+              <p className="text-3xl font-semibold text-stone-100">{kwh(paceKwh.recebido)}</p>
+              <p className="text-sm text-stone-400">
+                {Math.round((paceKwh.recebido / paceKwh.meta) * 100)}% de {kwh(paceKwh.meta)} (meta do forecast)
+              </p>
+            </div>
+            <span className={`rounded border px-2 py-0.5 text-xs ${STATUS[paceKwh.status].classe}`}>{STATUS[paceKwh.status].texto}</span>
+          </div>
+          <div className="mt-3">
+            <Barra valor={paceKwh.recebido} total={paceKwh.meta} cor={cor} />
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-stone-500">Deveria estar em</p>
+              <p className="font-semibold text-stone-100">{kwh(paceKwh.esperadoAteHoje)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-stone-500">Projeção do mês</p>
+              <p className="font-semibold text-stone-100">{paceKwh.diasUteisDecorridos > 0 ? kwh(paceKwh.projecao) : "—"}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-stone-500">Falta por dia útil</p>
+              <p className="font-semibold text-stone-100">{paceKwh.necessarioPorDia === null ? "—" : kwh(paceKwh.necessarioPorDia)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-stone-500">Dias úteis</p>
+              <p className="font-semibold text-stone-100">
+                {paceKwh.diasUteisDecorridos} de {paceKwh.diasUteisTotal}
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Funil do mês: volumes e conversões, um bloco por canal, lado a lado */}
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
