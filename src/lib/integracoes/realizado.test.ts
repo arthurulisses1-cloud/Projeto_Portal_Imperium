@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CRM_POR_NEGOCIO, TRESC_POR_NEGOCIO } from "./config";
-import { calcularFunilUnico, calcularRealizadoCrm, contarPorDia, dataBR, detalharVisoes, ehMql, leadsDoRealizado, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
+import { calcularFunilUnico, calcularRealizadoCrm, contarPorDia, dataBR, detalharVisoes, ehMql, leadsDoRealizado, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { contarAlosConexoes, segundos } from "./tresc";
 import { canalDoDeal } from "./run";
 import { aplicarLeads, aplicarRealizado, leadsPorQualificacao, montarFunisDaVisao, etapasIntegradas, funilUnicoDoNegocio, funisDoMes } from "../funil-negocio";
@@ -502,5 +502,31 @@ describe("visões do funil", () => {
     expect(outMes.etapas.find((e) => e.chave === "alos")!.realizado).toBe(50);
     expect(outMes.etapas.find((e) => e.chave === "reunioes_agendadas")!.realizado).toBe(0);
     expect(leadsPorQualificacao(x, "todos")).toEqual({ completo: 3, mql: 1, nao_mql: 2 });
+  });
+});
+
+describe("ranking de pré-vendas", () => {
+  it("credita agendada e realizada a quem era o responsável no momento do agendamento, do maior para o menor", () => {
+    const deals = [
+      deal({ deal_id: "a", nome: "ACME", responsavel_user_id: "jorge", sdr_user_id: "vini" }),
+      deal({ deal_id: "b", nome: "Beta", responsavel_user_id: "ryq" }),
+      deal({ deal_id: "c", nome: "Gama", responsavel_user_id: "jorge", sdr_user_id: "vini", criado_em: "2026-10-01T12:00:00Z" }),
+    ];
+    const eventos = [
+      ev("a", ST.agendadaOut, "2026-11-05T13:00:00Z"),
+      ev("a", ST.ganhoOut, "2026-11-06T13:00:00Z"),
+      ev("b", ST.agendadaOut, "2026-11-07T13:00:00Z"),
+      ev("c", ST.agendadaOut, "2026-11-08T13:00:00Z"), // lead de outubro: conta igual (todos os leads)
+    ];
+    // no agendamento, "a" e "c" eram do Vinícius; depois o Ganho passou "a" para o closer (Jorge)
+    const resp = new Map<string, [string, string][]>([
+      ["a", [["2026-11-05T13:00:00Z", "vini"], ["2026-11-06T13:00:01Z", "jorge"]]],
+      ["b", [["2026-11-07T13:00:00Z", "ryq"]]],
+      ["c", [["2026-11-08T13:00:00Z", "vini"]]],
+    ]);
+    const itens = leadsDoRealizado(deals, eventos, cfg, "2026-11-01", "2026-12-01");
+    const r = rankingPreVendas(itens, eventos, cfg, resp);
+    expect(r.reunioes_agendadas.map((p) => [p.pessoa, p.leads.length])).toEqual([["vini", 2], ["ryq", 1]]);
+    expect(r.reunioes_realizadas.map((p) => [p.pessoa, p.leads.map((l) => l.nome)])).toEqual([["vini", ["ACME"]]]);
   });
 });

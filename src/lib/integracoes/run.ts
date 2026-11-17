@@ -7,7 +7,7 @@ import { hojeBR } from "@/lib/data-br";
 import { CRM_POR_NEGOCIO, INICIO_HISTORICO, INICIO_REALIZADO, TRESC_POR_NEGOCIO, type ConfigCrm } from "./config";
 import { buscarLigacoesDoDia, contarAlosConexoes } from "./tresc";
 import { Pipefacil, type AtividadePipefacil, type DealPipefacil } from "./pipefacil";
-import { calcularFunilUnico, contarPorDia, detalharVisoes, etapaBase, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
+import { calcularFunilUnico, contarPorDia, detalharVisoes, etapaBase, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { ETAPAS_COM_LISTA } from "./leads-funil";
 import type { LeadEtapa } from "@/lib/funil-negocio";
 
@@ -252,6 +252,23 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
       const sdr = nome(v.deal.sdr_user_id);
       (doMes[k] ??= []).push({ nome: v.deal.nome || v.deal.empresa || "(sem nome)", responsavel, preVendas: sdr && sdr !== responsavel ? sdr : null, data: v.data });
       porMes.set(mes, doMes);
+    }
+    // Ranking de pré-vendas (agendadas e realizadas, todos os leads e canais): quem era o responsável no
+    // momento do agendamento, pelo histórico relido (cada evento traz o responsável daquele instante).
+    const responsaveis = new Map<string, [string, string][]>();
+    for (const a of [...atividades].sort((x, y) => Date.parse(x.occurredAt) - Date.parse(y.occurredAt))) {
+      if (!a.metadata?.responsibleUserId) continue;
+      const h = responsaveis.get(a.dealId) ?? [];
+      h.push([a.occurredAt, a.metadata.responsibleUserId]);
+      responsaveis.set(a.dealId, h);
+    }
+    const padrao = visoes.filter((v) => !v.etapa.includes(":"));
+    for (let mes = inicio.slice(0, 7); mes < fimExcl.slice(0, 7); mes = inicioDoMes(`${mes}-01`, 1).slice(0, 7)) {
+      const ranking = rankingPreVendas(padrao.filter((v) => v.data.startsWith(mes)), eventos, cfg, responsaveis);
+      const valor = Object.fromEntries(
+        Object.entries(ranking).map(([etapa, pessoas]) => [etapa, pessoas.map((p) => ({ nome: (p.pessoa && nomesUsuarios[p.pessoa]) || "Sem responsável", total: p.leads.length, leads: p.leads }))]),
+      );
+      await supabase.from("integracao_estado").upsert({ chave: `ranking:${slug}:${mes}`, valor, atualizado_em: new Date().toISOString() });
     }
     for (let mes = inicio.slice(0, 7); mes < fimExcl.slice(0, 7); mes = inicioDoMes(`${mes}-01`, 1).slice(0, 7)) {
       const lista = porMes.get(mes) ?? {};

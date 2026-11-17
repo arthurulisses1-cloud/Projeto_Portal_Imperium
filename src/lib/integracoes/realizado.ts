@@ -228,6 +228,50 @@ export function contarPorDia(itens: { data: string; canal: CanalPortal; etapa: s
   return Array.from(acc.values());
 }
 
+// ---------------------------------------------------------------- ranking de pré-vendas
+export type PessoaRanking = { pessoa: string | null; leads: { nome: string; data: string; canal: CanalPortal }[] };
+
+/**
+ * Ranking de pré-vendas por etapa (agendadas, realizadas): cada contagem do mês vai para quem era o
+ * responsável pelo lead no momento em que ele chegou em Reunião Agendada (quem agendou); a realizada vai
+ * para o mesmo pré-vendas. `responsaveis`: por lead, [instante, responsável] de cada evento do histórico.
+ * Sem histórico do momento: o campo pré-vendas do lead, senão o responsável atual. Do maior para o menor.
+ */
+export function rankingPreVendas(
+  itens: LeadDoRealizado[],
+  eventos: EventoCrm[],
+  cfg: ConfigCrm,
+  responsaveis: Map<string, [string, string][]>,
+  etapas: string[] = ["reunioes_agendadas", "reunioes_realizadas"],
+): Record<string, PessoaRanking[]> {
+  const marcos = marcosPorLead(eventos, cfg);
+  const quemAgendou = (d: DealCrm): string | null => {
+    const t = marcos.get(d.deal_id)?.[NIVEL.agendada];
+    const hist = responsaveis.get(d.deal_id);
+    if (t && hist) {
+      let r: string | null = null;
+      for (const [em, quem] of hist) if (Date.parse(em) <= Date.parse(t) + 1000) r = quem;
+      if (r) return r;
+    }
+    return d.sdr_user_id ?? d.responsavel_user_id;
+  };
+  const out: Record<string, PessoaRanking[]> = {};
+  for (const etapa of etapas) {
+    const porPessoa = new Map<string | null, PessoaRanking>();
+    for (const it of itens) {
+      if (it.etapa !== etapa) continue;
+      const pessoa = quemAgendou(it.deal);
+      const p = porPessoa.get(pessoa) ?? { pessoa, leads: [] };
+      p.leads.push({ nome: it.deal.nome || it.deal.empresa || "(sem nome)", data: it.data, canal: it.canal });
+      porPessoa.set(pessoa, p);
+    }
+    out[etapa] = Array.from(porPessoa.values())
+      .map((p) => ({ ...p, leads: p.leads.sort((a, b) => a.data.localeCompare(b.data)) }))
+      .sort((a, b) => b.leads.length - a.leads.length);
+  }
+  return out;
+}
+
 /**
  * Funil próprio do negócio (etapas do funil do CRM, sem canais). Mesma regra de contagem: o lead conta
  * na etapa no dia em que chegou pela primeira vez nela ou numa etapa à frente; a etapa de entrada

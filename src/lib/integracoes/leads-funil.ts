@@ -68,3 +68,11 @@ export async function buscarListasGravadas(admin: SupabaseClient, slug: string, 
   if (!data?.valor) return null;
   return new Map(Object.entries(data.valor as Record<string, LeadEtapa[]>));
 }
+
+export type RankingGravado = Record<string, { nome: string; total: number; leads: { nome: string; data: string; canal: string }[] }[]>;
+
+/** Ranking de pré-vendas gravado pela sincronização para o mês. null = sem ranking gravado. */
+export async function buscarRankingGravado(admin: SupabaseClient, slug: string, mes: string): Promise<RankingGravado | null> {
+  const { data } = await admin.from("integracao_estado").select("valor").eq("chave", `ranking:${slug}:${mes}`).maybeSingle();
+  return (data?.valor as RankingGravado | null) ?? null;
+}

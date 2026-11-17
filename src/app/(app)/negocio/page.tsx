@@ -6,7 +6,7 @@ import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { buscarDashboardNegocio, RANKINGS, type MixCanal } from "@/lib/dashboard-negocio";
 import { etapasIntegradas, funilUnicoDoNegocio, funisDoMes, leadsPorQualificacao, montarFunisDaVisao, type LeadEtapa } from "@/lib/funil-negocio";
-import { buscarLeadsDoFunil, buscarListasGravadas } from "@/lib/integracoes/leads-funil";
+import { buscarLeadsDoFunil, buscarListasGravadas, buscarRankingGravado } from "@/lib/integracoes/leads-funil";
 import type { Qualificacao, Recorte } from "@/lib/integracoes/realizado";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
@@ -164,22 +164,47 @@ export default async function NegocioDashboardPage({
   const ultimaSyncFunil = (linhasRealizado ?? []).reduce<string | null>((m, l) => (!m || l.synced_at > m ? l.synced_at : m), null);
   const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
   // Energy: contas subidas vêm da Sunne (negócios criados no mês por vendedor), não do compromisso do dia.
+  // Ranking de pré-vendas pelo Pipefácil (agendadas e realizadas, todos os leads e canais), gravado pela
+  // sincronização. Sem ele (negócio sem CRM ou mês fora da janela), vale o Compromisso do dia.
+  let rankingCrm: Awaited<ReturnType<typeof buscarRankingGravado>> = null;
+  if (comVisoes) {
+    try {
+      rankingCrm = await buscarRankingGravado(createAdminClient(), atual.slug, mesParam);
+    } catch (e) {
+      console.error("ranking do CRM falhou:", e);
+    }
+  }
+  const CANAL_LEAD: Record<string, string> = { outbound: "Outbound", inbound: "Inbound", indicacao: "Indicação" };
   const rankings = (RANKINGS[atual.slug] ?? [])
-    .map((k) => dados.esforco.find((e) => e.chave === k))
+    .map((k) => dados.esforco.find((e) => e.chave === k) ?? (rankingCrm?.[k] ? { chave: k, label: LABEL_RANKING[k] ?? k, meta: 0, realizado: 0, porPessoa: [] } : undefined))
     .filter((e): e is NonNullable<typeof e> => !!e)
-    .map((rk) =>
-      atual.slug === "vorp-energy" && rk.chave === "contas_subidas" && sunne
+    .map((rk) => {
+      const doCrm = rankingCrm?.[rk.chave];
+      if (doCrm) {
+        return {
+          ...rk,
+          realizado: doCrm.reduce((s, p) => s + p.total, 0),
+          porPessoa: doCrm.map((p) => ({
+            nome: p.nome,
+            meta: 0,
+            realizado: p.total,
+            leads: p.leads.map((l) => ({ nome: l.nome, data: l.data, responsavel: CANAL_LEAD[l.canal] ?? l.canal, preVendas: null })) as LeadEtapa[],
+          })),
+          fonte: "Pipefácil" as string | null,
+        };
+      }
+      return atual.slug === "vorp-energy" && rk.chave === "contas_subidas" && sunne
         ? {
             ...rk,
             realizado: sunne.criados,
             porPessoa: sunne.porOrganizacao
               .filter((o) => o.criados > 0)
-              .map((o) => ({ nome: o.pessoa ?? o.nome, meta: 0, realizado: o.criados }))
+              .map((o) => ({ nome: o.pessoa ?? o.nome, meta: 0, realizado: o.criados, leads: undefined as LeadEtapa[] | undefined }))
               .sort((a, b) => b.realizado - a.realizado || a.nome.localeCompare(b.nome, "pt-BR")),
-            fonte: "Sunne",
+            fonte: "Sunne" as string | null,
           }
-        : { ...rk, fonte: null as string | null },
-    );
+        : { ...rk, porPessoa: rk.porPessoa.map((p) => ({ ...p, leads: undefined as LeadEtapa[] | undefined })), fonte: null as string | null };
+    });
   // Realizado do funil do Energy: a Sunne não informa o canal, então é o total de todos os canais.
   const metaEtapa = (label: string) => previstos.reduce((s, fu) => s + (fu.etapas.find((e) => e.label === label)?.meta ?? 0), 0);
   const funilSunne = atual.slug === "vorp-energy" && sunne ? { contas: sunne.criados, metaContas: metaEtapa("Contas subidas"), vendas: sunne.fechados, metaVendas: metaEtapa("Vendas") } : null;
@@ -451,18 +476,18 @@ export default async function NegocioDashboardPage({
             <section key={rk.chave} className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
               <p className="text-[10px] uppercase tracking-widest text-stone-500">Ranking · {rk.label}</p>
               <p className="text-xs text-stone-500">
-                {num(rk.realizado)} no mês · {num(rk.meta)} comprometidos
-                {rk.fonte ? ` · ${rk.fonte}` : ""}
+                {num(rk.realizado)} no mês
+                {rk.fonte === "Pipefácil" ? " · por pré-vendas, todos os leads · Pipefácil" : ` · ${num(rk.meta)} comprometidos${rk.fonte ? ` · ${rk.fonte}` : ""}`}
               </p>
               {rk.porPessoa.length === 0 ? (
-                <p className="mt-2 text-sm text-stone-500">Ninguém registrou ainda.</p>
+                <p className="mt-2 text-sm text-stone-500">{rk.fonte === "Pipefácil" ? "Nenhuma reunião no mês." : "Ninguém registrou ainda."}</p>
               ) : (
                 <ol className="mt-2 space-y-1 text-sm">
                   {rk.porPessoa.slice(0, 8).map((p, i) => (
                     <li key={p.nome} className="flex items-center gap-2">
                       <span className="w-5 text-xs text-stone-500">{i + 1}</span>
                       <span className="min-w-0 flex-1 truncate text-stone-200">{p.nome}</span>
-                      <span className="text-stone-100">{num(p.realizado)}</span>
+                      <RealizadoComLeads valor={num(p.realizado)} leads={p.leads} />
                     </li>
                   ))}
                 </ol>
@@ -671,6 +696,8 @@ function RealizadoComLeads({ valor, leads }: { valor: string; leads?: LeadEtapa[
     </span>
   );
 }
+
+const LABEL_RANKING: Record<string, string> = { reunioes_agendadas: "Reuniões agendadas", reunioes_realizadas: "Reuniões realizadas" };
 
 /** Grupo de botões (links) de uma visão do funil; o ativo fica destacado. */
 function Seletor({ opcoes }: { opcoes: { rotulo: string; href: string; ativo: boolean; contagem?: number; dica?: string }[] }) {
