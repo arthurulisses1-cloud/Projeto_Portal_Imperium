@@ -426,16 +426,18 @@ describe("lista de leads do dashboard", () => {
 });
 
 describe("lead falso", () => {
-  it("perdido como 'Lead falso' conta em Leads, mas não em MQL nem nas etapas seguintes", () => {
+  it("perdido como 'Lead falso' sai do funil inteiro: Leads, MQL e etapas seguintes", () => {
     const fat = { faturamento: "acima_de_50_milhoes", cargo: "diretor", canal: "trafego", criado_em: "2026-11-08T13:00:00Z" };
     const deals = [
       deal({ deal_id: "f1", ...fat, status: "lost", motivo_perda: "lead falso" }),
+      // lead falso que não é MQL também sai de Leads
+      deal({ deal_id: "f2", canal: "trafego", criado_em: "2026-11-08T13:00:00Z", faturamento: "ate_30_mil", cargo: "outro", status: "lost", motivo_perda: "Lead Falso" }),
       deal({ deal_id: "ok", ...fat }),
       deal({ deal_id: "icp", ...fat, status: "lost", motivo_perda: "Fora do ICP" }),
     ];
     const eventos = [ev("f1", ST.conectadoIn, "2026-11-09T13:00:00Z"), ev("ok", ST.conectadoIn, "2026-11-09T13:00:00Z")];
     const r = calcularRealizadoCrm(deals, eventos, cfg, "2026-11-01", "2026-12-01");
-    expect(total(r, "inbound", "leads")).toBe(3);
+    expect(total(r, "inbound", "leads")).toBe(2);
     expect(total(r, "inbound", "mql")).toBe(2);
     expect(total(r, "inbound", "conectados")).toBe(1);
   });
@@ -475,7 +477,7 @@ describe("visões do funil", () => {
       expect(soma("inbound", `mql:${etapa}`) + soma("inbound", `nao_mql:${etapa}`)).toBe(soma("inbound", etapa));
     }
     expect(soma("inbound", "mql:leads")).toBe(1); // só "nov" (out entrou em outubro; falso não é MQL)
-    expect(soma("inbound", "nao_mql:leads")).toBe(2); // fraco + falso
+    expect(soma("inbound", "nao_mql:leads")).toBe(1); // só fraco (lead falso sai de Leads)
     expect(soma("inbound", "mql:conectados")).toBe(2); // nov + out (agendar sem passar por Conectados conta a conexão)
   });
 
@@ -499,11 +501,11 @@ describe("visões do funil", () => {
     expect(inMql.etapas[0]).toMatchObject({ label: "Leads MQL", meta: metaMql, realizado: 1 });
     const inNao = montarFunisDaVisao(base, x, integ, new Map(), "todos", "nao_mql").find((f) => f.canal === "inbound")!;
     expect(inNao.etapas.every((e) => e.meta === null)).toBe(true);
-    expect(inNao.etapas[0].realizado).toBe(2);
+    expect(inNao.etapas[0].realizado).toBe(1); // só "fraco": o lead falso sai de Leads
     const outMes = montarFunisDaVisao(base, x, integ, new Map(), "mes", "mql").find((f) => f.canal === "outbound")!;
     expect(outMes.etapas.find((e) => e.chave === "alos")!.realizado).toBe(50);
     expect(outMes.etapas.find((e) => e.chave === "reunioes_agendadas")!.realizado).toBe(0);
-    expect(leadsPorQualificacao(x, "todos")).toEqual({ completo: 3, mql: 1, nao_mql: 2 });
+    expect(leadsPorQualificacao(x, "todos")).toEqual({ completo: 2, mql: 1, nao_mql: 1 });
   });
 });
 
