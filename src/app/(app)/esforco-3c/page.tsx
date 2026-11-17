@@ -254,107 +254,63 @@ export default async function Esforco3cPage({ searchParams }: { searchParams: Pa
             </div>
           </section>
 
-          {/* Indicadores */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Kpi rotulo="Ligações" valor={num(painel.totais.ligacoes)} sub="discagens das campanhas" dica="Tudo o que foi discado, atendido ou não. O discador disca sem agente e só entrega a ligação quando alguém atende." />
-            <Kpi rotulo="Alôs" valor={num(painel.totais.alos)} sub={`${pct(painel.totais.alos, painel.totais.ligacoes)} das ligações`} dica="Ligação atendida que chegou ao pré-vendas. Manual não atendida ou com falha não conta (mesma regra do funil)." />
-            <Kpi rotulo="Conversões" valor={num(painel.totais.conversoes)} sub={`${num(painel.totais.dmc)} com o decisor (DMC)`} dica="Ligações que o pré-vendas qualificou como conversão. DMC: falou com quem decide." />
-            <Kpi
-              rotulo="Tempo falado (mediana | média)"
-              valor={`${tempo(painel.totais.faladoMediano)} | ${tempo(painel.totais.faladoMedio)}`}
-              sub={`${tempo(painel.totais.faladoTotal)} no total`}
-              dica="Mediana: metade das conversas dura até esse tempo. Média: tempo total dividido pelos alôs."
-            />
-          </div>
-
-          {/* Gráficos */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            {painel.porDia.length > 1 && (
-              <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
-                <p className="text-[10px] uppercase tracking-widest text-stone-500">Por dia · alôs e conexões</p>
-                <Colunas itens={painel.porDia.map((d) => ({ rotulo: curta(d.dia), fundo: d.alos, frente: d.conexoes }))} cor={cor} />
-              </section>
-            )}
+          {/* Evolução no tempo: tentativas, alôs e conexões por dia */}
+          {painel.porDia.length > 1 && (
             <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
-              <p className="text-[10px] uppercase tracking-widest text-stone-500">Melhor horário · alôs e conexões por hora</p>
-              <Colunas
-                itens={painel.porHora.filter((h) => h.hora >= 7 && h.hora <= 20).map((h) => ({ rotulo: `${h.hora}h`, fundo: h.alos, frente: h.conexoes }))}
-                cor={cor}
-              />
+              <p className="text-[10px] uppercase tracking-widest" style={{ color: `rgb(${cor})` }}>
+                Evolução no tempo
+              </p>
+              <h2 className="font-display text-lg text-stone-100">Por dia</h2>
+              <TresGraficos itens={painel.porDia.map((d) => ({ rotulo: curta(d.dia), ...d }))} cor={cor} sufixo="por dia" />
             </section>
-          </div>
+          )}
 
-          {/* Ranking */}
-          <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
-            <p className="text-[10px] uppercase tracking-widest text-stone-500">Ranking dos pré-vendas · por conexões</p>
-            {painel.porAgente.length === 0 ? (
-              <p className="mt-2 text-sm text-stone-500">Nenhum pré-vendas falou com alguém no período.</p>
-            ) : (
-              <div className="mt-2 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="text-[11px] text-stone-500">
-                    <tr className="border-b border-imperium-line">
-                      <th className="py-1.5 text-left font-normal">#</th>
-                      <th className="py-1.5 text-left font-normal">Pré-vendas</th>
-                      <th className="py-1.5 text-right font-normal">Conexões</th>
-                      <th className="py-1.5 text-right font-normal">Alôs</th>
-                      <th className="py-1.5 text-right font-normal" title="Alôs que viraram conexão">Aproveitamento</th>
-                      <th className="py-1.5 text-right font-normal">Conversões</th>
-                      <th className="py-1.5 text-right font-normal">Tempo falado</th>
-                      <th className="py-1.5 text-right font-normal" title="Metade das conversas dura até esse tempo">Mediana</th>
-                      <th className="py-1.5 text-right font-normal" title="Tempo falado ÷ alôs">Média</th>
-                    </tr>
-                  </thead>
-                  <tbody className="tabular-nums">
-                    {painel.porAgente.map((a, i) => (
-                      <tr key={a.agente} className="border-b border-imperium-line/60">
-                        <td className="py-1.5 text-stone-500">{i + 1}</td>
-                        <td className="py-1.5 text-stone-100">{a.agente}</td>
-                        <td className="py-1.5 text-right font-semibold text-stone-100">{num(a.conexoes)}</td>
-                        <td className="py-1.5 text-right text-stone-300">{num(a.alos)}</td>
-                        <td className="py-1.5 text-right text-stone-300">{pct(a.conexoes, a.alos)}</td>
-                        <td className="py-1.5 text-right text-stone-300">{num(a.conversoes)}</td>
-                        <td className="py-1.5 text-right text-stone-300">{tempo(a.faladoTotal)}</td>
-                        <td className="py-1.5 text-right text-stone-300">{tempo(a.faladoMediano)}</td>
-                        <td className="py-1.5 text-right text-stone-300">{tempo(a.faladoMedio)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          {/* Campanhas e listas */}
-          <Tabela
-            titulo="Por campanha"
-            linhas={painel.porCampanha.map((c) => ({ ...c, chave: c.campanha, nome: c.campanha }))}
+          {/* Performance por pré-vendas */}
+          <TabelaFunil
+            rotulo="Equipe"
+            titulo="Performance por pré-vendas"
+            coluna="Pré-vendas"
+            nota="Tentativas: as das campanhas do pré-vendas (o discador disca sem agente, então a tentativa é da campanha, que leva o nome de quem a trabalha). Alôs e conexões: as que ele atendeu."
+            linhas={painel.porPreVendas.map((x) => ({ ...x, chave: x.nome, fraco: !x.temDono }))}
             seg={seg}
           />
-          <Tabela
-            titulo="Por lista"
+
+          {/* Performance por campanha */}
+          <TabelaFunil rotulo="Campanhas" titulo="Performance por campanha" coluna="Campanha" linhas={painel.porCampanha.map((c) => ({ ...c, chave: c.campanha, nome: c.campanha }))} seg={seg} />
+
+          {/* Performance por lista */}
+          <TabelaFunil
+            rotulo="Bases"
+            titulo="Performance por lista"
+            coluna="Lista"
             linhas={painel.porLista.map((l) => ({ ...l, chave: l.lista, nome: l.lista, extra: l.campanha }))}
             seg={seg}
-            comCampanha
           />
 
-          {/* Discador e qualificações */}
-          <div className="grid gap-4 lg:grid-cols-2">
-            <section className="space-y-3 rounded-lg border border-imperium-line bg-imperium-surface p-4">
-              <p className="text-[10px] uppercase tracking-widest text-stone-500">Resultado das discagens</p>
-              <Barras itens={painel.porStatus} cor={cor} vazio="Nenhuma ligação no período." />
-              {painel.porMotivoFalha.length > 0 && (
-                <>
-                  <p className="pt-2 text-[10px] uppercase tracking-widest text-stone-500">Motivo das falhas</p>
-                  <Barras itens={painel.porMotivoFalha} cor={cor} />
-                </>
-              )}
-            </section>
-            <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
-              <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">Qualificações dos pré-vendas</p>
-              <Barras itens={painel.porQualificacao} cor={cor} vazio="Nenhuma ligação qualificada no período." />
-            </section>
-          </div>
+          {/* Performance por horário */}
+          <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+            <p className="text-[10px] uppercase tracking-widest" style={{ color: `rgb(${cor})` }}>
+              Horário
+            </p>
+            <h2 className="font-display text-lg text-stone-100">Performance por horário</h2>
+            <TresGraficos
+              itens={painel.porHora.filter((h) => h.ligacoes > 0).map((h) => ({ rotulo: `${h.hora}h`, ...h }))}
+              cor={cor}
+              sufixo="por hora"
+            />
+          </section>
+
+          {/* Diagnóstico do discador */}
+          <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+            <p className="text-[10px] uppercase tracking-widest" style={{ color: `rgb(${cor})` }}>
+              Discador
+            </p>
+            <h2 className="font-display text-lg text-stone-100">Diagnóstico do discador</h2>
+            <p className="mt-0.5 text-[12px] text-stone-400">Como terminaram as tentativas. Passe o mouse em cada linha para ver o que ela quer dizer.</p>
+            <div className="mt-3 grid gap-x-8 md:grid-cols-2">
+              <Barras itens={painel.porDiagnostico.filter((d) => d.ligacoes > 0)} cor={cor} total={painel.totais.ligacoes} vazio="Nenhuma tentativa no período." />
+            </div>
+          </section>
         </>
       )}
     </main>
@@ -459,68 +415,90 @@ function Multi({ rotulo, nome, opcoes, marcadas, vazio, largo }: { rotulo: strin
   );
 }
 
-function Barras({ itens, cor, vazio }: { itens: { nome: string; ligacoes: number }[]; cor: string; vazio?: string }) {
+function Barras({ itens, cor, vazio, total }: { itens: { nome: string; ligacoes: number; nota?: string }[]; cor: string; vazio?: string; total?: number }) {
   if (itens.length === 0) return vazio ? <p className="text-sm text-stone-500">{vazio}</p> : null;
   const max = Math.max(...itens.map((i) => i.ligacoes), 1);
-  const total = itens.reduce((s, i) => s + i.ligacoes, 0);
+  const soma = total ?? itens.reduce((s, i) => s + i.ligacoes, 0);
   return (
-    <ul className="space-y-1.5 text-xs">
+    <>
       {itens.slice(0, 12).map((i) => (
-        <li key={i.nome}>
+        <div key={i.nome} className="mb-1.5 text-xs" title={i.nota}>
           <div className="flex justify-between gap-2">
             <span className="truncate text-stone-300">{i.nome}</span>
             <span className="shrink-0 tabular-nums text-stone-100">
-              {num(i.ligacoes)} <span className="text-stone-500">· {pct(i.ligacoes, total)}</span>
+              {num(i.ligacoes)} <span className="text-stone-500">· {pct(i.ligacoes, soma)}</span>
             </span>
           </div>
           <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-imperium-raised">
             <div className="h-full rounded-full" style={{ width: `${(i.ligacoes / max) * 100}%`, backgroundColor: `rgb(${cor})` }} />
           </div>
-        </li>
+        </div>
       ))}
-    </ul>
+    </>
   );
 }
 
-/** Colunas: alôs (fundo claro) e conexões (frente, na cor da B.U.). */
-function Colunas({ itens, cor }: { itens: { rotulo: string; fundo: number; frente: number }[]; cor: string }) {
-  const max = Math.max(...itens.map((i) => i.fundo), 1);
+/** Três gráficos de colunas lado a lado: tentativas, alôs e conexões (como na versão nova do painel antigo). */
+function TresGraficos({ itens, cor, sufixo }: { itens: { rotulo: string; ligacoes: number; alos: number; conexoes: number }[]; cor: string; sufixo: string }) {
+  const series = [
+    ["Tentativas", (x: (typeof itens)[number]) => x.ligacoes],
+    ["Alôs", (x: (typeof itens)[number]) => x.alos],
+    ["Conexões", (x: (typeof itens)[number]) => x.conexoes],
+  ] as const;
+  if (itens.length === 0) return <p className="mt-2 text-sm text-stone-500">Nenhuma ligação no período.</p>;
   return (
-    <div className="mt-3">
-      <div className="flex h-36 items-end gap-1">
-        {itens.map((i) => (
-          <div key={i.rotulo} className="relative flex h-full flex-1 items-end" title={`${i.rotulo}: ${num(i.fundo)} alôs · ${num(i.frente)} conexões`}>
-            <div className="w-full rounded-t opacity-30" style={{ height: `${(i.fundo / max) * 100}%`, backgroundColor: `rgb(${cor})` }} />
-            <div className="absolute bottom-0 w-full rounded-t" style={{ height: `${(i.frente / max) * 100}%`, backgroundColor: `rgb(${cor})` }} />
+    <div className="mt-3 grid gap-4 lg:grid-cols-3">
+      {series.map(([nome, valor]) => {
+        const max = Math.max(...itens.map(valor), 1);
+        const total = itens.reduce((s, x) => s + valor(x), 0);
+        return (
+          <div key={nome}>
+            <p className="text-xs text-stone-300">
+              {nome} {sufixo} <span className="text-stone-500">· {num(total)} no período</span>
+            </p>
+            <div className="mt-2 flex h-28 items-end gap-0.5">
+              {itens.map((x) => (
+                <div key={x.rotulo} className="flex h-full flex-1 items-end" title={`${x.rotulo}: ${num(valor(x))} ${nome.toLowerCase()}`}>
+                  <div className="w-full rounded-t" style={{ height: `${(valor(x) / max) * 100}%`, minHeight: valor(x) > 0 ? 2 : 0, backgroundColor: `rgb(${cor})` }} />
+                </div>
+              ))}
+            </div>
+            <div className="mt-1 flex gap-0.5 text-[9px] text-stone-500">
+              {itens.map((x, i) => (
+                <span key={x.rotulo} className="flex-1 truncate text-center">
+                  {itens.length <= 16 || i % 2 === 0 ? x.rotulo : ""}
+                </span>
+              ))}
+            </div>
           </div>
-        ))}
-      </div>
-      <div className="mt-1 flex gap-1 text-[10px] text-stone-500">
-        {itens.map((i) => (
-          <span key={i.rotulo} className="flex-1 truncate text-center">
-            {i.rotulo}
-          </span>
-        ))}
-      </div>
-      <p className="mt-1 text-[10px] text-stone-500">Claro: alôs · forte: conexões. Passe o mouse para ver os números.</p>
+        );
+      })}
     </div>
   );
 }
 
-function Tabela({
+/** Tabela com as colunas da versão nova do painel antigo: tentativas, alôs, taxa de alô, conexões e taxa alô → conexão. */
+function TabelaFunil({
+  rotulo,
   titulo,
+  coluna,
+  nota,
   linhas,
   seg,
-  comCampanha,
 }: {
+  rotulo: string;
   titulo: string;
-  linhas: { chave: string; nome: string; extra?: string; origem?: string | null; ligacoes: number; alos: number; conexoes: number; conversoes: number }[];
+  coluna: string;
+  nota?: string;
+  linhas: { chave: string; nome: string; extra?: string; origem?: string | null; fraco?: boolean; ligacoes: number; alos: number; conexoes: number }[];
   seg: number;
-  comCampanha?: boolean;
 }) {
+  const comCampanha = linhas.some((l) => l.extra);
   return (
     <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
-      <p className="text-[10px] uppercase tracking-widest text-stone-500">{titulo}</p>
+      <p className="text-[10px] uppercase tracking-widest text-stone-500">{rotulo}</p>
+      <h2 className="font-display text-lg text-stone-100">{titulo}</h2>
+      {nota && <p className="mt-0.5 text-[12px] text-stone-400">{nota}</p>}
       {linhas.length === 0 ? (
         <p className="mt-2 text-sm text-stone-500">Nenhuma ligação no período.</p>
       ) : (
@@ -528,19 +506,21 @@ function Tabela({
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-imperium-surface text-[11px] text-stone-500">
               <tr className="border-b border-imperium-line">
-                <th className="py-1.5 text-left font-normal">{comCampanha ? "Lista" : "Campanha"}</th>
+                <th className="py-1.5 text-left font-normal">{coluna}</th>
                 {comCampanha && <th className="py-1.5 text-left font-normal">Campanha</th>}
-                <th className="py-1.5 text-right font-normal">Ligações</th>
+                <th className="py-1.5 text-right font-normal">Tentativas</th>
                 <th className="py-1.5 text-right font-normal">Alôs</th>
-                <th className="py-1.5 text-right font-normal" title="Alôs ÷ ligações">Contato</th>
-                <th className="py-1.5 text-right font-normal">{seg} s ou mais</th>
-                <th className="py-1.5 text-right font-normal">Conversões</th>
+                <th className="py-1.5 text-right font-normal">Taxa de alô</th>
+                <th className="py-1.5 text-right font-normal" title={`Conversas de ${seg} s ou mais`}>
+                  Conexões
+                </th>
+                <th className="py-1.5 text-right font-normal">Taxa alô → conexão</th>
               </tr>
             </thead>
             <tbody className="tabular-nums">
               {linhas.map((l) => (
                 <tr key={l.chave} className="border-b border-imperium-line/60">
-                  <td className="max-w-md py-1.5 text-stone-100">
+                  <td className={`max-w-md py-1.5 ${l.fraco ? "text-stone-500" : "text-stone-100"}`}>
                     <span className="break-words">{l.nome}</span>
                     {l.origem && <span className="ml-1.5 rounded border border-sky-400/40 bg-sky-400/10 px-1 text-[10px] text-sky-300">{l.origem}</span>}
                   </td>
@@ -549,7 +529,7 @@ function Tabela({
                   <td className="py-1.5 text-right text-stone-300">{num(l.alos)}</td>
                   <td className="py-1.5 text-right text-stone-300">{pct(l.alos, l.ligacoes)}</td>
                   <td className="py-1.5 text-right font-semibold text-stone-100">{num(l.conexoes)}</td>
-                  <td className="py-1.5 text-right text-stone-300">{num(l.conversoes)}</td>
+                  <td className="py-1.5 text-right text-stone-300">{pct(l.conexoes, l.alos)}</td>
                 </tr>
               ))}
             </tbody>
