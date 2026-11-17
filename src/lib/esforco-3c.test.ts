@@ -81,3 +81,36 @@ describe("utilização do pré-vendas", () => {
     expect(somarAtividade(linhas, new Set([1]))).toEqual({ esperando: 600, falando: 1200, pos: 300, ativo: 2100 });
   });
 });
+
+describe("performance por pré-vendas e diagnóstico (versão nova do painel antigo)", () => {
+  it("dono da campanha pelo nome", async () => {
+    const { donoDaCampanha } = await import("./esforco-3c");
+    const ag = ["Jorge Abudi", "Marcus Ryquelme", "Matheus", "Vinicius Ferreira"];
+    expect(donoDaCampanha("Jorge Abudi - Rastreamento", ag)).toBe("Jorge Abudi");
+    expect(donoDaCampanha("Matheus Mesquita", ag)).toBe("Matheus");
+    expect(donoDaCampanha("Vinícius Ferreira", ag)).toBe("Vinicius Ferreira");
+    expect(donoDaCampanha("Campanha Geral", ag)).toBeNull();
+  });
+
+  it("tentativa sem agente vai para o dono da campanha; filtro de pré-vendas leva as tentativas dele", async () => {
+    const { agregar, enxugar } = await import("./esforco-3c");
+    const b = (p: Record<string, unknown>) =>
+      enxugar({ call_date: "2026-11-10 10:00:00", agent: "Marcus Ryquelme", agent_id: 1, campaign: "Marcus Ryquelme", campaign_id: 10, status_id: 7, has_agent: true, speaking_with_agent_time: "00:01:30", ...p });
+    const ligs = [
+      b({}),
+      b({ agent: "-", agent_id: null, has_agent: false, status_id: 9, speaking_with_agent_time: "00:00:00" }),
+      b({ agent: "-", agent_id: null, has_agent: false, status_id: 8, sip_cause: 603, speaking_with_agent_time: "00:00:00" }),
+      b({ agent: "Jorge Abudi", agent_id: 2, campaign: "Jorge Abudi - Eventos", campaign_id: 11, speaking_with_agent_time: "00:00:20" }),
+      b({ agent: "-", agent_id: null, has_agent: false, campaign: "Jorge Abudi - Eventos", campaign_id: 11, status_id: 5, speaking_with_agent_time: "00:00:00" }),
+    ];
+    const p = agregar("vorp", ligs, "2026-11-10", "2026-11-10", {}, 60);
+    expect(p.porPreVendas.map((x) => [x.nome, x.ligacoes, x.alos, x.conexoes])).toEqual([
+      ["Marcus Ryquelme", 3, 1, 1],
+      ["Jorge Abudi", 2, 1, 0],
+    ]);
+    const diag = Object.fromEntries(p.porDiagnostico.map((d) => [d.id, d.ligacoes]));
+    expect(diag).toMatchObject({ atendida: 2, caixa_postal: 1, recusada: 1, nao_atendida: 1 });
+    const so = agregar("vorp", ligs, "2026-11-10", "2026-11-10", { agentes: ["Jorge Abudi"] }, 60);
+    expect(so.totais).toMatchObject({ ligacoes: 2, alos: 1, conexoes: 0 });
+  });
+});

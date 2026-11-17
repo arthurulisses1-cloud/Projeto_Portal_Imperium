@@ -31,6 +31,42 @@ const MOTIVOS_FALHA: Record<number, string> = {
   503: "Rede indisponível",
 };
 
+/** Diagnóstico do discador: como terminaram as tentativas (mesmas categorias do painel antigo). */
+export const DIAGNOSTICO: { id: string; nome: string; nota: string }[] = [
+  { id: "caixa_postal", nome: "Caixa postal", nota: "Caiu na caixa postal, antes ou depois de atender." },
+  { id: "nao_atendida", nome: "Não atendida", nota: "Tocou até o fim e ninguém atendeu." },
+  { id: "recusada", nome: "Recusada ou bloqueada", nota: "A pessoa recusou, ou a operadora ou o celular bloqueou (número marcado como spam, por exemplo)." },
+  { id: "numero_invalido", nome: "Número inválido", nota: "Número que não existe, desativado ou incompleto." },
+  { id: "falha", nome: "Falha", nota: "A discagem não completou por outro motivo (ocupado, rede, cancelada)." },
+  { id: "abandonada", nome: "Abandonada", nota: "A pessoa atendeu, mas não havia agente livre." },
+  { id: "atendida", nome: "Atendida", nota: "Chegou a um agente e terminou normalmente." },
+  { id: "outros", nome: "Outros", nota: "Os demais status do 3C Plus." },
+];
+export function categoriaDoDiscador(l: Pick<Ligacao, "status" | "sip">): string {
+  if (l.status === 9 || l.status === 15) return "caixa_postal";
+  if (l.status === 5) return "nao_atendida";
+  if (l.status === 6) return "abandonada";
+  if (l.status === 7) return "atendida";
+  if (l.status !== STATUS_FALHA) return "outros";
+  if (l.sip === 480) return "nao_atendida";
+  if (l.sip === 603) return "recusada";
+  if (l.sip === 404 || l.sip === 410 || l.sip === 484) return "numero_invalido";
+  return "falha";
+}
+
+const normal = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+/** Dono da campanha: o pré-vendas cujo nome abre o nome da campanha (no 3C cada campanha leva o nome de
+ *  quem a trabalha, ex.: "Jorge Abudi - Rastreamento", "Matheus Mesquita" para o agente "Matheus"). */
+export function donoDaCampanha(campanha: string, agentes: string[]): string | null {
+  const c = normal(campanha);
+  let melhor: string | null = null;
+  for (const a of agentes) {
+    const n = normal(a);
+    if (n && (c === n || c.startsWith(`${n} `) || c.startsWith(`${n}-`)) && (!melhor || n.length > normal(melhor).length)) melhor = a;
+  }
+  return melhor;
+}
+
 /** Origem do lead pelo nome da lista do discador, por B.U. (mesma regra do campo "Origem do lead"). */
 const ORIGEM_DA_LISTA: Record<string, { padrao: RegExp; origem: string }[]> = {
   vorp: [{ padrao: /base[ _]vorp|jorge abudi - base/i, origem: "Tráfego Pago" }],
@@ -95,7 +131,10 @@ export type PainelEsforco = {
   segundosConexao: number;
   totais: Contagem & { dmc: number; faladoTotal: number; faladoMedio: number; faladoMediano: number };
   porDia: ({ dia: string } & Contagem)[];
-  porHora: { hora: number; alos: number; conexoes: number }[];
+  porHora: { hora: number; ligacoes: number; alos: number; conexoes: number }[];
+  /** Por pré-vendas: tentativas das campanhas dele (o discador disca sem agente); alôs e conexões, as que ele atendeu. */
+  porPreVendas: { nome: string; temDono: boolean; ligacoes: number; alos: number; conexoes: number }[];
+  porDiagnostico: { id: string; nome: string; nota: string; ligacoes: number }[];
   porAgente: { agente: string; alos: number; conexoes: number; conversoes: number; dmc: number; faladoTotal: number; faladoMedio: number; faladoMediano: number }[];
   porCampanha: ({ campanha: string } & Contagem)[];
   porLista: ({ lista: string; campanha: string; origem: string | null } & Contagem)[];
@@ -137,16 +176,21 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
     listas: ordenar(ligacoes.map((l) => l.lista)),
   };
   const soAg = filtro.agentes?.length ? new Set(filtro.agentes) : null;
+  const donos = new Map(opcoes.campanhas.map((c) => [c, donoDaCampanha(c, opcoes.agentes)]));
+  /** Pré-vendas da ligação: quem atendeu; sem agente (discador), o dono da campanha. */
+  const pessoa = (l: Ligacao) => l.agente ?? donos.get(l.campanha) ?? null;
   const soCamp = filtro.campanhas?.length ? new Set(filtro.campanhas) : null;
   const soLista = filtro.listas?.length ? new Set(filtro.listas) : null;
   const doFiltro = ligacoes.filter(
-    (l) => (!soAg || (l.agente && soAg.has(l.agente))) && (!soCamp || soCamp.has(l.campanha)) && (!soLista || (l.lista && soLista.has(l.lista))),
+    (l) => (!soAg || (pessoa(l) !== null && soAg.has(pessoa(l) as string))) && (!soCamp || soCamp.has(l.campanha)) && (!soLista || (l.lista && soLista.has(l.lista))),
   );
 
   const totais = { ...zero(), dmc: 0, faladoTotal: 0, faladoMedio: 0, faladoMediano: 0 };
   const dias = new Map<string, { dia: string } & Contagem>();
   for (let d = de; d <= ate; d = somarDias(d, 1)) dias.set(d, { dia: d, ...zero() });
-  const horas = Array.from({ length: 24 }, (_, hora) => ({ hora, alos: 0, conexoes: 0 }));
+  const horas = Array.from({ length: 24 }, (_, hora) => ({ hora, ligacoes: 0, alos: 0, conexoes: 0 }));
+  const pv = new Map<string, { nome: string; temDono: boolean; ligacoes: number; alos: number; conexoes: number }>();
+  const diag = new Map(DIAGNOSTICO.map((d) => [d.id, { ...d, ligacoes: 0 }]));
   const agentes = new Map<string, { agente: string; alos: number; conexoes: number; conversoes: number; dmc: number; faladoTotal: number; falados: number[] }>();
   const campanhas = new Map<string, { campanha: string } & Contagem>();
   const listas = new Map<string, { lista: string; campanha: string; origem: string | null } & Contagem>();
@@ -176,6 +220,7 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
     if (d) conta(d);
     const h = horas[Number(l.data.slice(11, 13))];
     if (h) {
+      h.ligacoes++;
       if (alo) h.alos++;
       if (con) h.conexoes++;
     }
@@ -198,6 +243,14 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
     const li = listas.get(nomeLista) ?? { lista: nomeLista, campanha: l.campanha, origem: origemDaLista(slug, l.lista), ...zero() };
     conta(li);
     listas.set(nomeLista, li);
+    const quem = pessoa(l);
+    const chavePv = quem ?? `Sem pré-vendas: ${l.campanha}`;
+    const linhaPv = pv.get(chavePv) ?? { nome: chavePv, temDono: !!quem, ligacoes: 0, alos: 0, conexoes: 0 };
+    linhaPv.ligacoes++;
+    if (alo) linhaPv.alos++;
+    if (con) linhaPv.conexoes++;
+    pv.set(chavePv, linhaPv);
+    diag.get(categoriaDoDiscador(l))!.ligacoes++;
     mais(status, l.statusNome);
     if (l.status === STATUS_FALHA) mais(falhas, (l.sip && MOTIVOS_FALHA[l.sip]) || (l.desligamento ? `Outro (${l.desligamento})` : "Sem motivo informado"));
     if (l.qualificacao) mais(qualif, l.qualificacao);
@@ -215,6 +268,8 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
     porAgente: Array.from(agentes.values())
       .map(({ falados: f, ...a }) => ({ ...a, faladoMedio: a.alos > 0 ? Math.round(a.faladoTotal / a.alos) : 0, faladoMediano: mediana(f) }))
       .sort((a, b) => b.conexoes - a.conexoes || b.alos - a.alos),
+    porPreVendas: Array.from(pv.values()).sort((a, b) => Number(b.temDono) - Number(a.temDono) || b.conexoes - a.conexoes || b.ligacoes - a.ligacoes),
+    porDiagnostico: Array.from(diag.values()),
     porCampanha: Array.from(campanhas.values()).sort((a, b) => b.ligacoes - a.ligacoes),
     porLista: Array.from(listas.values()).sort((a, b) => b.conexoes - a.conexoes || b.ligacoes - a.ligacoes),
     porStatus: lista(status),
