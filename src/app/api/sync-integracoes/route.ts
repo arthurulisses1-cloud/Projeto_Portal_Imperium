@@ -6,7 +6,8 @@ export const maxDuration = 60;
 // Realizado automático do Dashboard do Negócio (3C Plus + Pipefácil). Mesma proteção do /api/sync.
 // Parâmetros opcionais: desde3c=YYYY-MM-DD (recalcula o 3C desde essa data), vendas=0 (não mexe
 // em vendas), simular=1 (só calcula, não grava), negocio=slug[,slug] (só esses; sem ele, todos
-// menos os de sincronização separada, como o Energy).
+// menos os de sincronização separada, como o Energy), historico=completo (lê o histórico inteiro do CRM;
+// carga única, para leads antigos não parecerem chegar pela 1ª vez numa etapa).
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const authHeader = request.headers.get("authorization");
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
     criarVendas: url.searchParams.get("vendas") !== "0",
     simular: url.searchParams.get("simular") === "1",
     negocios: negocios && negocios.length > 0 ? negocios : undefined,
+    historicoCompleto: url.searchParams.get("historico") === "completo",
   });
   return NextResponse.json(resultado, { status: resultado.ok ? 200 : 207 });
 }

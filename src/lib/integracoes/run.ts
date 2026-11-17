@@ -16,6 +16,9 @@ export type OpcoesSync = {
   criarVendas?: boolean;
   /** Só calcula e devolve, sem gravar nada no banco. */
   simular?: boolean;
+  /** Lê o histórico inteiro do CRM (desde o início da conta) em vez dos últimos 3 meses. Para a carga
+   *  única do histórico antigo: sem ele, lead antigo que volta a andar parece chegar pela 1ª vez numa etapa. */
+  historicoCompleto?: boolean;
   /** Só estes negócios (slugs). Sem lista: todos menos os de `syncSeparado`. */
   negocios?: string[];
   /** Mesmo que `negocios` (botão "Atualizar agora" do dashboard). */
@@ -178,7 +181,12 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const ultimo = (estado?.valor as { em?: string } | null)?.em;
   const inicioHistorico = cfg.inicioHistorico ?? INICIO_HISTORICO;
   const tresMeses = `${inicioDoMes(hojeBR(), -3)}T00:00:00-03:00`;
-  const desde = Date.parse(tresMeses) > Date.parse(inicioHistorico) ? tresMeses : inicioHistorico;
+  // O banco guarda tudo o que já foi lido; a carga completa (historicoCompleto) só precisa rodar uma vez.
+  const desde = opts.historicoCompleto
+    ? "2020-01-01T00:00:00Z"
+    : Date.parse(tresMeses) > Date.parse(inicioHistorico)
+      ? tresMeses
+      : inicioHistorico;
   const atividades = await api.atividadesDesde(desde);
   const idsDeals = new Set(deals.map((d) => d.id));
   const novosEventos = atividades
