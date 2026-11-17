@@ -10,6 +10,8 @@
 import { unstable_cache } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizarNome } from "@/lib/sync/parse";
+import { identidadeDe, type IdentidadeLead } from "@/lib/identidade";
+import { casarComPipefacil } from "@/lib/energy-canais";
 
 const BASE = "https://parceiro.sunne.com.br/api/v1";
 const POR_PAGINA = 500;
@@ -39,6 +41,8 @@ export type SunneDeal = {
   waitingNote?: boolean;
   /** Pendências abertas ou em reanálise (só buscadas para negócios em validação). */
   pendenciasAbertas?: number;
+  /** Códigos (nunca o dado) do telefone e das palavras do nome do cliente, para casar com o Pipefácil. */
+  identidade?: IdentidadeLead;
 };
 
 export type SunneOrganizacao = { id: string; nome: string | null };
@@ -78,10 +82,16 @@ export type FunilContasSunne = {
   /** Perdidos de contas subidas no mês, em qualquer etapa. */
   perdidos: number;
   porOrganizacao: { organizationId: string; nome: string; pessoa: string | null; subidas: number; avancaram: number; validacao: number; ganho: number; pendencia: number; perdidos: number }[];
+  /** Mesmos números separados por canal (só quando o casamento com o Pipefácil está disponível). */
+  porCanal: { pipefacil: ContagemContas; plataforma: ContagemContas } | null;
 };
+
+export type ContagemContas = { subidas: number; avancaram: number; validacao: number; ganho: number; pendencia: number; perdidos: number };
 
 export type SunneResumo = {
   contas: FunilContasSunne;
+  /** Sunne x Pipefácil: leads casados (nome e telefone) e vendas do Pipefácil que não estão na Sunne. */
+  consolidado: { ganhosPipefacilSemSunne: number; casados: number; leadsPipefacilComTelefone: number } | null;
   criados: number;
   fechados: number;
   consumoMedioFechado: number;
@@ -120,6 +130,7 @@ function lerDeal(bruto: unknown): SunneDeal {
     lostFromFunnel: textoOuNulo((d.lostFrom as Record<string, unknown> | null | undefined)?.funnel),
     lostFromStageKey: textoOuNulo((d.lostFrom as Record<string, unknown> | null | undefined)?.stageKey),
     waitingNote: texto(d.waitingNote) && d.waitingNote.trim() !== "",
+    identidade: identidadeDe(d.phone, [d.contactName, d.companyName].filter(texto).join(" ")),
   };
 }
 
@@ -187,7 +198,7 @@ export async function lerRedeSunne(): Promise<SunneRede> {
 }
 
 /** Mesma leitura, guardada em cache no servidor por alguns minutos. */
-export const redeSunneEmCache = unstable_cache(lerRedeSunne, ["sunne-rede-v2"], { revalidate: CACHE_SUNNE_SEGUNDOS, tags: ["sunne"] });
+export const redeSunneEmCache = unstable_cache(lerRedeSunne, ["sunne-rede-v3"], { revalidate: CACHE_SUNNE_SEGUNDOS, tags: ["sunne"] });
 
 // ---------------------------------------------------------------- vendedor de cada organização
 
@@ -239,11 +250,30 @@ export function alcanceDoNegocio(d: SunneDeal): number {
 }
 
 /** Funil das contas subidas no mês, independente do canal: subidas → avançaram → validação → ganho, pendência ou perdido. */
-export function funilDasContas(deals: SunneDeal[], ano: number, mes: number, vendedores: Map<string, SunneVendedor> = new Map()): FunilContasSunne {
+export function funilDasContas(
+  deals: SunneDeal[],
+  ano: number,
+  mes: number,
+  vendedores: Map<string, SunneVendedor> = new Map(),
+  /** Ids de negócios da Sunne que são o mesmo lead de um lead do Pipefácil (canal Pipefácil); o resto é da plataforma. */
+  viaPipefacil: ReadonlySet<string> | null = null,
+): FunilContasSunne {
   const periodo = `${ano}-${String(mes).padStart(2, "0")}`;
   const vazio = () => ({ subidas: 0, avancaram: 0, validacao: 0, ganho: 0, pendencia: 0, perdidos: 0 });
   const porOrg = new Map<string, ReturnType<typeof vazio> & { organizationId: string; nome: string; pessoa: string | null }>();
-  const f: FunilContasSunne = { subidas: 0, avancaram: 0, validacao: 0, ganho: 0, pendencia: 0, aguardando: 0, emAnalise: 0, perdidoAposValidacao: 0, perdidos: 0, porOrganizacao: [] };
+  const f: FunilContasSunne = {
+    subidas: 0,
+    avancaram: 0,
+    validacao: 0,
+    ganho: 0,
+    pendencia: 0,
+    aguardando: 0,
+    emAnalise: 0,
+    perdidoAposValidacao: 0,
+    perdidos: 0,
+    porOrganizacao: [],
+    porCanal: viaPipefacil ? { pipefacil: vazio(), plataforma: vazio() } : null,
+  };
 
   for (const d of deals) {
     if (d.product !== PRODUTO_KWH || mesLocal(d.createdAt) !== periodo) continue;
@@ -254,28 +284,35 @@ export function funilDasContas(deals: SunneDeal[], ano: number, mes: number, ven
       porOrg.set(d.organizationId, org);
     }
     const alcance = alcanceDoNegocio(d);
+    const canal = f.porCanal ? (viaPipefacil?.has(d.id) ? f.porCanal.pipefacil : f.porCanal.plataforma) : null;
     f.subidas++;
     org.subidas++;
+    if (canal) canal.subidas++;
     if (alcance >= 4) {
       f.avancaram++;
       org.avancaram++;
+      if (canal) canal.avancaram++;
     }
     if (alcance >= 5) {
       f.validacao++;
       org.validacao++;
+      if (canal) canal.validacao++;
       if (d.isLost) f.perdidoAposValidacao++;
       else if (d.isClosed) {
         f.ganho++;
         org.ganho++;
+        if (canal) canal.ganho++;
       } else if ((d.pendenciasAbertas ?? 0) > 0) {
         f.pendencia++;
         org.pendencia++;
+        if (canal) canal.pendencia++;
       } else if (d.waitingNote) f.aguardando++;
       else f.emAnalise++;
     }
     if (d.isLost) {
       f.perdidos++;
       org.perdidos++;
+      if (canal) canal.perdidos++;
     }
   }
   f.porOrganizacao = Array.from(porOrg.values()).sort((a, b) => b.subidas - a.subidas || b.ganho - a.ganho || a.nome.localeCompare(b.nome, "pt-BR"));
@@ -287,7 +324,7 @@ export function funilDasContas(deals: SunneDeal[], ano: number, mes: number, ven
  * (kWh/mês) desses fechados no mês, no total e por organização (vendedor).
  * As etapas são a posição atual dos negócios não perdidos, de qualquer mês.
  */
-export function resumirSunne(deals: SunneDeal[], ano: number, mes: number, vendedores: Map<string, SunneVendedor> = new Map()): Omit<SunneResumo, "lidoEm" | "contas"> {
+export function resumirSunne(deals: SunneDeal[], ano: number, mes: number, vendedores: Map<string, SunneVendedor> = new Map()): Omit<SunneResumo, "lidoEm" | "contas" | "consolidado"> {
   const periodo = `${ano}-${String(mes).padStart(2, "0")}`;
   const porOrg = new Map<string, SunneOrganizacaoResumo>();
   const daOrg = (id: string) => {
@@ -344,7 +381,13 @@ export async function buscarResumoSunne(supabase: SupabaseClient, ano: number, m
   const [rede, { data: perfis, error }] = await Promise.all([redeSunneEmCache(), supabase.from("profiles").select("id, full_name, nomes_planilha").eq("ativo", true)]);
   if (error) throw new Error("Erro lendo profiles: " + error.message);
   const vendedores = vendedoresSunne(rede.organizacoes, perfis ?? []);
-  return { ...resumirSunne(rede.deals, ano, mes, vendedores), contas: funilDasContas(rede.deals, ano, mes, vendedores), lidoEm: rede.lidoEm };
+  const canais = await casarComPipefacil(supabase, rede.deals, ano, mes);
+  return {
+    ...resumirSunne(rede.deals, ano, mes, vendedores),
+    contas: funilDasContas(rede.deals, ano, mes, vendedores, canais?.viaPipefacil ?? null),
+    consolidado: canais ? { ganhosPipefacilSemSunne: canais.ganhosPipefacilSemSunne, casados: canais.viaPipefacil.size, leadsPipefacilComTelefone: canais.leadsComTelefone } : null,
+    lidoEm: rede.lidoEm,
+  };
 }
 
 /** kWh (consumo médio) dos negócios fechados no mês, para a meta de kWh do Energy. */

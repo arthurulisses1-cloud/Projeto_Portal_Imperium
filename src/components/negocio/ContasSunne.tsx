@@ -4,7 +4,17 @@ const num = (v: number) => v.toLocaleString("pt-BR");
 const pct = (parte: number, todo: number) => (todo > 0 ? `${Math.round((parte / todo) * 100)}%` : "—");
 
 /** Contas na plataforma Sunne, todos os canais: subidas → avançaram → validação (contrato assinado) → ganho, pendência ou perdido. */
-export default function ContasSunne({ contas, cor, mesLabel }: { contas: FunilContasSunne; cor: string; mesLabel: string }) {
+export default function ContasSunne({
+  contas,
+  cor,
+  mesLabel,
+  consolidado,
+}: {
+  contas: FunilContasSunne;
+  cor: string;
+  mesLabel: string;
+  consolidado: { ganhosPipefacilSemSunne: number; casados: number; leadsPipefacilComTelefone: number } | null;
+}) {
   const topo = Math.max(1, contas.subidas);
   const passos = [
     { rotulo: "Contas subidas", valor: contas.subidas, dica: "Negócios criados na Sunne no mês, de qualquer canal", de: null as number | null },
@@ -63,6 +73,51 @@ export default function ContasSunne({ contas, cor, mesLabel }: { contas: FunilCo
           </p>
         )}
       </div>
+
+      {contas.porCanal && (
+        <div className="mt-4 border-t border-imperium-line pt-3">
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Por canal · sem contar a mesma conta duas vezes</p>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-xs text-stone-400">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wide text-stone-500">
+                  <th className="py-1 text-left font-normal">Canal</th>
+                  <th className="py-1 text-right font-normal">Subidas</th>
+                  <th className="py-1 text-right font-normal">Avançaram</th>
+                  <th className="py-1 text-right font-normal">Validação</th>
+                  <th className="py-1 text-right font-normal">Ganho</th>
+                  <th className="py-1 text-right font-normal">Pendência</th>
+                  <th className="py-1 text-right font-normal">Perdidas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(
+                  [
+                    ["Recuperação (Pipefácil)", contas.porCanal.pipefacil],
+                    ["Plataforma Sunne (outros canais)", contas.porCanal.plataforma],
+                  ] as const
+                ).map(([nome, c]) => (
+                  <tr key={nome} className="border-t border-imperium-line/60">
+                    <td className="py-1.5 text-stone-200">{nome}</td>
+                    <td className="py-1.5 text-right">{num(c.subidas)}</td>
+                    <td className="py-1.5 text-right">{num(c.avancaram)}</td>
+                    <td className="py-1.5 text-right">{num(c.validacao)}</td>
+                    <td className="py-1.5 text-right text-success-bright">{num(c.ganho)}</td>
+                    <td className="py-1.5 text-right text-warning-bright">{num(c.pendencia)}</td>
+                    <td className="py-1.5 text-right text-wine-bright">{num(c.perdidos)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {consolidado && (
+            <p className="mt-2 text-[11px] text-stone-500">
+              Vendas consolidadas: <span className="text-stone-100">{num(contas.ganho + consolidado.ganhosPipefacilSemSunne)}</span> ({num(contas.ganho)} fechadas na Sunne +{" "}
+              {num(consolidado.ganhosPipefacilSemSunne)} ganhas no Pipefácil sem negócio na Sunne). {num(consolidado.casados)} negócios da Sunne casaram com leads do Pipefácil por nome e telefone.
+            </p>
+          )}
+        </div>
+      )}
 
       {contas.porOrganizacao.length > 0 && (
         <div className="mt-4 overflow-x-auto">
