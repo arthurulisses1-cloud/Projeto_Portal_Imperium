@@ -115,8 +115,9 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
         "4ad3dba8-2353-4787-81e0-bbe6a4f391cf", // Bruno Brito (closer)
       ],
     },
-    // Login do portal ainda com outro e-mail (17/11/2026), até ajustarem lá.
-    emailsAlternativos: { "arthur.ulisses@grupovorp.com": "arthurulisses1@gmail.com" },
+    // Login do portal com outro e-mail (17/11/2026): Arthur até ajustarem lá; Bruno Brito entra no portal
+    // com o e-mail hemerson.brito e no Pipefácil está como bruno.brito.
+    emailsAlternativos: { "arthur.ulisses@grupovorp.com": "arthurulisses1@gmail.com", "bruno.brito@grupovorp.com": "hemerson.brito@grupovorp.com" },
     motivosLeadFalso: ["Lead Falso"], // motivo de perda criado no Pipefácil em 16/11/2026
     pipelinesSemNivelNaCriacao: ["cmq9wwt6u024441npj37o5f2y"], // [Vorp] Funil de Vendas
     stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],

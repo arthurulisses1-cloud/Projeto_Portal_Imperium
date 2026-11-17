@@ -97,7 +97,7 @@ export type PessoaPace = {
   recebido: number;
   /** Quantidade de vendas no mês. */
   vendas: number;
-  /** Meta individual (divisão igual entre quem vende); null para SDR/BDR/pré-vendas. */
+  /** Meta individual (divisão igual entre closers e executivos); null para Head (meta da unidade) e pré-vendas. */
   meta: number | null;
 };
 
@@ -109,9 +109,9 @@ export type PaceNegocio = {
   pessoas: PessoaPace[];
 };
 
-/** Cargos que vendem e dividem a meta em partes iguais. SDR e BDR ficam de fora
- *  (a meta deles é de esforço/canal, não de recebimento). */
-export const CARGOS_QUE_VENDEM = ["executivo", "closer", "head"];
+/** Cargos que vendem e dividem a meta em partes iguais (closers e executivos). O Head não entra: ele
+ *  responde pela meta da unidade inteira, como líder. SDR, BDR e pré-vendas têm meta de esforço (17/11/2026). */
+export const CARGOS_QUE_VENDEM = ["executivo", "closer"];
 
 export async function buscarPaceNegocios(
   supabase: SupabaseClient,

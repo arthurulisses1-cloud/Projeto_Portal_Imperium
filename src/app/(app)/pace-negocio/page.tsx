@@ -181,7 +181,7 @@ function CartaoPace({ n, ano, mes, aberto }: { n: PaceNegocio; ano: number; mes:
                 <span className="w-24 shrink-0 text-xs text-stone-500">{CARGO_LABEL[x.cargo as CargoNegocio] ?? x.cargo}</span>
                 <span className="w-28 shrink-0 text-right text-stone-100">{moeda(x.recebido)}</span>
                 <span className="w-32 shrink-0 text-right text-xs text-stone-500">
-                  {x.meta === null ? "meta de esforço" : `meta ${moeda(x.meta)}`}
+                  {x.cargo === "head" ? (p.meta > 0 ? `meta da B.U ${moeda(p.meta)}` : "líder da B.U") : x.meta === null ? "meta de esforço" : `meta ${moeda(x.meta)}`}
                 </span>
               </li>
             ))}
@@ -543,7 +543,7 @@ function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: Esfo
   const p = n.pace;
   const pctMes = p.diasUteisTotal > 0 ? p.diasUteisDecorridos / p.diasUteisTotal : 0;
   const hoje = hojeBR();
-  // Closer: quem vende no portal (closer, executivo, head), com a meta individual de recebimento.
+  // Closer: quem vende no portal (closer, executivo), com a meta individual de recebimento.
   const closers = n.pessoas.filter((x) => CARGOS_QUE_VENDEM.includes(x.cargo));
   const par = PARAMETROS[n.negocio.slug];
   const i = indiceMes(ano, mes);
