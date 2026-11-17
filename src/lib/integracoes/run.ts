@@ -339,7 +339,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
     });
   }
   let vendas: Resultado = { ganhas: ganhas.length, criadas: 0, atualizadas: 0, removidas: 0, semVinculo: [] as string[] };
-  if (opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas, cfg.emailsAlternativos);
+  if (opts.criarVendas && !simular) vendas = await sincronizarVendas(supabase, api, negocioId, ganhas, cfg.emailsAlternativos, slug);
 
   const semCanal = linhasDeals.filter((d) => !d.canal).length;
   return {
@@ -358,6 +358,7 @@ async function sincronizarVendas(
   negocioId: string,
   ganhas: ReturnType<typeof vendasGanhas>,
   emailsAlternativos: Record<string, string> = {},
+  slug?: string,
 ) {
   // Vínculo Pipefácil → portal pelo e-mail de login.
   const membros = await api.membros();
@@ -375,6 +376,12 @@ async function sincronizarVendas(
     const alternativo = emailsAlternativos[email]?.toLowerCase();
     return perfilPorEmail.get(email) ?? (alternativo ? perfilPorEmail.get(alternativo) ?? null : null);
   };
+  // Usuário do Pipefácil → perfil do portal (pelo e-mail), para as telas que procuram a pessoa no CRM
+  // (visão do SDR: pace, no-show e RQA). Sem isso, elas casam pelo nome.
+  if (slug) {
+    const perfis = Object.fromEntries(membros.map((m) => [m.userId, perfil(m.userId)] as const).filter(([, p]) => !!p));
+    await supabase.from("integracao_estado").upsert({ chave: `pipefacil:${slug}:perfis`, valor: perfis, atualizado_em: new Date().toISOString() });
+  }
 
   const { data: existentes, error: erroExist } = await supabase
     .from("vendas")

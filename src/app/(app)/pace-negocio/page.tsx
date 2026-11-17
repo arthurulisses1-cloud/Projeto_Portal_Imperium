@@ -5,14 +5,13 @@ import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
 import { podeVerArea } from "@/lib/permissoes-analista";
 import {
-  CARGO_LABEL,
   COOKIE_NEGOCIO,
+  rotuloCargo,
   NEGOCIO_COR,
   buscarNegociosVisiveis,
   negocioEmFoco,
   veConsolidado,
   nomeEquipe,
-  type CargoNegocio,
 } from "@/lib/negocios";
 import { CARGOS_QUE_VENDEM, buscarPaceNegocios, calcularPace, diasUteis, limitesDoMes, type PaceCalculado, type PaceNegocio, type StatusPace } from "@/lib/pace-negocio";
 import { buscarEsforcoNegocio, serieDoMes, type EsforcoNegocio, type IdealFunil, type IndicadorEsforco, type PontoSerie } from "@/lib/pace-esforco";
@@ -21,6 +20,8 @@ import { PARAMETROS, indiceMes, metaKwhForecast, vendasDoMes } from "@/lib/forec
 import { buscarAcumuladoKwhSunne } from "@/lib/sunne";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getViewerContext } from "@/lib/preview";
+import { CARGOS_PRE_VENDAS, buscarPainelSdr, temPainelSdr } from "@/lib/sdr-negocio";
+import { AvisoSdr, BarraMes, PaceEsforcoCard, QuadradosSdr, TabelaPaceDiario } from "@/components/negocio/PainelSdr";
 
 export const dynamic = "force-dynamic";
 
@@ -178,7 +179,7 @@ function CartaoPace({ n, ano, mes, aberto }: { n: PaceNegocio; ano: number; mes:
             {n.pessoas.map((x) => (
               <li key={x.id} className="flex items-center gap-3 py-1.5">
                 <span className="min-w-0 flex-1 truncate text-stone-200">{x.nome}</span>
-                <span className="w-24 shrink-0 text-xs text-stone-500">{CARGO_LABEL[x.cargo as CargoNegocio] ?? x.cargo}</span>
+                <span className="w-24 shrink-0 text-xs text-stone-500">{rotuloCargo(x.cargo, x.role)}</span>
                 <span className="w-28 shrink-0 text-right text-stone-100">{moeda(x.recebido)}</span>
                 <span className="w-32 shrink-0 text-right text-xs text-stone-500">
                   {x.cargo === "head" ? (p.meta > 0 ? `meta da B.U ${moeda(p.meta)}` : "líder da B.U") : x.meta === null ? "meta de esforço" : `meta ${moeda(x.meta)}`}
@@ -217,7 +218,10 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
   const mes = m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? Number(m[2]) : Number(hoje.slice(5, 7));
 
   const cookieStore = cookies();
-  const foco = negocioEmFoco(searchParams.negocio ?? cookieStore.get(COOKIE_NEGOCIO)?.value, visiveis);
+  // SDR sem negócio em foco abre direto no negócio em que é pré-vendas (a visão dele é individual).
+  const foco =
+    negocioEmFoco(searchParams.negocio ?? cookieStore.get(COOKIE_NEGOCIO)?.value, visiveis) ??
+    (!veConsolidado(eu.role) ? visiveis.find((n) => CARGOS_PRE_VENDAS.includes(n.cargo) && temPainelSdr(n.slug)) ?? null : null);
   const escolhidos = foco ? [foco] : visiveis;
 
   const dados = await buscarPaceNegocios(supabase, ano, mes, hoje, escolhidos.map((n) => n.slug));
@@ -236,6 +240,46 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
   // Executivo (não é Head nem visão consolidada): vê só o próprio pace, com o negócio como referência.
   const cargoNoFoco = foco?.cargo ?? null;
   const individual = !veConsolidado(eu.role) && !!foco && cargoNoFoco !== "head" && dados.length === 1;
+  // SDR (pré-vendas) de negócio com CRM: pace de reuniões e a tabela diária etapa por etapa, como na Matri.
+  if (individual && foco && cargoNoFoco && CARGOS_PRE_VENDAS.includes(cargoNoFoco) && temPainelSdr(foco.slug)) {
+    const painel = await buscarPainelSdr(createAdminClient(), foco, { id: user.id, nome: viewer.effectiveNome }, { ano, mes, hoje });
+    const cor = NEGOCIO_COR[foco.slug] ?? "201 162 74";
+    const mesAtual = hoje.slice(0, 7) === `${ano}-${String(mes).padStart(2, "0")}`;
+    const ag = painel.pv?.indicadores.reunioes_agendadas.pace;
+    const re = painel.pv?.indicadores.reunioes_realizadas.pace;
+    const ve = painel.pv?.indicadores.vendas.pace;
+    return (
+      <main className="mx-auto max-w-6xl space-y-5 px-6 py-8">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="font-display text-2xl text-gold-bright">Meu pace</h1>
+            <p className="mt-1 text-sm text-stone-400">
+              {nomeEquipe(foco)} · {MESES[mes]} de {ano}. Dias úteis de segunda a sexta, sem feriados.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-sm">
+            <Link href={`/pace-negocio?mes=${ant}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
+              ← {MESES[mes === 1 ? 12 : mes - 1]}
+            </Link>
+            <Link href={`/pace-negocio?mes=${seg}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
+              {MESES[mes === 12 ? 1 : mes + 1]} →
+            </Link>
+          </div>
+        </div>
+        <AvisoSdr painel={painel} />
+        {ag && mesAtual && <BarraMes p={ag} cor={cor} />}
+        {ag && re && ve && (
+          <div className="grid gap-4 md:grid-cols-3">
+            <PaceEsforcoCard titulo="Reuniões agendadas" p={ag} cor={cor} mesAtual={mesAtual} />
+            <PaceEsforcoCard titulo="Reuniões realizadas" p={re} cor={cor} mesAtual={mesAtual} />
+            <PaceEsforcoCard titulo="Vendas originadas" p={ve} cor={cor} mesAtual={mesAtual} />
+          </div>
+        )}
+        <QuadradosSdr painel={painel} cor={cor} />
+        <TabelaPaceDiario painel={painel} ano={ano} mes={mes} hoje={hoje} />
+      </main>
+    );
+  }
   if (individual && foco) {
     const d = dados[0];
     const eu = d.pessoas.find((p) => p.id === user.id);
@@ -643,7 +687,7 @@ function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: Esfo
                     <Avatar nome={c.nome} cor={cor} />
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-stone-100">{c.nome}</p>
-                      <p className="text-[11px] text-stone-500">{CARGO_LABEL[c.cargo as CargoNegocio] ?? c.cargo}</p>
+                      <p className="text-[11px] text-stone-500">{rotuloCargo(c.cargo, c.role)}</p>
                     </div>
                   </div>
                   <div>

@@ -28,6 +28,9 @@ import LancarVendaMural from "@/components/negocio/LancarVendaMural";
 import { NEGOCIO_COR, nomeEquipe } from "@/lib/negocios";
 import MetaExecutivo from "@/components/negocio/MetaExecutivo";
 import { buscarPaceNegocios, calcularPace } from "@/lib/pace-negocio";
+import { buscarPainelSdr, vinculoPreVendas } from "@/lib/sdr-negocio";
+import { MuralSdr } from "@/components/negocio/PainelSdr";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -246,7 +249,25 @@ export default async function MuralPage({
 
   // Executivo de um negócio: a primeira coisa do Mural é a meta individual, onde deveria estar (pace) e onde está.
   let metaExecutivo: React.ReactNode = null;
-  if (meRole !== "diretor" && meRole !== "investidor") {
+  // SDR (pré-vendas) de um negócio com CRM (Acrópole): pace de reuniões agendadas e realizadas, no-show e vendas.
+  const preVendas = meRole !== "diretor" && meRole !== "investidor" ? await vinculoPreVendas(supabase, meId) : null;
+  if (preVendas) {
+    try {
+      const painel = await buscarPainelSdr(createAdminClient(), preVendas, { id: meId, nome: profile?.full_name ?? "" }, { ano, mes, hoje });
+      metaExecutivo = (
+        <MuralSdr
+          painel={painel}
+          equipe={nomeEquipe(preVendas)}
+          cor={NEGOCIO_COR[preVendas.slug] ?? "201 162 74"}
+          mesLabel={MESES[mes - 1] + " de " + ano}
+          mesAtual={mesEhAtual}
+        />
+      );
+    } catch (e) {
+      console.error("Mural: painel do SDR falhou", e);
+    }
+  }
+  if (!metaExecutivo && meRole !== "diretor" && meRole !== "investidor") {
     const { data: vinculos } = await supabase
       .from("profile_negocios")
       .select("principal, cargo, negocios(slug, status)")

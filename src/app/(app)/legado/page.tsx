@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { podeVerArea } from "@/lib/permissoes-analista";
-import { CARGO_LABEL, NEGOCIO_COR, nomeEquipe, type CargoNegocio } from "@/lib/negocios";
+import { NEGOCIO_COR, nomeEquipe, rotuloCargo, type CargoNegocio } from "@/lib/negocios";
 import { buscarPaceNegocios, calcularPace, type PaceNegocio, type StatusPace } from "@/lib/pace-negocio";
 import { salvarAdmissao, salvarNascimento, alternarAtivo } from "./actions";
 import { hojeBR } from "@/lib/data-br";
@@ -32,6 +32,7 @@ type Perfil = {
   data_admissao: string | null;
   data_nascimento: string | null;
   ativo: boolean;
+  role?: string | null;
 };
 type Negocio = { slug: string; nome: string; equipe_nome: string | null; equipe_bandeira: string | null; status: string; ordem: number | null };
 
@@ -53,7 +54,7 @@ export default async function LegadoPage({ searchParams }: { searchParams: { fil
 
   const { data: vincRaw } = await supabase
     .from("profile_negocios")
-    .select("cargo, principal, negocios(slug, nome, equipe_nome, equipe_bandeira, status, ordem), profiles(id, full_name, avatar_url, data_admissao, data_nascimento, ativo)");
+    .select("cargo, principal, negocios(slug, nome, equipe_nome, equipe_bandeira, status, ordem), profiles(id, full_name, avatar_url, data_admissao, data_nascimento, ativo, role)");
   type L = { cargo: CargoNegocio; principal: boolean; negocios: Negocio | Negocio[] | null; profiles: Perfil | Perfil[] | null };
   const vinculos = ((vincRaw ?? []) as unknown as L[])
     .map((l) => ({
@@ -152,7 +153,7 @@ export default async function LegadoPage({ searchParams }: { searchParams: { fil
                     {inativo && <span className="ml-2 text-[10px] uppercase text-stone-500">Inativo</span>}
                   </p>
                   <p className="truncate text-xs text-stone-500">
-                    {vs.map((v) => `${CARGO_LABEL[v.cargo] ?? v.cargo} · ${nomeEquipe(v.negocio)}`).join("  |  ")}
+                    {vs.map((v) => `${rotuloCargo(v.cargo, p.role)} · ${nomeEquipe(v.negocio)}`).join("  |  ")}
                   </p>
                 </div>
                 {individual && <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${STATUS[individual.status].classe}`}>{STATUS[individual.status].texto}</span>}

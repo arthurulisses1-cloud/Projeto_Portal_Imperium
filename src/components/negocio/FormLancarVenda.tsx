@@ -1,7 +1,7 @@
-import { CARGO_LABEL, type CargoNegocio } from "@/lib/negocios";
+import { rotuloCargo, type CargoNegocio } from "@/lib/negocios";
 import { lancarVenda, editarVendaManual } from "@/app/(app)/lancar-vendas/actions";
 
-export type VendedorOpcao = { id: string; nome: string; cargo: CargoNegocio };
+export type VendedorOpcao = { id: string; nome: string; cargo: CargoNegocio; role?: string | null };
 export type PessoaOpcao = { id: string; full_name: string };
 
 /** Lançamento existente, para edição. */
@@ -62,7 +62,7 @@ export default function FormLancarVenda({
               </option>
               {vendedores.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.nome} · {CARGO_LABEL[v.cargo] ?? v.cargo}
+                  {v.nome} · {rotuloCargo(v.cargo, v.role)}
                 </option>
               ))}
               <optgroup label="Consultor de outra BU">

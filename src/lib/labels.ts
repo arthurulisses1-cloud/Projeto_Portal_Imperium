@@ -11,7 +11,7 @@ export const ROLE_LABELS: Record<string, string> = {
   sdr: "SDR",
   closer: "Closer",
   lider: "Líder",
-  diretor: "Diretor",
+  diretor: "Diretor Comercial",
   investidor: "Investidor",
   analista: "Analista",
 };

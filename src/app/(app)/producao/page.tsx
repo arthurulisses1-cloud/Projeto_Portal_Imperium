@@ -11,6 +11,12 @@ import { getViewerContext } from "@/lib/preview";
 import { IconAlert, IconCheck, IconBook } from "@/components/ui/icons";
 import { hojeBR } from "@/lib/data-br";
 import ProducaoFinance from "@/components/negocio/ProducaoFinance";
+import { buscarPainelSdr, vinculoPreVendas } from "@/lib/sdr-negocio";
+import { AvisoSdr, FunilSdr, QuadradosSdr, VendasSdr } from "@/components/negocio/PainelSdr";
+import { NEGOCIO_COR, nomeEquipe } from "@/lib/negocios";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+const MESES_SDR = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
 type Periodo = "hoje" | "semana" | "mes" | "personalizado";
 type Visao = "total" | "individual" | "tribo";
@@ -47,6 +53,29 @@ export default async function ProducaoPage({
     .eq("negocios.slug", "vorp-finance")
     .limit(1);
   if ((vincFinance ?? []).length > 0) return <ProducaoFinance supabase={supabase} meId={meId} hoje={hojeBR()} />;
+
+  // SDR (pré-vendas) de negócio com CRM (Acrópole): funil do mês com meta de volume e conversão etapa por etapa.
+  const preVendas = await vinculoPreVendas(supabase, meId);
+  if (preVendas) {
+    const hoje = hojeBR();
+    const ano = Number(hoje.slice(0, 4));
+    const mes = Number(hoje.slice(5, 7));
+    const painel = await buscarPainelSdr(createAdminClient(), preVendas, { id: meId, nome: viewer.effectiveNome }, { ano, mes, hoje });
+    return (
+      <main className="mx-auto max-w-4xl space-y-5 px-6 py-8">
+        <div>
+          <h1 className="font-display text-2xl text-gold-bright">Minha produção</h1>
+          <p className="mt-1 text-sm text-stone-400">
+            {nomeEquipe(preVendas)} · {MESES_SDR[mes - 1]} de {ano}
+          </p>
+        </div>
+        <AvisoSdr painel={painel} />
+        <FunilSdr painel={painel} />
+        <QuadradosSdr painel={painel} cor={NEGOCIO_COR[preVendas.slug] ?? "201 162 74"} />
+        <VendasSdr painel={painel} />
+      </main>
+    );
+  }
 
   const { data: profile } = await supabase
     .from("profiles")

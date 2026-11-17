@@ -88,16 +88,17 @@ export async function buscarOpcoesLancamento(
   const ativos = linhas.filter((l) => l.status === "ativo");
   const slugPorId = new Map(ativos.map((l) => [l.id, l.slug]));
   const [{ data: membros }, { data: todos }] = await Promise.all([
-    supabase.from("profile_negocios").select("negocio_id, cargo, profiles(id, full_name)").in("negocio_id", ativos.map((l) => l.id)),
+    supabase.from("profile_negocios").select("negocio_id, cargo, profiles(id, full_name, role)").in("negocio_id", ativos.map((l) => l.id)),
     supabase.from("profiles").select("id, full_name").order("full_name"),
   ]);
-  type M = { negocio_id: string; cargo: CargoNegocio; profiles: { id: string; full_name: string } | { id: string; full_name: string }[] | null };
+  type P = { id: string; full_name: string; role: string | null };
+  type M = { negocio_id: string; cargo: CargoNegocio; profiles: P | P[] | null };
   const vendedoresPor: Record<string, VendedorOpcao[]> = {};
   for (const m of (membros ?? []) as unknown as M[]) {
     const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     const slug = slugPorId.get(m.negocio_id);
     if (!p || !slug) continue;
-    (vendedoresPor[slug] ??= []).push({ id: p.id, nome: p.full_name, cargo: m.cargo });
+    (vendedoresPor[slug] ??= []).push({ id: p.id, nome: p.full_name, cargo: m.cargo, role: p.role ?? null });
   }
   for (const lista of Object.values(vendedoresPor)) lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   return { vendedoresPor, todos: (todos ?? []) as PessoaOpcao[] };
