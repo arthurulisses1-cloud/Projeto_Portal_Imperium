@@ -169,6 +169,7 @@ export function PainelComissaoSdr({
 }) {
   const rqa = reunioes?.rqa ?? { validadas: 0, aguardando: 0, recusadas: 0, valorValidado: 0, valorAguardando: 0 };
   const ativos = carteira.filter((c) => c.ativo);
+  const antecipados = carteira.filter((c) => c.antecipado);
   const closer = papel === "closer" || !temRqa;
   const recorrenciaMes = ativos.reduce((s, c) => s + c.porMes, 0);
   return (
@@ -267,6 +268,7 @@ export function PainelComissaoSdr({
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Minha carteira · recorrência</p>
           <p className="text-xs text-stone-400">
             {ativos.length} {ativos.length === 1 ? "contrato ativo" : "contratos ativos"} · <span className="text-gold-bright">{moeda(ativos.reduce((s, c) => s + c.porMes, 0))}</span> por mês
+            {antecipados.length > 0 && <span className="text-stone-500"> · {antecipados.length} pago{antecipados.length === 1 ? "" : "s"} antecipado{antecipados.length === 1 ? "" : "s"}</span>}
           </p>
         </div>
         {carteira.length === 0 ? (
@@ -287,7 +289,7 @@ export function PainelComissaoSdr({
               </thead>
               <tbody>
                 {carteira.map((c) => (
-                  <tr key={c.chave} className={`border-t border-imperium-line/60 ${c.ativo ? "" : "opacity-50"}`}>
+                  <tr key={c.chave} className={`border-t border-imperium-line/60 ${c.ativo || c.antecipado ? "" : "opacity-50"}`}>
                     <td className="py-1.5 text-stone-200">
                       {c.cliente} <span className="text-[11px] text-stone-500">· {c.papel === "sdr" ? "você agendou" : "você fechou"}</span>
                     </td>
@@ -295,15 +297,21 @@ export function PainelComissaoSdr({
                     <td className="py-1.5 text-stone-400">{dataCurta(c.ultimo)}</td>
                     <td className="py-1.5 text-right tabular-nums text-stone-300">{moeda(c.mrr)}</td>
                     <td className="py-1.5 text-right tabular-nums text-stone-400">{c.pct}%</td>
-                    <td className="py-1.5 text-right tabular-nums text-stone-100">{moeda(c.porMes)}</td>
-                    <td className={`py-1.5 text-right text-xs ${c.ativo ? "text-success-bright" : "text-stone-500"}`}>{c.ativo ? "Ativo" : "Sem lançamento"}</td>
+                    <td className="py-1.5 text-right tabular-nums text-stone-100">{c.antecipado ? "—" : moeda(c.porMes)}</td>
+                    <td className={`py-1.5 text-right text-xs ${c.ativo ? "text-success-bright" : c.antecipado ? "text-amber-400" : "text-stone-500"}`}>
+                      {c.antecipado && c.pagoAte
+                        ? `Pago ${c.mesesPagos} meses · recorrência a partir de ${c.pagoAte.slice(5, 7)}/${c.pagoAte.slice(0, 4)}`
+                        : c.ativo
+                          ? "Ativo"
+                          : "Sem lançamento"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-        <p className="mt-2 text-[11px] text-stone-500">Ativo = contrato com recebimento lançado neste mês ou no anterior. &quot;Por mês&quot; = MRR × o seu %.</p>
+        <p className="mt-2 text-[11px] text-stone-500">Ativo = contrato com recebimento lançado neste mês ou no anterior. &quot;Por mês&quot; = MRR × o seu %. Plano semestral ou anual pago de uma vez (Match Sales) já está pago no recebimento da venda: a recorrência só começa depois do período pago, se o cliente renovar.</p>
       </section>
     </div>
   );

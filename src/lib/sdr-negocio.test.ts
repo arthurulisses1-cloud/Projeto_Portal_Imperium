@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lerDataReuniao, mesmaPessoa, montarCarteira, resumirReunioes, somarPreVendas, statusRqa, tabelaDiaria, usuarioCrmDoPerfil } from "./sdr-negocio";
+import { lerDataReuniao, mesesPagosDaVenda, mesmaPessoa, montarCarteira, resumirReunioes, somaMesesData, somarPreVendas, statusRqa, tabelaDiaria, usuarioCrmDoPerfil } from "./sdr-negocio";
 import { calcularPace } from "./pace-negocio";
 import type { LeadAuditoria } from "./integracoes/auditoria";
 
@@ -168,5 +168,38 @@ describe("somarPreVendas", () => {
     expect(soma.indicadores.reunioes_agendadas.pace.recebido).toBe(3);
     expect(soma.indicadores.reunioes_agendadas.leads?.map((l) => l.data)).toEqual(["2026-11-03", "2026-11-03", "2026-11-05"]);
     expect(soma.indicadores.vendas.pace.recebido).toBe(1);
+  });
+});
+
+describe("plano pago de uma vez (Match Sales)", () => {
+  it("cruza o valor recebido com o MRR para achar os meses pagos", () => {
+    expect(mesesPagosDaVenda({ valor: 715, mrr: 119.2 })).toBe(6);
+    expect(mesesPagosDaVenda({ valor: 2700, mrr: 450 })).toBe(6);
+    expect(mesesPagosDaVenda({ valor: 1267, mrr: 105 })).toBe(12);
+    expect(mesesPagosDaVenda({ valor: 460, mrr: 421.67 })).toBe(1);
+    expect(mesesPagosDaVenda({ valor: 179, mrr: 179 })).toBe(1);
+  });
+  it("tira o setup antes de comparar e aceita a dica do nome do plano", () => {
+    expect(mesesPagosDaVenda({ valor: 3100 + 600 * 5, mrr: 600, valor_implantacao: 2500 })).toBe(6);
+    expect(mesesPagosDaVenda({ valor: 650, mrr: 119.2, produto: "plano_solo semestral" })).toBe(6);
+    expect(mesesPagosDaVenda({ valor: 1000, mrr: null })).toBe(1);
+  });
+  it("soma meses a uma data", () => {
+    expect(somaMesesData("2026-11-09", 6)).toBe("2027-05-09");
+    expect(somaMesesData("2026-08-31", 6)).toBe("2027-02-28");
+  });
+  it("carteira: contrato semestral pago à vista não gera recorrência até o fim do período", () => {
+    const venda = { data: "2026-11-09", cliente: "JM Veiculos", crm_deal_id: "d", mrr: 119.2, valor: 715, canal: "outbound", profile_id: "p", indicador_id: "p", primeiro_contrato: true };
+    const [c] = montarCarteira([venda], "p", "2026-11-18", () => 10, true);
+    expect(c.mesesPagos).toBe(6);
+    expect(c.antecipado).toBe(true);
+    expect(c.ativo).toBe(false);
+    expect(c.pagoAte).toBe("2027-05-09");
+    // Depois do período pago, volta ao critério normal (lançamento no mês atual ou anterior).
+    const [depois] = montarCarteira([venda, { ...venda, data: "2027-05-10" }], "p", "2027-05-12", () => 10, true);
+    expect(depois.antecipado).toBe(false);
+    expect(depois.ativo).toBe(true);
+    // Sem a detecção (Vorp), nada muda.
+    expect(montarCarteira([venda], "p", "2026-11-18", () => 10)[0].antecipado).toBe(false);
   });
 });

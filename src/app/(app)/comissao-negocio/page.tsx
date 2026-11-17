@@ -95,7 +95,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
     const admin = createAdminClient();
     const [painel, carteira] = await Promise.all([
       buscarPainelSdr(admin, preVendas, { id: user.id, nome: viewer.effectiveNome }, { ano, mes, hoje }),
-      buscarCarteira(admin, preVendas.id, user.id, hoje, pctNegocio(preVendas.slug)),
+      buscarCarteira(admin, preVendas.id, user.id, hoje, pctNegocio(preVendas.slug), preVendas.slug === "matchsales"),
     ]);
     const comissaoVendas = dados.find((d) => d.slug === preVendas.slug)?.pessoas.find((p) => p.id === user.id)?.total ?? 0;
     blocoSdr = (
@@ -109,7 +109,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
   // Closer da Acrópole: regras de closer da Acrópole, comissão de venda padrão e carteira de recorrência.
   const closerVorp = ehDiretor ? null : await vinculoCloser(supabase, user.id);
   if (!blocoSdr && closerVorp && (!foco || foco.slug === closerVorp.slug)) {
-    const carteira = await buscarCarteira(createAdminClient(), closerVorp.id, user.id, hoje, pctNegocio(closerVorp.slug));
+    const carteira = await buscarCarteira(createAdminClient(), closerVorp.id, user.id, hoje, pctNegocio(closerVorp.slug), closerVorp.slug === "matchsales");
     const comissaoVendas = dados.find((d) => d.slug === closerVorp.slug)?.pessoas.find((p) => p.id === user.id)?.total ?? 0;
     blocoSdr = (
       <>

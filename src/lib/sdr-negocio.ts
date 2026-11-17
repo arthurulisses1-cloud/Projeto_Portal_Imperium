@@ -363,7 +363,40 @@ export type ContratoCarteira = {
   ativo: boolean;
   /** A venda teve pré-vendas (muda o % do executivo no Match Sales). */
   comIndicador: boolean;
+  /** Meses de contrato já pagos de uma vez (plano semestral/anual pago à vista); 1 = mensal. */
+  mesesPagos: number;
+  /** Até quando o contrato está pago (AAAA-MM-DD) e se ainda vale hoje: a recorrência só começa depois, se houver renovação. */
+  pagoAte: string | null;
+  antecipado: boolean;
 };
+
+/** Planos cobrados de uma vez e a quantidade de meses que cobrem. */
+const PLANOS_MESES = [12, 6, 3];
+const DICA_PLANO: [RegExp, number][] = [[/anual/i, 12], [/semestral/i, 6], [/trimestral/i, 3]];
+
+/**
+ * Quantos meses de contrato o recebimento da venda já cobre (pura). Cruza o valor recebido de uma vez (sem o
+ * setup) com o MRR: 6 x MRR = semestral, 12 x MRR = anual. O nome do produto ("semestral", "anual") ajuda quando
+ * o valor não fecha exato. 1 = mensal (ou não dá para saber).
+ */
+export function mesesPagosDaVenda(v: { valor: number; mrr: number | null; valor_implantacao?: number | null; produto?: string | null }): number {
+  const mrr = Number(v.mrr ?? 0);
+  if (!(mrr > 0)) return 1;
+  const base = Math.max(0, Number(v.valor) - Number(v.valor_implantacao ?? 0));
+  const razao = base / mrr;
+  const dica = DICA_PLANO.find(([re]) => re.test(v.produto ?? ""))?.[1];
+  if (dica && razao >= dica * 0.9) return dica;
+  return PLANOS_MESES.find((c) => Math.abs(razao - c) <= c * 0.08) ?? 1;
+}
+
+/** Soma meses a uma data AAAA-MM-DD (mesmo dia do mês; o fim do mês curto fica no último dia). */
+export function somaMesesData(data: string, meses: number): string {
+  const [a, m, d] = data.split("-").map(Number);
+  const alvo = new Date(Date.UTC(a, m - 1 + meses, 1));
+  const ultimo = new Date(Date.UTC(alvo.getUTCFullYear(), alvo.getUTCMonth() + 1, 0)).getUTCDate();
+  alvo.setUTCDate(Math.min(d, ultimo));
+  return alvo.toISOString().slice(0, 10);
+}
 
 type LinhaVendaCarteira = {
   data: string;
@@ -375,6 +408,8 @@ type LinhaVendaCarteira = {
   profile_id: string | null;
   indicador_id: string | null;
   primeiro_contrato: boolean | null;
+  valor_implantacao?: number | null;
+  produto?: string | null;
 };
 
 /**
@@ -387,6 +422,7 @@ export function montarCarteira(
   profileId: string,
   hoje: string,
   pctDe: (papel: "sdr" | "closer", canal: string | null, comIndicador?: boolean) => number,
+  detectarPrepago = false,
 ): ContratoCarteira[] {
   const mesAtual = hoje.slice(0, 7);
   const [a, m] = mesAtual.split("-").map(Number);
@@ -410,7 +446,15 @@ export function montarCarteira(
       recebidoNoMes: 0,
       ativo: false,
       comIndicador: !!v.indicador_id,
+      mesesPagos: 1,
+      pagoAte: null,
+      antecipado: false,
     };
+    // Match Sales: plano semestral/anual pago de uma vez cobre o contrato todo; conta pela 1ª venda do cliente.
+    if (detectarPrepago && !porChave.has(chave)) {
+      c.mesesPagos = mesesPagosDaVenda({ valor: Number(v.valor), mrr: Number(v.mrr), valor_implantacao: v.valor_implantacao, produto: v.produto });
+      if (c.mesesPagos > 1) c.pagoAte = somaMesesData(v.data, c.mesesPagos);
+    }
     c.ultimo = v.data;
     c.mrr = Number(v.mrr);
     c.canal = v.canal ?? c.canal;
@@ -420,10 +464,12 @@ export function montarCarteira(
   return Array.from(porChave.values())
     .map((c) => {
       const pct = pctDe(c.papel, c.canal, c.comIndicador);
-      const ativo = c.ultimo.startsWith(mesAtual) || c.ultimo.startsWith(mesAnterior);
-      return { ...c, pct, porMes: (c.mrr * pct) / 100, ativo };
+      // Contrato pago de uma vez: não gera recorrência até o fim do período pago (só vigora se houver renovação).
+      const antecipado = !!c.pagoAte && hoje < c.pagoAte;
+      const ativo = !antecipado && (c.ultimo.startsWith(mesAtual) || c.ultimo.startsWith(mesAnterior));
+      return { ...c, pct, porMes: (c.mrr * pct) / 100, ativo, antecipado };
     })
-    .sort((x, y) => Number(y.ativo) - Number(x.ativo) || y.mrr - x.mrr);
+    .sort((x, y) => Number(y.ativo) - Number(x.ativo) || Number(y.antecipado) - Number(x.antecipado) || y.mrr - x.mrr);
 }
 
 export async function buscarCarteira(
@@ -432,14 +478,15 @@ export async function buscarCarteira(
   profileId: string,
   hoje: string,
   pctDe: (papel: "sdr" | "closer", canal: string | null, comIndicador?: boolean) => number,
+  detectarPrepago = false,
 ): Promise<ContratoCarteira[]> {
   const { data } = await admin
     .from("vendas")
-    .select("data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato")
+    .select("data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato, valor_implantacao, produto")
     .eq("negocio_id", negocioId)
     .or(`indicador_id.eq.${profileId},profile_id.eq.${profileId}`)
     .gt("mrr", 0)
     .order("data")
     .range(0, 4999);
-  return montarCarteira((data ?? []) as LinhaVendaCarteira[], profileId, hoje, pctDe);
+  return montarCarteira((data ?? []) as LinhaVendaCarteira[], profileId, hoje, pctDe, detectarPrepago);
 }
