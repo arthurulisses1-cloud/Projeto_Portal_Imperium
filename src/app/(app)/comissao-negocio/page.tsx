@@ -158,7 +158,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
               <ul className="mt-3 divide-y divide-imperium-line">
                 {pessoas.map((p) => (
                   <li key={p.id} className="py-2">
-                    <details>
+                    <details open={d.slug === "vorp-finance" && !completo}>
                       <summary className="flex cursor-pointer select-none items-center gap-3 text-sm">
                         <span className="min-w-0 flex-1 truncate text-stone-100">{p.nome}</span>
                         <span className="hidden text-xs text-stone-500 sm:inline">
@@ -174,6 +174,55 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
                         })()}
                         <span className="shrink-0 font-semibold text-gold-bright">{moeda(p.total)}</span>
                       </summary>
+                      {d.slug === "vorp-finance" ? (
+                        (() => {
+                          // Uma linha por venda: comissão da margem (base), comissão do deságio e total.
+                          const porVenda = new Map<string, { data: string; cliente: string | null; base: number; desagio: number }>();
+                          for (const i of p.itens) {
+                            const r = porVenda.get(i.vendaId) ?? { data: i.data, cliente: i.cliente, base: 0, desagio: 0 };
+                            if (i.tipo === "desagio") r.desagio += i.valor;
+                            else r.base += i.valor;
+                            porVenda.set(i.vendaId, r);
+                          }
+                          const linhas = Array.from(porVenda.values()).sort((a, b) => (a.data < b.data ? 1 : -1));
+                          const totBase = linhas.reduce((s, l) => s + l.base, 0);
+                          const totDesagio = linhas.reduce((s, l) => s + l.desagio, 0);
+                          return (
+                            <div className="mt-2 overflow-x-auto">
+                              <table className="w-full text-xs text-stone-400">
+                                <thead>
+                                  <tr className="text-[10px] uppercase tracking-wide text-stone-500">
+                                    <th className="py-1 text-left font-normal">Cliente</th>
+                                    <th className="py-1 text-right font-normal">Comissão da margem</th>
+                                    <th className="py-1 text-right font-normal">Comissão do deságio</th>
+                                    <th className="py-1 text-right font-normal">Comissão total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {linhas.map((l, idx) => (
+                                    <tr key={idx} className="border-t border-imperium-line/60">
+                                      <td className="py-1.5">
+                                        {l.cliente ?? "—"} <span className="text-stone-600">· {dataCurta(l.data)}</span>
+                                      </td>
+                                      <td className="py-1.5 text-right">{moeda(l.base)}</td>
+                                      <td className="py-1.5 text-right">{moeda(l.desagio)}</td>
+                                      <td className="py-1.5 text-right text-stone-100">{moeda(l.base + l.desagio)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot>
+                                  <tr className="border-t border-imperium-line font-semibold text-stone-200">
+                                    <td className="py-1.5">Total</td>
+                                    <td className="py-1.5 text-right">{moeda(totBase)}</td>
+                                    <td className="py-1.5 text-right">{moeda(totDesagio)}</td>
+                                    <td className="py-1.5 text-right text-gold-bright">{moeda(totBase + totDesagio)}</td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          );
+                        })()
+                      ) : (
                       <table className="mt-2 w-full text-xs text-stone-400">
                         <tbody>
                           {p.itens
@@ -195,6 +244,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
                             ))}
                         </tbody>
                       </table>
+                      )}
                     </details>
                   </li>
                 ))}
