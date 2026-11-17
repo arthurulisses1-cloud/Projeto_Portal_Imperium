@@ -79,6 +79,18 @@ export function canalDoDeal(d: Pick<DealPipefacil, "properties" | "tags" | "trac
   return null;
 }
 
+/** "Tipo de Contrato" do lead: o campo configurado ou a primeira propriedade com "tipo" e "contrato" no nome (texto ou lista). */
+export function tipoDeContrato(p: Record<string, unknown>, chave?: string): string | null {
+  const ler = (v: unknown): string | null => {
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (Array.isArray(v)) return v.map(String).join(", ") || null;
+    return null;
+  };
+  if (chave) return ler(p[chave]);
+  const k = Object.keys(p).find((x) => /tipo/i.test(x) && /contrato/i.test(x));
+  return k ? ler(p[k]) : null;
+}
+
 /** "Valor da implantação" do lead: o campo configurado ou, sem ele, a primeira propriedade com "implanta" no nome (R$ 1.234,56 também vale). */
 export function valorDaImplantacao(p: Record<string, unknown>, chave?: string): number | null {
   const ler = (v: unknown): number | null => {
@@ -111,6 +123,7 @@ function dealParaLinha(negocioId: string, d: DealPipefacil, cfg: ConfigCrm): Dea
     valor: NUMERO(d.value),
     mrr: NUMERO(p[campos.mrr ?? "mrr"]),
     implantacao: valorDaImplantacao(p, campos.implantacao),
+    tipo_contrato: tipoDeContrato(p, campos.tipoContrato),
     nome: d.name,
     empresa: d.company?.name ?? TEXTO(p.nome_empresa),
     produtos,
@@ -182,6 +195,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
       delete linha.motivo_perda;
       delete linha.origem;
       delete linha.implantacao;
+      delete linha.tipo_contrato;
       if (identidade) {
         linha.telefone_hash = identidade.lista[i].telefoneHash;
         linha.nome_tokens = identidade.lista[i].nomeTokens;
@@ -448,7 +462,8 @@ async function sincronizarVendas(
     const id = idPorDeal.get(g.deal_id);
     // Valor da implantação (migration 0116): só vai quando preenchido; sem a coluna, grava a venda sem ele.
     const semColunaImplantacao = (e: { code?: string } | null) => e?.code === "42703" || e?.code === "PGRST204";
-    const comImplantacao = g.implantacao != null ? { ...campos, valor_implantacao: g.implantacao } : campos;
+    const extras = { ...(g.implantacao != null ? { valor_implantacao: g.implantacao } : {}), ...(g.tipo_contrato ? { tipo_contrato: g.tipo_contrato } : {}) };
+    const comImplantacao = Object.keys(extras).length > 0 ? { ...campos, ...extras } : campos;
     // Sem a migration 0113 (vendas.profile_id opcional), venda sem dono é recusada pelo banco: fica de fora.
     // Sem a migration 0115 (canal "alternativo" e canal_origem), a venda de canal alternativo é recusada.
     const semDonoRecusada = (e: { code?: string } | null) =>
