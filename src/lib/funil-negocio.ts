@@ -150,6 +150,8 @@ export function montarFunisDaVisao(
   leads: Map<string, LeadEtapa[]>,
   recorte: Recorte,
   qualificacao: Qualificacao,
+  /** Pré-vendas escolhido em cada funil: só os números dele, com a meta do canal dividida pelo time. */
+  pessoas: Partial<Record<CanalDoFunil, { id: string; divisor: number }>> = {},
 ): FunilDoCanal[] {
   const soma = new Map<string, number>();
   for (const l of linhas) soma.set(`${l.canal}|${l.etapa}`, (soma.get(`${l.canal}|${l.etapa}`) ?? 0) + Number(l.quantidade));
@@ -163,11 +165,14 @@ export function montarFunisDaVisao(
         ...etapas.slice(iMql + 1).map((e) => (mql ? e : { ...e, meta: null, conversaoMeta: null })),
       ];
     }
+    const pv = pessoas[f.canal];
+    if (pv && pv.divisor > 1) etapas = etapas.map((e) => ({ ...e, meta: e.meta === null ? null : e.meta / pv.divisor }));
     return {
       ...f,
       etapas: etapas.map((e) => {
         if (!integradas.has(`${f.canal}|${e.chave}`)) return e;
-        const chave = ETAPA_DO_DISCADOR(f.canal, e.chave) ? e.chave : chaveVisao(e.chave, f.canal, recorte, qualificacao);
+        // Alôs e conexões vêm do 3C: iguais em todas as visões, só mudam com a pessoa.
+        const chave = ETAPA_DO_DISCADOR(f.canal, e.chave) ? (pv ? `pv:${pv.id}:${e.chave}` : e.chave) : chaveVisao(e.chave, f.canal, recorte, qualificacao, pv?.id);
         const lista = leads.get(`${f.canal}|${chave}`);
         return { ...e, realizado: soma.get(`${f.canal}|${chave}`) ?? 0, ...(lista ? { leads: lista } : {}) };
       }),
@@ -176,8 +181,18 @@ export function montarFunisDaVisao(
 }
 
 /** Quantos leads do Inbound em cada qualificação (números dos botões), no recorte escolhido. */
-export function leadsPorQualificacao(linhas: LinhaRealizado[], recorte: Recorte): Record<Qualificacao, number> {
+export function leadsPorQualificacao(linhas: LinhaRealizado[], recorte: Recorte, pessoa?: string | null): Record<Qualificacao, number> {
   const total = (q: Qualificacao) =>
-    linhas.filter((l) => l.canal === "inbound" && l.etapa === chaveVisao("leads", "inbound", recorte, q)).reduce((s, l) => s + Number(l.quantidade), 0);
+    linhas.filter((l) => l.canal === "inbound" && l.etapa === chaveVisao("leads", "inbound", recorte, q, pessoa)).reduce((s, l) => s + Number(l.quantidade), 0);
   return { completo: total("completo"), mql: total("mql"), nao_mql: total("nao_mql") };
+}
+
+/** Pré-vendas de cada canal com número no mês (pelas linhas "pv:<id>:…"), para o filtro do funil (pura). */
+export function pessoasDoCanal(linhas: LinhaRealizado[], canal: CanalDoFunil): string[] {
+  const ids = new Set<string>();
+  for (const l of linhas) {
+    if (l.canal !== canal || !l.etapa.startsWith("pv:") || !(Number(l.quantidade) > 0)) continue;
+    ids.add(l.etapa.slice(3, l.etapa.indexOf(":", 3)));
+  }
+  return Array.from(ids);
 }

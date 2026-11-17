@@ -585,3 +585,53 @@ describe("Social Selling na Acrópole", () => {
     expect(vendasGanhas(deals, eventos, cfg).map((v) => v.deal_id)).toEqual(["com", "rede"]); // a regra é só do Social Selling
   });
 });
+
+describe("funil por pré-vendas", () => {
+  it("credita cada etapa a quem levou o lead e a soma das pessoas bate com o time", async () => {
+    const { creditarPessoas, chaveVisao } = await import("./realizado");
+    const deals = [
+      deal({ deal_id: "a", nome: "ACME", responsavel_user_id: "jorge", sdr_user_id: "vini" }),
+      deal({ deal_id: "b", nome: "Beta", responsavel_user_id: "ryq" }),
+      deal({ deal_id: "i", canal: "trafego", criado_em: "2026-11-03T12:00:00Z", responsavel_user_id: "jorge", faturamento: "entre_400_mil_e_1_milhao", cargo: "diretor" }),
+    ];
+    const eventos = [
+      ev("a", ST.agendadaOut, "2026-11-05T13:00:00Z"),
+      ev("a", ST.ganhoOut, "2026-11-06T13:00:00Z"),
+      ev("b", ST.agendadaOut, "2026-11-07T13:00:00Z"),
+      ev("i", ST.conectadoIn, "2026-11-04T13:00:00Z"),
+    ];
+    // no agendamento "a" era do Vinícius; no Ganho passou para o Jorge (closer)
+    const resp = new Map<string, [string, string][]>([
+      ["a", [["2026-11-05T13:00:00Z", "vini"], ["2026-11-06T13:00:01Z", "jorge"]]],
+      ["b", [["2026-11-07T13:00:00Z", "ryq"]]],
+      ["i", [["2026-11-03T12:00:00Z", "jorge"]]],
+    ]);
+    const visoes = detalharVisoes(deals, eventos, cfg, "2026-11-01", "2026-12-01");
+    const pv = creditarPessoas(visoes, eventos, cfg, resp);
+    const soma = (k: string) => pv.filter((x) => x.etapa === k).length;
+    expect(soma(chaveVisao("reunioes_agendadas", "outbound", "todos", "completo", "vini"))).toBe(1);
+    expect(soma(chaveVisao("reunioes_realizadas", "outbound", "todos", "completo", "vini"))).toBe(1); // realizada vai para quem agendou
+    expect(soma(chaveVisao("reunioes_realizadas", "outbound", "todos", "completo", "jorge"))).toBe(0);
+    expect(soma(chaveVisao("reunioes_agendadas", "outbound", "todos", "completo", "ryq"))).toBe(1);
+    expect(soma(chaveVisao("leads", "inbound", "todos", "completo", "jorge"))).toBe(1);
+    expect(soma(chaveVisao("conectados", "inbound", "todos", "mql", "jorge"))).toBe(1);
+    // para cada visão sem pessoa, a soma das pessoas é igual ao time
+    for (const k of Array.from(new Set(visoes.map((v) => v.etapa)))) {
+      const time = visoes.filter((v) => v.etapa === k).length;
+      const pessoas = pv.filter((x) => x.etapa.endsWith(`:${k}`) && x.etapa.split(":").length === k.split(":").length + 2).length;
+      expect(pessoas).toBe(time);
+    }
+  });
+});
+
+describe("3C por pré-vendas", () => {
+  it("alôs e conexões de cada pessoa pelo de-para do agente; quem não ligou aparece com zero", async () => {
+    const { contarPorPessoa, contarAlosConexoes } = await import("./tresc");
+    const l = (agent_id: number | null, tempo: string, status_id = 7) => ({ call_date: "2026-11-10 10:00:00", has_agent: agent_id !== null, agent_id, agent: "x", status_id, speaking_with_agent_time: tempo });
+    const ligs = [l(1, "00:01:10"), l(1, "00:00:10"), l(2, "00:02:00"), l(null, "00:00:00", 9), l(3, "00:01:30")];
+    const r = contarPorPessoa(ligs, 60, { 1: "marcus", 2: "vini", 9: "ninguem" });
+    expect(Object.fromEntries(r)).toEqual({ marcus: { alos: 2, conexoes: 1 }, vini: { alos: 1, conexoes: 1 }, ninguem: { alos: 0, conexoes: 0 } });
+    // o agente 3 (sem de-para) fica só no total
+    expect(contarAlosConexoes(ligs, 60)).toEqual({ alos: 4, conexoes: 3 });
+  });
+});

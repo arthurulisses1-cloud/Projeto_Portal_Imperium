@@ -6,7 +6,8 @@ import { hojeBR } from "@/lib/data-br";
 import { getViewerContext } from "@/lib/preview";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { buscarDashboardNegocio, RANKINGS, type MixCanal } from "@/lib/dashboard-negocio";
-import { etapasIntegradas, funilUnicoDoNegocio, funisDoMes, leadsPorQualificacao, montarFunisDaVisao, type LeadEtapa } from "@/lib/funil-negocio";
+import { etapasIntegradas, funilUnicoDoNegocio, funisDoMes, leadsPorQualificacao, montarFunisDaVisao, pessoasDoCanal, type CanalDoFunil, type LeadEtapa } from "@/lib/funil-negocio";
+import { TIMES_POR_CANAL } from "@/lib/pace-esforco";
 import { buscarLeadsDoFunil, buscarListasGravadas, buscarRankingGravado } from "@/lib/integracoes/leads-funil";
 import type { Qualificacao, Recorte } from "@/lib/integracoes/realizado";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -68,7 +69,7 @@ function Barra({ valor, total, cor }: { valor: number; total: number; cor: strin
 export default async function NegocioDashboardPage({
   searchParams,
 }: {
-  searchParams: { negocio?: string; mes?: string; visao?: string; recorte?: string };
+  searchParams: { negocio?: string; mes?: string; visao?: string; recorte?: string; pvOut?: string; pvIn?: string };
 }) {
   // Visões do funil: qualificação (só Inbound) e recorte dos leads. Padrão: MQLs + todos os leads.
   const qualificacao: Qualificacao = searchParams.visao === "completo" || searchParams.visao === "nao_mql" ? searchParams.visao : "mql";
@@ -154,7 +155,7 @@ export default async function NegocioDashboardPage({
           .eq("negocio_id", atual.id)
           .gte("data", inicioMes)
           .lt("data", fimMesExcl)
-          .range(0, 9999)
+          .range(0, 29999)
       : { data: [] as { canal: string; etapa: string; quantidade: number; synced_at: string }[] };
   // Funis por canal do forecast; o negócio com funil próprio no CRM (Energy) mostra só ele, sem meta.
   const previstos = funisDoMes(atual.slug, ano, mes);
@@ -172,6 +173,33 @@ export default async function NegocioDashboardPage({
     }
   }
   const comVisoes = integradas.size > 0 && !funilUnico;
+  // Filtro de pré-vendas de cada funil (Outbound e Tráfego Pago): o time do canal (Pace) mais quem tem número
+  // no mês. Meta da pessoa = meta do canal ÷ tamanho do time do canal.
+  const filtroPv: Partial<Record<CanalDoFunil, { opcoes: { id: string; nome: string }[]; escolhido: string | null; divisor: number }>> = {};
+  if (comVisoes) {
+    let nomes: Record<string, string> = {};
+    try {
+      const { data } = await createAdminClient().from("integracao_estado").select("valor").eq("chave", `pipefacil:${atual.slug}:membros`).maybeSingle();
+      nomes = (data?.valor as Record<string, string> | null) ?? {};
+    } catch (e) {
+      console.error("nomes do Pipefácil falharam:", e);
+    }
+    for (const canal of ["outbound", "inbound"] as const) {
+      const time = TIMES_POR_CANAL[atual.slug]?.[canal] ?? [];
+      const ids = Array.from(new Set([...time, ...pessoasDoCanal(linhasRealizado ?? [], canal)]));
+      if (ids.length === 0) continue;
+      const primeiro = (id: string) => (nomes[id] ?? "Sem nome").split(" ")[0];
+      const opcoes = ids
+        .map((id) => ({ id, nome: ids.filter((x) => primeiro(x) === primeiro(id)).length > 1 ? nomes[id] ?? id : primeiro(id) }))
+        .sort((a, b) => Number(time.includes(b.id)) - Number(time.includes(a.id)) || a.nome.localeCompare(b.nome, "pt-BR"));
+      const pedido = canal === "outbound" ? searchParams.pvOut : searchParams.pvIn;
+      filtroPv[canal] = { opcoes, escolhido: opcoes.some((o) => o.id === pedido) ? pedido! : null, divisor: time.length || opcoes.length };
+    }
+  }
+  const pessoasEscolhidas: Partial<Record<CanalDoFunil, { id: string; divisor: number }>> = {};
+  for (const [canal, f] of Object.entries(filtroPv) as [CanalDoFunil, NonNullable<(typeof filtroPv)[CanalDoFunil]>][]) {
+    if (f.escolhido) pessoasEscolhidas[canal] = { id: f.escolhido, divisor: f.divisor };
+  }
   let funis = montarFunisDaVisao(
     funilUnico ? [funilUnico] : previstos,
     linhasRealizado ?? [],
@@ -179,6 +207,7 @@ export default async function NegocioDashboardPage({
     listasFunil,
     comVisoes ? recorte : "todos",
     comVisoes ? qualificacao : "completo",
+    pessoasEscolhidas,
   );
   // Vorp Finance: Entrevistas = as subidas pelo QR Code (planilha); Subidos = leads movidos para Subido em Meus Leads;
   // Vendas = vendas efetivas (aprovadas) do mês.
@@ -192,9 +221,15 @@ export default async function NegocioDashboardPage({
     const porChave: Record<string, number> = { reunioes_realizadas: entrevistas, propostas: subidos, vendas: vendasQtd };
     funis = funis.map((f) => (f.canal === "outbound" ? { ...f, etapas: f.etapas.map((e) => (e.chave in porChave ? { ...e, realizado: porChave[e.chave] } : e)) } : f));
   }
-  const leadsQualificacao = leadsPorQualificacao(linhasRealizado ?? [], recorte);
-  const hrefVisao = (mudar: { visao?: Qualificacao; recorte?: Recorte }) =>
-    `/negocio?${new URLSearchParams({ mes: mesParam, negocio: atual.slug, visao: mudar.visao ?? qualificacao, recorte: mudar.recorte ?? recorte })}`;
+  const leadsQualificacao = leadsPorQualificacao(linhasRealizado ?? [], recorte, pessoasEscolhidas.inbound?.id);
+  const hrefVisao = (mudar: { visao?: Qualificacao; recorte?: Recorte; pvOut?: string | null; pvIn?: string | null }) => {
+    const q = new URLSearchParams({ mes: mesParam, negocio: atual.slug, visao: mudar.visao ?? qualificacao, recorte: mudar.recorte ?? recorte });
+    const out = mudar.pvOut !== undefined ? mudar.pvOut : filtroPv.outbound?.escolhido;
+    const inb = mudar.pvIn !== undefined ? mudar.pvIn : filtroPv.inbound?.escolhido;
+    if (out) q.set("pvOut", out);
+    if (inb) q.set("pvIn", inb);
+    return `/negocio?${q}`;
+  };
   const ultimaSyncFunil = (linhasRealizado ?? []).reduce<string | null>((m, l) => (!m || l.synced_at > m ? l.synced_at : m), null);
   const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
   // Energy: contas subidas vêm da Sunne (negócios criados no mês por vendedor), não do compromisso do dia.
@@ -439,6 +474,23 @@ export default async function NegocioDashboardPage({
                       />
                     )}
                   </div>
+                  {/* Pré-vendas do funil: "Time" ou uma pessoa (o funil inteiro dela, com a meta dela) */}
+                  {comVisoes && (fu.canal === "outbound" || fu.canal === "inbound") && filtroPv[fu.canal] && (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] uppercase tracking-widest text-stone-500">Pré-vendas</span>
+                      <Seletor
+                        opcoes={[
+                          { rotulo: "Time", href: hrefVisao(fu.canal === "outbound" ? { pvOut: null } : { pvIn: null }), ativo: !filtroPv[fu.canal]!.escolhido },
+                          ...filtroPv[fu.canal]!.opcoes.map((o) => ({
+                            rotulo: o.nome,
+                            href: hrefVisao(fu.canal === "outbound" ? { pvOut: o.id } : { pvIn: o.id }),
+                            ativo: filtroPv[fu.canal]!.escolhido === o.id,
+                            dica: `Funil de ${o.nome}: alôs e conexões que atendeu no 3C, leads e reuniões que levou (a realizada, a proposta e a venda vão para quem agendou). Meta = meta do canal ÷ ${filtroPv[fu.canal]!.divisor}.`,
+                          })),
+                        ]}
+                      />
+                    </div>
+                  )}
 
                   {/* Volumes: colunas fixas para alinhar os números entre as linhas */}
                   <div className="mt-2 grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem_3.5rem] items-center gap-x-2 gap-y-1.5 text-xs tabular-nums">
