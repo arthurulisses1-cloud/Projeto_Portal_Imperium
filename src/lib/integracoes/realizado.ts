@@ -18,6 +18,8 @@ export type DealCrm = {
   motivo_perda?: string | null;
   /** Origem do lead quando difere do canal (só em memória; vai para as listas do hover). */
   origem?: string | null;
+  /** Valor da implantação/setup cadastrado no lead (só em memória; vai para a venda, não para crm_deals). */
+  implantacao?: number | null;
   status: string | null;
   stage_id: string | null;
   valor: number | null;
@@ -332,6 +334,8 @@ export type VendaCrm = {
   canal_origem: string | null;
   valor: number;
   mrr: number | null;
+  /** Valor da implantação (setup) cadastrado no CRM; null = não preenchido. */
+  implantacao: number | null;
   cliente: string | null;
   produto: string | null;
   closer_user_id: string | null;
@@ -367,6 +371,7 @@ export function vendasGanhas(deals: DealCrm[], eventos: EventoCrm[], cfg: Config
       canal_origem: canal === "alternativo" ? d.canal : null,
       valor: Number(d.valor ?? 0),
       mrr: d.mrr != null && Number(d.mrr) > 0 ? Number(d.mrr) : null,
+      implantacao: d.implantacao != null && Number(d.implantacao) > 0 ? Number(d.implantacao) : null,
       cliente: d.empresa || d.nome,
       produto: d.produtos && d.produtos.length > 0 ? d.produtos.join(", ") : null,
       closer_user_id: responsavelNoGanho?.get(d.deal_id) ?? d.responsavel_user_id,

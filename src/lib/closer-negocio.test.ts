@@ -82,12 +82,12 @@ describe("resumirReunioesCloser no Match Sales (dono da reunião)", () => {
 });
 
 describe("setupDaVenda", () => {
-  it("setup = o que o recebido passa da mensalidade", () => {
-    expect(setupDaVenda({ valor: 3100, mrr: 600 })).toBe(2500);
+  it("é o valor da implantação cadastrado na venda", () => {
+    expect(setupDaVenda({ valor_implantacao: 2500 })).toBe(2500);
   });
-  it("recorrência (recebido = MRR), sem MRR lançado ou recebido menor, é zero", () => {
-    expect(setupDaVenda({ valor: 600, mrr: 600 })).toBe(0);
-    expect(setupDaVenda({ valor: 3100, mrr: null })).toBe(0);
-    expect(setupDaVenda({ valor: 500, mrr: 600 })).toBe(0);
+  it("sem valor da implantação, é zero", () => {
+    expect(setupDaVenda({})).toBe(0);
+    expect(setupDaVenda({ valor_implantacao: null })).toBe(0);
+    expect(setupDaVenda({ valor_implantacao: -5 })).toBe(0);
   });
 });
