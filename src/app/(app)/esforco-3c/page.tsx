@@ -7,7 +7,11 @@ import { podeVerArea } from "@/lib/permissoes-analista";
 import { vinculoCloserVorp } from "@/lib/closer-negocio";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { TRESC_POR_NEGOCIO } from "@/lib/integracoes/config";
-import { MAX_DIAS, agregar, buscarLigacoes, type PainelEsforco } from "@/lib/esforco-3c";
+import { MAX_DIAS, agregar, buscarAtividade, buscarLigacoes, somarAtividade, type Atividade, type PainelEsforco } from "@/lib/esforco-3c";
+import { PARAMETROS } from "@/lib/forecast-negocios";
+
+/** Passagem ideal de tentativa para alô (meta do comercial, a mesma do painel antigo). */
+const IDEAL_ALO = 0.15;
 
 export const dynamic = "force-dynamic";
 // Um mês de ligações são dezenas de páginas da API do 3C.
@@ -86,16 +90,32 @@ export default async function Esforco3cPage({ searchParams }: { searchParams: Pa
   const filtro = { agentes: lista(searchParams.ag), campanhas: lista(searchParams.camp), listas: lista(searchParams.lista) };
 
   let painel: PainelEsforco | null = null;
+  let atividade: Atividade | null = null;
   let erro: string | null = null;
   let truncado = false;
   try {
     const lido = await buscarLigacoes(atual.slug, de, ate, hoje);
     truncado = lido.truncado;
     painel = agregar(atual.slug, lido.ligacoes, de, ate, filtro, TRESC_POR_NEGOCIO[atual.slug].segundosConexao);
+    // Utilização: o 3C mede o tempo do agente por campanha (não por lista). Campanhas do período (ou as
+    // escolhidas) e, com pré-vendas escolhido, só o tempo deles.
+    if (filtro.listas.length === 0) {
+      const campanhas = lido.ligacoes.filter((l) => filtro.campanhas.length === 0 || filtro.campanhas.includes(l.campanha)).map((l) => l.campanhaId).filter((x): x is number => !!x);
+      const ids = filtro.agentes.length
+        ? new Set(lido.ligacoes.filter((l) => l.agente && filtro.agentes.includes(l.agente) && l.agenteId).map((l) => l.agenteId as number))
+        : null;
+      try {
+        atividade = somarAtividade(await buscarAtividade(atual.slug, de, ate, hoje, campanhas), ids);
+      } catch (e) {
+        console.error("esforço 3C (atividade):", e);
+      }
+    }
   } catch (e) {
     console.error("esforço 3C:", e);
     erro = "Não foi possível ler as ligações do 3C Plus agora. Tente de novo em instantes.";
   }
+  // Passagem ideal de alô para conexão: a taxa do forecast da B.U. (a mesma meta do funil do Dashboard).
+  const idealConexao = PARAMETROS[atual.slug]?.outbound?.taxas[0] ?? 0.15;
 
   const href = (mudar: Partial<Params>) => {
     const p = new URLSearchParams();
@@ -187,6 +207,38 @@ export default async function Esforco3cPage({ searchParams }: { searchParams: Pa
 
       {painel && (
         <>
+          {/* Funil do discador: tentativas → alôs → conexões, com a passagem real contra a ideal */}
+          <FunilDiscador t={painel.totais} seg={seg} idealAlo={IDEAL_ALO} idealConexao={idealConexao} cor={cor} />
+
+          {/* Utilização do pré-vendas: tempo no discador e quanto virou conversa */}
+          <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+            <p className="text-[10px] uppercase tracking-widest" style={{ color: `rgb(${cor})` }}>
+              Utilização do pré-vendas
+            </p>
+            <h2 className="font-display text-lg text-stone-100">Tempo de atividade no discador</h2>
+            <p className="mt-0.5 text-[12px] text-stone-400">
+              {filtro.listas.length > 0
+                ? "Com lista escolhida, só o tempo médio aparece: o 3C Plus mede o tempo do pré-vendas por campanha, não por lista."
+                : "Quanto tempo o pré-vendas ficou prospectando no discador e quanto disso virou conversa."}
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <Kpi
+                rotulo="Tempo ativo no discador"
+                valor={atividade ? tempo(atividade.ativo) : "—"}
+                sub={atividade ? `esperando ${tempo(atividade.esperando)} · falando ${tempo(atividade.falando)}` : filtro.listas.length ? "não se divide por lista" : "o 3C Plus não respondeu"}
+                nota={
+                  atividade && atividade.ativo > 0
+                    ? `Pós-ligação: ${tempo(atividade.pos)} (${pct(atividade.pos, atividade.ativo)} do tempo ativo)${painel.totais.alos ? ` · ${tempo(Math.round(atividade.pos / painel.totais.alos))} por alô` : ""}`
+                    : undefined
+                }
+                dica="Tempo na campanha em modo discador, sem pausa: esperando o discador entregar ligação + falando + pós-ligação (na tela de qualificação, sem receber a próxima). Não conta pausa nem modo manual."
+              />
+              <Kpi rotulo="Tempo total falando" valor={atividade ? tempo(atividade.falando) : "—"} sub="em conversa com leads" dica="Soma do tempo em que o pré-vendas falou com leads nas ligações do discador." />
+              <Kpi rotulo="Tempo médio por chamada atendida" valor={painel.totais.alos ? tempo(painel.totais.faladoMedio) : "—"} sub={`${num(painel.totais.alos)} alôs`} dica="Tempo falado ÷ alôs." />
+              <Kpi rotulo="% do tempo falando" valor={atividade ? pct(atividade.falando, atividade.ativo) : "—"} sub="falando ÷ ativo no discador" dica="Tempo total falando ÷ tempo ativo no discador." />
+            </div>
+          </section>
+
           {/* Destaque: conexões e como foram qualificadas */}
           <section className="grid gap-4 rounded-lg border bg-imperium-surface p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" style={{ borderColor: `rgb(${cor} / 0.55)` }}>
             <div>
@@ -309,13 +361,76 @@ export default async function Esforco3cPage({ searchParams }: { searchParams: Pa
   );
 }
 
-function Kpi({ rotulo, valor, sub, dica }: { rotulo: string; valor: string; sub: string; dica: string }) {
+function Kpi({ rotulo, valor, sub, dica, nota }: { rotulo: string; valor: string; sub: string; dica: string; nota?: string }) {
   return (
     <div className="rounded-lg border border-imperium-line bg-imperium-surface p-4" title={dica}>
       <p className="text-[10px] uppercase tracking-widest text-stone-500">{rotulo}</p>
       <p className="mt-1 text-2xl font-semibold text-stone-100">{valor}</p>
       <p className="text-[11px] text-stone-500">{sub}</p>
+      {nota && <p className="mt-2 border-t border-imperium-line pt-2 text-[11px] text-wine-bright">{nota}</p>}
     </div>
+  );
+}
+
+/** Funil do discador: cada etapa num trapézio, a passagem ideal à esquerda e a real à direita. */
+function FunilDiscador({ t, seg, idealAlo, idealConexao, cor }: { t: PainelEsforco["totais"]; seg: number; idealAlo: number; idealConexao: number; cor: string }) {
+  const etapas = [
+    { nome: "Tentativas", valor: t.ligacoes, sub: "discagens das campanhas", dica: "Tudo o que o discador discou, atendido ou não.", ideal: null, real: null },
+    { nome: "Alôs", valor: t.alos, sub: "atendida e falou com o pré-vendas", dica: "Ligação atendida que chegou ao pré-vendas (mesma regra do funil do Dashboard).", ideal: idealAlo, real: t.ligacoes > 0 ? t.alos / t.ligacoes : null },
+    { nome: "Conexões", valor: t.conexoes, sub: `${seg} s ou mais de conversa`, dica: `Conversas de ${seg} s ou mais com o pré-vendas.`, ideal: idealConexao, real: t.alos > 0 ? t.conexoes / t.alos : null },
+  ];
+  const fmtPct = (v: number) => `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+  return (
+    <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+      <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_minmax(11rem,15rem)] gap-x-3">
+        {etapas.map((e, i) => {
+          const topo = 100 - i * 18;
+          const base = topo - 18;
+          const dif = e.real !== null && e.ideal !== null ? (e.real - e.ideal) * 100 : null;
+          return (
+            <div key={e.nome} className="contents">
+              <div className="flex flex-col items-end justify-center border-r border-imperium-line pr-3 text-right">
+                {e.ideal !== null && (
+                  <>
+                    <span className="text-[10px] uppercase tracking-widest text-stone-500">Ideal</span>
+                    <span className="text-lg font-semibold text-stone-100">{fmtPct(e.ideal)}</span>
+                  </>
+                )}
+              </div>
+              <div className="flex h-16 items-center justify-center">
+                <div
+                  className="flex h-full w-full items-center justify-center text-2xl font-semibold text-stone-950"
+                  style={{
+                    clipPath: `polygon(${(100 - topo) / 2}% 0, ${100 - (100 - topo) / 2}% 0, ${100 - (100 - base) / 2}% 100%, ${(100 - base) / 2}% 100%)`,
+                    backgroundColor: `rgb(${cor} / ${0.55 + i * 0.2})`,
+                    marginTop: i ? 2 : 0,
+                  }}
+                >
+                  {num(e.valor)}
+                </div>
+              </div>
+              <div className="flex flex-col justify-center border-l border-imperium-line pl-3 text-xs" title={e.dica}>
+                <span className="font-semibold text-stone-100">{e.nome}</span>
+                <span className="text-[11px] text-stone-500">{e.sub}</span>
+                {e.real !== null && (
+                  <span className="mt-0.5 text-[11px] text-stone-300">
+                    Real <span className="font-semibold text-stone-100">{fmtPct(e.real)}</span>{" "}
+                    {dif !== null && (
+                      <span className={`rounded px-1 ${dif >= 0 ? "bg-success/15 text-success-bright" : "bg-wine/15 text-wine-bright"}`}>
+                        {dif >= 0 ? "▲" : "▼"} {Math.abs(dif).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} p.p. {dif >= 0 ? "acima" : "abaixo"}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-[11px] text-stone-500">
+        Ideal: alô {fmtPct(idealAlo)} das tentativas (meta do comercial) · conexão {fmtPct(idealConexao)} dos alôs (forecast da B.U.).
+      </p>
+    </section>
   );
 }
 

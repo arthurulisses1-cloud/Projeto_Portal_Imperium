@@ -44,7 +44,9 @@ const ORIGEM_DA_LISTA: Record<string, { padrao: RegExp; origem: string }[]> = {
 export type Ligacao = {
   data: string; // "2026-11-11 18:12:39", Brasília
   agente: string | null;
+  agenteId: number | null;
   campanha: string;
+  campanhaId: number | null;
   lista: string | null;
   status: number;
   statusNome: string;
@@ -64,7 +66,9 @@ export function enxugar(c: Bruta): Ligacao {
   return {
     data: String(c.call_date ?? ""),
     agente: texto(c.agent),
+    agenteId: Number(c.agent_id) || null,
     campanha: texto(c.campaign) ?? `Campanha ${c.campaign_id ?? "?"}`,
+    campanhaId: Number(c.campaign_id) || null,
     lista: texto(c.list),
     status: Number(c.status_id ?? 0),
     statusNome: texto(c.readable_status_text) ?? `Status ${c.status_id ?? "?"}`,
@@ -253,4 +257,53 @@ export async function buscarLigacoes(slug: string, de: string, ate: string, hoje
   cache.set(chave, { ate: Date.now() + (ate >= hoje ? TTL_HOJE_MS : TTL_PASSADO_MS), ligacoes });
   if (cache.size > 30) cache.delete(cache.keys().next().value as string);
   return { ligacoes, truncado: primeira.total > MAX_PAGINAS };
+}
+
+// ---------------------------------------------------------------- utilização do pré-vendas
+// `GET /campaigns/{id}/agents/metrics`: por agente e por hora, o tempo em cada estado na campanha
+// (`idle` esperando o discador entregar ligação, `speaking` falando, `acw` pós-ligação na tela de
+// qualificação; `manual` fica de fora, pode vir com horas de modo manual esquecido aberto). Pausa não
+// soma tempo nenhum. Tempo ativo no discador = esperando + falando + pós-ligação. Mesma conta do painel antigo.
+
+export type LinhaAtividade = { agenteId: number | null; esperando: number; falando: number; pos: number };
+export type Atividade = { esperando: number; falando: number; pos: number; ativo: number };
+
+export function somarAtividade(linhas: LinhaAtividade[], agentes: Set<number> | null): Atividade {
+  const t = { esperando: 0, falando: 0, pos: 0 };
+  for (const l of linhas) {
+    if (agentes && (!l.agenteId || !agentes.has(l.agenteId))) continue;
+    t.esperando += l.esperando;
+    t.falando += l.falando;
+    t.pos += l.pos;
+  }
+  return { ...t, ativo: t.esperando + t.falando + t.pos };
+}
+
+const cacheAtividade = new Map<string, { ate: number; linhas: LinhaAtividade[] }>();
+
+/** Tempo dos agentes nas campanhas, no período (datas de Brasília). Guarda por pouco tempo em memória. */
+export async function buscarAtividade(slug: string, de: string, ate: string, hoje: string, campanhas: number[]): Promise<LinhaAtividade[]> {
+  const cfg = TRESC_POR_NEGOCIO[slug];
+  const token = cfg ? process.env[cfg.tokenEnv] : undefined;
+  if (!token || campanhas.length === 0) return [];
+  const ids = Array.from(new Set(campanhas)).sort((a, b) => a - b);
+  const chave = `${slug}|${de}|${ate}|${ids.join(",")}`;
+  const guardado = cacheAtividade.get(chave);
+  if (guardado && guardado.ate > Date.now()) return guardado.linhas;
+  const linhas: LinhaAtividade[] = [];
+  const umaCampanha = async (id: number) => {
+    const qs = new URLSearchParams({ api_token: token, startDate: `${de} 00:00:00`, endDate: `${ate} 23:59:59` });
+    const res = await fetch(`${BASE}/campaigns/${id}/agents/metrics?${qs}`, { headers: { Accept: "application/json", "Accept-Encoding": "gzip" }, cache: "no-store" });
+    if (!res.ok) throw new Error(`3C Plus respondeu ${res.status} nas métricas da campanha ${id}`);
+    const json = (await res.json()) as { data?: Bruta[] };
+    return (json.data ?? []).map((l) => {
+      const ag = l.agent as { id?: unknown } | undefined;
+      const s = (v: unknown) => segundos(typeof v === "string" ? v : null);
+      return { agenteId: Number(ag?.id) || null, esperando: s(l.idle), falando: s(l.speaking), pos: s(l.acw) };
+    });
+  };
+  for (let i = 0; i < ids.length; i += PARALELO) for (const lote of await Promise.all(ids.slice(i, i + PARALELO).map(umaCampanha))) linhas.push(...lote);
+  cacheAtividade.set(chave, { ate: Date.now() + (ate >= hoje ? TTL_HOJE_MS : TTL_PASSADO_MS), linhas });
+  if (cacheAtividade.size > 30) cacheAtividade.delete(cacheAtividade.keys().next().value as string);
+  return linhas;
 }
