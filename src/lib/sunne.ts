@@ -399,6 +399,35 @@ export async function buscarResumoSunne(supabase: SupabaseClient, ano: number, m
   };
 }
 
+/**
+ * kWh (consumo médio) dos negócios fechados, acumulado por dia (dias corridos de 1 até hoje) — o mesmo critério do
+ * kWh realizado do Mural, para o gráfico de kWh do Pace do Energy.
+ */
+export function acumuladoKwhSunne(deals: SunneDeal[], ano: number, mes: number, hoje: string): { data: string; valor: number }[] {
+  const periodo = `${ano}-${String(mes).padStart(2, "0")}`;
+  const porDia = new Map<string, number>();
+  for (const d of deals) {
+    if (d.product !== PRODUTO_KWH || !d.isClosed || d.isLost || !d.closedAt || mesLocal(d.closedAt) !== periodo) continue;
+    const dia = new Date(d.closedAt).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+    porDia.set(dia, (porDia.get(dia) ?? 0) + (d.averageConsumption ?? 0));
+  }
+  const ultimoDia = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const out: { data: string; valor: number }[] = [];
+  let soma = 0;
+  for (let dia = 1; dia <= ultimoDia; dia++) {
+    const data = `${periodo}-${String(dia).padStart(2, "0")}`;
+    if (data > hoje) break;
+    soma += porDia.get(data) ?? 0;
+    out.push({ data, valor: soma });
+  }
+  return out;
+}
+
+export async function buscarAcumuladoKwhSunne(ano: number, mes: number, hoje: string): Promise<{ data: string; valor: number }[]> {
+  const rede = await redeSunneEmCache();
+  return acumuladoKwhSunne(rede.deals, ano, mes, hoje);
+}
+
 /** kWh (consumo médio) dos negócios fechados no mês, para a meta de kWh do Energy. */
 export async function kwhSunneDoMes(ano: number, mes: number): Promise<number> {
   const rede = await redeSunneEmCache();

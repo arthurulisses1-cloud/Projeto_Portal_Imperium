@@ -17,7 +17,8 @@ import {
 import { CARGOS_QUE_VENDEM, buscarPaceNegocios, calcularPace, diasUteis, limitesDoMes, type PaceCalculado, type PaceNegocio, type StatusPace } from "@/lib/pace-negocio";
 import { buscarEsforcoNegocio, serieDoMes, type EsforcoNegocio, type IdealFunil, type IndicadorEsforco, type PontoSerie } from "@/lib/pace-esforco";
 import { RealizadoComLeads } from "@/components/negocio/RealizadoComLeads";
-import { PARAMETROS, indiceMes, vendasDoMes } from "@/lib/forecast-negocios";
+import { PARAMETROS, indiceMes, metaKwhForecast, vendasDoMes } from "@/lib/forecast-negocios";
+import { buscarAcumuladoKwhSunne } from "@/lib/sunne";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getViewerContext } from "@/lib/preview";
 
@@ -38,7 +39,7 @@ const STATUS: Record<StatusPace, { texto: string; classe: string }> = {
 };
 
 /** Curva do recebido acumulado contra a linha ideal da meta (ambos em dias corridos do mês). */
-function Curva({ n, ano, mes, cor }: { n: PaceNegocio; ano: number; mes: number; cor: string }) {
+function Curva({ n, ano, mes, cor, rotulo = "Recebido" }: { n: PaceNegocio; ano: number; mes: number; cor: string; rotulo?: string }) {
   const { inicio, fim } = limitesDoMes(ano, mes);
   const diasNoMes = Number(fim.slice(8));
   const total = n.pace.diasUteisTotal || 1;
@@ -57,12 +58,59 @@ function Curva({ n, ano, mes, cor }: { n: PaceNegocio; ano: number; mes: number;
   const ultimo = n.acumulado[n.acumulado.length - 1];
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-24 w-full" role="img" aria-label="Recebido acumulado contra o ritmo ideal da meta">
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-24 w-full" role="img" aria-label={`${rotulo} acumulado contra o ritmo ideal da meta`}>
       <line x1="0" y1={H - 3} x2={W} y2={H - 3} stroke="currentColor" strokeOpacity="0.15" />
       <polyline points={ideal.join(" ")} fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.5" strokeDasharray="4 3" />
       {real.length > 1 && <polyline points={real.join(" ")} fill="none" stroke={`rgb(${cor})`} strokeWidth="2.5" strokeLinejoin="round" />}
       {ultimo && <circle cx={x(Number(ultimo.data.slice(8)))} cy={y(ultimo.valor)} r="3.5" fill={`rgb(${cor})`} />}
     </svg>
+  );
+}
+
+const kwh = (v: number) => `${Math.round(v).toLocaleString("pt-BR")} kWh`;
+
+/** Energy: o mesmo painel do recebido, em kWh vendidos (fechados na Sunne), abaixo do gráfico do recebido. */
+function CartaoKwh({ n, pace, acumulado, ano, mes }: { n: PaceNegocio; pace: PaceCalculado; acumulado: { data: string; valor: number }[]; ano: number; mes: number }) {
+  const cor = NEGOCIO_COR[n.negocio.slug] ?? "201 162 74";
+  const st = STATUS[pace.status];
+  const pct = pace.meta > 0 ? Math.round((pace.recebido / pace.meta) * 100) : null;
+  const pctEsperado = pace.meta > 0 ? Math.round((pace.esperadoAteHoje / pace.meta) * 100) : null;
+  const adaptado: PaceNegocio = { ...n, pace, acumulado };
+  return (
+    <section className="rounded-lg border bg-imperium-surface p-4" style={{ borderColor: `rgb(${cor} / 0.55)` }}>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-base font-semibold" style={{ color: `rgb(${cor})` }}>
+          kWh vendidos · {nomeEquipe(n.negocio)}
+        </p>
+        <span className={`shrink-0 rounded border px-2 py-0.5 text-xs ${st.classe}`}>{st.texto}</span>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-4">
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Realizado</p>
+          <p className="text-lg font-semibold text-stone-100">{kwh(pace.recebido)}</p>
+          <p className="text-[11px] text-stone-500">{pct === null ? "sem meta" : `${pct}% da meta de ${kwh(pace.meta)}`}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Deveria estar em</p>
+          <p className="text-lg font-semibold text-stone-100">{pace.meta > 0 ? kwh(pace.esperadoAteHoje) : "—"}</p>
+          <p className="text-[11px] text-stone-500">{pctEsperado === null ? "" : `${pctEsperado}% da meta`}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Projeção do mês</p>
+          <p className="text-lg font-semibold text-stone-100">{pace.diasUteisDecorridos > 0 ? kwh(pace.projecao) : "—"}</p>
+          <p className="text-[11px] text-stone-500">{pace.meta > 0 && pace.diasUteisDecorridos > 0 ? `${Math.round((pace.projecao / pace.meta) * 100)}% da meta` : ""}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Falta por dia útil</p>
+          <p className="text-lg font-semibold text-stone-100">{pace.necessarioPorDia === null || pace.meta <= 0 ? "—" : kwh(pace.necessarioPorDia)}</p>
+          <p className="text-[11px] text-stone-500">{pace.meta > 0 ? `faltam ${kwh(pace.falta)}` : ""}</p>
+        </div>
+      </div>
+      <div className="mt-3 text-stone-400">
+        <Curva n={adaptado} ano={ano} mes={mes} cor={cor} rotulo="kWh" />
+        <p className="mt-1 text-[10px] text-stone-500">Linha cheia: kWh fechados acumulados (consumo médio dos negócios fechados na Sunne) · tracejada: ritmo da meta</p>
+      </div>
+    </section>
   );
 }
 
@@ -226,6 +274,20 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
     );
   }
 
+  // Energy: segundo painel, em kWh fechados (Sunne) contra a meta de kWh do mês, abaixo do recebido.
+  const kwhPorNegocio = new Map<string, { pace: PaceCalculado; acumulado: { data: string; valor: number }[] }>();
+  for (const d of dados) {
+    const metaKwh = Math.round(metaKwhForecast(d.negocio.slug, ano, mes));
+    if (metaKwh <= 0) continue;
+    try {
+      const acumulado = await buscarAcumuladoKwhSunne(ano, mes, hoje);
+      const realizado = acumulado[acumulado.length - 1]?.valor ?? 0;
+      kwhPorNegocio.set(d.negocio.id, { pace: calcularPace({ meta: metaKwh, recebido: realizado, hoje, ano, mes }), acumulado });
+    } catch (e) {
+      console.error("kWh da Sunne indisponível no Pace:", e);
+    }
+  }
+
   const metaTotal = dados.reduce((s, d) => s + d.pace.meta, 0);
   const recebidoTotal = dados.reduce((s, d) => s + d.pace.recebido, 0);
   const esperadoTotal = dados.reduce((s, d) => s + d.pace.esperadoAteHoje, 0);
@@ -296,9 +358,15 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
       {esforco && dados[0] && <PaceComercial n={dados[0]} esforco={esforco} ano={ano} mes={mes} />}
 
       <div className={`grid gap-4 ${dados.length > 1 ? "lg:grid-cols-2" : ""}`}>
-        {dados.map((d) => (
-          <CartaoPace key={d.negocio.id} n={d} ano={ano} mes={mes} aberto={dados.length === 1} />
-        ))}
+        {dados.map((d) => {
+          const k = kwhPorNegocio.get(d.negocio.id);
+          return (
+            <div key={d.negocio.id} className="space-y-4">
+              <CartaoPace n={d} ano={ano} mes={mes} aberto={dados.length === 1} />
+              {k && <CartaoKwh n={d} pace={k.pace} acumulado={k.acumulado} ano={ano} mes={mes} />}
+            </div>
+          );
+        })}
       </div>
     </main>
   );

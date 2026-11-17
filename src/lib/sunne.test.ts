@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { alcanceDoNegocio, casarOrganizacao, funilDasContas, lerRedeSunne, resumirSunne, vendedoresSunne, type SunneDeal } from "./sunne";
+import { acumuladoKwhSunne, alcanceDoNegocio, casarOrganizacao, funilDasContas, lerRedeSunne, resumirSunne, vendedoresSunne, type SunneDeal } from "./sunne";
 
 // Dados fictícios: nenhum identificador, nome ou valor vem da Sunne real.
 const base: SunneDeal = {
@@ -95,6 +95,23 @@ describe("funilDasContas", () => {
     expect(alcanceDoNegocio(d("1", { stageKey: "meeting_scheduled" }))).toBe(2);
     expect(alcanceDoNegocio(d("2", { funnel: "post_sales", stageKey: "active" }))).toBe(6);
     expect(alcanceDoNegocio(d("3", { isLost: true, funnel: "lost", stageKey: "lost" }))).toBe(-1);
+  });
+});
+
+describe("acumuladoKwhSunne", () => {
+  const fechado = (id: string, closedAt: string, kwh: number, extra: Partial<SunneDeal> = {}): SunneDeal => ({ ...base, id, isClosed: true, closedAt, averageConsumption: kwh, ...extra });
+  it("soma o consumo médio dos fechados por dia e acumula até hoje", () => {
+    const deals = [
+      fechado("a", "2026-11-02T15:00:00Z", 500),
+      fechado("b", "2026-11-02T18:00:00Z", 300),
+      fechado("c", "2026-11-04T15:00:00Z", 200),
+      fechado("d", "2026-10-30T15:00:00Z", 999), // outro mês
+      fechado("e", "2026-11-03T15:00:00Z", 999, { isLost: true }), // perdido
+      fechado("f", "2026-11-03T15:00:00Z", 999, { product: "alugsol" }), // outro produto
+    ];
+    const r = acumuladoKwhSunne(deals, 2026, 11, "2026-11-05");
+    expect(r.map((p) => p.data)).toEqual(["2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04", "2026-11-05"]);
+    expect(r.map((p) => p.valor)).toEqual([0, 800, 800, 1000, 1000]);
   });
 });
 
