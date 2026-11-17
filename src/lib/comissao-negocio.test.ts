@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comissaoDaVenda, dataPagamento, type VendaParaComissao } from "./comissao-negocio";
+import { comissaoDaVenda, dataPagamento, ehFundoMatri, type VendaParaComissao } from "./comissao-negocio";
 
 const base: VendaParaComissao = { id: "v", valor: 10000, canal: "outbound", closerId: "c", closerCargo: "executivo", indicadorId: null };
 const ctx = { headId: "h", diretorId: "d" };
@@ -117,5 +117,27 @@ describe("dataPagamento", () => {
   it("dia 15 do mês seguinte", () => {
     expect(dataPagamento("2026-11-20")).toBe("2026-12-15");
     expect(dataPagamento("2026-12-03")).toBe("2027-01-15");
+  });
+});
+
+describe("Finance, fundo do Matri (sem comissão para o Head)", () => {
+  const venda = { ...base, valor: 6000, valorCliente: 100000, fundoMatri: { sdrId: "s", closerId: "k" } };
+  it("SDR 10%, closer 10% e Diretor 5% da margem; o Head não recebe", () => {
+    const l = comissaoDaVenda("vorp-finance", venda, ctx);
+    expect(l.find((x) => x.beneficiarioId === "s")?.valor).toBeCloseTo(600);
+    expect(l.find((x) => x.beneficiarioId === "k")?.valor).toBeCloseTo(600);
+    expect(l.find((x) => x.beneficiarioId === "d")?.valor).toBeCloseTo(300);
+    expect(l.some((x) => x.beneficiarioId === "h")).toBe(false);
+    expect(soma(l)).toBeCloseTo(1500);
+  });
+  it("quando SDR e closer são a mesma pessoa, ela leva as duas partes (20%)", () => {
+    const l = comissaoDaVenda("vorp-finance", { ...venda, fundoMatri: { sdrId: "k", closerId: "k" } }, ctx);
+    expect(l.filter((x) => x.beneficiarioId === "k").reduce((s, x) => s + x.valor, 0)).toBeCloseTo(1200);
+  });
+  it("reconhece o fundo do Matri, inclusive o novo do Subido", () => {
+    expect(ehFundoMatri("Matri", null, null)).toBe(true);
+    expect(ehFundoMatri("Addebtare", false, "Matri")).toBe(true);
+    expect(ehFundoMatri("Matri", false, "Adianta jus")).toBe(false);
+    expect(ehFundoMatri("Addebtare", null, null)).toBe(false);
   });
 });

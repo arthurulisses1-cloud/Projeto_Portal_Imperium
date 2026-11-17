@@ -21,6 +21,7 @@
 // Ainda NÃO modelado: BDR por SQL da Vorp (R$ 10 inbound / R$ 20 outbound; a
 // validação fica para o fim do mês).
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export type Canal = "outbound" | "inbound" | "indicacao";
 export type PapelComissao = "closer" | "sdr" | "bdr" | "head" | "diretor";
@@ -54,7 +55,21 @@ export type VendaParaComissao = {
   recorrencia?: boolean;
   /** Finance: valor pago ao cliente; a margem base é 6% dele e o que a comissão (valor) exceder é deságio. */
   valorCliente?: number | null;
+  /**
+   * Finance, venda no fundo do Matri (o Head do Finance não tem comissão): SDR e closer do formulário, com a regra
+   * própria (10% SDR, 10% closer, 5% Diretor). null/ausente = regra normal do Finance.
+   */
+  fundoMatri?: { sdrId: string | null; closerId: string | null } | null;
 };
+
+/** Fundo do Matri no Finance (decisão do Diretor, 2026-11-18): sem comissão para o Head; SDR 10, closer 10, Diretor 5. */
+export const FINANCE_FUNDO_MATRI = { sdr: 10, closer: 10, diretor: 5 } as const;
+
+/** O fundo da venda é o do Matri? Vale o fundo novo do Subido, quando o lead mudou de fundo. */
+export function ehFundoMatri(fundoDestino: string | null, mesmoFundo: boolean | null, fundoNovo: string | null): boolean {
+  const efetivo = mesmoFundo === false && fundoNovo ? fundoNovo : fundoDestino;
+  return /matri/i.test(efetivo ?? "");
+}
 
 /** Finance: margem base de 6% sobre o pago ao cliente; 25% dela vira comissão; o deságio tem tabela própria. */
 export const FINANCE = {
@@ -170,6 +185,15 @@ function comissaoFinance(venda: VendaParaComissao, ctx: ContextoNegocio): LinhaC
     if (!id || pct <= 0 || base <= 0) return;
     linhas.push({ beneficiarioId: id, papel, pct, base, valor: (base * pct) / 100, tipo });
   };
+  if (venda.fundoMatri) {
+    const m = venda.fundoMatri;
+    for (const [base, tipo] of [[margem, "base"], [desagio, "desagio"]] as const) {
+      add(m.sdrId, "sdr", FINANCE_FUNDO_MATRI.sdr, base, tipo);
+      add(m.closerId, "closer", FINANCE_FUNDO_MATRI.closer, base, tipo);
+      add(ctx.diretorId, "diretor", FINANCE_FUNDO_MATRI.diretor, base, tipo);
+    }
+    return linhas;
+  }
   const aplicar = (base: number, tipo: "base" | "desagio") => {
     const t = FINANCE[tipo];
     if (liderVendendo) {
@@ -266,6 +290,27 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
     supabase.from("profiles").select("id, full_name"),
   ]);
 
+  // Finance: vendas do fundo do Matri (lidas à parte, pelo lead de origem; a RLS não pode esconder o fundo de ninguém).
+  const fundoMatriPorVenda = new Map<string, { sdrId: string | null; closerId: string | null }>();
+  const idsFinance = (vendas ?? []).filter((v) => lista.some((n) => n.id === v.negocio_id && n.slug === "vorp-finance")).map((v) => v.id as string);
+  if (idsFinance.length > 0) {
+    try {
+      const { data: leadsFundo, error: erroFundo } = await createAdminClient()
+        .from("entrevistas_leads")
+        .select("venda_id, sdr_profile_id, closer_profile_id, fundo_destino, sub_mesmo_fundo, sub_fundo_novo")
+        .in("venda_id", idsFinance);
+      if (!erroFundo) {
+        for (const l of leadsFundo ?? []) {
+          if (ehFundoMatri(l.fundo_destino as string | null, l.sub_mesmo_fundo as boolean | null, l.sub_fundo_novo as string | null)) {
+            fundoMatriPorVenda.set(l.venda_id as string, { sdrId: (l.sdr_profile_id as string | null) ?? null, closerId: (l.closer_profile_id as string | null) ?? null });
+          }
+        }
+      }
+    } catch (e) {
+      console.error("buscarComissoesNegocios: fundo do Matri indisponível:", e);
+    }
+  }
+
   const nomePor = new Map((perfis ?? []).map((p) => [p.id as string, p.full_name as string]));
   const diretorId = (diretor ?? [])[0]?.id ?? null;
 
@@ -298,6 +343,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
         primeiroContrato: v.primeiro_contrato ?? true,
         recorrencia: v.recorrencia ?? false,
         valorCliente: v.valor_cliente === null || v.valor_cliente === undefined ? null : Number(v.valor_cliente),
+        fundoMatri: fundoMatriPorVenda.get(v.id as string) ?? null,
       };
       for (const l of comissaoDaVenda(n.slug, venda, ctx)) {
         if (!l.beneficiarioId) continue; // venda sem dono (vendedor sem login): sem comissão de closer
