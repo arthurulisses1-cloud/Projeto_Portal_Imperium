@@ -482,14 +482,45 @@ export default async function NegocioDashboardPage({
               {rk.porPessoa.length === 0 ? (
                 <p className="mt-2 text-sm text-stone-500">{rk.fonte === "Pipefácil" ? "Nenhuma reunião no mês." : "Ninguém registrou ainda."}</p>
               ) : (
-                <ol className="mt-2 space-y-1 text-sm">
-                  {rk.porPessoa.slice(0, 8).map((p, i) => (
-                    <li key={p.nome} className="flex items-center gap-2">
-                      <span className="w-5 text-xs text-stone-500">{i + 1}</span>
-                      <span className="min-w-0 flex-1 truncate text-stone-200">{p.nome}</span>
-                      <RealizadoComLeads valor={num(p.realizado)} leads={p.leads} />
-                    </li>
-                  ))}
+                <ol className="mt-3 space-y-1.5 text-sm">
+                  {rk.porPessoa.slice(0, 8).map((p, i) => {
+                    const lider = rk.porPessoa[0]?.realizado || 1;
+                    const medalha = MEDALHAS[i];
+                    return (
+                      <li
+                        key={p.nome}
+                        className={`relative rounded-md px-2 py-1.5 ${i === 0 ? "border border-gold/40 bg-gold/10" : "border border-transparent"}`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          {medalha ? (
+                            <span
+                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-stone-950 shadow"
+                              style={{ background: `radial-gradient(circle at 35% 30%, ${medalha.brilho}, ${medalha.cor} 70%)`, boxShadow: `0 0 0 2px ${medalha.cor}55` }}
+                              title={`${i + 1}º lugar`}
+                            >
+                              {i + 1}
+                            </span>
+                          ) : (
+                            <span className="flex h-6 w-6 shrink-0 items-center justify-center text-xs text-stone-500">{i + 1}</span>
+                          )}
+                          <span className={`min-w-0 flex-1 truncate ${i === 0 ? "font-semibold text-gold-bright" : "text-stone-200"}`}>
+                            {p.nome}
+                            {i === 0 && p.realizado > 0 && <span className="ml-1.5 text-[10px] uppercase tracking-widest text-gold">líder</span>}
+                          </span>
+                          <span className={i === 0 ? "text-base font-semibold" : ""}>
+                            <RealizadoComLeads valor={num(p.realizado)} leads={p.leads} />
+                          </span>
+                        </div>
+                        {/* Barra: quanto cada um tem em relação ao líder */}
+                        <div className="ml-[2.125rem] mt-1 h-1 overflow-hidden rounded-full bg-imperium-raised">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${Math.max(4, (p.realizado / lider) * 100)}%`, background: medalha ? medalha.cor : `rgb(${cor} / 0.6)` }}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ol>
               )}
             </section>
@@ -696,6 +727,13 @@ function RealizadoComLeads({ valor, leads }: { valor: string; leads?: LeadEtapa[
     </span>
   );
 }
+
+/** Ouro, prata e bronze dos três primeiros do ranking. */
+const MEDALHAS: ({ cor: string; brilho: string } | undefined)[] = [
+  { cor: "#d4a72c", brilho: "#fff1b8" },
+  { cor: "#a8b0ba", brilho: "#f4f6f8" },
+  { cor: "#b8733a", brilho: "#f6d2b0" },
+];
 
 const LABEL_RANKING: Record<string, string> = { reunioes_agendadas: "Reuniões agendadas", reunioes_realizadas: "Reuniões realizadas" };
 
