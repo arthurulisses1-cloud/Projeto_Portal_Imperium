@@ -95,6 +95,8 @@ export type PessoaPace = {
   nome: string;
   cargo: string;
   recebido: number;
+  /** Quantidade de vendas no mês. */
+  vendas: number;
   /** Meta individual (divisão igual entre quem vende); null para SDR/BDR/pré-vendas. */
   meta: number | null;
 };
@@ -109,7 +111,7 @@ export type PaceNegocio = {
 
 /** Cargos que vendem e dividem a meta em partes iguais. SDR e BDR ficam de fora
  *  (a meta deles é de esforço/canal, não de recebimento). */
-const CARGOS_QUE_VENDEM = ["executivo", "closer", "head"];
+export const CARGOS_QUE_VENDEM = ["executivo", "closer", "head"];
 
 export async function buscarPaceNegocios(
   supabase: SupabaseClient,
@@ -163,9 +165,13 @@ export async function buscarPaceNegocios(
 
     const porDia = new Map<string, number>();
     const porPessoa = new Map<string, number>();
+    const qtdPorPessoa = new Map<string, number>();
     for (const v of doNegocio) {
       porDia.set(v.data, (porDia.get(v.data) ?? 0) + Number(v.valor));
-      if (v.profile_id) porPessoa.set(v.profile_id, (porPessoa.get(v.profile_id) ?? 0) + Number(v.valor));
+      if (v.profile_id) {
+        porPessoa.set(v.profile_id, (porPessoa.get(v.profile_id) ?? 0) + Number(v.valor));
+        qtdPorPessoa.set(v.profile_id, (qtdPorPessoa.get(v.profile_id) ?? 0) + 1);
+      }
     }
     const acumulado: { data: string; valor: number }[] = [];
     let soma = 0;
@@ -184,6 +190,7 @@ export async function buscarPaceNegocios(
         nome: m.nome,
         cargo: m.cargo,
         recebido: porPessoa.get(m.id) ?? 0,
+        vendas: qtdPorPessoa.get(m.id) ?? 0,
         meta: CARGOS_QUE_VENDEM.includes(m.cargo) ? metaIndividual : null,
       }))
       .sort((a, b) => b.recebido - a.recebido || a.nome.localeCompare(b.nome, "pt-BR"));

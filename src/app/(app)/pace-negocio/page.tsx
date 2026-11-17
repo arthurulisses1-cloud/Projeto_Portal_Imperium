@@ -13,7 +13,10 @@ import {
   nomeEquipe,
   type CargoNegocio,
 } from "@/lib/negocios";
-import { buscarPaceNegocios, diasUteis, limitesDoMes, type PaceNegocio, type StatusPace } from "@/lib/pace-negocio";
+import { CARGOS_QUE_VENDEM, buscarPaceNegocios, calcularPace, diasUteis, limitesDoMes, type PaceCalculado, type PaceNegocio, type StatusPace } from "@/lib/pace-negocio";
+import { buscarEsforcoNegocio, type EsforcoNegocio, type IndicadorEsforco } from "@/lib/pace-esforco";
+import { PARAMETROS, indiceMes, vendasDoMes } from "@/lib/forecast-negocios";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -168,6 +171,15 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
   const escolhidos = foco ? [foco] : visiveis;
 
   const dados = await buscarPaceNegocios(supabase, ano, mes, hoje, escolhidos.map((n) => n.slug));
+  // Pace Comercial (esforço + closer) só com um negócio em foco que tenha times por canal configurados.
+  let esforco: EsforcoNegocio | null = null;
+  if (foco && dados.length === 1) {
+    try {
+      esforco = await buscarEsforcoNegocio(createAdminClient(), foco.slug, foco.id, { ano, mes, hoje });
+    } catch (e) {
+      console.error("pace de esforço falhou:", e);
+    }
+  }
 
   const metaTotal = dados.reduce((s, d) => s + d.pace.meta, 0);
   const recebidoTotal = dados.reduce((s, d) => s + d.pace.recebido, 0);
@@ -238,11 +250,232 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
         </div>
       )}
 
+      {esforco && dados[0] && <PaceComercial n={dados[0]} esforco={esforco} ano={ano} mes={mes} />}
+
       <div className={`grid gap-4 ${dados.length > 1 ? "lg:grid-cols-2" : ""}`}>
         {dados.map((d) => (
           <CartaoPace key={d.negocio.id} n={d} ano={ano} mes={mes} aberto={dados.length === 1} />
         ))}
       </div>
     </main>
+  );
+}
+
+// ------------------------------------------------------------ Pace Comercial (por B.U)
+
+const CANAL_NOME: Record<string, string> = { outbound: "Outbound", inbound: "Inbound", indicacao: "Indicação" };
+const dec = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+const COR_STATUS: Record<StatusPace, string> = {
+  sem_meta: "rgb(120 113 108)",
+  adiantado: "rgb(var(--c-success-bright))",
+  no_ritmo: "rgb(251 191 36)",
+  atrasado: "rgb(var(--c-wine-bright))",
+  critico: "rgb(var(--c-wine-bright))",
+};
+
+/** Barra do realizado sobre a meta, com a marca de onde deveria estar hoje. */
+function BarraPace({ p }: { p: PaceCalculado }) {
+  if (!(p.meta > 0)) return null;
+  const feito = Math.min(100, (p.recebido / p.meta) * 100);
+  const esperado = Math.min(100, (p.esperadoAteHoje / p.meta) * 100);
+  return (
+    <div className="relative mt-1.5 h-2 overflow-hidden rounded-full bg-imperium-raised" title={`Deveria estar em ${dec(p.esperadoAteHoje)} hoje`}>
+      <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${feito}%`, background: COR_STATUS[p.status] }} />
+      <div className="absolute inset-y-0 w-0.5 bg-stone-100" style={{ left: `${esperado}%` }} />
+    </div>
+  );
+}
+
+function SeloStatus({ status }: { status: StatusPace }) {
+  const st = STATUS[status];
+  return <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${st.classe}`}>{st.texto}</span>;
+}
+
+function linhaFalta(p: PaceCalculado, fmt: (v: number) => string) {
+  if (!(p.meta > 0)) return "sem meta no mês";
+  if (p.falta <= 0) return "meta batida";
+  return p.necessarioPorDia === null ? `faltaram ${fmt(p.falta)}` : `faltam ${fmt(p.falta)} · ${fmt(p.necessarioPorDia)} por dia útil`;
+}
+
+/** Cartão de um indicador do time no topo (recebido, agendadas, realizadas). */
+function CartaoIndicador({ titulo, p, fmt, canais }: { titulo: string; p: PaceCalculado; fmt: (v: number) => string; canais?: IndicadorEsforco["canais"] }) {
+  return (
+    <div className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] uppercase tracking-widest text-stone-500">{titulo}</p>
+        <SeloStatus status={p.status} />
+      </div>
+      <p className="mt-1 text-2xl font-semibold text-stone-100">
+        {fmt(p.recebido)} {p.meta > 0 && <span className="text-sm font-normal text-stone-500">de {fmt(p.meta)}</span>}
+      </p>
+      <BarraPace p={p} />
+      <p className="mt-1.5 text-[11px] text-stone-400">
+        {p.meta > 0 ? `${Math.round((p.recebido / p.meta) * 100)}% da meta · deveria estar em ${fmt(p.esperadoAteHoje)}` : ""}
+      </p>
+      <p className="text-[11px] text-stone-500">{linhaFalta(p, fmt)}</p>
+      {canais && canais.length > 0 && (
+        <p className="mt-1.5 text-[11px] text-stone-500">
+          {canais.map((c, i) => (
+            <span key={c.canal}>
+              {i > 0 && " · "}
+              {CANAL_NOME[c.canal]} <span className="text-stone-300">{dec(c.realizado)}</span>
+              {c.meta != null ? ` de ${dec(c.meta)}` : ""}
+            </span>
+          ))}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Bloco de um indicador dentro do cartão de uma pessoa: o total com pace e, embaixo, os canais. */
+function BlocoPessoa({ titulo, ind }: { titulo: string; ind: IndicadorEsforco }) {
+  const p = ind.pace;
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-stone-300">{titulo}</span>
+        <SeloStatus status={p.status} />
+      </div>
+      <p className="mt-0.5 text-lg font-semibold text-stone-100">
+        {dec(p.recebido)} {p.meta > 0 && <span className="text-xs font-normal text-stone-500">de {dec(p.meta)}</span>}
+      </p>
+      <BarraPace p={p} />
+      <p className="mt-1 text-[11px] text-stone-500">
+        {p.meta > 0 ? `deveria estar em ${dec(p.esperadoAteHoje)} · ` : ""}
+        {linhaFalta(p, dec)}
+      </p>
+      {ind.canais.length > 1 && (
+        <p className="mt-0.5 text-[11px] text-stone-500">
+          {ind.canais.map((c, i) => (
+            <span key={c.canal}>
+              {i > 0 && " · "}
+              {CANAL_NOME[c.canal]} <span className="text-stone-300">{dec(c.realizado)}</span>
+              {c.meta != null ? ` de ${dec(c.meta)}` : ""}
+            </span>
+          ))}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Avatar({ nome, cor }: { nome: string; cor: string }) {
+  return (
+    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold" style={{ background: `rgb(${cor} / 0.18)`, color: `rgb(${cor})` }}>
+      {nome.trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: EsforcoNegocio; ano: number; mes: number }) {
+  const cor = NEGOCIO_COR[n.negocio.slug] ?? "201 162 74";
+  const p = n.pace;
+  const pctMes = p.diasUteisTotal > 0 ? p.diasUteisDecorridos / p.diasUteisTotal : 0;
+  const hoje = hojeBR();
+  // Closer: quem vende no portal (closer, executivo, head), com a meta individual de recebimento.
+  const closers = n.pessoas.filter((x) => CARGOS_QUE_VENDEM.includes(x.cargo));
+  const par = PARAMETROS[n.negocio.slug];
+  const i = indiceMes(ano, mes);
+  const vendasPlanejadas = par && i >= 0 ? vendasDoMes(par, i).total : null;
+  const ticketPlanejado = vendasPlanejadas && vendasPlanejadas > 0 && p.meta > 0 ? p.meta / vendasPlanejadas : null;
+  return (
+    <div className="space-y-4">
+      {/* Calendário do mês */}
+      <div className="rounded-lg border border-imperium-line bg-imperium-surface px-4 py-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
+          <span className="text-stone-300">
+            {p.diasUteisDecorridos >= p.diasUteisTotal
+              ? `Mês encerrado · ${p.diasUteisTotal} dias úteis`
+              : p.diasUteisDecorridos === 0
+                ? `Não começou · ${p.diasUteisTotal} dias úteis`
+                : `${p.diasUteisDecorridos}º dia útil de ${p.diasUteisTotal} · ${p.diasUteisRestantes} restantes`}
+          </span>
+          <span className="text-stone-500">{Math.round(pctMes * 100)}% do mês transcorrido · sem feriados nacionais</span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-imperium-raised">
+          <div className="h-full rounded-full" style={{ width: `${Math.min(100, pctMes * 100)}%`, background: `rgb(${cor})` }} />
+        </div>
+      </div>
+
+      {/* Topo: recebido, agendadas e realizadas do time */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <CartaoIndicador titulo="Recebido" p={p} fmt={moeda} />
+        <CartaoIndicador titulo="Reuniões agendadas" p={esforco.time.reunioes_agendadas.pace} fmt={dec} canais={esforco.time.reunioes_agendadas.canais} />
+        <CartaoIndicador titulo="Reuniões realizadas" p={esforco.time.reunioes_realizadas.pace} fmt={dec} canais={esforco.time.reunioes_realizadas.canais} />
+      </div>
+
+      {/* Pré-vendas: o pace total de cada um (um canal compensa o outro) e os canais embaixo */}
+      {esforco.preVendas.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">Pré-vendas · meta do canal dividida entre quem trabalha nele</p>
+          <div className="grid gap-4 md:grid-cols-3">
+            {esforco.preVendas.map((pv) => (
+              <section key={pv.id} className="space-y-3 rounded-lg border border-imperium-line bg-imperium-surface p-4">
+                <div className="flex items-center gap-2.5">
+                  <Avatar nome={pv.nome} cor={cor} />
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-stone-100">{pv.nome}</p>
+                    <p className="text-[11px] text-stone-500">
+                      Pré-vendas · {pv.indicadores.reunioes_agendadas.canais.filter((c) => c.meta != null).map((c) => CANAL_NOME[c.canal]).join(" e ")}
+                    </p>
+                  </div>
+                </div>
+                <BlocoPessoa titulo="Reuniões agendadas" ind={pv.indicadores.reunioes_agendadas} />
+                <BlocoPessoa titulo="Reuniões realizadas" ind={pv.indicadores.reunioes_realizadas} />
+              </section>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Closer: recebido com pace, vendas e ticket contra o planejado */}
+      {closers.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">Closer</p>
+          <div className="grid gap-4 md:grid-cols-3">
+            {closers.map((c) => {
+              const pc = calcularPace({ meta: c.meta ?? 0, recebido: c.recebido, hoje, ano, mes });
+              const ticket = c.vendas > 0 ? c.recebido / c.vendas : null;
+              const vendasMeta = vendasPlanejadas != null && closers.length > 0 ? vendasPlanejadas / closers.length : null;
+              return (
+                <section key={c.id} className="space-y-3 rounded-lg border border-imperium-line bg-imperium-surface p-4">
+                  <div className="flex items-center gap-2.5">
+                    <Avatar nome={c.nome} cor={cor} />
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-stone-100">{c.nome}</p>
+                      <p className="text-[11px] text-stone-500">{CARGO_LABEL[c.cargo as CargoNegocio] ?? c.cargo}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-stone-300">Recebido</span>
+                      <SeloStatus status={pc.status} />
+                    </div>
+                    <p className="mt-0.5 text-lg font-semibold text-stone-100">
+                      {moeda(pc.recebido)} {pc.meta > 0 && <span className="text-xs font-normal text-stone-500">de {moeda(pc.meta)}</span>}
+                    </p>
+                    <BarraPace p={pc} />
+                    <p className="mt-1 text-[11px] text-stone-500">{linhaFalta(pc, moeda)}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-stone-500">Vendas</p>
+                      <p className="font-semibold text-stone-100">{c.vendas}</p>
+                      <p className="text-[11px] text-stone-500">{vendasMeta != null ? `planejado ${dec(vendasMeta)}` : ""}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-widest text-stone-500">Ticket médio</p>
+                      <p className="font-semibold text-stone-100">{ticket === null ? "—" : moeda(ticket)}</p>
+                      <p className="text-[11px] text-stone-500">{ticketPlanejado != null ? `planejado ${moeda(ticketPlanejado)}` : ""}</p>
+                    </div>
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
