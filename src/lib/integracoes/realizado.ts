@@ -232,9 +232,9 @@ export function contarPorDia(itens: { data: string; canal: CanalPortal; etapa: s
 export type PessoaRanking = { pessoa: string | null; leads: { nome: string; data: string; canal: CanalPortal }[] };
 
 /**
- * Ranking de pré-vendas por etapa (agendadas, realizadas): cada contagem do mês vai para quem era o
- * responsável pelo lead no momento em que ele chegou em Reunião Agendada (quem agendou); a realizada vai
- * para o mesmo pré-vendas. `responsaveis`: por lead, [instante, responsável] de cada evento do histórico.
+ * Ranking de pré-vendas por etapa (agendadas, realizadas, vendas): cada contagem do mês vai para quem era o
+ * responsável pelo lead no momento em que ele chegou em Reunião Agendada (quem agendou); a realizada e a
+ * venda (venda originada) vão para o mesmo pré-vendas. `responsaveis`: por lead, [instante, responsável] de cada evento do histórico.
  * Sem histórico do momento: o campo pré-vendas do lead, senão o responsável atual. Do maior para o menor.
  */
 export function rankingPreVendas(
@@ -242,7 +242,7 @@ export function rankingPreVendas(
   eventos: EventoCrm[],
   cfg: ConfigCrm,
   responsaveis: Map<string, [string, string][]>,
-  etapas: string[] = ["reunioes_agendadas", "reunioes_realizadas"],
+  etapas: string[] = ["reunioes_agendadas", "reunioes_realizadas", "vendas"],
 ): Record<string, PessoaRanking[]> {
   const marcos = marcosPorLead(eventos, cfg);
   const quemAgendou = (d: DealCrm): string | null => {

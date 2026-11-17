@@ -14,7 +14,8 @@ import {
   type CargoNegocio,
 } from "@/lib/negocios";
 import { CARGOS_QUE_VENDEM, buscarPaceNegocios, calcularPace, diasUteis, limitesDoMes, type PaceCalculado, type PaceNegocio, type StatusPace } from "@/lib/pace-negocio";
-import { buscarEsforcoNegocio, type EsforcoNegocio, type IndicadorEsforco } from "@/lib/pace-esforco";
+import { buscarEsforcoNegocio, serieDoMes, type EsforcoNegocio, type IdealFunil, type IndicadorEsforco, type PontoSerie } from "@/lib/pace-esforco";
+import { RealizadoComLeads } from "@/components/negocio/RealizadoComLeads";
 import { PARAMETROS, indiceMes, vendasDoMes } from "@/lib/forecast-negocios";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -379,6 +380,14 @@ function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: Esfo
   const i = indiceMes(ano, mes);
   const vendasPlanejadas = par && i >= 0 ? vendasDoMes(par, i).total : null;
   const ticketPlanejado = vendasPlanejadas && vendasPlanejadas > 0 && p.meta > 0 ? p.meta / vendasPlanejadas : null;
+  // Recebido por dia (do acumulado em dias corridos) para o gráfico dia útil a dia útil.
+  const serieRecebido = serieDoMes(
+    p.meta,
+    n.acumulado.map((a, k) => [a.data, a.valor - (k > 0 ? n.acumulado[k - 1].valor : 0)] as [string, number]),
+    ano,
+    mes,
+    hoje,
+  );
   return (
     <div className="space-y-4">
       {/* Calendário do mês */}
@@ -429,6 +438,27 @@ function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: Esfo
         </div>
       )}
 
+      {/* Funis do mês: Agendadas → Realizadas → Vendas, do time e de cada pré-vendas */}
+      <div>
+        <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">Agendadas → realizadas → vendas · conversão ideal pelas metas do forecast</p>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <FunilPace titulo="Time" subtitulo="todos os canais" ind={esforco.time} ideal={esforco.ideal} cor={cor} destaque />
+          {esforco.preVendas.map((pv) => (
+            <FunilPace key={pv.id} titulo={pv.nome} subtitulo="vendas originadas: as que ele agendou" ind={pv.indicadores} ideal={pv.ideal} cor={cor} />
+          ))}
+        </div>
+      </div>
+
+      {/* Esperado × realizado acumulado, dia útil a dia útil */}
+      <div>
+        <p className="mb-2 text-[10px] uppercase tracking-widest text-stone-500">Esperado × realizado, dia útil a dia útil</p>
+        <div className="grid gap-4 md:grid-cols-3">
+          <GraficoSerie titulo="Recebido" serie={serieRecebido} cor={cor} fmt={moeda} />
+          <GraficoSerie titulo="Reuniões agendadas" serie={esforco.time.reunioes_agendadas.serie ?? []} cor={cor} fmt={dec} />
+          <GraficoSerie titulo="Reuniões realizadas" serie={esforco.time.reunioes_realizadas.serie ?? []} cor={cor} fmt={dec} />
+        </div>
+      </div>
+
       {/* Closer: recebido com pace, vendas e ticket contra o planejado */}
       {closers.length > 0 && (
         <div>
@@ -476,6 +506,117 @@ function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: Esfo
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+const ETAPAS_DO_FUNIL: { chave: "reunioes_agendadas" | "reunioes_realizadas" | "vendas"; nome: string }[] = [
+  { chave: "reunioes_agendadas", nome: "Agendadas" },
+  { chave: "reunioes_realizadas", nome: "Realizadas" },
+  { chave: "vendas", nome: "Vendas" },
+];
+
+function corConversao(real: number | null, ideal: number | null) {
+  if (real === null || ideal === null || ideal <= 0) return "text-stone-300";
+  if (real >= ideal) return "text-success-bright";
+  if (real >= ideal * 0.85) return "text-amber-400";
+  return "text-wine-bright";
+}
+const pctTxt = (v: number | null) => (v === null ? "—" : `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`);
+
+/** Funil Agendadas → Realizadas → Vendas contra a meta, com a conversão real × ideal entre as etapas. */
+function FunilPace({
+  titulo,
+  subtitulo,
+  ind,
+  ideal,
+  cor,
+  destaque = false,
+}: {
+  titulo: string;
+  subtitulo: string;
+  ind: Record<"reunioes_agendadas" | "reunioes_realizadas" | "vendas", IndicadorEsforco>;
+  ideal: IdealFunil;
+  cor: string;
+  destaque?: boolean;
+}) {
+  const larguras = [100, 78, 56];
+  return (
+    <section className="rounded-lg border bg-imperium-surface p-4" style={{ borderColor: destaque ? `rgb(${cor} / 0.55)` : undefined }}>
+      <p className="truncate font-semibold" style={{ color: destaque ? `rgb(${cor})` : undefined }}>
+        {titulo}
+      </p>
+      <p className="text-[11px] text-stone-500">{subtitulo}</p>
+      <div className="mt-3 space-y-1">
+        {ETAPAS_DO_FUNIL.map((e, i) => {
+          const p = ind[e.chave].pace;
+          const ant = i > 0 ? ind[ETAPAS_DO_FUNIL[i - 1].chave].pace.recebido : null;
+          const real = ant !== null && ant > 0 ? p.recebido / ant : null;
+          const id = i === 1 ? ideal.realizadas : i === 2 ? ideal.vendas : null;
+          return (
+            <div key={e.chave}>
+              {i > 0 && (
+                <p className="py-0.5 text-center text-[10px] text-stone-500">
+                  ↓ <span className={corConversao(real, id)}>{pctTxt(real)}</span> · ideal {pctTxt(id)}
+                </p>
+              )}
+              {/* Faixa em forma de funil: largura fixa por etapa; o preenchimento é o realizado sobre a meta. */}
+              <div className="mx-auto" style={{ width: `${larguras[i]}%` }}>
+                <div className="relative overflow-hidden rounded-md border border-imperium-line bg-imperium-raised px-2.5 py-1.5">
+                  {p.meta > 0 && (
+                    <div className="absolute inset-y-0 left-0" style={{ width: `${Math.min(100, (p.recebido / p.meta) * 100)}%`, background: `rgb(${cor} / 0.28)` }} />
+                  )}
+                  <div className="relative flex items-center justify-between gap-2 text-xs">
+                    <span className="text-stone-300">{e.nome}</span>
+                    <span className="tabular-nums">
+                      <RealizadoComLeads valor={dec(p.recebido)} leads={ind[e.chave].leads} />
+                      {p.meta > 0 && <span className="text-stone-500"> de {dec(p.meta)}</span>}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** Gráfico do esperado (tracejado) contra o realizado acumulado (cheio), um ponto por dia útil. */
+function GraficoSerie({ titulo, serie, cor, fmt }: { titulo: string; serie: PontoSerie[]; cor: string; fmt: (v: number) => string }) {
+  const W = 300;
+  const H = 110;
+  const PAD = 4;
+  const n = serie.length;
+  const topo = Math.max(1, ...serie.map((s) => Math.max(s.esperado, s.realizado ?? 0)));
+  const x = (i: number) => PAD + (i / Math.max(1, n - 1)) * (W - 2 * PAD);
+  const y = (v: number) => H - PAD - (v / topo) * (H - 2 * PAD - 10);
+  const esperado = serie.map((s, i) => `${x(i).toFixed(1)},${y(s.esperado).toFixed(1)}`).join(" ");
+  const andados = serie.map((s, i) => ({ s, i })).filter((p) => p.s.realizado !== null);
+  const realizado = andados.map(({ s, i }) => `${x(i).toFixed(1)},${y(s.realizado as number).toFixed(1)}`).join(" ");
+  const ultimo = andados[andados.length - 1];
+  const fimMes = serie[n - 1];
+  return (
+    <div className="rounded-lg border border-imperium-line bg-imperium-surface p-4 text-stone-400">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-xs text-stone-300">{titulo}</p>
+        {ultimo && (
+          <p className="text-[11px] text-stone-500">
+            <span className="text-stone-100">{fmt(ultimo.s.realizado as number)}</span> de {fmt(ultimo.s.esperado)} esperados até hoje
+          </p>
+        )}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 h-28 w-full" role="img" aria-label={`${titulo}: esperado e realizado acumulados por dia útil`}>
+        <line x1={PAD} y1={H - PAD} x2={W - PAD} y2={H - PAD} stroke="currentColor" strokeOpacity="0.15" />
+        <polyline points={esperado} fill="none" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.5" strokeDasharray="4 3" />
+        {andados.length > 1 && <polyline points={realizado} fill="none" stroke={`rgb(${cor})`} strokeWidth="2.5" strokeLinejoin="round" />}
+        {ultimo && <circle cx={x(ultimo.i)} cy={y(ultimo.s.realizado as number)} r="3.5" fill={`rgb(${cor})`} />}
+      </svg>
+      <div className="mt-1 flex justify-between text-[10px] text-stone-500">
+        <span>1º dia útil</span>
+        <span>meta {fimMes ? fmt(fimMes.esperado) : "—"} no {n}º dia útil</span>
+      </div>
     </div>
   );
 }

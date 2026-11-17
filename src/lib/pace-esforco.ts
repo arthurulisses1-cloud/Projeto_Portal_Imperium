@@ -6,8 +6,9 @@
 //    responsável pelo lead no agendamento), aberto por canal;
 //  - o pace principal da pessoa é o TOTAL (um canal pode compensar o outro); os canais são o detalhe.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { funisDoMes } from "@/lib/funil-negocio";
-import { calcularPace, type PaceCalculado } from "@/lib/pace-negocio";
+import { funisDoMes, type LeadEtapa } from "@/lib/funil-negocio";
+import { FERIADOS_NACIONAIS, calcularPace, limitesDoMes, type PaceCalculado } from "@/lib/pace-negocio";
+import { ehFimDeSemana, paraDataUTC } from "@/lib/data-br";
 import type { CanalPortal } from "@/lib/integracoes/config";
 import type { RankingGravado } from "@/lib/integracoes/leads-funil";
 
@@ -23,29 +24,74 @@ export const TIMES_POR_CANAL: Record<string, Partial<Record<CanalPortal, string[
   },
 };
 
+/** Etapas com cartão de pace (topo e pré-vendas). */
 export const ETAPAS_ESFORCO = ["reunioes_agendadas", "reunioes_realizadas"] as const;
-export type EtapaEsforco = (typeof ETAPAS_ESFORCO)[number];
+/** Etapas dos funis Agendadas → Realizadas → Vendas. */
+export const ETAPAS_FUNIL = ["reunioes_agendadas", "reunioes_realizadas", "vendas"] as const;
+export type EtapaEsforco = (typeof ETAPAS_FUNIL)[number];
 
 export type CanalDoPace = { canal: CanalPortal; meta: number | null; realizado: number };
-export type IndicadorEsforco = { pace: PaceCalculado; canais: CanalDoPace[] };
-export type PreVendasPace = { id: string; nome: string; indicadores: Record<EtapaEsforco, IndicadorEsforco> };
-export type EsforcoNegocio = { time: Record<EtapaEsforco, IndicadorEsforco>; preVendas: PreVendasPace[] };
+/** Ponto do gráfico: n-ésimo dia útil, esperado acumulado e realizado acumulado (null = dia que não chegou). */
+export type PontoSerie = { dia: string; esperado: number; realizado: number | null };
+export type IndicadorEsforco = { pace: PaceCalculado; canais: CanalDoPace[]; leads?: LeadEtapa[]; serie?: PontoSerie[] };
+/** Conversão ideal entre as etapas do funil, pela razão das metas do forecast. */
+export type IdealFunil = { realizadas: number | null; vendas: number | null };
+export type PreVendasPace = { id: string; nome: string; indicadores: Record<EtapaEsforco, IndicadorEsforco>; ideal: IdealFunil };
+export type EsforcoNegocio = { time: Record<EtapaEsforco, IndicadorEsforco>; ideal: IdealFunil; preVendas: PreVendasPace[] };
 
-type LinhaRealizado = { canal: string; etapa: string; quantidade: number };
+type LinhaRealizado = { canal: string; etapa: string; quantidade: number; data?: string };
 type Ctx = { ano: number; mes: number; hoje: string };
 
 const ORDEM_CANAIS: CanalPortal[] = ["outbound", "inbound", "indicacao"];
+const NOME_CANAL: Record<string, string> = { outbound: "Outbound", inbound: "Inbound", indicacao: "Indicação" };
 
 /** Metas do forecast de cada etapa de esforço por canal (pura). */
 export function metasPorCanal(slug: string, ano: number, mes: number): Record<EtapaEsforco, Partial<Record<CanalPortal, number>>> {
-  const out: Record<EtapaEsforco, Partial<Record<CanalPortal, number>>> = { reunioes_agendadas: {}, reunioes_realizadas: {} };
+  const out: Record<EtapaEsforco, Partial<Record<CanalPortal, number>>> = { reunioes_agendadas: {}, reunioes_realizadas: {}, vendas: {} };
   for (const f of funisDoMes(slug, ano, mes)) {
-    for (const etapa of ETAPAS_ESFORCO) {
+    for (const etapa of ETAPAS_FUNIL) {
       const meta = f.etapas.find((e) => e.chave === etapa)?.meta;
       if (meta != null) out[etapa][f.canal] = meta;
     }
   }
   return out;
+}
+
+/** Dias úteis do mês (seg-sex, sem feriado nacional), em ordem. */
+export function diasUteisDoMes(ano: number, mes: number): string[] {
+  const { inicio, fim } = limitesDoMes(ano, mes);
+  const out: string[] = [];
+  for (let d = paraDataUTC(inicio); d.toISOString().slice(0, 10) <= fim; d.setUTCDate(d.getUTCDate() + 1)) {
+    const dia = d.toISOString().slice(0, 10);
+    if (!ehFimDeSemana(dia) && !FERIADOS_NACIONAIS.has(dia)) out.push(dia);
+  }
+  return out;
+}
+
+/**
+ * Esperado × realizado acumulado, dia útil a dia útil (pura). `itens`: [dia, valor]. O realizado do dia
+ * útil inclui o que caiu antes dele (fim de semana entra no dia útil seguinte); o último dia andado vai
+ * até hoje e o último dia do mês, até o fim dele. Dia que ainda não chegou fica sem realizado.
+ */
+export function serieDoMes(meta: number, itens: [string, number][], ano: number, mes: number, hoje: string): PontoSerie[] {
+  const dias = diasUteisDoMes(ano, mes);
+  const decorridos = dias.filter((d) => d <= hoje).length;
+  const ate = (limite: string) => itens.reduce((s, [dia, v]) => s + (dia <= limite ? v : 0), 0);
+  return dias.map((dia, i) => {
+    const andou = i < decorridos;
+    const limite = i === dias.length - 1 && andou ? "9999-12-31" : i === decorridos - 1 ? hoje : dia;
+    return { dia, esperado: dias.length ? (meta * (i + 1)) / dias.length : 0, realizado: andou ? ate(limite) : null };
+  });
+}
+
+/** Conversão ideal: realizadas ÷ agendadas (só canais com agendamento) e vendas ÷ realizadas, pelas metas. */
+function idealDe(ind: Record<EtapaEsforco, IndicadorEsforco>): IdealFunil {
+  const meta = (e: EtapaEsforco, so?: (c: CanalDoPace) => boolean) => ind[e].canais.filter((c) => !so || so(c)).reduce((s, c) => s + (c.meta ?? 0), 0);
+  const comAgendamento = new Set(ind.reunioes_agendadas.canais.filter((c) => c.meta != null).map((c) => c.canal));
+  const ag = meta("reunioes_agendadas");
+  const realComAg = meta("reunioes_realizadas", (c) => comAgendamento.has(c.canal));
+  const real = meta("reunioes_realizadas");
+  return { realizadas: ag > 0 ? realComAg / ag : null, vendas: real > 0 ? meta("vendas") / real : null };
 }
 
 /**
@@ -58,13 +104,14 @@ export function montarEsforco(
   linhas: LinhaRealizado[],
   ranking: RankingGravado | null,
   nomes: Record<string, string>,
+  listas: Record<string, LeadEtapa[]> = {},
 ): EsforcoNegocio {
   const metas = metasPorCanal(slug, ctx.ano, ctx.mes);
   const times = TIMES_POR_CANAL[slug] ?? {};
   const pace = (meta: number, realizado: number) => calcularPace({ meta, recebido: realizado, hoje: ctx.hoje, ano: ctx.ano, mes: ctx.mes });
 
   const time = {} as Record<EtapaEsforco, IndicadorEsforco>;
-  for (const etapa of ETAPAS_ESFORCO) {
+  for (const etapa of ETAPAS_FUNIL) {
     const canais: CanalDoPace[] = ORDEM_CANAIS.filter((c) => metas[etapa][c] != null || linhas.some((l) => l.canal === c && l.etapa === etapa)).map(
       (canal) => ({
         canal,
@@ -72,14 +119,22 @@ export function montarEsforco(
         realizado: linhas.filter((l) => l.canal === canal && l.etapa === etapa).reduce((s, l) => s + Number(l.quantidade), 0),
       }),
     );
-    time[etapa] = { pace: pace(canais.reduce((s, c) => s + (c.meta ?? 0), 0), canais.reduce((s, c) => s + c.realizado, 0)), canais };
+    const metaTime = canais.reduce((s, c) => s + (c.meta ?? 0), 0);
+    const leads = ORDEM_CANAIS.flatMap((c) => listas[`${c}|${etapa}`] ?? []).sort((a, b) => a.data.localeCompare(b.data));
+    const itens: [string, number][] = linhas.filter((l) => l.etapa === etapa && l.data).map((l) => [l.data!, Number(l.quantidade)]);
+    time[etapa] = {
+      pace: pace(metaTime, canais.reduce((s, c) => s + c.realizado, 0)),
+      canais,
+      leads,
+      serie: serieDoMes(metaTime, itens, ctx.ano, ctx.mes, ctx.hoje),
+    };
   }
 
   const ids = Array.from(new Set(Object.values(times).flat()));
   const preVendas: PreVendasPace[] = ids.map((id) => {
     const nome = nomes[id] ?? "Usuário sem nome";
     const indicadores = {} as Record<EtapaEsforco, IndicadorEsforco>;
-    for (const etapa of ETAPAS_ESFORCO) {
+    for (const etapa of ETAPAS_FUNIL) {
       const leads = ranking?.[etapa]?.find((p) => p.nome === nome)?.leads ?? [];
       const doCanal = (c: CanalPortal) => leads.filter((l) => l.canal === c).length;
       const canais: CanalDoPace[] = ORDEM_CANAIS.filter((c) => times[c]?.includes(id) || doCanal(c) > 0).map((canal) => {
@@ -87,12 +142,16 @@ export function montarEsforco(
         const metaCanal = metas[etapa][canal];
         return { canal, meta: times[canal]?.includes(id) && metaCanal != null && membros > 0 ? metaCanal / membros : null, realizado: doCanal(canal) };
       });
-      indicadores[etapa] = { pace: pace(canais.reduce((s, c) => s + (c.meta ?? 0), 0), leads.length), canais };
+      indicadores[etapa] = {
+        pace: pace(canais.reduce((s, c) => s + (c.meta ?? 0), 0), leads.length),
+        canais,
+        leads: leads.map((l) => ({ nome: l.nome, data: l.data, responsavel: NOME_CANAL[l.canal] ?? l.canal, preVendas: null })),
+      };
     }
-    return { id, nome, indicadores };
+    return { id, nome, indicadores, ideal: idealDe(indicadores) };
   });
   preVendas.sort((a, b) => b.indicadores.reunioes_agendadas.pace.recebido - a.indicadores.reunioes_agendadas.pace.recebido);
-  return { time, preVendas };
+  return { time, ideal: idealDe(time), preVendas };
 }
 
 /** Lê o realizado do mês, o ranking e os nomes, e monta o pace de esforço. null = negócio sem times. */
@@ -100,12 +159,12 @@ export async function buscarEsforcoNegocio(admin: SupabaseClient, slug: string, 
   if (!TIMES_POR_CANAL[slug]) return null;
   const mesStr = `${ctx.ano}-${String(ctx.mes).padStart(2, "0")}`;
   const seg = ctx.mes === 12 ? `${ctx.ano + 1}-01` : `${ctx.ano}-${String(ctx.mes + 1).padStart(2, "0")}`;
-  const [{ data: linhas }, { data: rk }, { data: mb }] = await Promise.all([
+  const [{ data: linhas }, { data: rk }, { data: mb }, { data: ls }] = await Promise.all([
     admin
       .from("funil_realizado")
-      .select("canal, etapa, quantidade")
+      .select("canal, etapa, quantidade, data")
       .eq("negocio_id", negocioId)
-      .in("etapa", [...ETAPAS_ESFORCO])
+      .in("etapa", [...ETAPAS_FUNIL])
       .gte("data", `${mesStr}-01`)
       .lt("data", `${seg}-01`)
       .order("data")
@@ -114,6 +173,14 @@ export async function buscarEsforcoNegocio(admin: SupabaseClient, slug: string, 
       .range(0, 999),
     admin.from("integracao_estado").select("valor").eq("chave", `ranking:${slug}:${mesStr}`).maybeSingle(),
     admin.from("integracao_estado").select("valor").eq("chave", `pipefacil:${slug}:membros`).maybeSingle(),
+    admin.from("integracao_estado").select("valor").eq("chave", `leads_funil:${slug}:${mesStr}`).maybeSingle(),
   ]);
-  return montarEsforco(slug, ctx, linhas ?? [], (rk?.valor as RankingGravado | null) ?? null, (mb?.valor as Record<string, string> | null) ?? {});
+  return montarEsforco(
+    slug,
+    ctx,
+    linhas ?? [],
+    (rk?.valor as RankingGravado | null) ?? null,
+    (mb?.valor as Record<string, string> | null) ?? {},
+    (ls?.valor as Record<string, LeadEtapa[]> | null) ?? {},
+  );
 }

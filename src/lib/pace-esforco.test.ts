@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { metasPorCanal, montarEsforco, TIMES_POR_CANAL } from "./pace-esforco";
+import { diasUteisDoMes, metasPorCanal, montarEsforco, serieDoMes, TIMES_POR_CANAL } from "./pace-esforco";
 
 const JORGE = "efaa951d-455a-4148-ba3a-fa3b5f4bafd9";
 const RYQ = "7d0660e3-9acb-4266-93db-cfdee71e2289";
@@ -53,5 +53,30 @@ describe("pace de esforço (Pace por B.U)", () => {
 
   it("ordena os pré-vendas por agendadas", () => {
     expect(e.preVendas.map((p) => p.nome)).toEqual(["Vinícius Anastácio Ferreira", "Marcus Ryquelme", "Jorge Abudi"]);
+  });
+});
+
+describe("gráfico esperado × realizado e conversões ideais", () => {
+  it("um ponto por dia útil; fim de semana entra no dia útil seguinte; dia que não chegou fica sem realizado", () => {
+    const dias = diasUteisDoMes(2026, 11);
+    expect(dias.length).toBe(19);
+    expect(dias[0]).toBe("2026-11-03"); // 02/11 é Finados
+    const s = serieDoMes(19, [["2026-11-03", 2], ["2026-11-08", 1], ["2026-11-09", 1]], 2026, 11, "2026-11-10");
+    expect(s[0]).toMatchObject({ dia: "2026-11-03", esperado: 1, realizado: 2 });
+    expect(s.find((p) => p.dia === "2026-11-09")?.realizado).toBe(4); // o domingo 08/11 soma na segunda
+    expect(s.find((p) => p.dia === "2026-11-11")?.realizado).toBeNull();
+    expect(s[s.length - 1].esperado).toBeCloseTo(19);
+  });
+
+  it("ideal do funil pela razão das metas: realizadas ÷ agendadas (sem Indicação) e vendas ÷ realizadas", () => {
+    const metas = metasPorCanal("vorp", 2026, 11);
+    const e = montarEsforco("vorp", { ano: 2026, mes: 11, hoje: "2026-11-17" }, [], null, {});
+    const ag = metas.reunioes_agendadas.outbound! + metas.reunioes_agendadas.inbound!;
+    const realComAg = metas.reunioes_realizadas.outbound! + metas.reunioes_realizadas.inbound!;
+    expect(e.ideal.realizadas).toBeCloseTo(realComAg / ag);
+    const real = Object.values(metas.reunioes_realizadas).reduce((s, v) => s + (v ?? 0), 0);
+    const vendas = Object.values(metas.vendas).reduce((s, v) => s + (v ?? 0), 0);
+    expect(e.ideal.vendas).toBeCloseTo(vendas / real);
+    expect(e.time.vendas.pace.meta).toBeCloseTo(vendas);
   });
 });
