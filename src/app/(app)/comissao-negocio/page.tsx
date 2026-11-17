@@ -8,7 +8,8 @@ import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe, veConsolidado } from "@/lib/negocios";
 import { buscarComissoesNegocios, type ComissaoNegocio, type PapelComissao } from "@/lib/comissao-negocio";
 import { buscarCarteira, buscarPainelSdr, vinculoPreVendas } from "@/lib/sdr-negocio";
-import { ExplicacaoComissaoVorp, PainelComissaoSdr, pctVorp } from "@/components/negocio/ComissaoSdr";
+import { ExplicacaoComissaoCloserVorp, ExplicacaoComissaoVorp, PainelComissaoSdr, pctVorp } from "@/components/negocio/ComissaoSdr";
+import { vinculoCloserVorp } from "@/lib/closer-negocio";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -82,7 +83,10 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
   const totalGeral = dados.filter(veTudo).reduce((s, d) => s + d.totalComissao, 0);
 
   // A explicação do Finance só aparece para quem tem comissão do Finance na tela (ou vê o Finance inteiro).
-  const mostraFinance = dados.some((d) => d.slug === "vorp-finance" && (veTudo(d) || d.pessoas.some((p) => p.id === user.id)));
+  // Quem é de outra equipe (ex.: SDR/closer da Acrópole que participou de uma venda do Finance) vê só o valor a receber.
+  const doFinance = visiveis.some((n) => n.slug === "vorp-finance");
+  const mostraFinance =
+    (ehDiretor || doFinance) && dados.some((d) => d.slug === "vorp-finance" && (veTudo(d) || d.pessoas.some((p) => p.id === user.id)));
 
   // SDR da Acrópole: regras da Acrópole, RQA do mês, comissão de venda padrão e carteira de recorrência.
   const preVendas = ehDiretor ? null : await vinculoPreVendas(supabase, user.id);
@@ -98,6 +102,19 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
       <>
         <ExplicacaoComissaoVorp />
         <PainelComissaoSdr reunioes={painel.reunioes} comissaoVendas={comissaoVendas} carteira={carteira} atualizadoEm={painel.atualizadoEm} />
+      </>
+    );
+  }
+
+  // Closer da Acrópole: regras de closer da Acrópole, comissão de venda padrão e carteira de recorrência.
+  const closerVorp = ehDiretor ? null : await vinculoCloserVorp(supabase, user.id);
+  if (!blocoSdr && closerVorp && (!foco || foco.slug === closerVorp.slug)) {
+    const carteira = await buscarCarteira(createAdminClient(), closerVorp.id, user.id, hoje, pctVorp);
+    const comissaoVendas = dados.find((d) => d.slug === closerVorp.slug)?.pessoas.find((p) => p.id === user.id)?.total ?? 0;
+    blocoSdr = (
+      <>
+        <ExplicacaoComissaoCloserVorp />
+        <PainelComissaoSdr papel="closer" reunioes={null} comissaoVendas={comissaoVendas} carteira={carteira} atualizadoEm={null} />
       </>
     );
   }

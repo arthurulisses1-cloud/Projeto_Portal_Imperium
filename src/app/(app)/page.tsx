@@ -30,6 +30,8 @@ import MetaExecutivo from "@/components/negocio/MetaExecutivo";
 import { buscarPaceNegocios, calcularPace } from "@/lib/pace-negocio";
 import { buscarPainelSdr, vinculoPreVendas } from "@/lib/sdr-negocio";
 import { MuralSdr } from "@/components/negocio/PainelSdr";
+import { MuralCloser } from "@/components/negocio/PainelCloser";
+import { buscarPainelCloser, vinculoCloserVorp } from "@/lib/closer-negocio";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -267,6 +269,24 @@ export default async function MuralPage({
       console.error("Mural: painel do SDR falhou", e);
     }
   }
+  // Closer da Acrópole (Vorp): pace de recebido/MRR e as reuniões (previstas, do dia e realizadas).
+  const closerVorp = !metaExecutivo && meRole !== "diretor" && meRole !== "investidor" ? await vinculoCloserVorp(supabase, meId) : null;
+  if (closerVorp) {
+    try {
+      const painel = await buscarPainelCloser(createAdminClient(), closerVorp, { id: meId, nome: profile?.full_name ?? "" }, { ano, mes, hoje });
+      metaExecutivo = (
+        <MuralCloser
+          painel={painel}
+          equipe={nomeEquipe(closerVorp)}
+          cor={NEGOCIO_COR[closerVorp.slug] ?? "201 162 74"}
+          mesLabel={MESES[mes - 1] + " de " + ano}
+          mesAtual={mesEhAtual}
+        />
+      );
+    } catch (e) {
+      console.error("Mural: painel do closer falhou", e);
+    }
+  }
   if (!metaExecutivo && meRole !== "diretor" && meRole !== "investidor") {
     const { data: vinculos } = await supabase
       .from("profile_negocios")
@@ -338,11 +358,6 @@ export default async function MuralPage({
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       {searchParams.lancado && <p className="rounded border border-success/50 px-3 py-2 text-sm text-success-bright">Venda lançada.</p>}
-      {metaExecutivo}
-      {lancarVendaHead}
-      {painelNegocios.length > 0 && (
-        <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} ritmoPct={ritmoPct} lancar={lancarVenda} />
-      )}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {profile?.avatar_url ? (
@@ -402,6 +417,11 @@ export default async function MuralPage({
         </div>
       </div>
 
+      {metaExecutivo}
+      {lancarVendaHead}
+      {painelNegocios.length > 0 && (
+        <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} ritmoPct={ritmoPct} lancar={lancarVenda} />
+      )}
       {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
         <TarefasMuralWidget userId={meId} />
       )}

@@ -8,7 +8,8 @@ const ETAPAS: EtapaEsforco[] = ["reunioes_agendadas", "reunioes_realizadas", "ve
 export function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 }
-const dec = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+const decimal = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+const dec = decimal;
 const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`);
 
 /** Barra do mês: quanto do mês útil já passou. */
@@ -34,7 +35,8 @@ export function BarraMes({ p, cor }: { p: PaceCalculado; cor: string }) {
 }
 
 /** Pace de um indicador de esforço: meta do mês, onde deveria estar hoje e onde está. */
-export function PaceEsforcoCard({ titulo, p, cor, mesAtual }: { titulo: string; p: PaceCalculado; cor: string; mesAtual: boolean }) {
+export function PaceEsforcoCard({ titulo, p, cor, mesAtual, formato = "num" }: { titulo: string; p: PaceCalculado; cor: string; mesAtual: boolean; formato?: "num" | "moeda" }) {
+  const dec = formato === "moeda" ? moeda : decimal;
   const pctFeito = p.meta > 0 ? Math.min(100, (p.recebido / p.meta) * 100) : 0;
   const pctEsperado = p.meta > 0 ? Math.min(100, (p.esperadoAteHoje / p.meta) * 100) : 0;
   const diferenca = p.recebido - p.esperadoAteHoje;
@@ -86,7 +88,7 @@ export function PaceEsforcoCard({ titulo, p, cor, mesAtual }: { titulo: string; 
   );
 }
 
-function quandoReuniao(r: ReuniaoFutura): string {
+export function quandoReuniao(r: ReuniaoFutura): string {
   if (!r.quando) return r.quandoTexto ?? "sem data no CRM";
   const d = new Date(r.quando);
   const dia = d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "short", day: "2-digit", month: "2-digit" });
@@ -95,7 +97,7 @@ function quandoReuniao(r: ReuniaoFutura): string {
 }
 
 /** Número de reuniões a acontecer; ao passar o mouse, a data de cada reunião e o lead. */
-function ReunioesAAcontecer({ lista }: { lista: ReuniaoFutura[] }) {
+export function ReunioesAAcontecer({ lista }: { lista: ReuniaoFutura[] }) {
   const agora = Date.now();
   if (lista.length === 0) return <p className="mt-1 text-3xl font-semibold text-stone-400">0</p>;
   return (
@@ -112,6 +114,7 @@ function ReunioesAAcontecer({ lista }: { lista: ReuniaoFutura[] }) {
               <span key={r.id} className="block text-[11px] leading-tight">
                 <span className={passou ? "text-wine-bright" : "text-gold-bright"}>{quandoReuniao(r)}</span> <span className="text-stone-100">{r.nome}</span>
                 {r.empresa && r.empresa !== r.nome && <span className="text-stone-500"> · {r.empresa}</span>}
+                {r.sdr && <span className="text-stone-500"> · SDR {r.sdr}</span>}
                 {passou && <span className="block text-wine-bright">a data já passou: atualize a etapa no CRM</span>}
               </span>
             );

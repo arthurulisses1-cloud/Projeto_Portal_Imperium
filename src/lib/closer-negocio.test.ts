@@ -1,0 +1,66 @@
+import { describe, expect, it } from "vitest";
+import { metaMrrDaPessoa, resumirReunioesCloser } from "./closer-negocio";
+import type { LeadAuditoria } from "./integracoes/auditoria";
+
+const lead = (p: Partial<LeadAuditoria>): LeadAuditoria =>
+  ({
+    id: Math.random().toString(36).slice(2),
+    seq: null,
+    nome: "Lead",
+    empresa: null,
+    canal: "outbound",
+    status: "open",
+    etapa: "",
+    funil: "",
+    responsavel: null,
+    preVendas: "Jorge Abudi",
+    closer: "Bruno Brito",
+    vendedor: null,
+    rqa: null,
+    reuniaoMarcada: null,
+    agendadaEm: null,
+    realizadaEm: null,
+    noShowEm: null,
+    situacao: "a_acontecer",
+    tags: [],
+    passos: [],
+    ...p,
+  }) as LeadAuditoria;
+
+describe("resumirReunioesCloser", () => {
+  const hoje = "2026-11-18";
+  const leads = [
+    lead({ nome: "Amanhã", reuniaoMarcada: "19/11/2026 10:00" }),
+    lead({ nome: "Hoje tarde", reuniaoMarcada: "18/11/2026 15:30", preVendas: "Marcus Ryquelme" }),
+    lead({ nome: "Hoje cedo", reuniaoMarcada: "18/11/2026 09:00" }),
+    lead({ nome: "Feita hoje", reuniaoMarcada: "18/11/2026 08:00", situacao: "realizada", realizadaEm: "2026-11-18T12:00:00Z" }),
+    lead({ nome: "Feita dia 3", situacao: "realizada", realizadaEm: "2026-11-03T12:00:00Z" }),
+    lead({ nome: "Do outro closer", closer: "Outra Pessoa", reuniaoMarcada: "18/11/2026 11:00" }),
+    lead({ nome: "Cancelada", situacao: "cancelada", reuniaoMarcada: "18/11/2026 16:00" }),
+  ];
+  const r = resumirReunioesCloser(leads, "Bruno Brito", 2026, 11, hoje);
+
+  it("previstas: só as a acontecer dele, da mais próxima para a mais distante", () => {
+    expect(r.previstas.map((x) => x.nome)).toEqual(["Hoje cedo", "Hoje tarde", "Amanhã"]);
+    expect(r.previstas[1].sdr).toBe("Marcus Ryquelme");
+  });
+  it("do dia: reuniões marcadas para hoje por horário, com o SDR, sem cancelada nem de outro closer", () => {
+    expect(r.doDia.map((x) => x.nome)).toEqual(["Feita hoje", "Hoje cedo", "Hoje tarde"]);
+    expect(r.doDia[2].sdr).toBe("Marcus Ryquelme");
+  });
+  it("realizadas no mês e hoje", () => {
+    expect(r.realizadasNoMes).toBe(2);
+    expect(r.realizadasHoje).toBe(1);
+  });
+});
+
+describe("metaMrrDaPessoa", () => {
+  it("divide a meta de MRR na proporção da meta de recebido da pessoa", () => {
+    expect(metaMrrDaPessoa(60000, 25000, 100000)).toBe(15000);
+  });
+  it("sem meta de MRR ou de recebido, é zero", () => {
+    expect(metaMrrDaPessoa(0, 25000, 100000)).toBe(0);
+    expect(metaMrrDaPessoa(60000, null, 100000)).toBe(0);
+    expect(metaMrrDaPessoa(60000, 25000, 0)).toBe(0);
+  });
+});

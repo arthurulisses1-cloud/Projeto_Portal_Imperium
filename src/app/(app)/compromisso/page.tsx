@@ -13,6 +13,9 @@ import { IconFlame, IconCheck, IconAlert } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
 import CompromissoKpis from "@/components/CompromissoKpis";
 import { buscarContextoKpis, buscarLinhasKpis } from "@/lib/compromisso-kpis";
+import { buscarPainelCloser, vinculoCloserVorp } from "@/lib/closer-negocio";
+import { createAdminClient } from "@/lib/supabase/admin";
+import CompromissoCloser from "@/components/negocio/CompromissoCloser";
 
 type CompromissoRow = StreakRow;
 
@@ -52,6 +55,19 @@ export default async function CompromissoPage() {
   logErroSupabase(`CompromissoPage: profiles (id=${meId})`, profileError);
 
   const hoje = hojeBR();
+
+  // Closer da Acrópole (Vorp): compromisso automático (reuniões realizadas ÷ previstas do dia e vendas).
+  if (profile?.role === "closer") {
+    const closerVorp = await vinculoCloserVorp(supabase, meId);
+    if (closerVorp) {
+      try {
+        const painel = await buscarPainelCloser(createAdminClient(), closerVorp, { id: meId, nome: viewer.effectiveNome }, { ano: Number(hoje.slice(0, 4)), mes: Number(hoje.slice(5, 7)), hoje });
+        return <CompromissoCloser painel={painel} hoje={hoje} />;
+      } catch (e) {
+        console.error("Compromisso do closer falhou", e);
+      }
+    }
+  }
 
   // Multinegócio: quem está num negócio com indicadores próprios (kpi_definicoes)
   // vê o compromisso adaptado ao esforço do cargo; o resto segue no formato antigo.

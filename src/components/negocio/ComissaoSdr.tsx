@@ -27,7 +27,7 @@ export function ExplicacaoComissaoVorp() {
   const inb = pctVorp("sdr", "inbound");
   const rqa = RQA_VALOR.vorp;
   return (
-    <details className="rounded-lg border border-imperium-line bg-imperium-surface p-4" open>
+    <details className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
       <summary className="cursor-pointer text-sm font-semibold text-gold-bright">Como sua comissão é calculada · Acrópole</summary>
       <div className="mt-3 space-y-4 text-sm text-stone-300">
         <div>
@@ -57,6 +57,40 @@ export function ExplicacaoComissaoVorp() {
   );
 }
 
+/** "Como sua comissão é calculada" da Acrópole, para o Closer. */
+export function ExplicacaoComissaoCloserVorp() {
+  const out = pctVorp("closer", "outbound");
+  const inb = pctVorp("closer", "inbound");
+  return (
+    <details className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+      <summary className="cursor-pointer text-sm font-semibold text-gold-bright">Como sua comissão é calculada · Acrópole</summary>
+      <div className="mt-3 space-y-4 text-sm text-stone-300">
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">1 · Comissão de venda</p>
+          <p className="mt-1">
+            Em cada venda que você fecha, você recebe <strong>{out}% no outbound</strong> e <strong>{inb}% no inbound</strong> (indicação conta como inbound) sobre o valor
+            recebido da venda.
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">2 · Antecipado e 1º contrato</p>
+          <p className="mt-1">
+            Se o cliente paga antecipado, a base da comissão vai até <strong>3 × o MRR</strong> (teto de 3 meses). Só o <strong>1º contrato</strong> do cliente paga comissão de venda.
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">3 · Recorrência</p>
+          <p className="mt-1">
+            A comissão segue a cada MRR recebido dos clientes da sua carteira e termina quando o contrato deixa de ser lançado (cancelamento ou encerramento). A carteira está
+            logo abaixo.
+          </p>
+        </div>
+        <p className="text-xs text-stone-500">O pagamento sai no dia 15 do mês seguinte ao recebimento.</p>
+      </div>
+    </details>
+  );
+}
+
 const SELO: Record<StatusRqa, { texto: string; classe: string }> = {
   validada: { texto: "RQA validada", classe: "border-success/50 text-success-bright" },
   aguardando: { texto: "Aguardando validação", classe: "border-amber-400/50 text-amber-400" },
@@ -69,7 +103,9 @@ export function PainelComissaoSdr({
   comissaoVendas,
   carteira,
   atualizadoEm,
+  papel = "sdr",
 }: {
+  papel?: "sdr" | "closer";
   reunioes: ResumoReunioes | null;
   comissaoVendas: number;
   carteira: ContratoCarteira[];
@@ -77,8 +113,32 @@ export function PainelComissaoSdr({
 }) {
   const rqa = reunioes?.rqa ?? { validadas: 0, aguardando: 0, recusadas: 0, valorValidado: 0, valorAguardando: 0 };
   const ativos = carteira.filter((c) => c.ativo);
+  const closer = papel === "closer";
+  const recorrenciaMes = ativos.reduce((s, c) => s + c.porMes, 0);
   return (
     <div className="space-y-4">
+      {closer && (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Comissão de vendas</p>
+            <p className="mt-1 text-2xl font-semibold text-stone-100">{moeda(comissaoVendas)}</p>
+            <p className="text-xs text-stone-500">vendas que você fechou no mês</p>
+          </div>
+          <div className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Recorrência por mês</p>
+            <p className="mt-1 text-2xl font-semibold text-stone-100">{moeda(recorrenciaMes)}</p>
+            <p className="text-xs text-stone-500">
+              {ativos.length} {ativos.length === 1 ? "contrato ativo" : "contratos ativos"} na carteira
+            </p>
+          </div>
+          <div className="rounded-lg border border-gold/40 bg-imperium-surface p-4">
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Total do mês</p>
+            <p className="mt-1 text-2xl font-semibold text-gold-bright">{moeda(comissaoVendas)}</p>
+            <p className="text-xs text-stone-500">a recorrência entra conforme cada MRR for recebido</p>
+          </div>
+        </div>
+      )}
+      {!closer && (
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">RQA a receber</p>
@@ -98,7 +158,9 @@ export function PainelComissaoSdr({
           <p className="text-xs text-stone-500">+ {moeda(rqa.valorAguardando)} se as RQA pendentes forem validadas</p>
         </div>
       </div>
+      )}
 
+      {!closer && (
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões realizadas no mês · RQA</p>
@@ -142,6 +204,7 @@ export function PainelComissaoSdr({
           </div>
         )}
       </section>
+      )}
 
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">

@@ -49,8 +49,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/compromisso", label: "Compromisso", roles: ["sdr", "closer", "lider"] },
   { type: "link", href: "/tarefas", label: "Tarefas", roles: ["sdr", "closer", "lider", "diretor", "analista"], area: "tarefas" },
   // SDR só vê o funil de Repasse de Entrevistas (mesma rota, visão restrita).
-  { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr", "closer"] },
-  { type: "link", href: "/tribo", label: "Minha Tribo", roles: ["closer"] },
+  { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr"] },
   { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
   { type: "link", href: "/minha-producao", label: "Minha Produção", roles: ["lider"] },
   // Plano de Carreira e Corrida dos Marcos ficam ocultos por ora (2026-11-17): o modelo de ranks acabou.
@@ -69,7 +68,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
       { href: "/recordes", label: "Recordes" },
     ],
   },
-  { type: "link", href: "/parceiros", label: "Parceiros", roles: ["closer", "lider"] },
   { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
   {
     type: "group",
@@ -112,7 +110,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
     area: "financeiro",
     items: [
       { href: "/comissao-negocio", label: "Comissão do Mês" },
-      { href: "/parceiros", label: "Parceiros" },
       { href: "/financeiro-negocio", label: "Financeiro por Negócio" },
       { href: "/dre", label: "DRE" },
       { href: "/fechamento", label: "Fechamento de Mês" },
@@ -252,6 +249,27 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     }
     return rest;
   });
+  // Closer da Acrópole (Vorp): em Dados ganha o Esforço 3C Plus e a Auditoria (só com os dados do Vorp, pelos vínculos dele).
+  if (user && papelAtual === "closer") {
+    const { data: vorp } = await supabase
+      .from("profile_negocios")
+      .select("negocio_id, negocios!inner(slug)")
+      .eq("profile_id", previewPessoa?.id ?? user.id)
+      .eq("negocios.slug", "vorp")
+      .in("cargo", ["closer", "executivo"])
+      .limit(1);
+    if ((vorp ?? []).length > 0) {
+      const dados = itensVisiveis.find((i) => i.type === "group" && i.label === "Dados");
+      if (dados && dados.type === "group") {
+        const extras = [
+          { href: "/esforco-3c", label: "Esforço 3C Plus" },
+          { href: "/auditoria-comercial", label: "Auditoria" },
+        ].filter((x) => !dados.items.some((i) => i.href === x.href));
+        const pos = dados.items.findIndex((i) => i.href === "/pace-negocio");
+        dados.items.splice(pos >= 0 ? pos + 1 : dados.items.length, 0, ...extras);
+      }
+    }
+  }
   // Meus Leads: Finance (consultores e Head) e o Diretor; entra logo depois de Tarefas.
   if (ehConsultorFinance || (papelAtual === "diretor" && !previewPessoa) || permissoesAnalista?.leads.ver) {
     const pos = itensVisiveis.findIndex((i) => i.type === "link" && i.href === "/tarefas");

@@ -1,0 +1,183 @@
+// Visão do Closer da Acrópole (Vorp): pace de recebido e de MRR, reuniões previstas, reuniões do dia e pace de
+// reuniões realizadas. Pedido do Diretor, 17/11/2026 (Bruno Brito).
+//
+// De onde vem cada número:
+//  - reuniões: a base da Auditoria comercial (Pipefácil). As do closer são as que têm o nome dele em "closer"
+//    (mesmo vínculo usuário do Pipefácil → perfil do portal que o SDR usa);
+//  - recebido e MRR: tabela vendas, onde a pessoa é quem fechou (profile_id). A meta de recebido é a da pessoa no
+//    Pace do negócio; a de MRR é a meta de MRR do forecast dividida entre quem vende, na mesma proporção;
+//  - meta de reuniões realizadas: a do forecast (todos os canais) dividida em partes iguais entre os closers.
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AuditoriaGravada, LeadAuditoria } from "@/lib/integracoes/auditoria";
+import { metaMrrForecast } from "@/lib/forecast-negocios";
+import { calcularPace, limitesDoMes, buscarPaceNegocios, type PaceCalculado } from "@/lib/pace-negocio";
+import { metasPorCanal } from "@/lib/pace-esforco";
+import { lerDataReuniao, statusRqa, usuarioCrmDoPerfil, type ReuniaoFutura, type StatusRqa } from "@/lib/sdr-negocio";
+
+/** Cargos de closer no negócio (quem faz a reunião e fecha). */
+export const CARGOS_CLOSER = ["closer", "executivo"];
+export const SLUG_VORP = "vorp";
+
+const dataBR = (iso: string | null) =>
+  !iso ? null : iso.length <= 10 ? iso : new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+const noMes = (iso: string | null, inicio: string, fimExcl: string) => !!iso && iso.slice(0, 10) >= inicio && iso.slice(0, 10) < fimExcl;
+
+/** Reunião de hoje: horário, lead, SDR que agendou e como está. */
+export type ReuniaoDoDia = {
+  id: string;
+  nome: string;
+  empresa: string | null;
+  canal: string;
+  quando: string | null;
+  quandoTexto: string | null;
+  sdr: string | null;
+  situacao: "a_acontecer" | "realizada" | "no_show";
+  rqa: StatusRqa;
+};
+
+export type ResumoReunioesCloser = {
+  /** Reuniões dele ainda por acontecer (qualquer mês), da mais próxima para a mais distante. */
+  previstas: ReuniaoFutura[];
+  /** Reuniões marcadas para hoje (qualquer situação, menos cancelada), por horário. */
+  doDia: ReuniaoDoDia[];
+  /** Reuniões que ele realizou no mês (pela data em que foram realizadas). */
+  realizadasNoMes: number;
+  /** Realizadas hoje. */
+  realizadasHoje: number;
+};
+
+/** Resume as reuniões de um closer (pura). `hoje` = AAAA-MM-DD (Brasil). */
+export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, ano: number, mes: number, hoje: string): ResumoReunioesCloser {
+  const { inicio, fim } = limitesDoMes(ano, mes);
+  const fimExcl = new Date(Date.parse(fim + "T00:00:00Z") + 86400_000).toISOString().slice(0, 10);
+  const meus = leads.filter((l) => l.closer === nomeCrm);
+
+  const previstas: ReuniaoFutura[] = meus
+    .filter((l) => l.situacao === "a_acontecer")
+    .map((l) => {
+      const quando = lerDataReuniao(l.reuniaoMarcada);
+      return {
+        id: l.id,
+        nome: l.nome,
+        empresa: l.empresa,
+        canal: l.canal,
+        agendadaEm: dataBR(l.agendadaEm),
+        quando,
+        quandoTexto: quando ? null : l.reuniaoMarcada,
+        sdr: l.preVendas,
+      };
+    })
+    .sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
+
+  const doDia: ReuniaoDoDia[] = meus
+    .filter((l) => (l.situacao === "a_acontecer" || l.situacao === "realizada" || l.situacao === "no_show") && dataBR(lerDataReuniao(l.reuniaoMarcada)) === hoje)
+    .map((l) => {
+      const quando = lerDataReuniao(l.reuniaoMarcada);
+      return {
+        id: l.id,
+        nome: l.nome,
+        empresa: l.empresa,
+        canal: l.canal,
+        quando,
+        quandoTexto: quando ? null : l.reuniaoMarcada,
+        sdr: l.preVendas,
+        situacao: l.situacao as ReuniaoDoDia["situacao"],
+        rqa: statusRqa(l.rqa),
+      };
+    })
+    .sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
+
+  return {
+    previstas,
+    doDia,
+    realizadasNoMes: meus.filter((l) => noMes(dataBR(l.realizadaEm), inicio, fimExcl)).length,
+    realizadasHoje: meus.filter((l) => dataBR(l.realizadaEm) === hoje).length,
+  };
+}
+
+export type PainelCloser = {
+  slug: string;
+  nomeCrm: string | null;
+  recebido: PaceCalculado;
+  mrr: PaceCalculado;
+  /** Pace de reuniões realizadas (meta do forecast dividida entre os closers). */
+  realizadas: PaceCalculado;
+  reunioes: ResumoReunioesCloser | null;
+  atualizadoEm: string | null;
+  vendasNoMes: number;
+  /** Vendas, recebido e MRR de hoje. */
+  hoje: { vendas: number; recebido: number; mrr: number };
+};
+
+/** Meta de MRR da pessoa: a do forecast na proporção da meta de recebido dela (pura). */
+export function metaMrrDaPessoa(metaMrrNegocio: number, metaRecebidoPessoa: number | null, metaRecebidoNegocio: number): number {
+  if (!(metaMrrNegocio > 0) || !(metaRecebidoPessoa && metaRecebidoPessoa > 0) || !(metaRecebidoNegocio > 0)) return 0;
+  return (metaMrrNegocio * metaRecebidoPessoa) / metaRecebidoNegocio;
+}
+
+/** Lê tudo o que a visão do closer precisa. `admin`: só depois de conferir que a pessoa vista é do negócio. */
+export async function buscarPainelCloser(
+  admin: SupabaseClient,
+  negocio: { id: string; slug: string },
+  pessoa: { id: string; nome: string },
+  ctx: { ano: number; mes: number; hoje: string },
+): Promise<PainelCloser> {
+  const { inicio, fim } = limitesDoMes(ctx.ano, ctx.mes);
+  const fimExcl = new Date(Date.parse(fim + "T00:00:00Z") + 86400_000).toISOString().slice(0, 10);
+  const [{ data: mb }, { data: pf }, { data: au }, { data: vendas }, { data: closers }, [pn]] = await Promise.all([
+    admin.from("integracao_estado").select("valor").eq("chave", `pipefacil:${negocio.slug}:membros`).maybeSingle(),
+    admin.from("integracao_estado").select("valor").eq("chave", `pipefacil:${negocio.slug}:perfis`).maybeSingle(),
+    admin.from("integracao_estado").select("valor").eq("chave", `auditoria:${negocio.slug}`).maybeSingle(),
+    admin.from("vendas").select("valor, mrr, data").eq("negocio_id", negocio.id).eq("profile_id", pessoa.id).gte("data", inicio).lt("data", fimExcl),
+    admin.from("profile_negocios").select("profile_id").eq("negocio_id", negocio.id).in("cargo", CARGOS_CLOSER),
+    buscarPaceNegocios(admin, ctx.ano, ctx.mes, ctx.hoje, [negocio.slug]),
+  ]);
+
+  const nomes = (mb?.valor as Record<string, string> | null) ?? {};
+  const usuarioCrm = usuarioCrmDoPerfil((pf?.valor as Record<string, string> | null) ?? null, nomes, pessoa.id, pessoa.nome);
+  const nomeCrm = usuarioCrm ? nomes[usuarioCrm] ?? null : null;
+  const auditoria = (au?.valor as AuditoriaGravada | null) ?? null;
+
+  const eu = pn?.pessoas.find((p) => p.id === pessoa.id);
+  const recebidoMes = (vendas ?? []).reduce((s, v) => s + Number(v.valor ?? 0), 0);
+  const mrrMes = (vendas ?? []).reduce((s, v) => s + Number(v.mrr ?? 0), 0);
+  const base = { hoje: ctx.hoje, ano: ctx.ano, mes: ctx.mes };
+
+  const metasRealizadas = Object.values(metasPorCanal(negocio.slug, ctx.ano, ctx.mes).reunioes_realizadas).reduce((s, v) => s + (v ?? 0), 0);
+  const nClosers = Math.max(1, (closers ?? []).length);
+  const reunioes = nomeCrm && auditoria ? resumirReunioesCloser(auditoria.leads ?? [], nomeCrm, ctx.ano, ctx.mes, ctx.hoje) : null;
+
+  const deHoje = (vendas ?? []).filter((v) => v.data === ctx.hoje);
+  return {
+    slug: negocio.slug,
+    nomeCrm,
+    recebido: calcularPace({ meta: eu?.meta ?? 0, recebido: recebidoMes, ...base }),
+    mrr: calcularPace({ meta: metaMrrDaPessoa(metaMrrForecast(negocio.slug, ctx.ano, ctx.mes), eu?.meta ?? null, pn?.pace.meta ?? 0), recebido: mrrMes, ...base }),
+    realizadas: calcularPace({ meta: metasRealizadas / nClosers, recebido: reunioes?.realizadasNoMes ?? 0, ...base }),
+    reunioes,
+    atualizadoEm: auditoria?.atualizado_em ?? null,
+    vendasNoMes: (vendas ?? []).length,
+    hoje: {
+      vendas: deHoje.length,
+      recebido: deHoje.reduce((s, v) => s + Number(v.valor ?? 0), 0),
+      mrr: deHoje.reduce((s, v) => s + Number(v.mrr ?? 0), 0),
+    },
+  };
+}
+
+/** Vínculo de closer da pessoa no Vorp (Acrópole). null = não é closer de lá. */
+export async function vinculoCloserVorp(
+  supabase: SupabaseClient,
+  profileId: string,
+): Promise<{ id: string; slug: string; nome: string; equipe_nome: string | null } | null> {
+  const { data } = await supabase
+    .from("profile_negocios")
+    .select("cargo, negocios(id, slug, nome, equipe_nome, status)")
+    .eq("profile_id", profileId)
+    .in("cargo", CARGOS_CLOSER);
+  type N = { id: string; slug: string; nome: string; equipe_nome: string | null; status: string };
+  const achado = ((data ?? []) as unknown as { negocios: N | N[] | null }[])
+    .map((l) => (Array.isArray(l.negocios) ? l.negocios[0] : l.negocios))
+    .find((n) => n && n.status === "ativo" && n.slug === SLUG_VORP);
+  return achado ? { id: achado.id, slug: achado.slug, nome: achado.nome, equipe_nome: achado.equipe_nome } : null;
+}

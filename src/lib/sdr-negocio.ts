@@ -103,6 +103,8 @@ export type ReuniaoFutura = {
   quando: string | null;
   /** O valor do campo como veio, quando não deu para ler como data. */
   quandoTexto: string | null;
+  /** Quem agendou (visão do closer). */
+  sdr?: string | null;
 };
 
 /** Lê o campo de data da reunião: ISO, "dd/mm/aaaa" ou "dd/mm/aaaa hh:mm" (horário de Brasília). */

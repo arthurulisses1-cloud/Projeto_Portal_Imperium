@@ -16,7 +16,7 @@ export default function ExplicacaoComissaoFinance({ completo = false }: { comple
   const desagioExec = (sobra * desagio.comExecutivo.executivo) / 100;
 
   return (
-    <details className="rounded-lg border border-imperium-line bg-imperium-surface p-4" open>
+    <details className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
       <summary className="cursor-pointer text-sm font-semibold text-gold-bright">Como sua comissão é calculada · Vorp Finance</summary>
       <div className="mt-3 space-y-4 text-sm text-stone-300">
         <p>
