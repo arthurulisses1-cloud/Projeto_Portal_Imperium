@@ -71,7 +71,7 @@ describe("3C Plus", () => {
 
 describe("realizado do CRM", () => {
   it("conta no dia em que o lead chegou pela 1ª vez na etapa ou além (pulo de etapa também conta)", () => {
-    const deals = [deal({ deal_id: "a" })];
+    const deals = [deal({ deal_id: "a", status: "won" })];
     const eventos = [
       ev("a", ST.entradaOut, "2026-11-09T21:40:24Z"),
       ev("a", ST.agendadaOut, "2026-11-09T21:50:33Z"),
@@ -300,7 +300,8 @@ describe("Galáticos (MatchSales)", () => {
     expect(v.map((x) => x.deal_id)).toEqual(["o", "n"]);
     expect(v[0]).toMatchObject({ canal: "outbound", valor: 715, mrr: null, closer_user_id: "r1", produto: "plano_solo, sdr_ia" });
     expect(v[1]).toMatchObject({ canal: "inbound", data: "2026-11-18" });
-    expect(ms.inicioVendas).toBe("2026-11-16");
+    expect(ms.inicioVendas).toBe("2026-11-01");
+    expect(ms.campos.mrr).toBe("mrr_competencia");
   });
 });
 
@@ -528,5 +529,14 @@ describe("ranking de pré-vendas", () => {
     const r = rankingPreVendas(itens, eventos, cfg, resp);
     expect(r.reunioes_agendadas.map((p) => [p.pessoa, p.leads.length])).toEqual([["vini", 2], ["ryq", 1]]);
     expect(r.reunioes_realizadas.map((p) => [p.pessoa, p.leads.map((l) => l.nome)])).toEqual([["vini", ["ACME"]]]);
+  });
+});
+
+describe("venda desfeita", () => {
+  it("lead ganho e depois perdido (ou reaberto) não conta como venda no funil", () => {
+    const eventos = [ev("w", ST.ganhoVendas, "2026-11-06T13:00:00Z"), ev("l", ST.ganhoVendas, "2026-11-06T13:00:00Z")];
+    const r = calcularRealizadoCrm([deal({ deal_id: "w", status: "won" }), deal({ deal_id: "l", status: "lost" })], eventos, cfg, "2026-11-01", "2026-12-01");
+    expect(total(r, "outbound", "vendas")).toBe(1);
+    expect(total(r, "outbound", "propostas")).toBe(2); // a proposta e a reunião aconteceram
   });
 });

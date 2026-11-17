@@ -94,7 +94,7 @@ function dealParaLinha(negocioId: string, d: DealPipefacil, cfg: ConfigCrm): Dea
     cargo: campos.cargo ? TEXTO(p[campos.cargo]) : null,
     tamanho_time: campos.tamanhoTime ? TEXTO(p[campos.tamanhoTime]) : null,
     valor: NUMERO(d.value),
-    mrr: NUMERO(p.mrr),
+    mrr: NUMERO(p[campos.mrr ?? "mrr"]),
     nome: d.name,
     empresa: d.company?.name ?? TEXTO(p.nome_empresa),
     produtos,
@@ -371,11 +371,10 @@ async function sincronizarVendas(supabase: SupabaseClient, api: Pipefacil, negoc
   const semVinculo: string[] = [];
   const manter = new Set<string>();
   for (const g of ganhas) {
+    // Vendedor sem login no portal (e-mail do Pipefácil sem conta): a venda entra sem dono (conta no
+    // recebido do negócio, sem comissão de closer) e fica listada em semVinculo.
     const closer = perfil(g.closer_user_id);
-    if (!closer) {
-      semVinculo.push(g.cliente ?? g.deal_id);
-      continue;
-    }
+    if (!closer) semVinculo.push(g.cliente ?? g.deal_id);
     const sdr = perfil(g.sdr_user_id);
     const campos = {
       negocio_id: negocioId,
@@ -398,12 +397,19 @@ async function sincronizarVendas(supabase: SupabaseClient, api: Pipefacil, negoc
     };
     manter.add(g.deal_id);
     const id = idPorDeal.get(g.deal_id);
+    // Sem a migration 0113 (vendas.profile_id opcional), venda sem dono é recusada pelo banco: fica de fora.
+    const semDonoRecusada = (e: { code?: string } | null) => !closer && e?.code === "23502";
     if (id) {
       const { error } = await supabase.from("vendas").update(campos).eq("id", id);
+      if (semDonoRecusada(error)) continue;
       if (error) throw new Error("Erro atualizando venda do CRM: " + error.message);
       atualizadas += 1;
     } else {
       const { error } = await supabase.from("vendas").insert(campos);
+      if (semDonoRecusada(error)) {
+        manter.delete(g.deal_id);
+        continue;
+      }
       if (error) throw new Error("Erro criando venda do CRM: " + error.message);
       criadas += 1;
     }

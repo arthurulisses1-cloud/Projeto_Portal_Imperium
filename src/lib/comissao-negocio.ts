@@ -300,6 +300,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
         valorCliente: v.valor_cliente === null || v.valor_cliente === undefined ? null : Number(v.valor_cliente),
       };
       for (const l of comissaoDaVenda(n.slug, venda, ctx)) {
+        if (!l.beneficiarioId) continue; // venda sem dono (vendedor sem login): sem comissão de closer
         const pessoa = porPessoa.get(l.beneficiarioId) ?? {
           id: l.beneficiarioId,
           nome: nomePor.get(l.beneficiarioId) ?? "—",

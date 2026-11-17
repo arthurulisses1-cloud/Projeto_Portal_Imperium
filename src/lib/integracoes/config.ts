@@ -29,7 +29,7 @@ export type ConfigCrm = {
   /** Valor do campo Canal (canal_origem) → canal do portal. Canais ausentes daqui ficam fora do negócio. */
   canais: Record<string, CanalPortal>;
   /** Slug dos campos do Pipefácil usados na qualificação (cada workspace tem os seus). */
-  campos: { faturamento?: string; cargo?: string; tamanhoTime?: string };
+  campos: { faturamento?: string; cargo?: string; tamanhoTime?: string; /** Campo de MRR (padrão "mrr"). */ mrr?: string };
   /** MQL (inbound): valores aceitos de cada critério; o lead precisa atender todos os critérios definidos. */
   mql: Partial<Record<CriterioMql, string[]>>;
   /** Primeiro dia (YYYY-MM-DD) em que os Ganhos viram venda; padrão INICIO_REALIZADO. Antes disso, vendas manuais. */
@@ -153,7 +153,7 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "Indicação Cliente": "indicacao",
       "Indicação Investidor": "indicacao",
     },
-    campos: { faturamento: "faturamento_mensal", cargo: "cargo", tamanhoTime: "tamanho_do_time" },
+    campos: { faturamento: "faturamento_mensal", cargo: "cargo", tamanhoTime: "tamanho_do_time", mrr: "mrr_competencia" }, // "MRR Competência" (aba Principal)
     // MQL: faturamento a partir de 50 mil/mês e mais de 2 vendedores.
     mql: {
       faturamento: [
@@ -173,8 +173,8 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       ],
       tamanho_time: ["entre_2_e_5_vendedores", "entre_5_e_20_vendedores", "entre_6_e_20_vendedores", "mais_de_20_vendedores"],
     },
-    // Até 15/11 as vendas da Match foram lançadas à mão; daqui em diante vêm dos Ganhos.
-    inicioVendas: "2026-11-16",
+    // As vendas de novembro inteiro vêm dos Ganhos (o lançamento manual até 15/11 não foi feito; 17/11/2026).
+    inicioVendas: "2026-11-01",
   },
   // Maximus Energy: workspace "Sunne" do Pipefácil, funil Inside Sales (16/11/2026). O dashboard mostra
   // um funil só, com as etapas do Inside Sales (sem canais nem meta do forecast). O Recebido é a soma do

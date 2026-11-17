@@ -223,7 +223,7 @@ async function recordesIndividuais(supabase: SupabaseClient): Promise<RecordeAut
   // mesma fonte e mesma convenção de `papel` que ranking/page.tsx usa —
   // "ambos" conta pros dois lados).
   const vendas = await buscarTudoPaginado<{ profile_id: string; valor: number; data: string; papel: string }>((from, to) =>
-    supabase.from("vendas").select("profile_id, valor, data, papel").range(from, to)
+    supabase.from("vendas").select("profile_id, valor, data, papel").not("profile_id", "is", null).range(from, to)
   );
 
   for (const [papel, titulo] of [
@@ -308,7 +308,7 @@ async function top5PorPapel(
   elegivel?: (p: { role: string; ativo: boolean }) => boolean
 ): Promise<RankingHistorico[]> {
   const vendas = await buscarTudoPaginado<{ profile_id: string; valor: number; papel: string }>((from, to) =>
-    supabase.from("vendas").select("profile_id, valor, papel").range(from, to)
+    supabase.from("vendas").select("profile_id, valor, papel").not("profile_id", "is", null).range(from, to)
   );
   const relevantes = vendas.filter((v) => v.papel === papel || v.papel === "ambos");
   const totais = new Map<string, number>();
@@ -420,7 +420,7 @@ async function top5PorPapelFiltrado(
   opts: { ranksPermitidos?: string[]; dataInicio?: string; dataFimExclusivo?: string } = {}
 ): Promise<RankingHistorico[]> {
   const vendas = await buscarTudoPaginado<{ profile_id: string; valor: number; papel: string; data: string }>((from, to) => {
-    let q = supabase.from("vendas").select("profile_id, valor, papel, data").range(from, to);
+    let q = supabase.from("vendas").select("profile_id, valor, papel, data").not("profile_id", "is", null).range(from, to);
     if (opts.dataInicio) q = q.gte("data", opts.dataInicio);
     if (opts.dataFimExclusivo) q = q.lt("data", opts.dataFimExclusivo);
     return q;

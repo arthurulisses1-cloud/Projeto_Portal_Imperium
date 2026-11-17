@@ -139,6 +139,8 @@ function percorrerRealizado(
     for (const etapa of etapas) {
       const nivel = NIVEL_DA_ETAPA[etapa];
       if (!nivel) continue;
+      // Venda desfeita (o lead foi ganho e depois perdido ou reaberto): não conta.
+      if (nivel === NIVEL.venda && d.status !== "won") continue;
       const t = marcas[nivel];
       if (t) somar(dataBR(t), canal, etapa, d);
     }
