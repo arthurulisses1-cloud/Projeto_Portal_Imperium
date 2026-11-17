@@ -34,6 +34,9 @@ export type ConfigCrm = {
   mql: Partial<Record<CriterioMql, string[]>>;
   /** Primeiro dia (YYYY-MM-DD) em que os Ganhos viram venda; padrão INICIO_REALIZADO. Antes disso, vendas manuais. */
   inicioVendas?: string;
+  /** Motivos de perda de lead falso (cadastro inválido): o lead conta em "Leads" (o formulário chegou),
+   *  mas não conta como MQL nem nas etapas seguintes. */
+  motivosLeadFalso?: string[];
   /**
    * Funil próprio no dashboard: as etapas do funil do CRM, sem canais nem meta do forecast. Com ele,
    * `niveis` e `canais` não são usados. Gravado em funil_realizado com canal "outbound".
@@ -92,6 +95,7 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "15f65232-76e8-4c24-93d0-a52c6c477998": NIVEL.entrada, // Inbound SDR: SEM CONEXÃO
     },
     regressaoDesfaz: true,
+    motivosLeadFalso: ["Lead Falso"], // motivo de perda criado no Pipefácil em 16/11/2026
     pipelinesSemNivelNaCriacao: ["cmq9wwt6u024441npj37o5f2y"], // [Vorp] Funil de Vendas
     stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],
     canais: { outbound: "outbound", trafego: "inbound", indicacao: "indicacao" },

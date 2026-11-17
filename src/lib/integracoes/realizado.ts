@@ -14,6 +14,8 @@ export type DealCrm = {
   cargo: string | null;
   /** Tamanho do time comercial (só em memória; não vai para crm_deals). */
   tamanho_time?: string | null;
+  /** Motivo de perda (só em memória; não vai para crm_deals). */
+  motivo_perda?: string | null;
   status: string | null;
   stage_id: string | null;
   valor: number | null;
@@ -114,13 +116,18 @@ function percorrerRealizado(
     if (!canal) continue;
     const etapas = ETAPAS_PORTAL[canal];
 
+    // Lead falso (perdido com motivo de lead falso): conta só como lead que chegou.
+    const motivo = d.motivo_perda?.trim().toLowerCase();
+    const falso = !!motivo && !!cfg.motivosLeadFalso?.some((m) => m.toLowerCase() === motivo);
+
     // Topo do funil: criação do lead (Inbound e Indicação). Alôs/Conexões do Outbound vêm do 3C.
     if (d.criado_em) {
       const dia = dataBR(d.criado_em);
       if (etapas.includes("leads")) somar(dia, canal, "leads", d);
-      if (etapas.includes("mql") && ehMql(d, cfg)) somar(dia, canal, "mql", d);
+      if (etapas.includes("mql") && !falso && ehMql(d, cfg)) somar(dia, canal, "mql", d);
       if (etapas.includes("leads_indicados")) somar(dia, canal, "leads_indicados", d);
     }
+    if (falso) continue;
 
     const marcas = chegada.get(d.deal_id);
     if (!marcas) continue;

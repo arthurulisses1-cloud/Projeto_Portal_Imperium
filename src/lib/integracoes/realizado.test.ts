@@ -422,3 +422,19 @@ describe("lista de leads do dashboard", () => {
     expect(out.etapas.find((e) => e.chave === "reunioes_agendadas")?.leads).toBeUndefined();
   });
 });
+
+describe("lead falso", () => {
+  it("perdido como 'Lead falso' conta em Leads, mas não em MQL nem nas etapas seguintes", () => {
+    const fat = { faturamento: "acima_de_50_milhoes", cargo: "diretor", canal: "trafego", criado_em: "2026-11-08T13:00:00Z" };
+    const deals = [
+      deal({ deal_id: "f1", ...fat, status: "lost", motivo_perda: "lead falso" }),
+      deal({ deal_id: "ok", ...fat }),
+      deal({ deal_id: "icp", ...fat, status: "lost", motivo_perda: "Fora do ICP" }),
+    ];
+    const eventos = [ev("f1", ST.conectadoIn, "2026-11-09T13:00:00Z"), ev("ok", ST.conectadoIn, "2026-11-09T13:00:00Z")];
+    const r = calcularRealizadoCrm(deals, eventos, cfg, "2026-11-01", "2026-12-01");
+    expect(total(r, "inbound", "leads")).toBe(3);
+    expect(total(r, "inbound", "mql")).toBe(2);
+    expect(total(r, "inbound", "conectados")).toBe(1);
+  });
+});

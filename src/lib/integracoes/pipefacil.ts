@@ -16,6 +16,7 @@ export type DealPipefacil = {
   company?: { name?: string | null } | null;
   createdAt: string;
   closedAt: string | null;
+  lostReason?: string | null;
 };
 
 export type AtividadePipefacil = {

@@ -100,6 +100,7 @@ function dealParaLinha(negocioId: string, d: DealPipefacil, cfg: ConfigCrm): Dea
     sdr_user_id: TEXTO(p.sdr_usuario),
     criado_em: d.createdAt,
     fechado_em: d.closedAt,
+    motivo_perda: TEXTO(d.lostReason),
     synced_at: new Date().toISOString(),
   };
 }
@@ -148,10 +149,11 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const inicioExecucao = new Date().toISOString();
   const linhasDeals = deals.map((d) => dealParaLinha(negocioId, d, cfg));
   if (!simular) {
-    // tamanho_time só é usado no cálculo do MQL; crm_deals não tem essa coluna.
+    // tamanho_time e motivo_perda só são usados no cálculo; crm_deals não tem essas colunas.
     const espelho = linhasDeals.map((d) => {
       const linha: Record<string, unknown> = { ...d };
       delete linha.tamanho_time;
+      delete linha.motivo_perda;
       return linha;
     });
     for (const lote of chunk(espelho, 500)) {
