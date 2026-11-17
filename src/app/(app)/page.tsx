@@ -5,15 +5,13 @@ import Card from "@/components/ui/Card";
 import Laurel from "@/components/ui/Laurel";
 import BarraMeta from "@/components/ui/BarraMeta";
 import BarraMetaToggle from "@/components/ui/BarraMetaToggle";
-import ConfrontoWidget from "@/components/ui/Confronto";
 import EnquetePoll, { type EnqueteData } from "@/components/ui/EnquetePoll";
 import CentralNotificacoes from "@/components/CentralNotificacoes";
 import LeadsCobrancaMural from "@/components/LeadsCobrancaMural";
 import TarefasMuralWidget from "@/components/TarefasMuralWidget";
 import CampanhasFeed from "@/components/CampanhasFeed";
-import { IconShield, IconCoin, IconHorn, IconBallot, IconMedal, IconScroll } from "@/components/ui/icons";
-import { buscarConfrontoTribos, buscarTopCredito, buscarCrestsTribos } from "@/lib/guerra";
-import { buscarMetaIndividual, buscarMetaExercito, buscarProducaoPagaExercito, buscarMetaTribo, buscarProducaoPagaTribo, buscarMetaFirma, buscarProducaoPagaFirma, buscarPainelFinanceiroTribo, buscarPainelFinanceiroPessoa, type PainelFinanceiro } from "@/lib/metas";
+import { IconHorn, IconBallot, IconMedal, IconScroll } from "@/components/ui/icons";
+import { buscarMetaIndividual, buscarMetaExercito, buscarProducaoPagaExercito, buscarMetaTribo, buscarProducaoPagaTribo, buscarMetaFirma, buscarProducaoPagaFirma } from "@/lib/metas";
 import { buscarCampanhasAtivas } from "@/lib/campanhas";
 import { getViewerContext } from "@/lib/preview";
 import { buscarComentarios, buscarReacoes } from "@/lib/social";
@@ -30,10 +28,6 @@ import LancarVendaMural from "@/components/negocio/LancarVendaMural";
 import { NEGOCIO_COR, nomeEquipe } from "@/lib/negocios";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-
-function moeda(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
-}
 
 export default async function MuralPage({
   searchParams,
@@ -93,7 +87,6 @@ export default async function MuralPage({
   const mesEhAtual = ano === anoHoje && mes === mesHoje;
   const inicioMes = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const fimMesExclusivo = mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, "0")}-01`;
-  const fimMes = new Date(Date.UTC(ano, mes, 0)).toISOString().slice(0, 10);
   const mesAnterior = mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 };
   const mesSeguinte = mes === 12 ? { ano: ano + 1, mes: 1 } : { ano, mes: mes + 1 };
 
@@ -116,12 +109,6 @@ export default async function MuralPage({
   );
   const quote =
     quotes && quotes.length > 0 ? quotes[dayOfYear % quotes.length] : null;
-
-  const [confrontoTribos, topCredito, crestsTribos] = await Promise.all([
-    buscarConfrontoTribos(supabase, inicioMes, fimMes),
-    buscarTopCredito(supabase, inicioMes, fimMes, 5),
-    buscarCrestsTribos(supabase),
-  ]);
 
   const { metaCreditoIndividual: metaIndividual } = await buscarMetaIndividual(supabase, meId, { ano, mes });
 
@@ -184,36 +171,6 @@ export default async function MuralPage({
       buscarMetaFirma(supabase, { ano, mes }),
       buscarProducaoPagaFirma(supabase, inicioMes, fimMesExclusivo),
     ]);
-  }
-
-  // Painel financeiro do mês — mesma classificação que o Forecast já usa
-  // (status_manual, catálogo preenchido por closer/líder/diretor): "pra
-  // pagar" = Aguardando Pagamento, "em pendência" = Resolvendo Pendência.
-  // Previsão de crédito soma os 3 baldes com alguma certeza de virar
-  // crédito (exclui Análise Jurídico/Esfriou, que ainda não têm destino
-  // definido). Diretor vê a firma, Closer a própria Tribo, SDR a própria
-  // produção — Líder fica de fora por enquanto (não foi pedido).
-  let painelFinanceiro: PainelFinanceiro | null = null;
-  if (meRole === "diretor" || meRole === "investidor" || analistaFinanceiroLiberado) {
-    const { data: opsMes } = await supabase
-      .from("weekly_operacoes")
-      .select("valor, status, status_manual")
-      .gte("data", inicioMes)
-      .lte("data", fimMes);
-    let pago = 0;
-    let paraPagar = 0;
-    let pendencia = 0;
-    for (const o of opsMes ?? []) {
-      const valor = Number(o.valor);
-      if (o.status === "PAGO") pago += valor;
-      else if (o.status_manual === "aguardando_pagamento") paraPagar += valor;
-      else if (o.status_manual === "resolvendo_pendencia") pendencia += valor;
-    }
-    painelFinanceiro = { paraPagar, pendencia, previsaoCredito: pago + paraPagar + pendencia, pagoMaisParaPagar: pago + paraPagar };
-  } else if (meRole === "closer" && triboAtual?.id) {
-    painelFinanceiro = await buscarPainelFinanceiroTribo(supabase, triboAtual.id, inicioMes, fimMes);
-  } else if (meRole === "sdr") {
-    painelFinanceiro = await buscarPainelFinanceiroPessoa(supabase, meId, inicioMes, fimMes);
   }
 
   // Enquetes: pré-computa opções + votos dos posts do tipo 'enquete' já carregados
@@ -433,33 +390,6 @@ export default async function MuralPage({
         </Card>
       )}
 
-      {painelFinanceiro && (
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card title="Pra pagar × Em pendência">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="kicker">Pra pagar</p>
-                <p className="mt-1 font-display text-xl text-gold-bright">{moeda(painelFinanceiro.paraPagar)}</p>
-              </div>
-              <div>
-                <p className="kicker">Em pendência</p>
-                <p className="mt-1 font-display text-xl text-wine-bright">{moeda(painelFinanceiro.pendencia)}</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card title="Pago + Aguardando pagamento">
-            <p className="font-display text-xl text-gold-bright">{moeda(painelFinanceiro.pagoMaisParaPagar)}</p>
-            <p className="mt-1 text-[11px] text-stone-600">Pago + Em pagamento (sem contar pendência)</p>
-          </Card>
-
-          <Card title="Previsão de crédito">
-            <p className="font-display text-xl text-gold-bright">{moeda(painelFinanceiro.previsaoCredito)}</p>
-            <p className="mt-1 text-[11px] text-stone-600">Pago + Em pagamento + Resolvendo pendência</p>
-          </Card>
-        </div>
-      )}
-
       {quote && (
         <div className="flex items-center gap-3 border-y border-imperium-line py-2.5 text-center">
           <Laurel className="hidden h-3 w-8 shrink-0 -scale-x-100 text-gold/30 sm:block" />
@@ -469,25 +399,6 @@ export default async function MuralPage({
           <Laurel className="hidden h-3 w-8 shrink-0 text-gold/30 sm:block" />
         </div>
       )}
-
-      {/* Mostra de qual mês são esses resultados só quando não é o mês
-          corrente — evita poluir a visão do dia a dia (a maioria das
-          visitas é olhando o mês atual). */}
-      {!mesEhAtual && (
-        <p className="-mb-3 text-[11px] text-stone-500">
-          Guerra de Tribos e Ranking abaixo são de{" "}
-          <span className="text-gold">{MESES[mes - 1]}/{ano}</span>
-        </p>
-      )}
-      <div className="grid gap-6 sm:grid-cols-2">
-        <Card title="Guerra de Tribos" icon={<IconShield className="h-4 w-4 text-gold" />}>
-          <ConfrontoWidget dados={confrontoTribos} crests={crestsTribos} />
-        </Card>
-
-        <Card title="Ranking de Crédito" icon={<IconCoin className="h-4 w-4 text-gold" />}>
-          <ConfrontoWidget dados={topCredito} />
-        </Card>
-      </div>
 
       {campanhasAtivas.length > 0 && (
         <CampanhasFeed

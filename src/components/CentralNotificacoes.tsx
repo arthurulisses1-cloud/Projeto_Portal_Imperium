@@ -73,7 +73,16 @@ async function buscarStatusPorTime(supabase: SupabaseClient, hojeStr: string, di
 // escopo = sem filtro extra = firma inteira).
 type Escopo = EscopoTime;
 
-export default async function CentralNotificacoes({ escopo = null, viewerId }: { escopo?: Escopo; viewerId?: string }) {
+export default async function CentralNotificacoes({
+  escopo = null,
+  viewerId,
+  ocultarLegado = true,
+}: {
+  escopo?: Escopo;
+  viewerId?: string;
+  /** Limpeza do CRM antigo (2026-11): esconde "Como cada Exército/Tribo está no mês" e "Subidos pro compliance". */
+  ocultarLegado?: boolean;
+}) {
   const supabase = await createClient();
   const pessoal = escopo?.tipo === "individual";
 
@@ -138,7 +147,7 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
       tituloFeedback = escopo.tipo === "individual" ? "Como você está no mês" : "Como cada membro da Tribo está no mês";
     }
     try {
-      const feedbacks = await buscarFeedbacksMes(supabase, hoje, alvos);
+      const feedbacks = ocultarLegado ? new Map<string, never>() : await buscarFeedbacksMes(supabase, hoje, alvos);
       itensFeedback = alvos.flatMap((a) => {
         const f = feedbacks.get(a.chave);
         return f ? [{ chave: a.chave, nome: nomes.get(a.chave) ?? "", feedback: f }] : [];
@@ -166,7 +175,7 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
   const subidosMesQtd = subidosMesRegistros.length;
   const subidosHojePorPessoa = contarPorPessoa(subidosMesRegistros.filter((r) => r.data === hoje));
   const souCloser = !!viewerId && idsComSubido.includes(viewerId);
-  const mostrarSubidos = idsComSubido.length > 0 && (!pessoal || souCloser);
+  const mostrarSubidos = !ocultarLegado && idsComSubido.length > 0 && (!pessoal || souCloser);
 
   const lancouHoje = new Set((compromissosHoje ?? []).filter((c) => c.lancado).map((c) => c.profile_id));
   // Quem já foi marcado como falta hoje não "esqueceu" de lançar — não faz
@@ -385,7 +394,7 @@ export default async function CentralNotificacoes({ escopo = null, viewerId }: {
         </a>
       </div>
       <div className="space-y-5">
-        <FeedbackMes titulo={tituloFeedback} itens={itensFeedback} />
+        {!ocultarLegado && <FeedbackMes titulo={tituloFeedback} itens={itensFeedback} />}
 
         {temCompromissoPraMostrar && (
           <div>
