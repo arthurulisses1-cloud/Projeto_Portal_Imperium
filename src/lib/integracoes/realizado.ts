@@ -122,17 +122,16 @@ function percorrerRealizado(
     if (!canal) continue;
     const etapas = ETAPAS_PORTAL[canal];
 
-    // Lead falso (perdido com motivo de lead falso): conta só como lead que chegou.
-    const falso = ehLeadFalso(d, cfg);
+    // Lead falso (perdido com motivo de lead falso): sai do funil inteiro, inclusive de Leads (17/11/2026).
+    if (ehLeadFalso(d, cfg)) continue;
 
     // Topo do funil: criação do lead (Inbound e Indicação). Alôs/Conexões do Outbound vêm do 3C.
     if (d.criado_em) {
       const dia = dataBR(d.criado_em);
       if (etapas.includes("leads")) somar(dia, canal, "leads", d);
-      if (etapas.includes("mql") && !falso && ehMql(d, cfg)) somar(dia, canal, "mql", d);
+      if (etapas.includes("mql") && ehMql(d, cfg)) somar(dia, canal, "mql", d);
       if (etapas.includes("leads_indicados")) somar(dia, canal, "leads_indicados", d);
     }
-    if (falso) continue;
 
     const marcas = chegada.get(d.deal_id);
     if (!marcas) continue;

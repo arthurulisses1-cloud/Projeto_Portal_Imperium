@@ -44,8 +44,8 @@ export type ConfigCrm = {
   emailsAlternativos?: Record<string, string>;
   /** Primeiro dia (YYYY-MM-DD) em que os Ganhos viram venda; padrão INICIO_REALIZADO. Antes disso, vendas manuais. */
   inicioVendas?: string;
-  /** Motivos de perda de lead falso (cadastro inválido): o lead conta em "Leads" (o formulário chegou),
-   *  mas não conta como MQL nem nas etapas seguintes. */
+  /** Motivos de perda de lead falso (cadastro inválido): o lead sai do funil inteiro, inclusive de
+   *  "Leads", seja ou não MQL (17/11/2026). */
   motivosLeadFalso?: string[];
   /**
    * Funil próprio no dashboard: as etapas do funil do CRM, sem canais nem meta do forecast. Com ele,
@@ -105,14 +105,14 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "15f65232-76e8-4c24-93d0-a52c6c477998": NIVEL.entrada, // Inbound SDR: SEM CONEXÃO
     },
     regressaoDesfaz: true,
-    // Social Selling só entra com closer do comercial que fez a call (17/11/2026). Bruno Brito (closer novo)
-    // entra aqui quando tiver usuário no Pipefácil.
+    // Social Selling só entra com closer do comercial que fez a call (17/11/2026).
     closersPorCanal: {
       social_selling: [
         "cmq9hl04y007540mzmda6ebng", // Arthur Ulisses
         "efaa951d-455a-4148-ba3a-fa3b5f4bafd9", // Jorge Abudi
         "2acc1ce9-0160-4bf9-8526-4f799604143a", // Vinícius Anastácio Ferreira
         "7d0660e3-9acb-4266-93db-cfdee71e2289", // Marcus Ryquelme
+        "4ad3dba8-2353-4787-81e0-bbe6a4f391cf", // Bruno Brito (closer)
       ],
     },
     // Login do portal ainda com outro e-mail (17/11/2026), até ajustarem lá.
