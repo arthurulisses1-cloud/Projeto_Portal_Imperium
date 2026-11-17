@@ -113,11 +113,29 @@ export async function salvarNomesPlanilha(formData: FormData) {
 // gente nunca chega a ver/manusear a senha dela. Substitui o antigo modelo
 // de gerar uma senha temporária e mostrar em tela (que só funcionava uma
 // vez e não dava pra recuperar depois).
-export async function enviarLinkAcesso(formData: FormData) {
-  await exigirDiretor();
+// Devolve { erro } em vez de lançar: em produção o Next esconde a mensagem de erros lançados por ações
+// ("An error occurred in the Server Components render"), então o texto nunca chegava à tela.
+function mensagemAuth(e: { message: string; code?: string; status?: number }): string {
+  const m = (e.message ?? "").toLowerCase();
+  if (e.code === "over_email_send_rate_limit" || m.includes("rate limit")) {
+    return "O Supabase limitou o envio de e-mails (padrão: poucos por hora para o projeto todo). Espere cerca de uma hora ou use \"Gerar senha nova\" para essa pessoa.";
+  }
+  if (e.code === "email_exists" || m.includes("already been registered") || m.includes("already registered")) {
+    return "Esse e-mail já está cadastrado em outra conta.";
+  }
+  if (m.includes("invalid") && m.includes("email")) return "E-mail inválido.";
+  return e.message;
+}
+
+export async function enviarLinkAcesso(formData: FormData): Promise<{ email: string } | { erro: string }> {
+  try {
+    await exigirDiretor();
+  } catch {
+    return { erro: "Só o Diretor pode trocar o e-mail de acesso." };
+  }
   const profileId = String(formData.get("profile_id") ?? "");
   const emailReal = String(formData.get("email_real") ?? "").trim().toLowerCase();
-  if (!profileId || !emailReal) throw new Error("Email é obrigatório.");
+  if (!profileId || !emailReal) return { erro: "E-mail é obrigatório." };
 
   const admin = createAdminClient();
 
@@ -125,7 +143,7 @@ export async function enviarLinkAcesso(formData: FormData) {
     email: emailReal,
     email_confirm: true,
   });
-  if (updateError) throw new Error("Erro ao atualizar email: " + updateError.message);
+  if (updateError) return { erro: "Não foi possível trocar o e-mail: " + mensagemAuth(updateError) };
 
   const h = await headers();
   const host = h.get("host") ?? "localhost:3000";
@@ -133,7 +151,7 @@ export async function enviarLinkAcesso(formData: FormData) {
   const redirectTo = `${proto}://${host}/auth/redefinir-senha`;
 
   const { error: resetError } = await admin.auth.resetPasswordForEmail(emailReal, { redirectTo });
-  if (resetError) throw new Error("Email atualizado, mas falhou ao enviar o link: " + resetError.message);
+  if (resetError) return { erro: "O e-mail foi trocado, mas o link não foi enviado: " + mensagemAuth(resetError) };
 
   revalidatePath("/gestao");
   return { email: emailReal };

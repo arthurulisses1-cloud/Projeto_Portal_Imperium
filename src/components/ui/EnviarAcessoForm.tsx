@@ -17,6 +17,10 @@ export default function EnviarAcessoForm({ profileId, emailAtual }: { profileId:
     startTransition(async () => {
       try {
         const r = await enviarLinkAcesso(fd);
+        if ("erro" in r) {
+          setResultado({ tipo: "erro", texto: r.erro });
+          return;
+        }
         setResultado({ tipo: "ok", texto: `Link enviado pra ${r.email}.` });
         setEmail("");
       } catch (e) {
