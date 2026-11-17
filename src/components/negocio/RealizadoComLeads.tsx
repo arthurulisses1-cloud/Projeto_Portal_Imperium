@@ -14,14 +14,14 @@ const nomeOrigem = (o: string) => ORIGEM[o] ?? o;
 /** Número do realizado; com leads, mostra a lista (data, lead, responsável e pré-vendas) ao passar o mouse.
  *  Lead com "Origem do lead" preenchida (ex.: lead antigo de tráfego prospectado pelo Outbound) ganha uma
  *  etiqueta, e o topo da lista diz quantos vieram de cada origem. */
-export function RealizadoComLeads({ valor, leads }: { valor: string; leads?: LeadEtapa[] }) {
+export function RealizadoComLeads({ valor, leads, alinhar = "direita" }: { valor: string; leads?: LeadEtapa[]; /** Lado em que a lista abre (número à esquerda do cartão: "esquerda"). */ alinhar?: "direita" | "esquerda" }) {
   if (!leads || leads.length === 0) return <span className="text-right text-stone-100">{valor}</span>;
   const porOrigem = new Map<string, number>();
   for (const l of leads) if (l.origem) porOrigem.set(l.origem, (porOrigem.get(l.origem) ?? 0) + 1);
   return (
     <span className="group relative text-right text-stone-100" tabIndex={0}>
       <span className="cursor-help underline decoration-stone-500 decoration-dotted underline-offset-4">{valor}</span>
-      <span className="pointer-events-none invisible absolute right-0 top-full z-30 mt-1 w-80 rounded-md border border-imperium-line bg-imperium-surface p-2 text-left opacity-0 shadow-xl transition-opacity group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus:pointer-events-auto group-focus:visible group-focus:opacity-100">
+      <span className={`pointer-events-none invisible absolute ${alinhar === "esquerda" ? "left-0" : "right-0"} top-full z-30 mt-1 w-80 rounded-md border border-imperium-line bg-imperium-surface p-2 text-left opacity-0 shadow-xl transition-opacity group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus:pointer-events-auto group-focus:visible group-focus:opacity-100 font-normal`}>
         <span className="mb-1 block text-[10px] uppercase tracking-widest text-stone-500">
           {leads.length} {leads.length === 1 ? "lead" : "leads"}
           {Array.from(porOrigem.entries()).map(([o, n]) => (
