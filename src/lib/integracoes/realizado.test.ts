@@ -533,6 +533,16 @@ describe("ranking de pré-vendas", () => {
     expect(r.reunioes_agendadas.map((p) => [p.pessoa, p.leads.length])).toEqual([["vini", 2], ["ryq", 1]]);
     expect(r.reunioes_realizadas.map((p) => [p.pessoa, p.leads.map((l) => l.nome)])).toEqual([["vini", ["ACME"]]]);
   });
+
+  it("leva a Origem do lead (ex.: lead antigo de tráfego no Outbound) para a lista do hover", () => {
+    const deals = [deal({ deal_id: "t", nome: "Da base", origem: "trafego" }), deal({ deal_id: "f", nome: "Fria" })];
+    const eventos = [ev("t", ST.agendadaOut, "2026-11-05T13:00:00Z"), ev("f", ST.agendadaOut, "2026-11-05T14:00:00Z")];
+    const itens = leadsDoRealizado(deals, eventos, cfg, "2026-11-01", "2026-12-01");
+    const leads = rankingPreVendas(itens, eventos, cfg, new Map()).reunioes_agendadas.flatMap((p) => p.leads);
+    expect(leads.map((l) => [l.nome, l.origem])).toEqual([["Da base", "trafego"], ["Fria", null]]);
+    // a origem não muda o canal: os dois contam no Outbound
+    expect(itens.every((i) => i.canal === "outbound")).toBe(true);
+  });
 });
 
 describe("venda desfeita", () => {

@@ -105,6 +105,7 @@ function dealParaLinha(negocioId: string, d: DealPipefacil, cfg: ConfigCrm): Dea
     criado_em: d.createdAt,
     fechado_em: d.closedAt,
     motivo_perda: TEXTO(d.lostReason),
+    origem: campos.origem ? TEXTO(p[campos.origem]) : null,
     synced_at: new Date().toISOString(),
   };
 }
@@ -156,11 +157,12 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   // Identidade (códigos do telefone e do nome) para casar com a Sunne; só nos negócios que pedem.
   const identidade = cfg.identificarContato ? await identidadesDosDeals(deals, () => api.contatos()) : null;
   if (!simular) {
-    // tamanho_time e motivo_perda só são usados no cálculo; crm_deals não tem essas colunas.
+    // tamanho_time, motivo_perda e origem só são usados no cálculo e nas listas; crm_deals não tem essas colunas.
     const espelho = linhasDeals.map((d, i) => {
       const linha: Record<string, unknown> = { ...d };
       delete linha.tamanho_time;
       delete linha.motivo_perda;
+      delete linha.origem;
       if (identidade) {
         linha.telefone_hash = identidade.lista[i].telefoneHash;
         linha.nome_tokens = identidade.lista[i].nomeTokens;
@@ -269,7 +271,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
       const k = `${v.canal}|${v.etapa}`;
       const responsavel = nome(v.deal.responsavel_user_id);
       const sdr = nome(v.deal.sdr_user_id);
-      (doMes[k] ??= []).push({ nome: v.deal.nome || v.deal.empresa || "(sem nome)", responsavel, preVendas: sdr && sdr !== responsavel ? sdr : null, data: v.data });
+      (doMes[k] ??= []).push({ nome: v.deal.nome || v.deal.empresa || "(sem nome)", responsavel, preVendas: sdr && sdr !== responsavel ? sdr : null, data: v.data, origem: v.deal.origem ?? null });
       porMes.set(mes, doMes);
     }
     // Ranking de pré-vendas (agendadas e realizadas, todos os leads e canais): quem era o responsável no

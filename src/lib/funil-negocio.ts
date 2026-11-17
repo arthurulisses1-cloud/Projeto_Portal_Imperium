@@ -24,7 +24,14 @@ export type EtapaFunil = {
 };
 
 /** Lead que compõe o realizado de uma etapa: aparece ao passar o mouse no número. */
-export type LeadEtapa = { nome: string; responsavel: string | null; preVendas: string | null; data: string };
+export type LeadEtapa = {
+  nome: string;
+  responsavel: string | null;
+  preVendas: string | null;
+  data: string;
+  /** Origem do lead quando difere do canal (campo "Origem do lead" do CRM, ex.: "trafego"). */
+  origem?: string | null;
+};
 
 export type FunilDoCanal = { canal: CanalDoFunil; titulo: string; etapas: EtapaFunil[] };
 
