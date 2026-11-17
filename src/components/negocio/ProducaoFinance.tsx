@@ -21,7 +21,8 @@ function corConversao(real: number | null, meta: number): string {
 
 const pct = (v: number) => `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 
-/** Minha Produção do executivo do Vorp Finance: o mesmo funil de Meus Leads (Entrevistas, Subidos, Em pendência, Ganhos). */
+/** Minha Produção do executivo do Vorp Finance: o mesmo funil de Meus Leads (Entrevistas, Subidos, Em pendência, Ganhos).
+ *  Entrevista = a que ele subiu pelo QR Code (planilha, como SDR ou closer); Subido = o lead que ele moveu para Subido. */
 export default async function ProducaoFinance({
   supabase,
   meId,
@@ -41,7 +42,8 @@ export default async function ProducaoFinance({
   const [{ data: porData }, { data: porSubido }] = fin
     ? await Promise.all([
         supabase.from("entrevistas_leads").select(colunas).eq("negocio_id", fin.id).or(meu).gte("data", inicio).lt("data", fimExcl).limit(2000),
-        supabase.from("entrevistas_leads").select(colunas).eq("negocio_id", fin.id).or(meu).gte("subido_em", inicio).lt("subido_em", fimExcl).limit(2000),
+        // Subido = o lead que ELE moveu para Subido (quem registrou o subido), não quem fez a entrevista.
+        supabase.from("entrevistas_leads").select(colunas).eq("negocio_id", fin.id).eq("subido_por", meId).gte("subido_em", inicio).lt("subido_em", fimExcl).limit(2000),
       ])
     : [{ data: [] as Lead[] }, { data: [] as Lead[] }];
 

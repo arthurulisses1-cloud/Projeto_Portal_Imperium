@@ -151,7 +151,7 @@ export default async function NegocioDashboardPage({
     }
   }
   const comVisoes = integradas.size > 0 && !funilUnico;
-  const funis = montarFunisDaVisao(
+  let funis = montarFunisDaVisao(
     funilUnico ? [funilUnico] : previstos,
     linhasRealizado ?? [],
     integradas,
@@ -159,6 +159,18 @@ export default async function NegocioDashboardPage({
     comVisoes ? recorte : "todos",
     comVisoes ? qualificacao : "completo",
   );
+  // Vorp Finance: Entrevistas = as subidas pelo QR Code (planilha); Subidos = leads movidos para Subido em Meus Leads;
+  // Vendas = vendas efetivas (aprovadas) do mês.
+  if (atual.slug === "vorp-finance") {
+    const contar = (q: PromiseLike<{ count: number | null }>) => q.then((r) => r.count ?? 0);
+    const [entrevistas, subidos, vendasQtd] = await Promise.all([
+      contar(supabase.from("entrevistas_leads").select("id", { count: "exact", head: true }).eq("negocio_id", atual.id).gte("data", inicioMes).lt("data", fimMesExcl)),
+      contar(supabase.from("entrevistas_leads").select("id", { count: "exact", head: true }).eq("negocio_id", atual.id).gte("subido_em", inicioMes).lt("subido_em", fimMesExcl)),
+      contar(supabase.from("vendas").select("id", { count: "exact", head: true }).eq("negocio_id", atual.id).gte("data", inicioMes).lt("data", fimMesExcl)),
+    ]);
+    const porChave: Record<string, number> = { reunioes_realizadas: entrevistas, propostas: subidos, vendas: vendasQtd };
+    funis = funis.map((f) => (f.canal === "outbound" ? { ...f, etapas: f.etapas.map((e) => (e.chave in porChave ? { ...e, realizado: porChave[e.chave] } : e)) } : f));
+  }
   const leadsQualificacao = leadsPorQualificacao(linhasRealizado ?? [], recorte);
   const hrefVisao = (mudar: { visao?: Qualificacao; recorte?: Recorte }) =>
     `/negocio?${new URLSearchParams({ mes: mesParam, negocio: atual.slug, visao: mudar.visao ?? qualificacao, recorte: mudar.recorte ?? recorte })}`;
