@@ -10,6 +10,7 @@ import { Pipefacil, type AtividadePipefacil, type DealPipefacil } from "./pipefa
 import { calcularFunilUnico, contarPorDia, detalharVisoes, etapaBase, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { ETAPAS_COM_LISTA } from "./leads-funil";
 import { montarAuditoria } from "./auditoria";
+import { identidadesDosDeals } from "./contatos";
 import type { LeadEtapa } from "@/lib/funil-negocio";
 
 export type OpcoesSync = {
@@ -152,14 +153,23 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const inicioExecucao = new Date().toISOString();
   let nomesUsuarios: Record<string, string> = {};
   const linhasDeals = deals.map((d) => dealParaLinha(negocioId, d, cfg));
+  // Identidade (códigos do telefone e do nome) para casar com a Sunne; só nos negócios que pedem.
+  const identidade = cfg.identificarContato ? await identidadesDosDeals(deals, () => api.contatos()) : null;
   if (!simular) {
     // tamanho_time e motivo_perda só são usados no cálculo; crm_deals não tem essas colunas.
-    const espelho = linhasDeals.map((d) => {
+    const espelho = linhasDeals.map((d, i) => {
       const linha: Record<string, unknown> = { ...d };
       delete linha.tamanho_time;
       delete linha.motivo_perda;
+      if (identidade) {
+        linha.telefone_hash = identidade.lista[i].telefoneHash;
+        linha.nome_tokens = identidade.lista[i].nomeTokens;
+      }
       return linha;
     });
+    if (identidade) {
+      await supabase.from("integracao_estado").upsert({ chave: `pipefacil:${slug}:identidade`, valor: identidade.cobertura, atualizado_em: new Date().toISOString() });
+    }
     for (const lote of chunk(espelho, 500)) {
       const { error } = await supabase.from("crm_deals").upsert(lote, { onConflict: "negocio_id,deal_id" });
       if (error) throw new Error("Erro gravando leads do CRM: " + error.message);

@@ -18,7 +18,12 @@ export type DealPipefacil = {
   closedAt: string | null;
   lostReason?: string | null;
   expectedCloseAt?: string | null;
+  /** Contato do lead (objeto livre na API; o telefone vem dele ou da lista de contatos pelo id). */
+  contact?: Record<string, unknown> | null;
+  contactId?: string | null;
 };
+
+export type ContatoPipefacil = { id: string; phone: string | null; name: string | null; displayName?: string | null; email?: string | null };
 
 export type FunilPipefacil = { id: string; seq: number; name: string; stages: { id: string; name: string }[] };
 
@@ -96,6 +101,19 @@ export class Pipefacil {
         out.push(a);
       }
       if (passou || !r.data.hasMore || !r.data.nextCursor) break;
+      cursor = r.data.nextCursor;
+    }
+    return out;
+  }
+
+  /** Contatos da conta (id, telefone, nome): só leitura, para identificar o cliente de cada lead. */
+  async contatos(): Promise<ContatoPipefacil[]> {
+    const out: ContatoPipefacil[] = [];
+    let cursor: string | undefined;
+    for (let i = 0; i < 300; i++) {
+      const r = await this.get<Pagina<ContatoPipefacil>>("/contacts", { limit: "200", cursor });
+      out.push(...r.data.items);
+      if (!r.data.hasMore || !r.data.nextCursor) break;
       cursor = r.data.nextCursor;
     }
     return out;

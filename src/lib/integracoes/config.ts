@@ -24,6 +24,8 @@ export type ConfigCrm = {
    *  criado pela conversa do WhatsApp) não teve reunião realizada por isso. */
   pipelinesSemNivelNaCriacao?: string[];
 
+  /** Guarda o código do telefone e do nome de cada lead (para casar com outro sistema, ex.: Sunne no Energy). */
+  identificarContato?: boolean;
   /** Etapas de Ganho que viram venda no portal (uma por funil que fecha venda). */
   stagesGanhoVenda: string[];
   /** Valor do campo Canal (canal_origem) → canal do portal. Canais ausentes daqui ficam fora do negócio. */
@@ -188,6 +190,7 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
   // valor dos leads no Ganho do Pipefácil (recebidoPeloCrm). Precisa de PIPEFACIL_API_TOKEN_SUNNE.
   "vorp-energy": {
     tokenEnv: "PIPEFACIL_API_TOKEN_SUNNE",
+    identificarContato: true,
     pipelines: [13],
     niveis: {},
     stagesGanhoVenda: ["6ec9fb40-184f-442b-a0cb-5fc7f0b89bac"], // Ganho do Inside Sales
