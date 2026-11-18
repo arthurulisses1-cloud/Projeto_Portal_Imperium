@@ -115,6 +115,7 @@ export function ReunioesAAcontecer({ lista, rotulo = "SDR" }: { lista: ReuniaoFu
                 <span className={passou ? "text-wine-bright" : "text-gold-bright"}>{quandoReuniao(r)}</span> <span className="text-stone-100">{r.nome}</span>
                 {r.empresa && r.empresa !== r.nome && <span className="text-stone-500"> · {r.empresa}</span>}
                 {r.sdr && <span className="text-stone-500"> · {rotulo} {r.sdr}</span>}
+                {r.com && <span className="text-stone-500"> · com {r.com}</span>}
                 {passou && <span className="block text-wine-bright">a data já passou: atualize a etapa no CRM</span>}
               </span>
             );

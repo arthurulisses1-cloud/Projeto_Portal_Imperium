@@ -373,7 +373,8 @@ export default async function MuralPage({
     type NegHead = { id: string; slug: string; nome: string; equipe_nome: string | null; status: "ativo" | "arquivado"; ordem: number | null };
     const negociosHead = ((chefia ?? []) as unknown as { negocios: NegHead | NegHead[] | null }[])
       .map((l) => (Array.isArray(l.negocios) ? l.negocios[0] : l.negocios))
-      .filter((n): n is NegHead => !!n && n.status === "ativo")
+      // O Head do Match Sales não lança venda no Mural: as vendas dele vêm do Pipefácil.
+      .filter((n): n is NegHead => !!n && n.status === "ativo" && n.slug !== "matchsales")
       .sort((a, b) => (a.ordem ?? 99) - (b.ordem ?? 99));
     if (negociosHead.length > 0) {
       const { vendedoresPor, todos } = await buscarOpcoesLancamento(supabase, negociosHead);

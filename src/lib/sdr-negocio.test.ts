@@ -233,3 +233,12 @@ describe("sinal de plano de vários meses", () => {
     expect(pago.antecipado).toBe(true);
   });
 });
+
+describe("lead repassado pelo BDR (Match Sales)", () => {
+  it("mostra com quem é a reunião quando o lead foi para outra pessoa", () => {
+    const l1 = lead({ nome: "Repassado", preVendas: "Fernando", closer: null, responsavel: "Davi Ximenes", reuniaoMarcada: "20/11/2026 10:00" });
+    const l2 = lead({ nome: "Meu mesmo", preVendas: "Fernando", closer: null, responsavel: "Fernando", reuniaoMarcada: "21/11/2026 10:00" });
+    const r = resumirReunioes([l1, l2], "Fernando", "matchsales", 2026, 11);
+    expect(r.aAcontecer.map((x) => x.com)).toEqual(["Davi Ximenes", null]);
+  });
+});

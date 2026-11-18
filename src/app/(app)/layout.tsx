@@ -50,8 +50,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
   { type: "link", href: "/tarefas", label: "Tarefas", roles: ["sdr", "closer", "lider", "diretor", "analista"], area: "tarefas" },
   // SDR só vê o funil de Repasse de Entrevistas (mesma rota, visão restrita).
   { type: "link", href: "/producao", label: "Minha Produção", roles: ["sdr"] },
-  { type: "link", href: "/exercito", label: "Meu Exército", roles: ["lider"] },
-  { type: "link", href: "/minha-producao", label: "Minha Produção", roles: ["lider"] },
+  // Meu Exército e a Minha Produção do líder saíram (2026-11-18): o líder agora é Head de um negócio e gerencia pelo Mural e pelo Pace.
   // Plano de Carreira e Corrida dos Marcos ficam ocultos por ora (2026-11-17): o modelo de ranks acabou.
   // "analista" liberado aqui pro Igor Lobato (Analista de Growth) ver a
   // própria comissão — pedido do Diretor, 2026-09-24. Os outros Analistas
@@ -271,6 +270,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       // Executivo/closer não usa a Minha Produção do SDR.
       const iProd = itensVisiveis.findIndex((i) => i.type === "link" && i.href === "/producao");
       if (iProd >= 0) itensVisiveis.splice(iProd, 1);
+    }
+  }
+  // Head do Match Sales não lança venda (as vendas vêm do Pipefácil): sai o Lançar Vendas do Dados.
+  if (user && papelAtual === "lider") {
+    const { data: headMatch } = await supabase
+      .from("profile_negocios")
+      .select("negocio_id, negocios!inner(slug)")
+      .eq("profile_id", previewPessoa?.id ?? user.id)
+      .eq("negocios.slug", "matchsales")
+      .eq("cargo", "head")
+      .limit(1);
+    if ((headMatch ?? []).length > 0) {
+      const dadosHead = itensVisiveis.find((i) => i.type === "group" && i.label === "Dados");
+      if (dadosHead && dadosHead.type === "group") dadosHead.items = dadosHead.items.filter((i) => i.href !== "/lancar-vendas");
     }
   }
   // Meus Leads: Finance (consultores e Head) e o Diretor; entra logo depois de Tarefas.

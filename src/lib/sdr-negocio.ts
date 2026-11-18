@@ -110,6 +110,8 @@ export type ReuniaoFutura = {
   quandoTexto: string | null;
   /** Quem agendou (visão do closer). */
   sdr?: string | null;
+  /** Com quem é a reunião (visão do SDR/BDR): o closer, ou a pessoa para quem o lead foi repassado. */
+  com?: string | null;
 };
 
 /** Lê o campo de data da reunião: ISO, "dd/mm/aaaa" ou "dd/mm/aaaa hh:mm" (horário de Brasília). */
@@ -136,6 +138,11 @@ export type ResumoReunioes = {
   noShow: { qtd: number; base: number; pct: number | null };
   rqa: { validadas: number; aguardando: number; recusadas: number; valorValidado: number; valorAguardando: number };
 };
+
+/** Lead que o pré-vendas/BDR repassou: o responsável de hoje, quando não é quem agendou (no Match o campo closer quase não é preenchido). */
+function repassadoPara(l: Pick<LeadAuditoria, "responsavel" | "preVendas">): string | null {
+  return l.responsavel && l.responsavel !== l.preVendas ? l.responsavel : null;
+}
 
 const noMes = (iso: string | null, inicio: string, fimExcl: string) => !!iso && iso.slice(0, 10) >= inicio && iso.slice(0, 10) < fimExcl;
 /** Instantes da auditoria vêm em UTC; a data do Brasil é UTC-3. */
@@ -166,7 +173,7 @@ export function resumirReunioes(leads: LeadAuditoria[], nomeCrm: string, slug: s
       canal: l.canal,
       agendadaEm: dataBR(l.agendadaEm),
       realizadaEm: dataBR(l.realizadaEm),
-      closer: l.closer ?? l.vendedor ?? null,
+      closer: l.closer ?? l.vendedor ?? repassadoPara(l),
       rqa: statusRqa(l.rqa),
       valorRqa: valores[l.canal as CanalPortal] ?? 0,
     }))
@@ -184,6 +191,7 @@ export function resumirReunioes(leads: LeadAuditoria[], nomeCrm: string, slug: s
         agendadaEm: dataBR(l.agendadaEm),
         quando,
         quandoTexto: quando ? null : l.reuniaoMarcada,
+        com: l.closer ?? repassadoPara(l),
       };
     })
     .sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
