@@ -289,9 +289,9 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
                       {d.slug === "vorp-finance" ? (
                         (() => {
                           // Uma linha por venda: comissão da margem (base), comissão do deságio e total.
-                          const porVenda = new Map<string, { data: string; cliente: string | null; base: number; desagio: number }>();
+                          const porVenda = new Map<string, { data: string; cliente: string | null; base: number; desagio: number; pagoEm: string | null }>();
                           for (const i of p.itens) {
-                            const r = porVenda.get(i.vendaId) ?? { data: i.data, cliente: i.cliente, base: 0, desagio: 0 };
+                            const r = porVenda.get(i.vendaId) ?? { data: i.data, cliente: i.cliente, base: 0, desagio: 0, pagoEm: i.pagoEm ?? null };
                             if (i.tipo === "desagio") r.desagio += i.valor;
                             else r.base += i.valor;
                             porVenda.set(i.vendaId, r);
@@ -315,6 +315,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
                                     <tr key={idx} className="border-t border-imperium-line/60">
                                       <td className="py-1.5">
                                         {l.cliente ?? "—"} <span className="text-stone-600">· {dataCurta(l.data)}</span>
+                                        {l.pagoEm && <span className="ml-2 rounded bg-success/15 px-1.5 py-0.5 text-[10px] text-success-bright">pago em {dataCurta(l.pagoEm)}</span>}
                                       </td>
                                       <td className="py-1.5 text-right">{moeda(l.base)}</td>
                                       <td className="py-1.5 text-right">{moeda(l.desagio)}</td>
@@ -343,13 +344,16 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
                             .map((i, idx) => (
                               <tr key={idx} className="border-t border-imperium-line/60">
                                 <td className="w-12 py-1">{dataCurta(i.data)}</td>
-                                <td className="py-1">{i.cliente ?? "—"}</td>
+                                <td className="py-1">
+                                  {i.cliente ?? "—"}
+                                  {i.pagoEm && <span className="ml-2 rounded bg-success/15 px-1.5 py-0.5 text-[10px] text-success-bright">pago em {dataCurta(i.pagoEm)}</span>}
+                                </td>
                                 <td className="py-1">
                                   {PAPEL[i.papel]}
                                   {i.tipo === "desagio" && " · deságio"}
                                 </td>
                                 <td className="py-1 text-right">
-                                  {i.pct}% de {moeda(i.base)}
+                                  {i.ajustado ? "valor definido" : `${i.pct}% de ${moeda(i.base)}`}
                                 </td>
                                 <td className="py-1 text-right text-stone-200">{moeda(i.valor)}</td>
                               </tr>

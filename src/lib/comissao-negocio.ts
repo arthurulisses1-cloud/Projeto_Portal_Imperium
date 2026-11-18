@@ -263,12 +263,18 @@ export type ItemComissao = {
   tipoContrato: string | null;
   implantacao: number | null;
   primeiroContrato: boolean;
+  /** Valor fixado pelo Diretor (comissao_ajustes) em vez do cálculo automático. */
+  ajustado?: boolean;
+  /** Data (YYYY-MM-DD) em que esta comissão foi marcada como paga. */
+  pagoEm?: string | null;
 };
 
 export type ComissaoPessoa = {
   id: string;
   nome: string;
   total: number;
+  /** Parte do total já marcada como paga. */
+  pago: number;
   porPapel: Partial<Record<PapelComissao, number>>;
   itens: ItemComissao[];
 };
@@ -280,9 +286,13 @@ export type ComissaoNegocio = {
   temRegra: boolean;
   recebido: number;
   totalComissao: number;
+  /** Parte do total já marcada como paga (não entra no "a pagar"). */
+  totalPago?: number;
   pessoas: ComissaoPessoa[];
   pagamento: string;
 };
+
+type AjusteRow = { venda_id: string; profile_id: string; papel: string | null; valor: number | null; pago_em: string | null };
 
 export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: number, mes: number, slugs?: string[]): Promise<ComissaoNegocio[]> {
   const inicio = `${ano}-${String(mes).padStart(2, "0")}-01`;
@@ -329,6 +339,18 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
     }
   }
 
+  // Ajustes do Diretor (valor fixado e/ou pagamento). Sem a tabela (migration 0119 ainda não rodada), segue só o cálculo.
+  const ajustesPor = new Map<string, AjusteRow[]>();
+  if ((vendas ?? []).length > 0) {
+    const { data: ajustes, error: erroAjuste } = await supabase
+      .from("comissao_ajustes")
+      .select("venda_id, profile_id, papel, valor, pago_em")
+      .in("venda_id", (vendas ?? []).map((v) => v.id as string));
+    if (!erroAjuste) {
+      for (const a of (ajustes ?? []) as AjusteRow[]) ajustesPor.set(a.venda_id, [...(ajustesPor.get(a.venda_id) ?? []), a]);
+    }
+  }
+
   const nomePor = new Map((perfis ?? []).map((p) => [p.id as string, p.full_name as string]));
   const diretorId = (diretor ?? [])[0]?.id ?? null;
 
@@ -363,16 +385,31 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
         valorCliente: v.valor_cliente === null || v.valor_cliente === undefined ? null : Number(v.valor_cliente),
         fundoMatri: fundoMatriPorVenda.get(v.id as string) ?? null,
       };
-      for (const l of comissaoDaVenda(n.slug, venda, ctx)) {
+      let linhasVenda = comissaoDaVenda(n.slug, venda, ctx);
+      const ajustesVenda = ajustesPor.get(v.id as string) ?? [];
+      // Valor fixado pelo Diretor substitui o cálculo daquela pessoa nesta venda.
+      for (const a of ajustesVenda) {
+        if (a.valor === null || a.valor === undefined) continue;
+        const dela = linhasVenda.filter((l) => l.beneficiarioId === a.profile_id);
+        const papel = (a.papel as PapelComissao | null) ?? dela[0]?.papel ?? "closer";
+        linhasVenda = [
+          ...linhasVenda.filter((l) => l.beneficiarioId !== a.profile_id),
+          { beneficiarioId: a.profile_id, papel, pct: 0, base: Number(v.valor), valor: Number(a.valor), tipo: "base" as const },
+        ];
+      }
+      for (const l of linhasVenda) {
         if (!l.beneficiarioId) continue; // venda sem dono (vendedor sem login): sem comissão de closer
+        const ajuste = ajustesVenda.find((a) => a.profile_id === l.beneficiarioId);
         const pessoa = porPessoa.get(l.beneficiarioId) ?? {
           id: l.beneficiarioId,
           nome: nomePor.get(l.beneficiarioId) ?? "—",
           total: 0,
+          pago: 0,
           porPapel: {},
           itens: [],
         };
         pessoa.total += l.valor;
+        if (ajuste?.pago_em) pessoa.pago += l.valor;
         pessoa.porPapel[l.papel] = (pessoa.porPapel[l.papel] ?? 0) + l.valor;
         pessoa.itens.push({
           vendaId: v.id,
@@ -388,6 +425,8 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
           tipoContrato: (v.tipo_contrato as string | null) ?? null,
           implantacao: v.valor_implantacao === null || v.valor_implantacao === undefined ? null : Number(v.valor_implantacao),
           primeiroContrato: v.primeiro_contrato ?? true,
+          ajustado: !!ajuste && ajuste.valor !== null && ajuste.valor !== undefined,
+          pagoEm: ajuste?.pago_em ?? null,
         });
         porPessoa.set(l.beneficiarioId, pessoa);
       }
@@ -401,6 +440,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
       temRegra,
       recebido,
       totalComissao: pessoas.reduce((s, p) => s + p.total, 0),
+      totalPago: pessoas.reduce((s, p) => s + p.pago, 0),
       pessoas,
       pagamento: dataPagamento(inicio),
     };

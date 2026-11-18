@@ -39,7 +39,7 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
     supabase.from("negocios").select("id, slug").eq("status", "ativo"),
   ]);
 
-  const fixosPor = await buscarFixosPorNegocio(supabase, (negocios ?? []) as { id: string; slug: string }[]);
+  const fixosPor = await buscarFixosPorNegocio(supabase, (negocios ?? []) as { id: string; slug: string }[], ano, mes);
 
   const custoDiretorPorNegocio = comissoes.length > 0 ? CUSTO_DIRETOR / comissoes.length : 0;
   const linhas = comissoes.map((c) => {
@@ -53,7 +53,8 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
   const totalFixos = linhas.reduce((s, l) => s + l.totalFixos, 0);
   const totalComissoes = linhas.reduce((s, l) => s + l.c.totalComissao, 0);
   const resultado = recebido - totalFixos - totalComissoes - CUSTO_DIRETOR;
-  const comissaoAnteriorAPagar = comissoesAnt.reduce((s, c) => s + c.totalComissao, 0);
+  // O que já foi marcado como pago não entra no que falta pagar.
+  const comissaoAnteriorAPagar = comissoesAnt.reduce((s, c) => s + c.totalComissao - (c.totalPago ?? 0), 0);
 
   const antLink = `${ant.ano}-${String(ant.mes).padStart(2, "0")}`;
   const seg = mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;

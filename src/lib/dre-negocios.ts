@@ -30,23 +30,40 @@ export async function comissoesComEnergia(supabase: SupabaseClient, ano: number,
   );
 }
 
-/** Fixos mensais por negócio (slug), só de pessoas ativas. */
-export async function buscarFixosPorNegocio(supabase: SupabaseClient, negocios: { id: string; slug: string }[]): Promise<Map<string, FixoPessoa[]>> {
+/** Fixo do mês: a exceção cadastrada para o mês (ex.: proporcional no mês de entrada) ou o fixo mensal (pura). */
+export function fixoDoMes(fixo: number, excecoes: Record<string, number> | null | undefined, ano: number, mes: number): number {
+  const e = excecoes?.[`${ano}-${String(mes).padStart(2, "0")}`];
+  return e === undefined || e === null ? fixo : Number(e);
+}
+
+/** Fixos do mês por negócio (slug), só de pessoas ativas. Sem ano/mês usa o fixo mensal, sem exceções. */
+export async function buscarFixosPorNegocio(supabase: SupabaseClient, negocios: { id: string; slug: string }[], ano?: number, mes?: number): Promise<Map<string, FixoPessoa[]>> {
   const out = new Map<string, FixoPessoa[]>();
   if (negocios.length === 0) return out;
-  const { data: vinculos } = await supabase
+  const ids = negocios.map((n) => n.id);
+  // fixo_excecoes vem da migration 0120; sem ela, cai na leitura antiga.
+  const comExcecoes = await supabase
     .from("profile_negocios")
-    .select("negocio_id, cargo, fixo, profiles!inner(id, full_name, ativo)")
-    .in("negocio_id", negocios.map((n) => n.id))
+    .select("negocio_id, cargo, fixo, fixo_excecoes, profiles!inner(id, full_name, ativo)")
+    .in("negocio_id", ids)
     .not("fixo", "is", null);
-  type V = { negocio_id: string; cargo: string; fixo: number; profiles: { id: string; full_name: string; ativo: boolean } | { id: string; full_name: string; ativo: boolean }[] };
+  const vinculos: unknown[] | null = comExcecoes.error
+    ? (
+        await supabase
+          .from("profile_negocios")
+          .select("negocio_id, cargo, fixo, profiles!inner(id, full_name, ativo)")
+          .in("negocio_id", ids)
+          .not("fixo", "is", null)
+      ).data
+    : comExcecoes.data;
+  type V = { negocio_id: string; cargo: string; fixo: number; fixo_excecoes?: Record<string, number> | null; profiles: { id: string; full_name: string; ativo: boolean } | { id: string; full_name: string; ativo: boolean }[] };
   const slugPorId = new Map(negocios.map((n) => [n.id, n.slug]));
   for (const v of (vinculos ?? []) as unknown as V[]) {
     const p = Array.isArray(v.profiles) ? v.profiles[0] : v.profiles;
     const slug = slugPorId.get(v.negocio_id);
     if (!p?.ativo || !slug) continue;
     const arr = out.get(slug) ?? [];
-    arr.push({ nome: p.full_name, cargo: v.cargo, fixo: Number(v.fixo) });
+    arr.push({ nome: p.full_name, cargo: v.cargo, fixo: ano && mes ? fixoDoMes(Number(v.fixo), v.fixo_excecoes, ano, mes) : Number(v.fixo) });
     out.set(slug, arr);
   }
   Array.from(out.values()).forEach((arr) => arr.sort((a, b) => b.fixo - a.fixo));
@@ -113,6 +130,6 @@ export async function buscarDreNegocios(supabase: SupabaseClient, ano: number, m
     comissoesComEnergia(supabase, ano, mes),
     supabase.from("negocios").select("id, slug").eq("status", "ativo"),
   ]);
-  const fixosPor = await buscarFixosPorNegocio(supabase, (negocios ?? []) as { id: string; slug: string }[]);
+  const fixosPor = await buscarFixosPorNegocio(supabase, (negocios ?? []) as { id: string; slug: string }[], ano, mes);
   return montarDre(comissoes, fixosPor);
 }

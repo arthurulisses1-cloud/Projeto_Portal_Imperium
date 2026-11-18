@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { montarDre } from "./dre-negocios";
+import { fixoDoMes, montarDre } from "./dre-negocios";
 import type { ComissaoNegocio } from "./comissao-negocio";
 
 const neg = (slug: string, recebido: number, totalComissao: number): ComissaoNegocio => ({
@@ -11,6 +11,14 @@ const neg = (slug: string, recebido: number, totalComissao: number): ComissaoNeg
   totalComissao,
   pessoas: [],
   pagamento: "",
+});
+
+describe("fixoDoMes", () => {
+  it("usa a exceção do mês e o fixo mensal nos demais", () => {
+    expect(fixoDoMes(4000, { "2026-11": 2000 }, 2026, 11)).toBe(2000);
+    expect(fixoDoMes(4000, { "2026-11": 2000 }, 2026, 12)).toBe(4000);
+    expect(fixoDoMes(4000, null, 2026, 11)).toBe(4000);
+  });
 });
 
 describe("montarDre", () => {
