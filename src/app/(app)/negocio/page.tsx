@@ -487,20 +487,19 @@ export default async function NegocioDashboardPage({
                       />
                     )}
                   </div>
-                  {/* Pré-vendas do funil: "Time" ou uma pessoa (o funil inteiro dela, com a meta dela) */}
+                  {/* Pré-vendas do funil: "Time" ou uma pessoa (o funil inteiro dela, com a meta dela), numa lista suspensa */}
                   {comVisoes && (fu.canal === "outbound" || fu.canal === "inbound") && filtroPv[fu.canal] && (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                      <span className="text-[10px] uppercase tracking-widest text-stone-500">Pré-vendas</span>
-                      <Seletor
-                        opcoes={[
-                          { rotulo: "Time", href: hrefVisao(fu.canal === "outbound" ? { pvOut: null } : { pvIn: null }), ativo: !filtroPv[fu.canal]!.escolhido },
-                          ...filtroPv[fu.canal]!.opcoes.map((o) => ({
-                            rotulo: o.nome,
-                            href: hrefVisao(fu.canal === "outbound" ? { pvOut: o.id } : { pvIn: o.id }),
-                            ativo: filtroPv[fu.canal]!.escolhido === o.id,
-                            dica: `Funil de ${o.nome}: alôs e conexões que atendeu no 3C, leads e reuniões que levou (a realizada, a proposta e a venda vão para quem agendou). Meta = meta do canal ÷ ${filtroPv[fu.canal]!.divisor}.`,
-                          })),
-                        ]}
+                    <div className="mt-1.5">
+                      <SeletorPessoa
+                        key={filtroPv[fu.canal]!.escolhido ?? "time"}
+                        escolhido={filtroPv[fu.canal]!.opcoes.find((o) => o.id === filtroPv[fu.canal]!.escolhido)?.nome ?? null}
+                        time={hrefVisao(fu.canal === "outbound" ? { pvOut: null } : { pvIn: null })}
+                        opcoes={filtroPv[fu.canal]!.opcoes.map((o) => ({
+                          nome: o.nome,
+                          href: hrefVisao(fu.canal === "outbound" ? { pvOut: o.id } : { pvIn: o.id }),
+                          ativo: filtroPv[fu.canal]!.escolhido === o.id,
+                        }))}
+                        dica={`Funil de cada pessoa: alôs e conexões que atendeu no 3C, leads e reuniões que levou (a realizada, a proposta e a venda vão para quem agendou). Meta = meta do canal ÷ ${filtroPv[fu.canal]!.divisor}.`}
                       />
                     </div>
                   )}
@@ -948,5 +947,31 @@ function Seletor({ opcoes }: { opcoes: { rotulo: string; href: string; ativo: bo
         </Link>
       ))}
     </span>
+  );
+}
+
+/** Filtro de pré-vendas do funil numa lista suspensa: compacto mesmo com muitas pessoas (ex.: Galáticos). */
+function SeletorPessoa({ escolhido, time, opcoes, dica }: { escolhido: string | null; time: string; opcoes: { nome: string; href: string; ativo: boolean }[]; dica: string }) {
+  return (
+    <details className="group relative inline-block text-[11px]">
+      <summary
+        title={dica}
+        className="flex cursor-pointer list-none items-center gap-1.5 rounded-lg border border-imperium-line bg-imperium-raised px-2.5 py-1 text-stone-300 hover:text-stone-100 [&::-webkit-details-marker]:hidden"
+      >
+        <span className="text-[10px] uppercase tracking-widest text-stone-500">Pré-vendas</span>
+        <span className={escolhido ? "font-semibold text-gold-bright" : "text-stone-100"}>{escolhido ?? "Time"}</span>
+        <span className="text-stone-500 transition group-open:rotate-180">▾</span>
+      </summary>
+      <div className="absolute left-0 z-30 mt-1 max-h-72 min-w-[12rem] overflow-y-auto rounded-md border border-imperium-line bg-imperium-surface p-1 shadow-xl">
+        <Link href={time} scroll={false} className={`block rounded px-2 py-1 ${!escolhido ? "bg-imperium-raised font-semibold text-stone-100" : "text-stone-300 hover:bg-imperium-raised"}`}>
+          Time
+        </Link>
+        {opcoes.map((o) => (
+          <Link key={o.nome} href={o.href} scroll={false} className={`block rounded px-2 py-1 ${o.ativo ? "bg-imperium-raised font-semibold text-gold-bright" : "text-stone-300 hover:bg-imperium-raised"}`}>
+            {o.nome}
+          </Link>
+        ))}
+      </div>
+    </details>
   );
 }
