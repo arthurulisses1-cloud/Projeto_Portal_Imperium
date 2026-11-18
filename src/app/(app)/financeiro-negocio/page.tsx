@@ -3,14 +3,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
 import { NEGOCIO_COR } from "@/lib/negocios";
-import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
+import { comissoesComEnergia, buscarFixosPorNegocio, CUSTO_DIRETOR } from "@/lib/dre-negocios";
 
 export const dynamic = "force-dynamic";
 
 const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-
-/** Custo mensal do Diretor, dividido igualmente entre os negócios ativos (pedido do Diretor, 2026-11-05). */
-const CUSTO_DIRETOR = 10000;
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -37,29 +34,12 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
   const ant = mesAnterior(ano, mes);
 
   const [comissoes, comissoesAnt, { data: negocios }] = await Promise.all([
-    buscarComissoesNegocios(supabase, ano, mes),
-    buscarComissoesNegocios(supabase, ant.ano, ant.mes),
+    comissoesComEnergia(supabase, ano, mes),
+    comissoesComEnergia(supabase, ant.ano, ant.mes),
     supabase.from("negocios").select("id, slug").eq("status", "ativo"),
   ]);
 
-  const ids = (negocios ?? []).map((n) => n.id);
-  const { data: vinculos } = await supabase
-    .from("profile_negocios")
-    .select("negocio_id, cargo, fixo, profiles!inner(id, full_name, ativo)")
-    .in("negocio_id", ids)
-    .not("fixo", "is", null);
-  type V = { negocio_id: string; cargo: string; fixo: number; profiles: { id: string; full_name: string; ativo: boolean } | { id: string; full_name: string; ativo: boolean }[] };
-  const slugPorId = new Map((negocios ?? []).map((n) => [n.id as string, n.slug as string]));
-  const fixosPor = new Map<string, { nome: string; cargo: string; fixo: number }[]>();
-  for (const v of (vinculos ?? []) as unknown as V[]) {
-    const p = Array.isArray(v.profiles) ? v.profiles[0] : v.profiles;
-    if (!p?.ativo) continue;
-    const slug = slugPorId.get(v.negocio_id);
-    if (!slug) continue;
-    const arr = fixosPor.get(slug) ?? [];
-    arr.push({ nome: p.full_name, cargo: v.cargo, fixo: Number(v.fixo) });
-    fixosPor.set(slug, arr);
-  }
+  const fixosPor = await buscarFixosPorNegocio(supabase, (negocios ?? []) as { id: string; slug: string }[]);
 
   const custoDiretorPorNegocio = comissoes.length > 0 ? CUSTO_DIRETOR / comissoes.length : 0;
   const linhas = comissoes.map((c) => {
