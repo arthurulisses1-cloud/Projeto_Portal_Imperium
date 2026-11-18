@@ -137,7 +137,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
     const { data: vals, error } = await admin.from("rqa_gerente").select("deal_id, decisao, observacao, atualizado_em, atualizado_por").eq("negocio_id", atual.id);
     if (error) rqaIndisponivel = true;
     for (const v of vals ?? []) gerenteRqa.set(v.deal_id, { decisao: v.decisao, observacao: v.observacao, atualizadoEm: v.atualizado_em, atualizadoPor: v.atualizado_por });
-    podeValidar = !rqaIndisponivel && (await podeValidarRqa(supabase, user.id, eu.role, atual.id));
+    podeValidar = !rqaIndisponivel && (await podeValidarRqa(supabase, user.id, eu.role, atual.id, atual.slug));
     const ids = Array.from(new Set(Array.from(gerenteRqa.values()).map((v) => v.atualizadoPor).filter((x): x is string => !!x)));
     if (ids.length) {
       const { data: perfis } = await admin.from("profiles").select("id, full_name").in("id", ids);

@@ -7,9 +7,10 @@ import { CRM_POR_NEGOCIO } from "@/lib/integracoes/config";
 import type { AuditoriaGravada } from "@/lib/integracoes/auditoria";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Quem valida a RQA: o Diretor ou o Head do negócio. */
-export async function podeValidarRqa(supabase: SupabaseClient, userId: string, role: string, negocioId: string): Promise<boolean> {
-  if (role === "diretor") return true;
+/** Quem valida a RQA: o Diretor, o Head do negócio ou um dos validadores da configuração do negócio. */
+export async function podeValidarRqa(supabase: SupabaseClient, userId: string, role: string, negocioId: string, slug: string): Promise<boolean> {
+  if (!CRM_POR_NEGOCIO[slug]?.rqa) return false;
+  if (role === "diretor" || CRM_POR_NEGOCIO[slug]?.rqa?.validadores?.includes(userId)) return true;
   const { data } = await supabase.from("profile_negocios").select("cargo").eq("profile_id", userId).eq("negocio_id", negocioId).maybeSingle();
   return data?.cargo === "head";
 }
@@ -35,7 +36,7 @@ export async function salvarValidacaoRqa(formData: FormData): Promise<void> {
   if (!eu) return;
   const admin = createAdminClient();
   const { data: neg } = await admin.from("negocios").select("id").eq("slug", slug).single();
-  if (!neg || !(await podeValidarRqa(supabase, user.id, eu.role, neg.id))) return;
+  if (!neg || !(await podeValidarRqa(supabase, user.id, eu.role, neg.id, slug))) return;
 
   // Só reunião realizada da base da Auditoria (o lead existe e chegou à realizada).
   const { data: est } = await admin.from("integracao_estado").select("valor").eq("chave", `auditoria:${slug}`).maybeSingle();
