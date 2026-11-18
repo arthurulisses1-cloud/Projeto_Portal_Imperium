@@ -375,7 +375,11 @@ export type ContratoCarteira = {
   chave: string;
   cliente: string;
   canal: string | null;
-  papel: "sdr" | "closer";
+  papel: "sdr" | "closer" | "head";
+  /** Gestão: quem fechou o contrato (nome). */
+  dono?: string | null;
+  /** Dupla com a pessoa como co-responsável e Head: soma a gestão ao % de fechamento. */
+  somaGestao?: boolean;
   desde: string;
   ultimo: string;
   mrr: number;
@@ -467,6 +471,8 @@ export function montarCarteira(
   detectarPrepago = false,
   /** Match Sales: a pessoa recebe 10% no fechamento em qualquer canal (sem BDR). */
   dezSempre = false,
+  /** Head (Match Sales): inclui os contratos do time com o % de gestão; no contrato em que é co-responsável soma a gestão ao fechamento. */
+  gestao?: { pct: number; nomes?: ReadonlyMap<string, string> },
 ): ContratoCarteira[] {
   const mesAtual = hoje.slice(0, 7);
   const [a, m] = mesAtual.split("-").map(Number);
@@ -474,7 +480,8 @@ export function montarCarteira(
   const porChave = new Map<string, ContratoCarteira>();
   for (const v of [...vendas].sort((x, y) => x.data.localeCompare(y.data))) {
     if (!(Number(v.mrr) > 0) || v.primeiro_contrato === false) continue;
-    const papel = v.indicador_id === profileId ? "sdr" : v.profile_id === profileId || v.co_closer_id === profileId ? "closer" : null;
+    const souCloser = v.profile_id === profileId || v.co_closer_id === profileId;
+    const papel = v.indicador_id === profileId ? "sdr" : souCloser ? "closer" : gestao ? "head" : null;
     if (!papel) continue;
     const chave = (v.cliente ?? "").trim().toLowerCase() || v.crm_deal_id || v.data;
     const c = porChave.get(chave) ?? {
@@ -495,6 +502,8 @@ export function montarCarteira(
       antecipado: false,
       sinal: false,
       dupla: false,
+      dono: v.profile_id ? gestao?.nomes?.get(v.profile_id) ?? null : null,
+      somaGestao: !!gestao && v.co_closer_id === profileId,
     };
     // Match Sales: plano semestral/anual pago de uma vez cobre o contrato todo; conta pela 1ª venda do cliente.
     if (detectarPrepago && !porChave.has(chave)) {
@@ -512,8 +521,8 @@ export function montarCarteira(
   return Array.from(porChave.values())
     .map((c) => {
       // Fechamento: quem recebe 10% sempre (sem BDR) usa 10; em dupla, metade da taxa de cada um.
-      const taxa = c.papel === "closer" && dezSempre && !c.comIndicador ? 10 : pctDe(c.papel, c.canal, c.comIndicador);
-      const pct = c.papel === "closer" && c.dupla ? taxa / 2 : taxa;
+      const taxa = c.papel === "closer" && dezSempre && !c.comIndicador ? 10 : c.papel === "head" ? 0 : pctDe(c.papel, c.canal, c.comIndicador);
+      const pct = c.papel === "head" && gestao ? gestao.pct : (c.papel === "closer" && c.dupla ? taxa / 2 : taxa) + (c.somaGestao && gestao ? gestao.pct : 0);
       // Contrato pago de uma vez: não gera recorrência até o fim do período pago (só vigora se houver renovação).
       const antecipado = !!c.pagoAte && hoje < c.pagoAte;
       const ativo = !antecipado && !c.sinal && (c.ultimo.startsWith(mesAtual) || c.ultimo.startsWith(mesAnterior));
@@ -546,4 +555,24 @@ export async function buscarCarteira(
   if (error) ({ data, error } = await consulta("data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato, valor_implantacao, produto, tipo_contrato"));
   if (error) ({ data, error } = await consulta("data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato, valor_implantacao, produto"));
   return montarCarteira((data ?? []) as unknown as LinhaVendaCarteira[], profileId, hoje, pctDe, detectarPrepago, dezSempre);
+}
+
+/** Carteira de recorrência do Head do Match Sales: todos os contratos do time com o % de gestão e, onde ele é da dupla, o fechamento também. */
+export async function buscarCarteiraGestao(
+  admin: SupabaseClient,
+  negocioId: string,
+  headId: string,
+  hoje: string,
+  pctDe: (papel: "sdr" | "closer", canal: string | null, comIndicador?: boolean) => number,
+  pctGestao: number,
+  detectarPrepago = false,
+): Promise<ContratoCarteira[]> {
+  const consulta = (colunas: string) => admin.from("vendas").select(colunas).eq("negocio_id", negocioId).gt("mrr", 0).order("data").range(0, 4999);
+  const base = "data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato, valor_implantacao, produto";
+  let { data, error } = await consulta(base + ", tipo_contrato, co_closer_id");
+  if (error) ({ data, error } = await consulta(base + ", tipo_contrato"));
+  if (error) ({ data, error } = await consulta(base));
+  const { data: perfis } = await admin.from("profiles").select("id, full_name");
+  const nomes = new Map((perfis ?? []).map((p) => [p.id as string, (p.full_name as string).split(" ")[0]] as const));
+  return montarCarteira((data ?? []) as unknown as LinhaVendaCarteira[], headId, hoje, pctDe, detectarPrepago, false, { pct: pctGestao, nomes });
 }

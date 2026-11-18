@@ -166,6 +166,30 @@ describe("carteira em dupla (Match Sales)", () => {
   });
 });
 
+describe("carteira do Head (Match Sales)", () => {
+  const v = { crm_deal_id: null, canal: "outbound", primeiro_contrato: true, valor: 300, data: "2026-11-10", mrr: 300, indicador_id: null };
+  const pct = (p: "sdr" | "closer", c: string | null) => (p === "closer" ? (c === "outbound" ? 10 : 8) : 5);
+  it("contrato do time rende só a gestão; onde é da dupla soma fechamento e gestão; onde é o responsável, só o fechamento", () => {
+    const c = montarCarteira(
+      [
+        { ...v, cliente: "Do time", profile_id: "leo", co_closer_id: null },
+        { ...v, cliente: "Dupla", profile_id: "leo", co_closer_id: "davi" },
+        { ...v, cliente: "Dele", profile_id: "davi", co_closer_id: null },
+      ],
+      "davi",
+      "2026-11-18",
+      pct,
+      false,
+      false,
+      { pct: 2, nomes: new Map([["leo", "Leonardo"], ["davi", "Davi"]]) },
+    );
+    const por = Object.fromEntries(c.map((x) => [x.cliente, [x.papel, x.pct, x.porMes]]));
+    expect(por["Do time"]).toEqual(["head", 2, 6]);
+    expect(por["Dupla"]).toEqual(["closer", 7, 21]);
+    expect(por["Dele"]).toEqual(["closer", 10, 30]);
+  });
+});
+
 describe("somarPreVendas", () => {
   const ind = (meta: number, datas: string[]) => ({
     pace: calcularPace({ meta, recebido: datas.length, hoje: "2026-11-18", ano: 2026, mes: 11 }),

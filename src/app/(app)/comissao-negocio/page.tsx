@@ -6,9 +6,9 @@ import ExplicacaoComissaoFinance from "@/components/negocio/ExplicacaoComissaoFi
 import { getViewerContext } from "@/lib/preview";
 import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe, veConsolidado } from "@/lib/negocios";
-import { buscarComissoesNegocios, MATCH_COMISSAO_10_SEMPRE, type ComissaoNegocio, type PapelComissao } from "@/lib/comissao-negocio";
-import { buscarCarteira, buscarPainelSdr, temRqa, vinculoPreVendas } from "@/lib/sdr-negocio";
-import { ExplicacaoComissaoCloserVorp, ExplicacaoComissaoMatch, ExplicacaoComissaoVorp, PainelComissaoSdr, pctNegocio } from "@/components/negocio/ComissaoSdr";
+import { buscarComissoesNegocios, MATCH_COMISSAO_10_SEMPRE, percentuais, type ComissaoNegocio, type PapelComissao } from "@/lib/comissao-negocio";
+import { buscarCarteira, buscarCarteiraGestao, buscarPainelSdr, temRqa, vinculoPreVendas } from "@/lib/sdr-negocio";
+import { ExplicacaoComissaoCloserVorp, ExplicacaoComissaoMatch, ExplicacaoComissaoVorp, CarteiraRecorrencia, PainelComissaoSdr, pctNegocio } from "@/components/negocio/ComissaoSdr";
 import { vinculoCloser } from "@/lib/closer-negocio";
 import { buscarComissaoEnergia, vinculoEnergia } from "@/lib/energy-time";
 import { ComissaoEnergiaExecutivo, ComissaoEnergiaHead, ComissaoEnergiaTime } from "@/components/negocio/ComissaoEnergia";
@@ -139,6 +139,15 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
     );
   }
 
+  // Head do Match Sales: carteira de recorrência do time (gestão) e, onde ele é da dupla, o fechamento também.
+  let blocoGestaoMatch: React.ReactNode = null;
+  const headMatch = ehDiretor ? null : visiveis.find((n) => n.cargo === "head" && n.slug === "matchsales");
+  if (headMatch && (!foco || foco.slug === "matchsales")) {
+    const gestaoPct = percentuais("matchsales", { id: "", valor: 0, canal: "outbound", closerId: "x", closerCargo: "executivo", indicadorId: null })?.head ?? 2;
+    const carteiraGestao = await buscarCarteiraGestao(createAdminClient(), headMatch.id, user.id, hoje, pctNegocio("matchsales"), gestaoPct, true);
+    blocoGestaoMatch = <CarteiraRecorrencia carteira={carteiraGestao} titulo="Carteira do time · recorrência" />;
+  }
+
   // Maximus Energy: comissão da primeira fatura de cada conta ganha na Sunne (o executivo vê só as dele; Head e Diretor, o time).
   let blocoEnergia: React.ReactNode = null;
   let energiaDoHead: number | null = null; // comissão do Head do Energy (individual + time), para o total do mês
@@ -209,6 +218,8 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
       {mostraFinance && <ExplicacaoComissaoFinance completo={ehDiretor || headDe.has("vorp-finance")} />}
 
       {blocoSdr}
+
+      {blocoGestaoMatch}
 
       {blocoEnergia}
 
