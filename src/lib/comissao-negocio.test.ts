@@ -94,9 +94,15 @@ describe("comissaoDaVenda", () => {
     const dois10 = comissaoDaVenda("matchsales", { ...base, closerId: "a", coCloserId: "b" }, ctx);
     expect(dois10.filter((x) => x.papel === "closer").map((x) => x.pct)).toEqual([5, 5]);
   });
-  it("Match: Head como co-responsável divide o fechamento e leva também os 2% de gestão", () => {
-    const l = comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "a", coCloserId: "h" }, ctx);
-    expect(l.filter((x) => x.beneficiarioId === "h").map((x) => [x.papel, x.pct])).toEqual([["closer", 4], ["head", 2]]);
+  it("Match, gestão de 2%: Head fora da venda leva 2; sozinho, os 2 vão para o Diretor; na dupla, 1 para cada", () => {
+    const fora = comissaoDaVenda("matchsales", { ...base, closerId: "a" }, ctx);
+    expect(fora.filter((x) => x.papel === "head" || x.papel === "diretor").map((x) => [x.beneficiarioId, x.pct])).toEqual([["h", 2]]);
+    const sozinho = comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "h", closerCargo: "head" }, ctx);
+    expect(sozinho.find((x) => x.papel === "closer")?.pct).toBe(8);
+    expect(sozinho.filter((x) => x.papel === "head" || x.papel === "diretor").map((x) => [x.beneficiarioId, x.pct])).toEqual([["d", 2]]);
+    const co = comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "a", coCloserId: "h" }, ctx);
+    expect(co.filter((x) => x.beneficiarioId === "h").map((x) => [x.papel, x.pct])).toEqual([["closer", 4], ["head", 1]]);
+    expect(co.filter((x) => x.beneficiarioId === "d").map((x) => [x.papel, x.pct])).toEqual([["diretor", 1]]);
   });
   it("Match: Soares sozinho recebe 10% até no inbound; os demais seguem 8%", () => {
     const comSoares = { headId: "h", diretorId: "d", comissao10Sempre: new Set(["soares"]) };

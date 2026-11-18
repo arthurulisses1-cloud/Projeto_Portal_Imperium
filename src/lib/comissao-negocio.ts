@@ -179,6 +179,16 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
   // Energy: o Head leva os 5% mesmo vendendo (35%); se o Diretor vendeu, ele fica também com o do Head (40%).
   if (energia) {
     add(diretorVendeu ? ctx.diretorId : ctx.headId, "head", p.head);
+  } else if (slug === "matchsales" && ctx.headId) {
+    // Gestão do Match (2%): o Head não participou → 2% dele; fez sozinho → os 2% vão para o Diretor;
+    // participou da dupla (responsável ou co-responsável) → 1% para ele e 1% para o Diretor.
+    const headNaVenda = venda.closerId === ctx.headId || venda.coCloserId === ctx.headId;
+    const dupla = !!venda.coCloserId && venda.coCloserId !== venda.closerId;
+    if (!headNaVenda) add(ctx.headId, "head", p.head);
+    else if (dupla) {
+      add(ctx.headId, "head", p.head / 2);
+      add(ctx.diretorId, "diretor", p.head / 2);
+    } else add(ctx.diretorId, "diretor", p.head);
   } else {
     add(ctx.headId && ctx.headId !== venda.closerId ? ctx.headId : null, "head", p.head);
   }

@@ -503,7 +503,7 @@ export function montarCarteira(
       sinal: false,
       dupla: false,
       dono: v.profile_id ? gestao?.nomes?.get(v.profile_id) ?? null : null,
-      somaGestao: !!gestao && v.co_closer_id === profileId,
+      somaGestao: !!gestao && souCloser && !!v.co_closer_id && v.co_closer_id !== v.profile_id,
     };
     // Match Sales: plano semestral/anual pago de uma vez cobre o contrato todo; conta pela 1ª venda do cliente.
     if (detectarPrepago && !porChave.has(chave)) {
@@ -522,7 +522,7 @@ export function montarCarteira(
     .map((c) => {
       // Fechamento: quem recebe 10% sempre (sem BDR) usa 10; em dupla, metade da taxa de cada um.
       const taxa = c.papel === "closer" && dezSempre && !c.comIndicador ? 10 : c.papel === "head" ? 0 : pctDe(c.papel, c.canal, c.comIndicador);
-      const pct = c.papel === "head" && gestao ? gestao.pct : (c.papel === "closer" && c.dupla ? taxa / 2 : taxa) + (c.somaGestao && gestao ? gestao.pct : 0);
+      const pct = c.papel === "head" && gestao ? gestao.pct : (c.papel === "closer" && c.dupla ? taxa / 2 : taxa) + (c.somaGestao && gestao ? gestao.pct / 2 : 0);
       // Contrato pago de uma vez: não gera recorrência até o fim do período pago (só vigora se houver renovação).
       const antecipado = !!c.pagoAte && hoje < c.pagoAte;
       const ativo = !antecipado && !c.sinal && (c.ultimo.startsWith(mesAtual) || c.ultimo.startsWith(mesAnterior));
@@ -557,7 +557,7 @@ export async function buscarCarteira(
   return montarCarteira((data ?? []) as unknown as LinhaVendaCarteira[], profileId, hoje, pctDe, detectarPrepago, dezSempre);
 }
 
-/** Carteira de recorrência do Head do Match Sales: todos os contratos do time com o % de gestão e, onde ele é da dupla, o fechamento também. */
+/** Carteira de recorrência do Head do Match Sales: contratos do time com 2% de gestão; onde ele é da dupla, o fechamento + 1% de gestão; sozinho, só o fechamento. */
 export async function buscarCarteiraGestao(
   admin: SupabaseClient,
   negocioId: string,

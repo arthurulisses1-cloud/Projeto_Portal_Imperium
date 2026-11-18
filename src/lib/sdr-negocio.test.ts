@@ -169,7 +169,7 @@ describe("carteira em dupla (Match Sales)", () => {
 describe("carteira do Head (Match Sales)", () => {
   const v = { crm_deal_id: null, canal: "outbound", primeiro_contrato: true, valor: 300, data: "2026-11-10", mrr: 300, indicador_id: null };
   const pct = (p: "sdr" | "closer", c: string | null) => (p === "closer" ? (c === "outbound" ? 10 : 8) : 5);
-  it("contrato do time rende só a gestão; onde é da dupla soma fechamento e gestão; onde é o responsável, só o fechamento", () => {
+  it("contrato do time rende só a gestão (2%); onde é da dupla soma fechamento e 1% de gestão; onde é o responsável, só o fechamento", () => {
     const c = montarCarteira(
       [
         { ...v, cliente: "Do time", profile_id: "leo", co_closer_id: null },
@@ -185,7 +185,7 @@ describe("carteira do Head (Match Sales)", () => {
     );
     const por = Object.fromEntries(c.map((x) => [x.cliente, [x.papel, x.pct, x.porMes]]));
     expect(por["Do time"]).toEqual(["head", 2, 6]);
-    expect(por["Dupla"]).toEqual(["closer", 7, 21]);
+    expect(por["Dupla"]).toEqual(["closer", 6, 18]);
     expect(por["Dele"]).toEqual(["closer", 10, 30]);
   });
 });
