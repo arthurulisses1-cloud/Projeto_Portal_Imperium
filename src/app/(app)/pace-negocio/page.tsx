@@ -15,6 +15,8 @@ import {
 } from "@/lib/negocios";
 import { CARGOS_QUE_VENDEM, buscarPaceNegocios, calcularPace, diasUteis, limitesDoMes, type PaceCalculado, type PaceNegocio, type StatusPace } from "@/lib/pace-negocio";
 import { buscarPainelHead, type PainelHead } from "@/lib/head-negocio";
+import { buscarPainelEnergia } from "@/lib/energy-time";
+import { MuralEnergia } from "@/components/negocio/PainelEnergia";
 import DestaqueSetup from "@/components/negocio/DestaqueSetup";
 import { buscarEsforcoNegocio, serieDoMes, type EsforcoNegocio, type IdealFunil, type IndicadorEsforco, type PontoSerie } from "@/lib/pace-esforco";
 import { RealizadoComLeads } from "@/components/negocio/RealizadoComLeads";
@@ -286,6 +288,38 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
         <TabelaPaceDiario painel={painel} ano={ano} mes={mes} hoje={hoje} />
       </main>
     );
+  }
+  // Energy: o executivo vê o funil das contas e os paces de kWh e faturamento (todos fazem o processo completo).
+  if (individual && foco && foco.slug === "vorp-energy") {
+    try {
+      const painelE = await buscarPainelEnergia(createAdminClient(), { ano, mes, hoje });
+      const eu = painelE.pessoas.find((p) => p.id === user.id);
+      if (eu) {
+        return (
+          <main className="mx-auto max-w-4xl space-y-5 px-6 py-8">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h1 className="font-display text-2xl text-gold-bright">Meu pace</h1>
+                <p className="mt-1 text-sm text-stone-400">
+                  {nomeEquipe(foco)} · {MESES[mes]} de {ano}. Dias úteis de segunda a sexta, sem feriados.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Link href={`/pace-negocio?mes=${ant}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
+                  ← {MESES[mes === 1 ? 12 : mes - 1]}
+                </Link>
+                <Link href={`/pace-negocio?mes=${seg}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
+                  {MESES[mes === 12 ? 1 : mes + 1]} →
+                </Link>
+              </div>
+            </div>
+            <MuralEnergia pessoa={eu} equipe={nomeEquipe(foco)} cor={NEGOCIO_COR[foco.slug] ?? "201 162 74"} mesLabel={MESES[mes] + " de " + ano} mesAtual={hoje.slice(0, 7) === `${ano}-${String(mes).padStart(2, "0")}`} />
+          </main>
+        );
+      }
+    } catch (e) {
+      console.error("pace do executivo do Energy falhou", e);
+    }
   }
   if (individual && foco) {
     const d = dados[0];

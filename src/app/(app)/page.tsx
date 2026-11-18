@@ -33,6 +33,8 @@ import { MuralSdr } from "@/components/negocio/PainelSdr";
 import { MuralCloser } from "@/components/negocio/PainelCloser";
 import { buscarPainelCloser, ehPainelCloser, setupDoNegocio, vinculoCloser } from "@/lib/closer-negocio";
 import { buscarPainelHead } from "@/lib/head-negocio";
+import { buscarPainelEnergia, vinculoEnergia } from "@/lib/energy-time";
+import { MuralEnergia, MuralEnergiaHead } from "@/components/negocio/PainelEnergia";
 import { MuralHead } from "@/components/negocio/PainelHead";
 import DestaqueSetup from "@/components/negocio/DestaqueSetup";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -298,6 +300,26 @@ export default async function MuralPage({
       );
     } catch (e) {
       console.error("Mural: painel do closer falhou", e);
+    }
+  }
+  // Maximus Energy: todo executivo faz o processo completo. Mural de cara com o funil das contas e os paces de kWh e faturamento;
+  // o Head vê o do time e o de cada vendedor.
+  if (!metaExecutivo && meRole !== "diretor" && meRole !== "investidor") {
+    const vEnergia = await vinculoEnergia(supabase, meId);
+    if (vEnergia) {
+      try {
+        const painelE = await buscarPainelEnergia(createAdminClient(), { ano, mes, hoje });
+        const corE = NEGOCIO_COR[vEnergia.slug] ?? "201 162 74";
+        const rotuloMes = MESES[mes - 1] + " de " + ano;
+        if (vEnergia.cargo === "head") {
+          metaExecutivo = <MuralEnergiaHead painel={painelE} equipe={nomeEquipe(vEnergia)} cor={corE} mesLabel={rotuloMes} mesAtual={mesEhAtual} />;
+        } else {
+          const eu = painelE.pessoas.find((p) => p.id === meId);
+          if (eu) metaExecutivo = <MuralEnergia pessoa={eu} equipe={nomeEquipe(vEnergia)} cor={corE} mesLabel={rotuloMes} mesAtual={mesEhAtual} />;
+        }
+      } catch (e) {
+        console.error("Mural: painel do Energy falhou", e);
+      }
     }
   }
   if (!metaExecutivo && meRole !== "diretor" && meRole !== "investidor") {

@@ -272,6 +272,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       if (iProd >= 0) itensVisiveis.splice(iProd, 1);
     }
   }
+  // Energy: todo executivo faz o processo completo e vê o funil e os paces no Mural; a Minha Produção do SDR não se aplica.
+  if (user && (papelAtual === "closer" || papelAtual === "sdr")) {
+    const { data: energia } = await supabase
+      .from("profile_negocios")
+      .select("negocio_id, negocios!inner(slug)")
+      .eq("profile_id", previewPessoa?.id ?? user.id)
+      .eq("negocios.slug", "vorp-energy")
+      .limit(1);
+    if ((energia ?? []).length > 0) {
+      const iProdEnergia = itensVisiveis.findIndex((i) => i.type === "link" && i.href === "/producao");
+      if (iProdEnergia >= 0) itensVisiveis.splice(iProdEnergia, 1);
+    }
+  }
   // Head do Match Sales não lança venda (as vendas vêm do Pipefácil): sai o Lançar Vendas do Dados.
   if (user && papelAtual === "lider") {
     const { data: headMatch } = await supabase

@@ -37,6 +37,10 @@ export type SunneDeal = {
   /** Onde o negócio estava ao ser perdido (funil e etapa). */
   lostFromFunnel?: string | null;
   lostFromStageKey?: string | null;
+  /** Motivo da perda: o registrado na plataforma/API (lostReason, lostCategory) ou, em perdas antigas da validação, cancellationReason. */
+  lostReason?: string | null;
+  lostCategory?: string | null;
+  cancellationReason?: string | null;
   /** A validação da Sunne está esperando um retorno interno (não é pendência do parceiro). */
   waitingNote?: boolean;
   /** Pendências abertas ou em reanálise (só buscadas para negócios em validação). */
@@ -136,6 +140,9 @@ function lerDeal(bruto: unknown): SunneDeal {
     averageConsumption: typeof d.averageConsumption === "number" && Number.isFinite(d.averageConsumption) ? d.averageConsumption : null,
     lostFromFunnel: textoOuNulo((d.lostFrom as Record<string, unknown> | null | undefined)?.funnel),
     lostFromStageKey: textoOuNulo((d.lostFrom as Record<string, unknown> | null | undefined)?.stageKey),
+    lostReason: textoOuNulo(d.lostReason),
+    lostCategory: textoOuNulo(d.lostCategory),
+    cancellationReason: textoOuNulo(d.cancellationReason),
     waitingNote: texto(d.waitingNote) && d.waitingNote.trim() !== "",
     identidade: identidadeDe(d.phone, [d.contactName, d.companyName].filter(texto).join(" ")),
     compensableKwh: numeroOuNulo(d.compensableKwh),
@@ -207,7 +214,7 @@ export async function lerRedeSunne(): Promise<SunneRede> {
 }
 
 /** Mesma leitura, guardada em cache no servidor por alguns minutos. */
-export const redeSunneEmCache = unstable_cache(lerRedeSunne, ["sunne-rede-v4"], { revalidate: CACHE_SUNNE_SEGUNDOS, tags: ["sunne"] });
+export const redeSunneEmCache = unstable_cache(lerRedeSunne, ["sunne-rede-v5"], { revalidate: CACHE_SUNNE_SEGUNDOS, tags: ["sunne"] });
 
 // ---------------------------------------------------------------- vendedor de cada organização
 
