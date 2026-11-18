@@ -435,7 +435,8 @@ export type FollowGravado = { atualizado_em: string; abertos: LeadValor[]; venda
 /**
  * Follow (foto de agora): os leads abertos no funil do follow (Funil de Vendas), com valor e temperatura.
  * Vendido: as vendas de cada mês do intervalo (as mesmas da etapa Vendas do funil). Os dois com o
- * pré-vendas que agendou (mesma regra do filtro do funil). Só os canais com funil (outbound e inbound).
+ * pré-vendas que agendou (mesma regra do filtro do funil). Os três canais com funil (outbound, inbound e
+ * Referidos); canal alternativo fica de fora.
  */
 export function montarFollow(
   deals: DealCrm[],
@@ -447,7 +448,7 @@ export function montarFollow(
   const marcos = marcosPorLead(eventos, cfg);
   const quem = (d: DealCrm) => responsavelNoAgendamento(d, marcos.get(d.deal_id), responsaveis.get(d.deal_id));
   const nome = (d: DealCrm) => d.nome || d.empresa || "(sem nome)";
-  const comFunil = (c: CanalPortal | null): c is "outbound" | "inbound" => c === "outbound" || c === "inbound";
+  const comFunil = (c: CanalPortal | null): c is CanalPortal => c === "outbound" || c === "inbound" || c === "indicacao";
   const abertos: LeadValor[] = [];
   for (const d of deals) {
     const canal = canalPortal(d, cfg);
