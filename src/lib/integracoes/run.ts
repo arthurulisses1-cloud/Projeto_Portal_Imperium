@@ -105,6 +105,35 @@ export function valorDaImplantacao(p: Record<string, unknown>, chave?: string): 
   return k ? ler(p[k]) : null;
 }
 
+/** Id do co-responsável do lead (venda em dupla): procura um campo "co-responsável" no lead e nas propriedades. */
+export function coResponsavelDoDeal(d: DealPipefacil): string | null {
+  const id = (v: unknown): string | null => {
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (Array.isArray(v)) {
+      for (const x of v) {
+        const r = id(x);
+        if (r) return r;
+      }
+      return null;
+    }
+    if (v && typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      return id(o.userId ?? o.id ?? o.user_id);
+    }
+    return null;
+  };
+  const eh = (k: string) => /co[-_ ]?respons|corespons|secondary.?respons/i.test(k);
+  for (const fonte of [d as unknown as Record<string, unknown>, d.properties ?? {}]) {
+    for (const [k, v] of Object.entries(fonte)) {
+      if (eh(k)) {
+        const r = id(v);
+        if (r) return r;
+      }
+    }
+  }
+  return null;
+}
+
 function dealParaLinha(negocioId: string, d: DealPipefacil, cfg: ConfigCrm): DealCrm & Record<string, unknown> {
   const campos = cfg.campos;
   const p = d.properties ?? {};
@@ -128,6 +157,7 @@ function dealParaLinha(negocioId: string, d: DealPipefacil, cfg: ConfigCrm): Dea
     empresa: d.company?.name ?? TEXTO(p.nome_empresa),
     produtos,
     responsavel_user_id: d.responsibleUserId,
+    co_responsavel_user_id: coResponsavelDoDeal(d),
     closer_user_id: TEXTO(p.closer_usuario),
     sdr_user_id: TEXTO(p.sdr_usuario),
     criado_em: d.createdAt,
@@ -193,6 +223,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
     const espelho = linhasDeals.map((d, i) => {
       const linha: Record<string, unknown> = { ...d };
       delete linha.tamanho_time;
+      delete linha.co_responsavel_user_id;
       delete linha.motivo_perda;
       delete linha.origem;
       delete linha.temperatura;
@@ -477,7 +508,13 @@ async function sincronizarVendas(
     const id = idPorDeal.get(g.deal_id);
     // Valor da implantação (migration 0116): só vai quando preenchido; sem a coluna, grava a venda sem ele.
     const semColunaImplantacao = (e: { code?: string } | null) => e?.code === "42703" || e?.code === "PGRST204";
-    const extras = { ...(g.implantacao != null ? { valor_implantacao: g.implantacao } : {}), ...(g.tipo_contrato ? { tipo_contrato: g.tipo_contrato } : {}) };
+    // Dupla (migration 0121): o co-responsável divide a comissão do fechamento com o responsável.
+    const coCloser = perfil(g.co_responsavel_user_id);
+    const extras = {
+      ...(g.implantacao != null ? { valor_implantacao: g.implantacao } : {}),
+      ...(g.tipo_contrato ? { tipo_contrato: g.tipo_contrato } : {}),
+      ...(coCloser && coCloser !== closer ? { co_closer_id: coCloser } : {}),
+    };
     const comImplantacao = Object.keys(extras).length > 0 ? { ...campos, ...extras } : campos;
     // Sem a migration 0113 (vendas.profile_id opcional), venda sem dono é recusada pelo banco: fica de fora.
     // Sem a migration 0115 (canal "alternativo" e canal_origem), a venda de canal alternativo é recusada.

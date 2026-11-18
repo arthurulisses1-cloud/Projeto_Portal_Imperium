@@ -14,6 +14,8 @@ export type DealCrm = {
   cargo: string | null;
   /** Tamanho do time comercial (só em memória; não vai para crm_deals). */
   tamanho_time?: string | null;
+  /** Co-responsável do lead no CRM (venda em dupla). Só em memória; não vai para crm_deals. */
+  co_responsavel_user_id?: string | null;
   /** Motivo de perda (só em memória; não vai para crm_deals). */
   motivo_perda?: string | null;
   /** Origem do lead quando difere do canal (só em memória; vai para as listas do hover). */
@@ -335,6 +337,8 @@ export function calcularFunilUnico(deals: DealCrm[], eventos: EventoCrm[], funil
 
 export type VendaCrm = {
   deal_id: string;
+  /** Co-responsável (dupla) no momento da leitura; null = venda de uma pessoa só. */
+  co_responsavel_user_id: string | null;
   data: string;
   /** Canal do funil, ou "alternativo" (canal do CRM fora dos funis, em canal_origem). */
   canal: CanalPortal | "alternativo";
@@ -386,6 +390,7 @@ export function vendasGanhas(deals: DealCrm[], eventos: EventoCrm[], cfg: Config
       produto: d.produtos && d.produtos.length > 0 ? d.produtos.join(", ") : null,
       closer_user_id: responsavelNoGanho?.get(d.deal_id) ?? d.responsavel_user_id,
       sdr_user_id: d.sdr_user_id,
+      co_responsavel_user_id: d.co_responsavel_user_id && d.co_responsavel_user_id !== (responsavelNoGanho?.get(d.deal_id) ?? d.responsavel_user_id) ? d.co_responsavel_user_id : null,
     });
   }
   return out;

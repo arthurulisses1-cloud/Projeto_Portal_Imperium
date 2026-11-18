@@ -60,7 +60,20 @@ export type VendaParaComissao = {
    * própria (10% SDR, 10% closer, 5% Diretor). null/ausente = regra normal do Finance.
    */
   fundoMatri?: { sdrId: string | null; closerId: string | null } | null;
+  /** Match Sales: segundo vendedor da dupla (co-responsável do lead); divide a comissão do fechamento. */
+  coCloserId?: string | null;
 };
+
+/** Match Sales: quem recebe sempre 10% no fechamento, mesmo no inbound (combinado com o time, 2026-11-18). */
+export const MATCH_COMISSAO_10_SEMPRE = ["Arthur Soares"];
+
+/** Match Sales: % de cada vendedor do fechamento (cada um pela própria taxa; em dupla, metade para cada). */
+export function taxasFechamentoMatch(venda: VendaParaComissao, ctx: ContextoNegocio, taxaPadrao: number): { id: string; pct: number }[] {
+  // Com BDR a regra é a mesma para todos (5%).
+  const taxa = (id: string) => (!venda.indicadorId && ctx.comissao10Sempre?.has(id) ? 10 : taxaPadrao);
+  const dupla = venda.coCloserId && venda.coCloserId !== venda.closerId ? [venda.closerId, venda.coCloserId] : [venda.closerId];
+  return dupla.map((id) => ({ id, pct: taxa(id) / dupla.length }));
+}
 
 /** Fundo do Matri no Finance (decisão do Diretor, 2026-11-18): sem comissão para o Head; SDR 10, closer 10, Diretor 5. */
 export const FINANCE_FUNDO_MATRI = { sdr: 10, closer: 10, diretor: 5 } as const;
@@ -93,6 +106,8 @@ export type ContextoNegocio = {
   diretorId: string | null;
   /** Quem é do negócio (para saber se o participante de uma venda é de outra BU). Ausente = ninguém é do negócio. */
   membrosIds?: ReadonlySet<string>;
+  /** Match Sales: ids de quem recebe 10% no fechamento em qualquer canal. */
+  comissao10Sempre?: ReadonlySet<string>;
 };
 
 type Pcts = { closer: number; sdr: number; gestao: number };
@@ -152,7 +167,11 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
   };
   const energia = slug === "vorp-energy";
   const diretorVendeu = !!ctx.diretorId && venda.closerId === ctx.diretorId;
-  add(venda.closerId, "closer", p.closer);
+  if (slug === "matchsales") {
+    for (const t of taxasFechamentoMatch(venda, ctx, p.closer)) add(t.id, "closer", t.pct);
+  } else {
+    add(venda.closerId, "closer", p.closer);
+  }
   if (venda.indicadorId) {
     add(venda.indicadorId, slug === "matchsales" ? "bdr" : "sdr", slug === "matchsales" ? p.bdr : p.sdr);
   }
@@ -161,7 +180,7 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
   if (energia) {
     add(diretorVendeu ? ctx.diretorId : ctx.headId, "head", p.head);
   } else {
-    add(ctx.headId && ctx.headId !== venda.closerId ? ctx.headId : null, "head", p.head);
+    add(ctx.headId && ctx.headId !== venda.closerId && ctx.headId !== venda.coCloserId ? ctx.headId : null, "head", p.head);
   }
   // Vorp com Head: 1% dele e 2% do Diretor (em vez dos 3% só do Diretor).
   if (slug === "vorp" && ctx.headId) {
@@ -305,18 +324,16 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
   if (lista.length === 0) return [];
   const ids = lista.map((n) => n.id);
 
-  const [{ data: vendas }, { data: membros }, { data: diretor }, { data: perfis }] = await Promise.all([
-    supabase
-      .from("vendas")
-      .select("id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente, mrr, valor_antecipado, primeiro_contrato, recorrencia, valor_cliente, tipo_contrato, valor_implantacao")
-      .in("negocio_id", ids)
-      .gte("data", inicio)
-      .lt("data", fimExcl)
-      .range(0, 19999),
+  const colunasVenda = "id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente, mrr, valor_antecipado, primeiro_contrato, recorrencia, valor_cliente, tipo_contrato, valor_implantacao";
+  const lerVendas = (colunas: string) => supabase.from("vendas").select(colunas).in("negocio_id", ids).gte("data", inicio).lt("data", fimExcl).range(0, 19999);
+  const [vendasBruto, { data: membros }, { data: diretor }, { data: perfis }] = await Promise.all([
+    lerVendas(colunasVenda + ", co_closer_id").then(async (r) => (r.error ? await lerVendas(colunasVenda) : r)),
     supabase.from("profile_negocios").select("negocio_id, profile_id, cargo").in("negocio_id", ids),
     supabase.from("profiles").select("id").eq("role", "diretor").eq("ativo", true).limit(1),
     supabase.from("profiles").select("id, full_name"),
   ]);
+
+  const vendas = (vendasBruto.data ?? []) as unknown as Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
 
   // Finance: vendas do fundo do Matri (lidas à parte, pelo lead de origem; a RLS não pode esconder o fundo de ninguém).
   const fundoMatriPorVenda = new Map<string, { sdrId: string | null; closerId: string | null }>();
@@ -362,6 +379,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
       headId: head && head.profile_id !== diretorId ? head.profile_id : null,
       diretorId,
       membrosIds: new Set(membrosN.map((m) => m.profile_id as string)),
+      comissao10Sempre: new Set((perfis ?? []).filter((p) => MATCH_COMISSAO_10_SEMPRE.includes(p.full_name as string)).map((p) => p.id as string)),
     };
     const cargoDe = new Map(membrosN.map((m) => [m.profile_id as string, m.cargo as string]));
 
@@ -384,6 +402,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
         recorrencia: v.recorrencia ?? false,
         valorCliente: v.valor_cliente === null || v.valor_cliente === undefined ? null : Number(v.valor_cliente),
         fundoMatri: fundoMatriPorVenda.get(v.id as string) ?? null,
+        coCloserId: (v.co_closer_id as string | null | undefined) ?? null,
       };
       let linhasVenda = comissaoDaVenda(n.slug, venda, ctx);
       const ajustesVenda = ajustesPor.get(v.id as string) ?? [];

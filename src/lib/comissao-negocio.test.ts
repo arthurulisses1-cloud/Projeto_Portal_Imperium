@@ -82,6 +82,23 @@ describe("comissaoDaVenda", () => {
     expect(l.find((x) => x.papel === "closer")?.pct).toBe(5);
     expect(l.find((x) => x.papel === "head")?.pct).toBe(2);
   });
+  it("Match em dupla: cada um pela própria taxa, dividida por dois (10% e 8% viram 5 e 4)", () => {
+    const comSoares = { headId: "h", diretorId: "d", comissao10Sempre: new Set(["soares"]) };
+    // Soares (10 sempre) + Leonardo no inbound (8): 5% e 4%
+    const l = comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "soares", coCloserId: "leo" }, comSoares);
+    expect(l.find((x) => x.beneficiarioId === "soares")?.pct).toBe(5);
+    expect(l.find((x) => x.beneficiarioId === "leo")?.pct).toBe(4);
+    // dois de 8% = 4/4; dois de 10% = 5/5
+    const dois8 = comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "a", coCloserId: "b" }, ctx);
+    expect(dois8.filter((x) => x.papel === "closer").map((x) => x.pct)).toEqual([4, 4]);
+    const dois10 = comissaoDaVenda("matchsales", { ...base, closerId: "a", coCloserId: "b" }, ctx);
+    expect(dois10.filter((x) => x.papel === "closer").map((x) => x.pct)).toEqual([5, 5]);
+  });
+  it("Match: Soares sozinho recebe 10% até no inbound; os demais seguem 8%", () => {
+    const comSoares = { headId: "h", diretorId: "d", comissao10Sempre: new Set(["soares"]) };
+    expect(comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "soares" }, comSoares).find((x) => x.papel === "closer")?.pct).toBe(10);
+    expect(comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "leo" }, comSoares).find((x) => x.papel === "closer")?.pct).toBe(8);
+  });
   it("Energy: executivo 30 + head 5 + diretor 5", () => {
     expect(soma(comissaoDaVenda("vorp-energy", base, ctx))).toBeCloseTo(4000);
   });
