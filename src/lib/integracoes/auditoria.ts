@@ -3,7 +3,8 @@
 // linha do tempo. Montada na sincronização e gravada em integracao_estado ("auditoria:<slug>").
 import type { ConfigCrm } from "./config";
 import { NIVEL } from "./config";
-import { canalPortal, marcosPorLead, responsavelEm, responsavelNoAgendamento, type DealCrm, type EventoCrm } from "./realizado";
+import { INICIO_HISTORICO } from "./config";
+import { canalPortal, ehLeadFalso, ehMql, marcosPorLead, responsavelEm, responsavelNoAgendamento, type DealCrm, type EventoCrm } from "./realizado";
 
 /** Situação da reunião: a acontecer, realizada, no-show (passou pelo No Show e não realizou) ou
  *  cancelada (perdida antes da reunião). */
@@ -37,6 +38,11 @@ export type LeadAuditoria = {
   motivoPerda: string | null;
   tags: string[];
   reuniaoMarcada: string | null;
+  /** Quando o lead entrou (criação) e quando conectou (primeira vez em Conectado ou além). */
+  criadoEm: string | null;
+  conectadoEm: string | null;
+  /** MQL pelas regras do negócio (só faz sentido no Inbound). */
+  mql: boolean;
   agendadaEm: string | null;
   realizadaEm: string | null;
   propostaEm: string | null;
@@ -78,7 +84,11 @@ const texto = (v: unknown): string | null => {
   return typeof v === "string" && v.trim() ? v.trim() : typeof v === "number" ? String(v) : null;
 };
 
-/** Monta a base (pura): só leads de canal do negócio que chegaram a Reunião Agendada ou além. */
+/**
+ * Monta a base (pura): os leads de canal do negócio que chegaram a Reunião Agendada ou além e, no Inbound,
+ * também os que só entraram ou conectaram (desde o início do histórico), para a lista "Leads Inbound do
+ * período". Lead falso fica fora (como no funil). A venda só conta com o lead ganho (venda desfeita não).
+ */
 export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsaveis, vendedores, nomes }: Entrada): LeadAuditoria[] {
   const marcos = marcosPorLead(eventos, cfg);
   const porLead = new Map<string, EventoCrm[]>();
@@ -89,8 +99,10 @@ export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsav
   const out: LeadAuditoria[] = [];
   for (const d of deals) {
     const canal = canalPortal(d, cfg);
-    const m = marcos.get(d.deal_id);
-    if (!canal || !m?.[NIVEL.agendada]) continue;
+    const m = marcos.get(d.deal_id) ?? {};
+    if (!canal || ehLeadFalso(d, cfg)) continue;
+    const doInbound = canal === "inbound" && ((d.criado_em ?? "") >= INICIO_HISTORICO.slice(0, 10) || (m[NIVEL.conectado] ?? "") >= INICIO_HISTORICO.slice(0, 10));
+    if (!m[NIVEL.agendada] && !doInbound) continue;
     const ex = extras.get(d.deal_id) ?? {};
     const p = ex.properties ?? {};
     const evs = (porLead.get(d.deal_id) ?? []).slice().sort((a, b) => Date.parse(a.ocorrido_em) - Date.parse(b.ocorrido_em));
@@ -108,7 +120,7 @@ export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsav
     const noShow = evs.find((e) => ehNoShow(e.stage_id))?.ocorrido_em ?? null;
     const realizada = m[NIVEL.realizada] ?? null;
     const perdida = d.status === "lost" ? ex.closedAt ?? d.fechado_em ?? null : null;
-    const situacao: SituacaoReuniao = realizada ? "realizada" : noShow ? "no_show" : d.status === "lost" ? "cancelada" : "a_acontecer";
+    const situacao: SituacaoReuniao = !m[NIVEL.agendada] ? "a_acontecer" : realizada ? "realizada" : noShow ? "no_show" : d.status === "lost" ? "cancelada" : "a_acontecer";
     const atual = d.stage_id ? etapas.get(d.stage_id) : undefined;
 
     out.push({
@@ -121,7 +133,12 @@ export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsav
       etapa: atual?.nome ?? "—",
       funil: atual?.funil ?? "—",
       responsavel: nome(d.responsavel_user_id),
-      preVendas: nome(responsavelNoAgendamento(d, m, hist)),
+      // Quem agendou; sem reunião, quem tinha o lead quando conectou (ou quando entrou).
+      preVendas: nome(
+        m[NIVEL.agendada]
+          ? responsavelNoAgendamento(d, m, hist)
+          : (m[NIVEL.conectado] ? responsavelEm(hist, m[NIVEL.conectado]!) : null) ?? (d.criado_em ? responsavelEm(hist, d.criado_em) : null) ?? d.sdr_user_id ?? d.responsavel_user_id,
+      ),
       closer: nome(d.closer_user_id),
       vendedor: nome(vendedores.get(d.deal_id) ?? (m[NIVEL.venda] ? d.responsavel_user_id : null)),
       faturamento: d.faturamento,
@@ -137,10 +154,13 @@ export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsav
       motivoPerda: ex.lostReason ?? null,
       tags: (ex.tags ?? []).map((t) => t.name),
       reuniaoMarcada: texto(p.reuniao_agendada),
+      criadoEm: d.criado_em,
+      conectadoEm: m[NIVEL.conectado] ?? null,
+      mql: ehMql(d, cfg),
       agendadaEm: m[NIVEL.agendada] ?? null,
       realizadaEm: realizada,
       propostaEm: m[NIVEL.proposta] ?? null,
-      vendaEm: m[NIVEL.venda] ?? null,
+      vendaEm: d.status === "won" ? m[NIVEL.venda] ?? null : null,
       noShowEm: noShow,
       perdidaEm: perdida,
       situacao,
