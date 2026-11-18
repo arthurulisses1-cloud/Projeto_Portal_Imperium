@@ -102,7 +102,8 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
   const [ano, mes] = mesParam.split("-").map(Number);
   const ant = mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, "0")}`;
   const seg = mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;
-  const aba = searchParams.aba === "closer" || searchParams.aba === "movimentacoes" ? searchParams.aba : "reunioes";
+  const ABAS = ["closer", "movimentacoes", "leads_outbound", "leads_inbound"];
+  const aba = ABAS.includes(searchParams.aba ?? "") ? searchParams.aba! : "reunioes";
   const f: Filtros = { pv: searchParams.pv ?? "", closer: searchParams.closer ?? "", canal: searchParams.canal ?? "", q: (searchParams.q ?? "").trim() };
 
   const { data: est } = await createAdminClient().from("integracao_estado").select("valor").eq("chave", `auditoria:${atual.slug}`).maybeSingle();
@@ -164,6 +165,8 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
             ["reunioes", "Reuniões"],
             ["closer", "Pós-reunião (closer)"],
             ["movimentacoes", "Movimentações"],
+            ["leads_outbound", "Leads Outbound do período"],
+            ["leads_inbound", "Leads Inbound do período"],
           ] as const
         ).map(([k, rotulo]) => (
           <Link
@@ -200,6 +203,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
             ))}
           </select>
         </Campo>
+        {!aba.startsWith("leads_") && (
         <Campo rotulo="Canal">
           <select name="canal" defaultValue={f.canal} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
             <option value="">Todos</option>
@@ -210,6 +214,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
             ))}
           </select>
         </Campo>
+        )}
         {aba === "reunioes" && (
           <Campo rotulo="Situação">
             <select name="situacao" defaultValue={searchParams.situacao ?? ""} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
@@ -257,6 +262,8 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
         <AbaReunioes todos={todos} f={f} noMes={noMes} mesParam={mesParam} sp={searchParams} href={href} />
       ) : aba === "closer" ? (
         <AbaCloser todos={todos} f={f} noMes={noMes} sp={searchParams} href={href} />
+      ) : aba === "leads_outbound" || aba === "leads_inbound" ? (
+        <AbaLeadsDoPeriodo todos={todos} f={f} noMes={noMes} canal={aba === "leads_outbound" ? "outbound" : "inbound"} href={href} />
       ) : (
         <AbaMovimentacoes todos={todos} f={f} noMes={noMes} sp={searchParams} href={href} />
       )}
@@ -738,5 +745,96 @@ function FichaLead({ l, cor, fechar }: { l: LeadAuditoria; cor: string; fechar: 
         {l.passos.length === 0 && <p className="text-sm text-stone-500">Sem histórico de etapas.</p>}
       </aside>
     </div>
+  );
+}
+
+/**
+ * Leads Outbound / Inbound do período (como no Funil Outbound do sistema antigo): o caminho de cada lead do
+ * canal com algum passo no mês (agendamento, realização ou venda), quem agendou, a etapa atual no Funil de
+ * Vendas com o closer e o valor. Cada passo com a sua data; "Não realizada" é o no-show ou a perda antes da
+ * reunião. Mesma base e mesmas regras do Dashboard.
+ */
+function AbaLeadsDoPeriodo({
+  todos,
+  f,
+  noMes,
+  canal,
+  href,
+}: {
+  todos: LeadAuditoria[];
+  f: Filtros;
+  noMes: (iso: string | null) => boolean;
+  canal: "outbound" | "inbound";
+  href: (m: Partial<Params>) => string;
+}) {
+  const lista = todos
+    .filter((l) => l.canal === canal && passaFiltros(l, { ...f, canal: "" }) && (noMes(l.agendadaEm) || noMes(l.realizadaEm) || noMes(l.vendaEm)))
+    .map((l) => ({ l, ultimo: [l.vendaEm, l.realizadaEm, l.agendadaEm].filter((x): x is string => !!x).sort().pop() ?? "" }))
+    .sort((a, b) => b.ultimo.localeCompare(a.ultimo))
+    .map((x) => x.l);
+  const conta = (t: (l: LeadAuditoria) => boolean) => lista.filter(t).length;
+  const titulo = canal === "outbound" ? "Outbound" : "Tráfego Pago";
+  return (
+    <div className="space-y-4">
+      <p className="text-[11px] text-stone-500">
+        O caminho de cada lead do {titulo} com algum passo no mês (agendamento, realização ou venda) e a etapa dele no Funil de Vendas. {lista.length} leads ·{" "}
+        {conta((l) => noMes(l.agendadaEm))} agendados no mês · {conta((l) => noMes(l.realizadaEm))} realizados · {conta((l) => noMes(l.vendaEm))} vendas.
+      </p>
+      <PorPessoa titulo="Por pré-vendas" itens={contarPor(lista, (l) => l.preVendas)} href={(nome) => href({ pv: nome, lead: undefined })} />
+      <div className="overflow-x-auto rounded-lg border border-imperium-line bg-imperium-surface">
+        <table className="w-full min-w-[900px] text-sm">
+          <thead className="border-b border-imperium-line">
+            <tr>
+              <th className={thClasse}>Lead</th>
+              <th className={thClasse}>{canal === "outbound" ? "BDR" : "SDR"}</th>
+              <th className={thClasse}>Caminho</th>
+              <th className={thClasse}>Closer</th>
+              <th className={`${thClasse} text-right`}>Valor</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-imperium-line/60">
+            {lista.map((l) => {
+              const naoRealizada = !l.realizadaEm && (l.situacao === "no_show" || l.situacao === "cancelada");
+              // Etapa depois da reunião (no Funil de Vendas da Acrópole; no próprio funil da Galáticos, que fecha a venda nele).
+              const noFunilDeVendas = !!l.realizadaEm || /vendas/i.test(l.funil) || l.status === "lost" || l.status === "won";
+              return (
+                <tr key={l.id} className="hover:bg-imperium-raised/40">
+                  <td className={tdClasse}>
+                    <LinkLead l={l} href={href} /> <span className="text-[11px] text-stone-500">#{l.seq}</span>
+                  </td>
+                  <td className={`${tdClasse} text-stone-400`}>{l.preVendas ?? "—"}</td>
+                  <td className={tdClasse}>
+                    <span className="flex flex-wrap items-center gap-1 text-[11px]">
+                      <Passo rotulo="Agendada" em={l.agendadaEm} />
+                      <span className="text-stone-600">→</span>
+                      {naoRealizada ? <span className="rounded border border-wine/60 bg-wine/10 px-1.5 py-0.5 text-wine-bright">Não realizada</span> : <Passo rotulo="Realizada" em={l.realizadaEm} />}
+                      <span className="text-stone-600">→</span>
+                      <Passo rotulo="Venda" em={l.vendaEm} />
+                    </span>
+                  </td>
+                  <td className={tdClasse}>
+                    {noFunilDeVendas ? <span className="text-stone-200">{l.etapa}</span> : <span className="text-stone-500">—</span>}{" "}
+                    <span className="text-[11px] text-stone-500">{l.closer ?? ""}</span>
+                  </td>
+                  <td className={`${tdClasse} text-right tabular-nums`}>{l.valor ? moeda(l.valor) : "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {lista.length === 0 && <p className="p-4 text-sm text-stone-500">Nenhum lead do {titulo} com passo no mês.</p>}
+      </div>
+    </div>
+  );
+}
+
+/** Um passo do caminho: verde com a data quando aconteceu, cinza quando ainda não. */
+function Passo({ rotulo, em }: { rotulo: string; em: string | null }) {
+  return em ? (
+    <span className="rounded border border-success/40 bg-success/10 px-1.5 py-0.5 text-success-bright">
+      {rotulo} <span className="text-stone-400">{dia(em)}</span>
+    </span>
+  ) : (
+    <span className="rounded border border-imperium-line px-1.5 py-0.5 text-stone-500">{rotulo}</span>
   );
 }
