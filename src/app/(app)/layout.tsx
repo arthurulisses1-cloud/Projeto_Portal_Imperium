@@ -97,7 +97,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
       { href: "/auditoria-comercial", label: "Auditoria", roles: ["lider", "diretor", "analista"] },
       { href: "/compromissos", label: "Compromissos", roles: ["diretor", "lider", "analista"] },
       { href: "/metas", label: "Metas Mensais", roles: ["diretor", "analista"] },
-      { href: "/lancar-vendas", label: "Lançar Vendas", roles: ["closer", "lider", "diretor"] },
       { href: "/tv", label: "Painel TV (gestão à vista)", roles: ["diretor", "analista"] },
       { href: "/tv/config", label: "Configurar ordem do Painel TV", roles: ["diretor"] },
     ],

@@ -97,11 +97,8 @@ export default async function LancarVendasPage({
   return (
     <main className="mx-auto max-w-3xl space-y-5 px-6 py-8">
       <div>
-        <h1 className="font-display text-2xl text-gold-bright">Lançar vendas</h1>
-        <p className="mt-1 text-sm text-stone-400">
-          Registre o valor <strong>recebido</strong>. Parcelas e recorrências entram uma a uma, na data em que o dinheiro cai.
-          Alimenta o painel do Mural.
-        </p>
+        <h1 className="font-display text-2xl text-gold-bright">Vendas lançadas</h1>
+        <p className="mt-1 text-sm text-stone-400">Novos lançamentos manuais estão desativados. Aqui você corrige ou exclui o que já foi lançado.</p>
       </div>
 
       {negocios.length > 1 && (
@@ -142,18 +139,6 @@ export default async function LancarVendasPage({
           />
         </Card>
       )}
-
-      <Card>
-        <p className="mb-3 text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
-          {nomeEquipe(atual)}
-        </p>
-        <FormLancarVenda
-          slug={atual.slug}
-          hoje={hoje}
-          todos={todos ?? []}
-          vendedores={vendedores.map((v) => ({ id: v.p.id, nome: v.p.full_name, cargo: v.cargo }))}
-        />
-      </Card>
 
       <Card>
         <div className="mb-3 flex items-baseline justify-between">

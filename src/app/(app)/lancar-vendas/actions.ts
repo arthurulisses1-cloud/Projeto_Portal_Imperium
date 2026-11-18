@@ -96,6 +96,8 @@ async function lerFormulario(formData: FormData) {
 /** Registra uma venda/recebimento de um negócio. Quem pode (Diretor ou Head do
  *  negócio) é garantido pela RLS; aqui só validamos os dados. */
 export async function lancarVenda(formData: FormData) {
+  // Lançamento manual de venda desativado: as vendas entram pela aprovação do lead / sincronização.
+  if (process.env.LANCAMENTO_MANUAL_ATIVO !== "1") throw new Error("O lançamento manual de vendas foi desativado.");
   const { supabase, user, slug, negocioId, campos } = await lerFormulario(formData);
   const { error } = await supabase.from("vendas").insert({
     ...campos,

@@ -22,9 +22,7 @@ import { ACADEMY_RH } from "@/lib/acessos-especiais";
 import { buscarAulasCobranca } from "@/lib/academy";
 import CobrancaFechamento from "@/components/academy/CobrancaFechamento";
 import PainelNegocios from "@/components/ui/PainelNegocios";
-import { buscarPainelNegocios, buscarOpcoesLancamento } from "@/lib/negocio-painel";
-import FormLancarVenda from "@/components/negocio/FormLancarVenda";
-import LancarVendaMural from "@/components/negocio/LancarVendaMural";
+import { buscarPainelNegocios } from "@/lib/negocio-painel";
 import { NEGOCIO_COR, nomeEquipe } from "@/lib/negocios";
 import MetaExecutivo from "@/components/negocio/MetaExecutivo";
 import { buscarPaceNegocios, calcularPace } from "@/lib/pace-negocio";
@@ -246,24 +244,6 @@ export default async function MuralPage({
   // Ritmo: só no mês corrente, % do mês já transcorrido.
   const ritmoPct =
     ano === anoHoje && mes === mesHoje ? Math.round((Number(hoje.slice(8, 10)) / new Date(ano, mes, 0).getDate()) * 100) : null;
-  // Atalho de lançamento de venda direto no Mural (só o Diretor).
-  let lancarVenda: React.ReactNode = null;
-  if (meRole === "diretor" && painelNegocios.length > 0) {
-    const { vendedoresPor, todos } = await buscarOpcoesLancamento(supabase, painelNegocios);
-    lancarVenda = (
-      <LancarVendaMural
-        itens={painelNegocios
-          .filter((n) => n.status === "ativo")
-          .map((n) => ({
-            slug: n.slug,
-            nome: nomeEquipe(n),
-            cor: NEGOCIO_COR[n.slug] ?? "201 162 74",
-            form: <FormLancarVenda slug={n.slug} vendedores={vendedoresPor[n.slug] ?? []} todos={todos} hoje={hoje} retorno="mural" />,
-          }))}
-      />
-    );
-  }
-
   // Executivo de um negócio: a primeira coisa do Mural é a meta individual, onde deveria estar (pace) e onde está.
   let metaExecutivo: React.ReactNode = null;
   // SDR (pré-vendas) de um negócio com CRM (Acrópole): pace de reuniões agendadas e realizadas, no-show e vendas.
@@ -383,39 +363,8 @@ export default async function MuralPage({
     .limit(1);
   const ehFinance = (finMembro ?? []).length > 0;
 
-  // Head de um negócio (ex.: Arthur Barbosa, Vorp Finance) também lança vendas no Mural,
-  // só do(s) negócio(s) que chefia (a RLS de vendas já restringe o insert a Diretor/Head).
-  let lancarVendaHead: React.ReactNode = null;
-  if (meRole !== "diretor") {
-    const { data: chefia } = await supabase
-      .from("profile_negocios")
-      .select("negocios(id, slug, nome, equipe_nome, status, ordem)")
-      .eq("profile_id", meId)
-      .eq("cargo", "head");
-    type NegHead = { id: string; slug: string; nome: string; equipe_nome: string | null; status: "ativo" | "arquivado"; ordem: number | null };
-    const negociosHead = ((chefia ?? []) as unknown as { negocios: NegHead | NegHead[] | null }[])
-      .map((l) => (Array.isArray(l.negocios) ? l.negocios[0] : l.negocios))
-      // O Head do Match Sales não lança venda no Mural: as vendas dele vêm do Pipefácil.
-      .filter((n): n is NegHead => !!n && n.status === "ativo" && n.slug !== "matchsales")
-      .sort((a, b) => (a.ordem ?? 99) - (b.ordem ?? 99));
-    if (negociosHead.length > 0) {
-      const { vendedoresPor, todos } = await buscarOpcoesLancamento(supabase, negociosHead);
-      lancarVendaHead = (
-        <LancarVendaMural
-          itens={negociosHead.map((n) => ({
-            slug: n.slug,
-            nome: nomeEquipe(n),
-            cor: NEGOCIO_COR[n.slug] ?? "201 162 74",
-            form: <FormLancarVenda slug={n.slug} vendedores={vendedoresPor[n.slug] ?? []} todos={todos} hoje={hoje} retorno="mural" />,
-          }))}
-        />
-      );
-    }
-  }
-
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
-      {searchParams.lancado && <p className="rounded border border-success/50 px-3 py-2 text-sm text-success-bright">Venda lançada.</p>}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           {profile?.avatar_url ? (
@@ -476,9 +425,8 @@ export default async function MuralPage({
       </div>
 
       {metaExecutivo}
-      {lancarVendaHead}
       {painelNegocios.length > 0 && (
-        <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} ritmoPct={ritmoPct} lancar={lancarVenda} />
+        <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} ritmoPct={ritmoPct} />
       )}
       {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
         <TarefasMuralWidget userId={meId} />
