@@ -147,6 +147,25 @@ describe("carteira de recorrência", () => {
   });
 });
 
+describe("carteira em dupla (Match Sales)", () => {
+  const venda = { crm_deal_id: null, canal: "outbound", primeiro_contrato: true, valor: 300, data: "2026-11-10", cliente: "Dupla SA", mrr: 300, profile_id: "leo", indicador_id: null, co_closer_id: "soares" };
+  const pctMatch = (papel: "sdr" | "closer", canal: string | null) => (papel === "closer" ? (canal === "outbound" ? 10 : 8) : 5);
+  it("cada um recebe metade da própria taxa; Soares usa 10% mesmo no inbound", () => {
+    const inbound = { ...venda, canal: "inbound" };
+    expect(montarCarteira([inbound], "leo", "2026-11-18", pctMatch)[0].pct).toBe(4);
+    const [s] = montarCarteira([inbound], "soares", "2026-11-18", pctMatch, false, true);
+    expect(s.pct).toBe(5);
+    expect(s.papel).toBe("closer");
+    expect(s.dupla).toBe(true);
+    expect(s.porMes).toBe(15);
+  });
+  it("sozinho, Soares recebe 10% no inbound; com BDR vale a taxa normal", () => {
+    const sozinho = { ...venda, canal: "inbound", co_closer_id: null, profile_id: "soares" };
+    expect(montarCarteira([sozinho], "soares", "2026-11-18", pctMatch, false, true)[0].pct).toBe(10);
+    expect(montarCarteira([{ ...sozinho, indicador_id: "bdr" }], "soares", "2026-11-18", () => 5, false, true)[0].pct).toBe(5);
+  });
+});
+
 describe("somarPreVendas", () => {
   const ind = (meta: number, datas: string[]) => ({
     pace: calcularPace({ meta, recebido: datas.length, hoje: "2026-11-18", ano: 2026, mes: 11 }),

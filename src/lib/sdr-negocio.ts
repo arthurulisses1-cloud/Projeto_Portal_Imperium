@@ -393,6 +393,8 @@ export type ContratoCarteira = {
   antecipado: boolean;
   /** Plano semestral/anual com só um sinal pago: o restante entra quando for pago (a venda é atualizada) e aí vira pago antecipado. */
   sinal: boolean;
+  /** Venda em dupla (Match Sales): o % da pessoa é a metade da taxa dela. */
+  dupla?: boolean;
 };
 
 /** Plano de vários meses (Tipo de Contrato) em que o recebido está entre uma parcela e o período todo: sinal pago, restante a vir (pura). */
@@ -448,6 +450,8 @@ type LinhaVendaCarteira = {
   valor_implantacao?: number | null;
   produto?: string | null;
   tipo_contrato?: string | null;
+  /** Match Sales: segundo vendedor da dupla (co-responsável do lead). */
+  co_closer_id?: string | null;
 };
 
 /**
@@ -461,6 +465,8 @@ export function montarCarteira(
   hoje: string,
   pctDe: (papel: "sdr" | "closer", canal: string | null, comIndicador?: boolean) => number,
   detectarPrepago = false,
+  /** Match Sales: a pessoa recebe 10% no fechamento em qualquer canal (sem BDR). */
+  dezSempre = false,
 ): ContratoCarteira[] {
   const mesAtual = hoje.slice(0, 7);
   const [a, m] = mesAtual.split("-").map(Number);
@@ -468,7 +474,7 @@ export function montarCarteira(
   const porChave = new Map<string, ContratoCarteira>();
   for (const v of [...vendas].sort((x, y) => x.data.localeCompare(y.data))) {
     if (!(Number(v.mrr) > 0) || v.primeiro_contrato === false) continue;
-    const papel = v.indicador_id === profileId ? "sdr" : v.profile_id === profileId ? "closer" : null;
+    const papel = v.indicador_id === profileId ? "sdr" : v.profile_id === profileId || v.co_closer_id === profileId ? "closer" : null;
     if (!papel) continue;
     const chave = (v.cliente ?? "").trim().toLowerCase() || v.crm_deal_id || v.data;
     const c = porChave.get(chave) ?? {
@@ -488,6 +494,7 @@ export function montarCarteira(
       pagoAte: null,
       antecipado: false,
       sinal: false,
+      dupla: false,
     };
     // Match Sales: plano semestral/anual pago de uma vez cobre o contrato todo; conta pela 1ª venda do cliente.
     if (detectarPrepago && !porChave.has(chave)) {
@@ -495,6 +502,7 @@ export function montarCarteira(
       if (c.mesesPagos > 1) c.pagoAte = somaMesesData(v.data, c.mesesPagos);
       c.sinal = c.mesesPagos === 1 && ehSinalDePlano({ valor: Number(v.valor), mrr: Number(v.mrr), valor_implantacao: v.valor_implantacao, tipo_contrato: v.tipo_contrato });
     }
+    c.dupla = !!v.co_closer_id && v.co_closer_id !== v.profile_id;
     c.ultimo = v.data;
     c.mrr = Number(v.mrr);
     c.canal = v.canal ?? c.canal;
@@ -503,7 +511,9 @@ export function montarCarteira(
   }
   return Array.from(porChave.values())
     .map((c) => {
-      const pct = pctDe(c.papel, c.canal, c.comIndicador);
+      // Fechamento: quem recebe 10% sempre (sem BDR) usa 10; em dupla, metade da taxa de cada um.
+      const taxa = c.papel === "closer" && dezSempre && !c.comIndicador ? 10 : pctDe(c.papel, c.canal, c.comIndicador);
+      const pct = c.papel === "closer" && c.dupla ? taxa / 2 : taxa;
       // Contrato pago de uma vez: não gera recorrência até o fim do período pago (só vigora se houver renovação).
       const antecipado = !!c.pagoAte && hoje < c.pagoAte;
       const ativo = !antecipado && !c.sinal && (c.ultimo.startsWith(mesAtual) || c.ultimo.startsWith(mesAnterior));
@@ -519,18 +529,21 @@ export async function buscarCarteira(
   hoje: string,
   pctDe: (papel: "sdr" | "closer", canal: string | null, comIndicador?: boolean) => number,
   detectarPrepago = false,
+  dezSempre = false,
 ): Promise<ContratoCarteira[]> {
-  const consulta = (colunas: string) =>
+  const consulta = (colunas: string, comDupla = false) =>
     admin
       .from("vendas")
       .select(colunas)
       .eq("negocio_id", negocioId)
-      .or(`indicador_id.eq.${profileId},profile_id.eq.${profileId}`)
+      .or(comDupla ? `indicador_id.eq.${profileId},profile_id.eq.${profileId},co_closer_id.eq.${profileId}` : `indicador_id.eq.${profileId},profile_id.eq.${profileId}`)
       .gt("mrr", 0)
       .order("data")
       .range(0, 4999);
   // tipo_contrato é da migration 0117: sem ela, lê sem a coluna e o plano sai só pelo valor.
-  let { data, error } = await consulta("data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato, valor_implantacao, produto, tipo_contrato");
+  // co_closer_id (dupla) é da migration 0121.
+  let { data, error } = await consulta("data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato, valor_implantacao, produto, tipo_contrato, co_closer_id", true);
+  if (error) ({ data, error } = await consulta("data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato, valor_implantacao, produto, tipo_contrato"));
   if (error) ({ data, error } = await consulta("data, cliente, crm_deal_id, mrr, valor, canal, profile_id, indicador_id, primeiro_contrato, valor_implantacao, produto"));
-  return montarCarteira((data ?? []) as unknown as LinhaVendaCarteira[], profileId, hoje, pctDe, detectarPrepago);
+  return montarCarteira((data ?? []) as unknown as LinhaVendaCarteira[], profileId, hoje, pctDe, detectarPrepago, dezSempre);
 }

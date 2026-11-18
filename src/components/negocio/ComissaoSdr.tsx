@@ -367,7 +367,9 @@ export function PainelComissaoSdr({
                     <td className="py-1.5 text-stone-400">{c.desde.slice(8)}/{c.desde.slice(5, 7)}/{c.desde.slice(0, 4)}</td>
                     <td className="py-1.5 text-stone-400">{dataCurta(c.ultimo)}</td>
                     <td className="num py-1.5 text-right tabular-nums text-stone-300">{moeda(c.mrr)}</td>
-                    <td className="num py-1.5 text-right tabular-nums text-stone-400">{c.pct}%</td>
+                    <td className="num py-1.5 text-right tabular-nums text-stone-400">
+                      {c.pct}%{c.dupla && <span className="ml-1 text-[10px] text-stone-500">dupla</span>}
+                    </td>
                     <td className="num py-1.5 text-right tabular-nums text-stone-100">{c.antecipado || c.sinal ? "—" : moeda(c.porMes)}</td>
                     <td className={`max-w-[240px] py-1.5 text-right text-xs leading-snug ${c.ativo ? "text-success-bright" : c.antecipado || c.sinal ? "text-amber-400" : "text-stone-500"}`}>
                       {c.antecipado && c.pagoAte

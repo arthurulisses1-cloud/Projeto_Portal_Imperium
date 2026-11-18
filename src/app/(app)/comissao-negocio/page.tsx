@@ -6,7 +6,7 @@ import ExplicacaoComissaoFinance from "@/components/negocio/ExplicacaoComissaoFi
 import { getViewerContext } from "@/lib/preview";
 import { hojeBR } from "@/lib/data-br";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe, veConsolidado } from "@/lib/negocios";
-import { buscarComissoesNegocios, type ComissaoNegocio, type PapelComissao } from "@/lib/comissao-negocio";
+import { buscarComissoesNegocios, MATCH_COMISSAO_10_SEMPRE, type ComissaoNegocio, type PapelComissao } from "@/lib/comissao-negocio";
 import { buscarCarteira, buscarPainelSdr, temRqa, vinculoPreVendas } from "@/lib/sdr-negocio";
 import { ExplicacaoComissaoCloserVorp, ExplicacaoComissaoMatch, ExplicacaoComissaoVorp, PainelComissaoSdr, pctNegocio } from "@/components/negocio/ComissaoSdr";
 import { vinculoCloser } from "@/lib/closer-negocio";
@@ -97,7 +97,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
     const admin = createAdminClient();
     const [painel, carteira] = await Promise.all([
       buscarPainelSdr(admin, preVendas, { id: user.id, nome: viewer.effectiveNome }, { ano, mes, hoje }),
-      buscarCarteira(admin, preVendas.id, user.id, hoje, pctNegocio(preVendas.slug), preVendas.slug === "matchsales"),
+      buscarCarteira(admin, preVendas.id, user.id, hoje, pctNegocio(preVendas.slug), preVendas.slug === "matchsales", MATCH_COMISSAO_10_SEMPRE.includes(viewer.effectiveNome)),
     ]);
     const comissaoVendas = dados.find((d) => d.slug === preVendas.slug)?.pessoas.find((p) => p.id === user.id)?.total ?? 0;
     blocoSdr = (
@@ -120,7 +120,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
   // Closer da Acrópole: regras de closer da Acrópole, comissão de venda padrão e carteira de recorrência.
   const closerVorp = ehDiretor ? null : await vinculoCloser(supabase, user.id);
   if (!blocoSdr && closerVorp && (!foco || foco.slug === closerVorp.slug)) {
-    const carteira = await buscarCarteira(createAdminClient(), closerVorp.id, user.id, hoje, pctNegocio(closerVorp.slug), closerVorp.slug === "matchsales");
+    const carteira = await buscarCarteira(createAdminClient(), closerVorp.id, user.id, hoje, pctNegocio(closerVorp.slug), closerVorp.slug === "matchsales", closerVorp.slug === "matchsales" && MATCH_COMISSAO_10_SEMPRE.includes(viewer.effectiveNome));
     const comissaoVendas = dados.find((d) => d.slug === closerVorp.slug)?.pessoas.find((p) => p.id === user.id)?.total ?? 0;
     blocoSdr = (
       <>
