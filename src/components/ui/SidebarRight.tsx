@@ -52,17 +52,25 @@ export default async function SidebarRight({ userId }: { userId: string }) {
   const quote = quotes && quotes.length > 0 ? quotes[(dayOfYear + 1) % quotes.length] : null;
 
   // ---------- Comissão do mês: o que a pessoa tem agora x o que teria no pace ----------
-  let comissao: { atual: number; base: number; desagio: number; noPace: number | null; equipe: string | null } | null = null;
+  let comissao: { atual: number; base: number; desagio: number; pago: number; noPace: number | null; equipe: string | null } | null = null;
   try {
     // Todos os negócios: a pessoa também recebe de vendas de outras BUs em que participou.
     const dados = await buscarComissoesNegocios(supabase, ano, mes);
+    // "atual" é o que ainda vai receber: comissões já pagas (ex.: recebimento antecipado) ficam de fora e aparecem à parte.
     let atual = 0;
     let desagio = 0;
+    let pago = 0;
     for (const d of dados) {
       const eu = d.pessoas.find((p) => p.id === userId);
       if (!eu) continue;
-      atual += eu.total;
-      desagio += eu.itens.filter((i) => i.tipo === "desagio").reduce((s, i) => s + i.valor, 0);
+      for (const i of eu.itens) {
+        if (i.pagoEm) {
+          pago += i.valor;
+          continue;
+        }
+        atual += i.valor;
+        if (i.tipo === "desagio") desagio += i.valor;
+      }
     }
     let noPace: number | null = null;
     // SDR (pré-vendas) não ganha % de closer: a estimativa pelo pace não vale para ele (a comissão dele é RQA + venda originada).
@@ -83,7 +91,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
         noPace = taxa > 0 ? esperadoRecebido * taxa : null;
       }
     }
-    comissao = { atual, base: atual - desagio, desagio, noPace, equipe: principal ? nomeEquipe(principal.negocio) : null };
+    comissao = { atual, base: atual - desagio, desagio, pago, noPace, equipe: principal ? nomeEquipe(principal.negocio) : null };
   } catch (e) {
     console.error("SidebarRight: comissão do mês falhou", e);
   }
@@ -134,7 +142,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
         </div>
       )}
 
-      {comissao && (comissao.atual > 0 || comissao.noPace !== null) && (
+      {comissao && (comissao.atual > 0 || comissao.pago > 0 || comissao.noPace !== null) && (
         <a href="/comissao-negocio" className="block border-t border-imperium-line pt-4 transition hover:opacity-80">
           <div className="flex items-center justify-between">
             <p className="kicker">Comissão do mês</p>
@@ -143,6 +151,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
           <p className="mt-1.5 text-xs text-stone-300">
             Você está com <span className="text-lg font-semibold text-gold-bright">{moeda(comissao.atual)}</span>
           </p>
+          {comissao.pago > 0 && <p className="text-[11px] text-stone-500">Fora da conta: {moeda(comissao.pago)} já recebidos antecipadamente.</p>}
           {comissao.desagio > 0 && (
             <p className="text-[11px] text-stone-500">
               {moeda(comissao.base)} de comissão base + {moeda(comissao.desagio)} de deságio
@@ -152,10 +161,10 @@ export default async function SidebarRight({ userId }: { userId: string }) {
             <p className="mt-1 text-xs text-stone-400">
               No seu pace deveria estar com <span className="text-stone-200">{moeda(comissao.noPace)}</span>
               {" · "}
-              <span className={comissao.atual >= comissao.noPace ? "text-success-bright" : "text-wine-bright"}>
-                {comissao.atual >= comissao.noPace
-                  ? `${moeda(comissao.atual - comissao.noPace)} à frente`
-                  : `${moeda(comissao.noPace - comissao.atual)} abaixo`}
+              <span className={comissao.atual + comissao.pago >= comissao.noPace ? "text-success-bright" : "text-wine-bright"}>
+                {comissao.atual + comissao.pago >= comissao.noPace
+                  ? `${moeda(comissao.atual + comissao.pago - comissao.noPace)} à frente`
+                  : `${moeda(comissao.noPace - comissao.atual - comissao.pago)} abaixo`}
               </span>
             </p>
           )}
