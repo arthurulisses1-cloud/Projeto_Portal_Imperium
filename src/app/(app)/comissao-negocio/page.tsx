@@ -10,6 +10,8 @@ import { buscarComissoesNegocios, type ComissaoNegocio, type PapelComissao } fro
 import { buscarCarteira, buscarPainelSdr, temRqa, vinculoPreVendas } from "@/lib/sdr-negocio";
 import { ExplicacaoComissaoCloserVorp, ExplicacaoComissaoMatch, ExplicacaoComissaoVorp, PainelComissaoSdr, pctNegocio } from "@/components/negocio/ComissaoSdr";
 import { vinculoCloser } from "@/lib/closer-negocio";
+import { buscarComissaoEnergia, vinculoEnergia } from "@/lib/energy-time";
+import { ComissaoEnergiaExecutivo, ComissaoEnergiaTime } from "@/components/negocio/ComissaoEnergia";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -119,6 +121,19 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
     );
   }
 
+  // Maximus Energy: comissão da primeira fatura de cada conta ganha na Sunne (o executivo vê só as dele; Head e Diretor, o time).
+  let blocoEnergia: React.ReactNode = null;
+  const vEnergia = ehDiretor ? null : await vinculoEnergia(supabase, user.id);
+  if ((vEnergia || ehDiretor) && (!foco || foco.slug === "vorp-energy")) {
+    try {
+      const ce = await buscarComissaoEnergia(createAdminClient(), { ano, mes });
+      if (ehDiretor || vEnergia?.cargo === "head") blocoEnergia = <ComissaoEnergiaTime dados={ce} verGestao />;
+      else blocoEnergia = <ComissaoEnergiaExecutivo pessoa={ce.pessoas.find((p) => p.id === user.id) ?? null} pct={ce.pct.executivo} />;
+    } catch (e) {
+      console.error("Comissão do Energy falhou", e);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-4xl space-y-5 px-6 py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -145,6 +160,8 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
       {mostraFinance && <ExplicacaoComissaoFinance completo={ehDiretor || headDe.has("vorp-finance")} />}
 
       {blocoSdr}
+
+      {blocoEnergia}
 
       {visiveis.length > 1 && (
         <div className="flex flex-wrap gap-2 text-sm">
@@ -174,6 +191,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
       )}
 
       {dados.map((d) => {
+        if (d.slug === "vorp-energy" && blocoEnergia) return null; // o Energy aparece no bloco próprio, acima
         const cor = NEGOCIO_COR[d.slug] ?? "201 162 74";
         const completo = veTudo(d);
         const pessoas = completo ? d.pessoas : d.pessoas.filter((p) => p.id === user.id);

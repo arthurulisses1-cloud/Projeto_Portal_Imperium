@@ -35,15 +35,20 @@ export function FunilEnergiaCard({ funil, titulo, cor }: { funil: FunilEnergia; 
       <div className="mt-3 space-y-3">
         <Degrau rotulo="Contas subidas" valor={funil.subidas} base={funil.subidas} anterior={null} cor={cor} />
         <Degrau rotulo="Contrato enviado" valor={funil.contrato} base={funil.subidas} anterior={funil.subidas} cor={cor} />
-        <Degrau rotulo="Em validação" valor={funil.validacao} base={funil.subidas} anterior={funil.contrato} cor={cor} />
+        <Degrau rotulo="Passaram pela validação" valor={funil.validacao} base={funil.subidas} anterior={funil.contrato} cor={cor} />
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <div className="rounded border border-amber-400/40 p-3">
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Ainda em validação</p>
+          <p className="mt-0.5 text-2xl font-semibold text-amber-400">{funil.emAndamento}</p>
+          <p className="text-[11px] text-stone-500">aguardando a Sunne agora, entre as que passaram pela validação</p>
+        </div>
         <div className="rounded border border-success/40 p-3">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Ganhas</p>
           <p className="mt-0.5 text-2xl font-semibold text-success-bright">{funil.ganhas}</p>
           <p className="text-[11px] text-stone-500">
-            {pct(funil.ganhas, funil.validacao)} das validadas{funil.emAndamento > 0 ? ` · ${funil.emAndamento} ainda em validação` : ""}
+            {pct(funil.ganhas, funil.validacao)} das que passaram pela validação
           </p>
         </div>
         <div className="rounded border border-wine/50 p-3">

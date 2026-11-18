@@ -8,6 +8,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { metaForecast, metaKwhForecast } from "@/lib/forecast-negocios";
 import { calcularPace, type PaceCalculado } from "@/lib/pace-negocio";
+import { percentuais } from "@/lib/comissao-negocio";
 import { pctVorpPrimeiraFatura, primeiraFaturaSunne } from "@/lib/energy-canais";
 import { PRODUTO_KWH, alcanceDoNegocio, redeSunneEmCache, vendedoresSunne, type SunneDeal } from "@/lib/sunne";
 
@@ -190,4 +191,72 @@ export async function vinculoEnergia(
     if (n && n.status === "ativo" && n.slug === SLUG_ENERGY) return { cargo: l.cargo, id: n.id, slug: n.slug, nome: n.nome, equipe_nome: n.equipe_nome };
   }
   return null;
+}
+
+// ------------------------------------------------------------------ comissão (primeira fatura)
+
+export type LinhaComissaoEnergia = { id: string; data: string; kwh: number; primeiraFatura: number; recebido: number; comissao: number };
+
+export type ComissaoPessoaEnergia = { id: string; nome: string; cargo: string; linhas: LinhaComissaoEnergia[]; total: number };
+
+export type ComissaoEnergia = {
+  pessoas: ComissaoPessoaEnergia[];
+  pct: { executivo: number; head: number; diretor: number };
+  /** Recebido da Vorp na primeira fatura de todas as vendas do mês, e o que Head e Diretor levam sobre ele. */
+  recebidoTotal: number;
+  headTotal: number;
+  diretorTotal: number;
+  lidoEm: string;
+};
+
+/**
+ * Comissão da primeira fatura de cada venda fechada no mês (pura): o executivo (dono da conta na Sunne) leva `pctExecutivo`%
+ * do que a Vorp recebe (80% da primeira fatura; 100% acima de 80 mil kWh no mês). A recorrência não entra aqui.
+ */
+export function comissaoDasVendas(deals: SunneDeal[], ano: number, mes: number, orgIds: ReadonlySet<string> | null, kwhTimeNoMes: number, pctExecutivo: number): LinhaComissaoEnergia[] {
+  const periodo = `${ano}-${String(mes).padStart(2, "0")}`;
+  const parteVorp = pctVorpPrimeiraFatura(kwhTimeNoMes);
+  const out: LinhaComissaoEnergia[] = [];
+  for (const d of deals) {
+    if (!doVendedor(d, orgIds) || !d.isClosed || d.isLost || mesLocal(d.closedAt) !== periodo) continue;
+    const primeiraFatura = primeiraFaturaSunne(d);
+    const recebido = primeiraFatura * parteVorp;
+    out.push({
+      id: d.id,
+      data: new Date(d.closedAt as string).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }),
+      kwh: d.averageConsumption ?? 0,
+      primeiraFatura,
+      recebido,
+      comissao: (recebido * pctExecutivo) / 100,
+    });
+  }
+  return out.sort((a, b) => b.data.localeCompare(a.data));
+}
+
+export async function buscarComissaoEnergia(supabase: SupabaseClient, ctx: { ano: number; mes: number }): Promise<ComissaoEnergia> {
+  const p = percentuais(SLUG_ENERGY, { id: "", valor: 0, canal: null, closerId: "", closerCargo: null, indicadorId: null });
+  const pct = { executivo: p?.closer ?? 30, head: p?.head ?? 5, diretor: p?.diretor ?? 5 };
+  const { data: negocio } = await supabase.from("negocios").select("id").eq("slug", SLUG_ENERGY).maybeSingle();
+  if (!negocio) throw new Error("Negócio Energy não encontrado");
+  const [rede, { data: membros }, { data: perfis }] = await Promise.all([
+    redeSunneEmCache(),
+    supabase.from("profile_negocios").select("cargo, profiles!inner(id, full_name, ativo)").eq("negocio_id", negocio.id),
+    supabase.from("profiles").select("id, full_name, nomes_planilha").eq("ativo", true),
+  ]);
+  type M = { cargo: string; profiles: { id: string; full_name: string; ativo: boolean } | { id: string; full_name: string; ativo: boolean }[] };
+  const vendem = ((membros ?? []) as unknown as M[])
+    .map((m) => ({ cargo: m.cargo, p: Array.isArray(m.profiles) ? m.profiles[0] : m.profiles }))
+    .filter((m) => m.p?.ativo && CARGOS_VENDEM_ENERGY.includes(m.cargo));
+  const vendedores = vendedoresSunne(rede.organizacoes, perfis ?? []);
+  const orgsDe = new Map<string, Set<string>>();
+  for (const [orgId, v] of Array.from(vendedores)) if (v.profileId) orgsDe.set(v.profileId, (orgsDe.get(v.profileId) ?? new Set()).add(orgId));
+
+  const kwhTime = kwhParaLimite(rede.deals, ctx.ano, ctx.mes);
+  const pessoas: ComissaoPessoaEnergia[] = vendem.map(({ cargo, p: pe }) => {
+    const linhas = comissaoDasVendas(rede.deals, ctx.ano, ctx.mes, orgsDe.get(pe.id) ?? new Set<string>(), kwhTime, pct.executivo);
+    return { id: pe.id, nome: pe.full_name, cargo, linhas, total: linhas.reduce((s, l) => s + l.comissao, 0) };
+  });
+  const todas = comissaoDasVendas(rede.deals, ctx.ano, ctx.mes, null, kwhTime, pct.executivo);
+  const recebidoTotal = todas.reduce((s, l) => s + l.recebido, 0);
+  return { pessoas, pct, recebidoTotal, headTotal: (recebidoTotal * pct.head) / 100, diretorTotal: (recebidoTotal * pct.diretor) / 100, lidoEm: rede.lidoEm };
 }
