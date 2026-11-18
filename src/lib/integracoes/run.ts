@@ -122,7 +122,7 @@ export function coResponsavelDoDeal(d: DealPipefacil): string | null {
     }
     return null;
   };
-  const eh = (k: string) => /co[-_ ]?respons|corespons|secondary.?respons/i.test(k);
+  const eh = (k: string) => /co[-_ ]?respons|corespons|secondary|co[-_ ]?owner|collaborator|colaborador|assistant|auxiliar|support/i.test(k);
   for (const fonte of [d as unknown as Record<string, unknown>, d.properties ?? {}]) {
     for (const [k, v] of Object.entries(fonte)) {
       if (eh(k)) {
@@ -216,6 +216,16 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const inicioExecucao = new Date().toISOString();
   let nomesUsuarios: Record<string, string> = {};
   const linhasDeals = deals.map((d) => dealParaLinha(negocioId, d, cfg));
+  // Diagnóstico: estrutura de um lead com co-responsável (card #15235 do Match), sem os dados de contato,
+  // para descobrir como a API do Pipefácil devolve o campo. Remover depois de confirmado.
+  if (!simular && slug === "matchsales") {
+    const amostra = deals.find((d) => d.seq === 15235);
+    if (amostra) {
+      const copia: Record<string, unknown> = { ...(amostra as unknown as Record<string, unknown>) };
+      for (const k of ["contact", "contactId", "company", "name"]) delete copia[k];
+      await supabase.from("integracao_estado").upsert({ chave: `diagnostico:${slug}:deal_15235`, valor: copia, atualizado_em: new Date().toISOString() });
+    }
+  }
   // Identidade (códigos do telefone e do nome) para casar com a Sunne; só nos negócios que pedem.
   const identidade = cfg.identificarContato ? await identidadesDosDeals(deals, () => api.contatos()) : null;
   if (!simular) {
