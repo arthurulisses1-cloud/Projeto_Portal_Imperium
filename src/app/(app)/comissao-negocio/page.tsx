@@ -11,7 +11,7 @@ import { buscarCarteira, buscarCarteiraGestao, buscarPainelSdr, temRqa, vinculoP
 import { ExplicacaoComissaoCloserVorp, ExplicacaoComissaoMatch, ExplicacaoComissaoVorp, CarteiraRecorrencia, PainelComissaoSdr, pctNegocio } from "@/components/negocio/ComissaoSdr";
 import { vinculoCloser } from "@/lib/closer-negocio";
 import { buscarComissaoEnergia, vinculoEnergia } from "@/lib/energy-time";
-import { ComissaoEnergiaExecutivo, ComissaoEnergiaHead, ComissaoEnergiaTime } from "@/components/negocio/ComissaoEnergia";
+import { ComissaoEnergiaDiretor, ComissaoEnergiaExecutivo, ComissaoEnergiaHead } from "@/components/negocio/ComissaoEnergia";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -77,7 +77,8 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
   // Diretor vê tudo; Head vê o negócio que chefia; os demais só as próprias linhas.
   const ehDiretor = eu.role === "diretor";
   const headDe = new Set(visiveis.filter((n) => n.cargo === "head" && !ehDiretor).map((n) => n.slug));
-  const veTudo = (d: ComissaoNegocio) => ehDiretor || headDe.has(d.slug);
+  // O Diretor vê só o que ele recebe e de onde vem (não as comissões dos outros).
+  const veTudo = (d: ComissaoNegocio) => headDe.has(d.slug);
 
   const ant = mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, "0")}`;
   const seg = mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;
@@ -155,8 +156,10 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
   if ((vEnergia || ehDiretor) && (!foco || foco.slug === "vorp-energy")) {
     try {
       const ce = await buscarComissaoEnergia(createAdminClient(), { ano, mes });
-      if (ehDiretor) blocoEnergia = <ComissaoEnergiaTime dados={ce} verGestao />;
-      else if (vEnergia?.cargo === "head") {
+      if (ehDiretor) {
+        blocoEnergia = <ComissaoEnergiaDiretor dados={ce} />;
+        energiaDoHead = ce.diretorTotal + (ce.pessoas.find((p) => p.id === user.id)?.total ?? 0);
+      } else if (vEnergia?.cargo === "head") {
         // O Head não vê o que cada executivo ganha: só as vendas individuais dele e a comissão sobre o time.
         blocoEnergia = <ComissaoEnergiaHead dados={ce} headId={user.id} />;
         energiaDoHead = (ce.pessoas.find((p) => p.id === user.id)?.total ?? 0) + ce.headTotal;
@@ -172,6 +175,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
     .map((d) => ({ slug: d.slug, nome: d.equipeNome || d.nome, total: d.pessoas.find((p) => p.id === user.id)?.total ?? 0 }))
     .filter((o) => o.total > 0);
   const totalPessoal = (energiaDoHead ?? 0) + outrasComissoes.reduce((s, o) => s + o.total, 0);
+  const jaPago = dados.reduce((s, d) => s + (d.pessoas.find((p) => p.id === user.id)?.pago ?? 0), 0);
 
   return (
     <main className="mx-auto max-w-4xl space-y-5 px-6 py-8">
@@ -192,15 +196,22 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
         </div>
       </div>
 
-      {energiaDoHead !== null && (
+      {(energiaDoHead !== null || ehDiretor) && (
         <div className="rounded-lg border border-gold/40 bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Sua comissão total em {MESES[mes]} · a pagar em {dataBR(dados[0]?.pagamento ?? seg + "-15")}</p>
           <p className="mt-1 text-2xl font-semibold text-gold-bright">{moeda(totalPessoal)}</p>
+          {jaPago > 0 && (
+            <p className="text-xs text-stone-500">
+              Já recebido antecipadamente: {moeda(jaPago)} · a receber: <span className="text-stone-300">{moeda(totalPessoal - jaPago)}</span>
+            </p>
+          )}
           <ul className="mt-2 divide-y divide-imperium-line text-sm">
-            <li className="flex justify-between py-1">
-              <span className="text-stone-300">Maximus Energy (Sunne)</span>
-              <span className="text-stone-100">{moeda(energiaDoHead)}</span>
-            </li>
+            {energiaDoHead !== null && (
+              <li className="flex justify-between py-1">
+                <span className="text-stone-300">Maximus Energy (Sunne)</span>
+                <span className="text-stone-100">{moeda(energiaDoHead)}</span>
+              </li>
+            )}
             {outrasComissoes.map((o) => (
               <li key={o.slug} className="flex justify-between py-1">
                 <span className="text-stone-300">{o.nome}</span>
@@ -257,6 +268,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
         const cor = NEGOCIO_COR[d.slug] ?? "201 162 74";
         const completo = veTudo(d);
         const pessoas = completo ? d.pessoas : d.pessoas.filter((p) => p.id === user.id);
+        if (ehDiretor && pessoas.length === 0) return null; // Diretor: só os negócios de onde vem comissão dele
         const nome = d.equipeNome || d.nome;
         const externo = dadosExternos.includes(d);
         return (

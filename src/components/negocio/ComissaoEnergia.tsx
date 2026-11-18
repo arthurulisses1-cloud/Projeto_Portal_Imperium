@@ -130,6 +130,23 @@ export function ComissaoEnergiaHead({ dados, headId }: { dados: ComissaoEnergia;
   );
 }
 
+/** Comissão do Diretor no Energy: só a parte dele (gestão sobre as contas do time), sem abrir o que cada um ganha. */
+export function ComissaoEnergiaDiretor({ dados }: { dados: ComissaoEnergia }) {
+  return (
+    <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-[10px] uppercase tracking-widest text-stone-500">Maximus Energy · sua comissão de gestão</p>
+        <p className="text-sm text-stone-400">
+          {dados.pct.diretor}% de {moeda(dados.faturaTotal)} · <span className="font-semibold text-gold-bright">{moeda(dados.diretorTotal)}</span>
+        </p>
+      </div>
+      <p className="mt-2 text-xs text-stone-500">
+        {dados.contasTotal} {dados.contasTotal === 1 ? "conta ganha" : "contas ganhas"} pelo time no mês, primeira fatura somada. Recorrência (a partir do 3º mês) ainda não entra neste cálculo.
+      </p>
+    </section>
+  );
+}
+
 /** Comissão do time (Head e Diretor): cada vendedor, mais o que a gestão leva. */
 export function ComissaoEnergiaTime({ dados, verGestao }: { dados: ComissaoEnergia; verGestao: boolean }) {
   const totalTime = dados.pessoas.reduce((s, p) => s + p.total, 0);
