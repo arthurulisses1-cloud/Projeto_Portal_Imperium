@@ -94,6 +94,10 @@ describe("comissaoDaVenda", () => {
     const dois10 = comissaoDaVenda("matchsales", { ...base, closerId: "a", coCloserId: "b" }, ctx);
     expect(dois10.filter((x) => x.papel === "closer").map((x) => x.pct)).toEqual([5, 5]);
   });
+  it("Match: Head como co-responsável divide o fechamento e leva também os 2% de gestão", () => {
+    const l = comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "a", coCloserId: "h" }, ctx);
+    expect(l.filter((x) => x.beneficiarioId === "h").map((x) => [x.papel, x.pct])).toEqual([["closer", 4], ["head", 2]]);
+  });
   it("Match: Soares sozinho recebe 10% até no inbound; os demais seguem 8%", () => {
     const comSoares = { headId: "h", diretorId: "d", comissao10Sempre: new Set(["soares"]) };
     expect(comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "soares" }, comSoares).find((x) => x.papel === "closer")?.pct).toBe(10);

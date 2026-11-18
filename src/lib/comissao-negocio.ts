@@ -180,7 +180,7 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
   if (energia) {
     add(diretorVendeu ? ctx.diretorId : ctx.headId, "head", p.head);
   } else {
-    add(ctx.headId && ctx.headId !== venda.closerId && ctx.headId !== venda.coCloserId ? ctx.headId : null, "head", p.head);
+    add(ctx.headId && ctx.headId !== venda.closerId ? ctx.headId : null, "head", p.head);
   }
   // Vorp com Head: 1% dele e 2% do Diretor (em vez dos 3% só do Diretor).
   if (slug === "vorp" && ctx.headId) {
