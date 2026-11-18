@@ -114,3 +114,20 @@ describe("performance por pré-vendas e diagnóstico (versão nova do painel ant
     expect(so.totais).toMatchObject({ ligacoes: 2, alos: 1, conexoes: 0 });
   });
 });
+
+describe("tentativas por pré-vendas por dia", () => {
+  it("soma por pessoa e dia, e o total do dia bate com as tentativas", async () => {
+    const { agregar, enxugar } = await import("./esforco-3c");
+    const b = (p: Record<string, unknown>) => enxugar({ call_date: "2026-11-10 10:00:00", agent: "-", has_agent: false, campaign: "Marcus Ryquelme", status_id: 9, speaking_with_agent_time: "00:00:00", ...p });
+    const ligs = [
+      b({ agent: "Marcus Ryquelme", agent_id: 1, has_agent: true, status_id: 7 }),
+      b({}),
+      b({ call_date: "2026-11-11 09:00:00" }),
+      b({ campaign: "Jorge Abudi", agent: "Jorge Abudi", agent_id: 2, has_agent: true, status_id: 7 }),
+    ];
+    const p = agregar("vorp", ligs, "2026-11-10", "2026-11-11", {}, 60);
+    expect(p.tentativasPorPessoaDia).toEqual({ "Marcus Ryquelme": { "2026-11-10": 2, "2026-11-11": 1 }, "Jorge Abudi": { "2026-11-10": 1 } });
+    const total = Object.values(p.tentativasPorPessoaDia).reduce((s, d) => s + Object.values(d).reduce((a, n) => a + n, 0), 0);
+    expect(total).toBe(p.totais.ligacoes);
+  });
+});

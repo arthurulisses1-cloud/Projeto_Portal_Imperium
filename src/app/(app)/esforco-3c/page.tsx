@@ -9,6 +9,7 @@ import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nom
 import { TRESC_POR_NEGOCIO } from "@/lib/integracoes/config";
 import { MAX_DIAS, agregar, buscarAtividade, buscarLigacoes, somarAtividade, type Atividade, type PainelEsforco } from "@/lib/esforco-3c";
 import { PARAMETROS } from "@/lib/forecast-negocios";
+import { INICIO_REALIZADO } from "@/lib/integracoes/config";
 
 /** Passagem ideal de tentativa para alô (meta do comercial, a mesma do painel antigo). */
 const IDEAL_ALO = 0.15;
@@ -91,12 +92,41 @@ export default async function Esforco3cPage({ searchParams }: { searchParams: Pa
 
   let painel: PainelEsforco | null = null;
   let atividade: Atividade | null = null;
+  // Etapas do Pipefácil por dia (agendadas, realizadas, vendas do Outbound): o realizado do funil do Dashboard,
+  // da pessoa escolhida quando há filtro de pré-vendas.
+  const crmPorDia = new Map<string, { agendamentos: number; realizadas: number; vendas: number }>();
   let erro: string | null = null;
   let truncado = false;
   try {
     const lido = await buscarLigacoes(atual.slug, de, ate, hoje);
     truncado = lido.truncado;
     painel = agregar(atual.slug, lido.ligacoes, de, ate, filtro, TRESC_POR_NEGOCIO[atual.slug].segundosConexao);
+    {
+      const mapa = TRESC_POR_NEGOCIO[atual.slug].agentes ?? {};
+      const pessoas = filtro.agentes.length
+        ? Array.from(new Set(lido.ligacoes.filter((l) => l.agente && filtro.agentes.includes(l.agente) && l.agenteId && mapa[l.agenteId]).map((l) => mapa[l.agenteId as number])))
+        : [];
+      const BASE = { reunioes_agendadas: "agendamentos", reunioes_realizadas: "realizadas", vendas: "vendas" } as const;
+      const etapas = filtro.agentes.length ? pessoas.flatMap((id) => Object.keys(BASE).map((e) => `pv:${id}:${e}`)) : Object.keys(BASE);
+      if (etapas.length) {
+        const { data } = await supabase
+          .from("funil_realizado")
+          .select("data, etapa, quantidade")
+          .eq("negocio_id", atual.id)
+          .eq("canal", "outbound")
+          .eq("fonte", "pipefacil")
+          .in("etapa", etapas)
+          .gte("data", de)
+          .lte("data", ate)
+          .range(0, 9999);
+        for (const r of data ?? []) {
+          const chave = BASE[r.etapa.slice(r.etapa.lastIndexOf(":") + 1) as keyof typeof BASE];
+          const d = crmPorDia.get(r.data) ?? { agendamentos: 0, realizadas: 0, vendas: 0 };
+          d[chave] += Number(r.quantidade);
+          crmPorDia.set(r.data, d);
+        }
+      }
+    }
     // Utilização: o 3C mede o tempo do agente por campanha (não por lista). Campanhas do período (ou as
     // escolhidas) e, com pré-vendas escolhido, só o tempo deles.
     if (filtro.listas.length === 0) {
@@ -254,14 +284,32 @@ export default async function Esforco3cPage({ searchParams }: { searchParams: Pa
             </div>
           </section>
 
-          {/* Evolução no tempo: tentativas, alôs e conexões por dia */}
+          {/* Evolução dia a dia: as três etapas do discador e as três do Pipefácil, e as tentativas por pré-vendas */}
           {painel.porDia.length > 1 && (
             <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
               <p className="text-[10px] uppercase tracking-widest" style={{ color: `rgb(${cor})` }}>
-                Evolução no tempo
+                Evolução
               </p>
-              <h2 className="font-display text-lg text-stone-100">Por dia</h2>
-              <TresGraficos itens={painel.porDia.map((d) => ({ rotulo: curta(d.dia), ...d }))} cor={cor} sufixo="por dia" />
+              <h2 className="font-display text-lg text-stone-100">Dia a dia</h2>
+              <p className="mt-0.5 text-[12px] text-stone-400">
+                Cada coluna é o que aconteceu no dia: as ligações do dia e os passos dos leads do Outbound com data nele (agendamento, realização, venda). Cada etapa conta
+                pela própria data, então a soma dos dias bate com o funil do Dashboard.
+                {filtro.campanhas.length + filtro.listas.length > 0 && " Agendamentos, realizadas e vendas não se dividem por campanha nem por lista: com esses filtros, mostram o Outbound inteiro."}
+                {de < INICIO_REALIZADO && ` As etapas do Pipefácil só existem no Senatus a partir de ${curta(INICIO_REALIZADO)}.`}
+              </p>
+              <Graficos
+                itens={painel.porDia.map((d) => ({ rotulo: curta(d.dia), ...d, ...(crmPorDia.get(d.dia) ?? { agendamentos: 0, realizadas: 0, vendas: 0 }) }))}
+                cor={cor}
+                series={[
+                  ["Tentativas", (x) => x.ligacoes],
+                  ["Alôs", (x) => x.alos],
+                  ["Conexões", (x) => x.conexoes],
+                  ["Agendamentos", (x) => x.agendamentos],
+                  ["Realizadas", (x) => x.realizadas],
+                  ["Vendas", (x) => x.vendas],
+                ]}
+              />
+              <TentativasPorPessoa porPessoa={painel.tentativasPorPessoaDia} dias={painel.porDia.map((d) => d.dia)} />
             </section>
           )}
 
@@ -293,10 +341,14 @@ export default async function Esforco3cPage({ searchParams }: { searchParams: Pa
               Horário
             </p>
             <h2 className="font-display text-lg text-stone-100">Performance por horário</h2>
-            <TresGraficos
+            <Graficos
               itens={painel.porHora.filter((h) => h.ligacoes > 0).map((h) => ({ rotulo: `${h.hora}h`, ...h }))}
               cor={cor}
-              sufixo="por hora"
+              series={[
+                ["Tentativas por hora", (x) => x.ligacoes],
+                ["Alôs por hora", (x) => x.alos],
+                ["Conexões por hora", (x) => x.conexoes],
+              ]}
             />
           </section>
 
@@ -438,23 +490,18 @@ function Barras({ itens, cor, vazio, total }: { itens: { nome: string; ligacoes:
   );
 }
 
-/** Três gráficos de colunas lado a lado: tentativas, alôs e conexões (como na versão nova do painel antigo). */
-function TresGraficos({ itens, cor, sufixo }: { itens: { rotulo: string; ligacoes: number; alos: number; conexoes: number }[]; cor: string; sufixo: string }) {
-  const series = [
-    ["Tentativas", (x: (typeof itens)[number]) => x.ligacoes],
-    ["Alôs", (x: (typeof itens)[number]) => x.alos],
-    ["Conexões", (x: (typeof itens)[number]) => x.conexoes],
-  ] as const;
+/** Gráficos de colunas lado a lado, um por série (três por linha), como no painel antigo. */
+function Graficos<T extends { rotulo: string }>({ itens, cor, series }: { itens: T[]; cor: string; series: [string, (x: T) => number][] }) {
   if (itens.length === 0) return <p className="mt-2 text-sm text-stone-500">Nenhuma ligação no período.</p>;
   return (
-    <div className="mt-3 grid gap-4 lg:grid-cols-3">
+    <div className="mt-3 grid gap-x-4 gap-y-5 lg:grid-cols-3">
       {series.map(([nome, valor]) => {
         const max = Math.max(...itens.map(valor), 1);
         const total = itens.reduce((s, x) => s + valor(x), 0);
         return (
           <div key={nome}>
             <p className="text-xs text-stone-300">
-              {nome} {sufixo} <span className="text-stone-500">· {num(total)} no período</span>
+              {nome} <span className="text-stone-500">· {num(total)} no período</span>
             </p>
             <div className="mt-2 flex h-28 items-end gap-0.5">
               {itens.map((x) => (
@@ -473,6 +520,64 @@ function TresGraficos({ itens, cor, sufixo }: { itens: { rotulo: string; ligacoe
           </div>
         );
       })}
+    </div>
+  );
+}
+
+const CORES_PESSOAS = ["#FC5400", "#2F6FD6", "#16A085", "#8E44AD", "#B8860B", "#D63384"];
+
+/** Tentativas por pré-vendas, uma linha por pessoa, só nos dias úteis (segunda a sexta), como no painel antigo. */
+function TentativasPorPessoa({ porPessoa, dias: todos }: { porPessoa: Record<string, Record<string, number>>; dias: string[] }) {
+  const dias = todos.filter((d) => ![0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay()));
+  const nomes = Object.keys(porPessoa).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  if (nomes.length === 0 || dias.length <= 1) return null;
+  const W = 900;
+  const H = 180;
+  const P = { e: 34, d: 8, t: 8, b: 22 };
+  const max = Math.max(1, ...nomes.flatMap((n) => dias.map((d) => porPessoa[n][d] ?? 0)));
+  const x = (i: number) => P.e + (i * (W - P.e - P.d)) / (dias.length - 1);
+  const y = (v: number) => P.t + (1 - v / max) * (H - P.t - P.b);
+  const passo = Math.ceil(dias.length / 16);
+  return (
+    <div className="mt-6 border-t border-imperium-line pt-4">
+      <p className="text-xs font-semibold text-stone-200">Tentativas por pré-vendas</p>
+      <p className="text-[11px] text-stone-500">Só os dias úteis (segunda a sexta). As tentativas das campanhas de cada pré-vendas no 3C (a campanha leva o nome de quem a trabalha).</p>
+      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-stone-300">
+        {nomes.map((n, i) => (
+          <li key={n} className="flex items-center gap-1.5">
+            <span className="h-0.5 w-4 rounded" style={{ backgroundColor: CORES_PESSOAS[i % CORES_PESSOAS.length] }} />
+            {n} <span className="text-stone-500">· {num(dias.reduce((s, d) => s + (porPessoa[n][d] ?? 0), 0))}</span>
+          </li>
+        ))}
+      </ul>
+      <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 w-full" role="img" aria-label="Tentativas por pré-vendas por dia útil">
+        {[0, 0.5, 1].map((f) => (
+          <g key={f}>
+            <line x1={P.e} x2={W - P.d} y1={y(max * f)} y2={y(max * f)} stroke="currentColor" className="text-imperium-line" strokeWidth={1} />
+            <text x={P.e - 6} y={y(max * f) + 3} textAnchor="end" className="fill-stone-500 text-[10px]">
+              {num(Math.round(max * f))}
+            </text>
+          </g>
+        ))}
+        {dias.map((d, i) =>
+          i % passo === 0 ? (
+            <text key={d} x={x(i)} y={H - 6} textAnchor="middle" className="fill-stone-500 text-[10px]">
+              {curta(d)}
+            </text>
+          ) : null,
+        )}
+        {nomes.map((n, k) => (
+          <polyline
+            key={n}
+            fill="none"
+            stroke={CORES_PESSOAS[k % CORES_PESSOAS.length]}
+            strokeWidth={2}
+            points={dias.map((d, i) => `${x(i)},${y(porPessoa[n][d] ?? 0)}`).join(" ")}
+          >
+            <title>{`${n}: ${dias.map((d) => `${curta(d)} ${porPessoa[n][d] ?? 0}`).join(" · ")}`}</title>
+          </polyline>
+        ))}
+      </svg>
     </div>
   );
 }

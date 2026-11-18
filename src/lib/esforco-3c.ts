@@ -134,6 +134,8 @@ export type PainelEsforco = {
   porHora: { hora: number; ligacoes: number; alos: number; conexoes: number }[];
   /** Por pré-vendas: tentativas das campanhas dele (o discador disca sem agente); alôs e conexões, as que ele atendeu. */
   porPreVendas: { nome: string; temDono: boolean; ligacoes: number; alos: number; conexoes: number }[];
+  /** Tentativas de cada pré-vendas por dia (a mesma regra da tabela por pré-vendas), para o gráfico de linhas. */
+  tentativasPorPessoaDia: Record<string, Record<string, number>>;
   porDiagnostico: { id: string; nome: string; nota: string; ligacoes: number }[];
   porAgente: { agente: string; alos: number; conexoes: number; conversoes: number; dmc: number; faladoTotal: number; faladoMedio: number; faladoMediano: number }[];
   porCampanha: ({ campanha: string } & Contagem)[];
@@ -190,6 +192,7 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
   for (let d = de; d <= ate; d = somarDias(d, 1)) dias.set(d, { dia: d, ...zero() });
   const horas = Array.from({ length: 24 }, (_, hora) => ({ hora, ligacoes: 0, alos: 0, conexoes: 0 }));
   const pv = new Map<string, { nome: string; temDono: boolean; ligacoes: number; alos: number; conexoes: number }>();
+  const porPessoaDia: Record<string, Record<string, number>> = {};
   const diag = new Map(DIAGNOSTICO.map((d) => [d.id, { ...d, ligacoes: 0 }]));
   const agentes = new Map<string, { agente: string; alos: number; conexoes: number; conversoes: number; dmc: number; faladoTotal: number; falados: number[] }>();
   const campanhas = new Map<string, { campanha: string } & Contagem>();
@@ -247,6 +250,10 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
     const chavePv = quem ?? `Sem pré-vendas: ${l.campanha}`;
     const linhaPv = pv.get(chavePv) ?? { nome: chavePv, temDono: !!quem, ligacoes: 0, alos: 0, conexoes: 0 };
     linhaPv.ligacoes++;
+    if (quem) {
+      const dias = (porPessoaDia[quem] ??= {});
+      dias[l.data.slice(0, 10)] = (dias[l.data.slice(0, 10)] ?? 0) + 1;
+    }
     if (alo) linhaPv.alos++;
     if (con) linhaPv.conexoes++;
     pv.set(chavePv, linhaPv);
@@ -270,6 +277,7 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
       .sort((a, b) => b.conexoes - a.conexoes || b.alos - a.alos),
     porPreVendas: Array.from(pv.values()).sort((a, b) => Number(b.temDono) - Number(a.temDono) || b.conexoes - a.conexoes || b.ligacoes - a.ligacoes),
     porDiagnostico: Array.from(diag.values()),
+    tentativasPorPessoaDia: porPessoaDia,
     porCampanha: Array.from(campanhas.values()).sort((a, b) => b.ligacoes - a.ligacoes),
     porLista: Array.from(listas.values()).sort((a, b) => b.conexoes - a.conexoes || b.ligacoes - a.ligacoes),
     porStatus: lista(status),
