@@ -98,3 +98,21 @@ describe("base da auditoria: Inbound completo, sem lead falso, venda só com gan
     expect(leads.find((l) => l.nome === "Venda desfeita")!.vendaEm).toBeNull();
   });
 });
+
+describe("BANT com o texto do CRM", () => {
+  it("usa o rótulo da opção (com acento e descrição) quando a sincronização passa os rótulos", async () => {
+    const { montarAuditoria } = await import("./auditoria");
+    const { CRM_POR_NEGOCIO } = await import("./config");
+    const cfg = CRM_POR_NEGOCIO.vorp;
+    const deal = { deal_id: "x", nome: "Lead", canal: "outbound", status: "open", criado_em: "2026-11-01T12:00:00Z", responsavel_user_id: "r", faturamento: "entre_30_e_100_mil", cargo: "proprietario", valor: 0, mrr: null, empresa: null, produtos: null, closer_user_id: null, sdr_user_id: null, fechado_em: null, stage_id: null };
+    const eventos = [{ deal_id: "x", stage_id: "722cd95f-5518-4fcf-8229-3bb4aea55a7d", ocorrido_em: "2026-11-02T12:00:00Z" }];
+    const extras = new Map([["x", { properties: { bant_timing: "alta_prioridade", bant_necessidade: "Gerar demanda" } }]]);
+    const rotulos = {
+      quanto_sua_empresa_fatura_por_mes: { entre_30_e_100_mil: "Entre 30 e 100 mil" },
+      qual_seu_cargo_atual: { proprietario: "Proprietário" },
+      bant_timing: { alta_prioridade: "Alta prioridade (agora ou até 15 dias)" },
+    };
+    const [l] = montarAuditoria({ deals: [deal] as never, extras, eventos, cfg, etapas: new Map(), responsaveis: new Map(), vendedores: new Map(), nomes: {}, rotulos });
+    expect(l).toMatchObject({ faturamentoRotulo: "Entre 30 e 100 mil", cargoRotulo: "Proprietário", necessidade: "Gerar demanda", timingRotulo: "Alta prioridade (agora ou até 15 dias)" });
+  });
+});

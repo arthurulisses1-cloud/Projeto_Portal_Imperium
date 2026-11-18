@@ -12,7 +12,7 @@ import type { AuditoriaGravada, LeadAuditoria, SituacaoReuniao } from "@/lib/int
 
 export const dynamic = "force-dynamic";
 
-// Auditoria comercial (Dados → Auditoria): Reuniões, Pós-reunião (closer) e Movimentações do mês, com a
+// Auditoria comercial (Dados → Auditoria): Reuniões, Pós-reunião (closer) e Leads do período, com a
 // ficha de cada lead (linha do tempo). A base é a mesma do Dashboard (gravada pela sincronização), então
 // as contagens batem com o funil e o ranking. Só Diretor, Líder e Analista com acesso a Dados.
 
@@ -24,8 +24,6 @@ const SITUACAO: Record<SituacaoReuniao, { texto: string; classe: string }> = {
   no_show: { texto: "No-show", classe: "border-wine/60 text-wine-bright" },
   cancelada: { texto: "Cancelada", classe: "border-imperium-line text-stone-400" },
 };
-const TIPO_MOV = { agendada: "Reunião agendada", realizada: "Reunião realizada", venda: "Venda" } as const;
-type TipoMov = keyof typeof TIPO_MOV;
 
 const dataBR = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }) : null);
 const dia = (iso: string | null) => {
@@ -56,7 +54,9 @@ type Params = {
   base?: string;
   situacao?: string;
   modo?: string;
-  tipo?: string;
+  /** Reuniões: faturamento (valor do CRM) e dia da reunião (AAAA-MM-DD). */
+  fat?: string;
+  diaR?: string;
   temp?: string;
   /** Visão da lista do Inbound: todos, mql ou nao_mql. */
   vq?: string;
@@ -104,7 +104,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
   const [ano, mes] = mesParam.split("-").map(Number);
   const ant = mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, "0")}`;
   const seg = mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;
-  const ABAS = ["closer", "movimentacoes", "leads_outbound", "leads_inbound"];
+  const ABAS = ["closer", "leads_outbound", "leads_inbound"];
   const aba = ABAS.includes(searchParams.aba ?? "") ? searchParams.aba! : "reunioes";
   const f: Filtros = { pv: searchParams.pv ?? "", closer: searchParams.closer ?? "", canal: searchParams.canal ?? "", q: (searchParams.q ?? "").trim() };
 
@@ -120,10 +120,13 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
   const preVendas = Array.from(new Set(todos.map((l) => l.preVendas).filter((x): x is string => !!x))).sort((a, b) => a.localeCompare(b, "pt-BR"));
   const closers = Array.from(new Set(todos.flatMap((l) => [l.closer, l.responsavel]).filter((x): x is string => !!x))).sort((a, b) => a.localeCompare(b, "pt-BR"));
   const canais = Array.from(new Set(todos.map((l) => l.canal)));
+  const faturamentos = Array.from(new Map(todos.filter((l) => l.faturamento).map((l) => [l.faturamento!, l.faturamentoRotulo ?? legivel(l.faturamento)!])).entries()).sort(
+    (a, b) => ordemFaixa(a[0]) - ordemFaixa(b[0]) || a[1].localeCompare(b[1], "pt-BR"),
+  );
 
   const href = (mudar: Partial<Params>) => {
     const p = new URLSearchParams();
-    const tudo: Params = { negocio: atual.slug, mes: mesParam, aba, pv: f.pv, closer: f.closer, canal: f.canal, q: f.q, base: searchParams.base, situacao: searchParams.situacao, modo: searchParams.modo, tipo: searchParams.tipo, temp: searchParams.temp, vq: searchParams.vq, ...mudar };
+    const tudo: Params = { negocio: atual.slug, mes: mesParam, aba, pv: f.pv, closer: f.closer, canal: f.canal, q: f.q, base: searchParams.base, situacao: searchParams.situacao, modo: searchParams.modo, fat: searchParams.fat, diaR: searchParams.diaR, temp: searchParams.temp, vq: searchParams.vq, ...mudar };
     for (const [k, v] of Object.entries(tudo)) if (v) p.set(k, v);
     return `/auditoria-comercial?${p}`;
   };
@@ -169,7 +172,6 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
           [
             ["reunioes", "Reuniões"],
             ["closer", "Pós-reunião (closer)"],
-            ["movimentacoes", "Movimentações"],
             ["leads_outbound", "Leads Outbound do período"],
             ["leads_inbound", "Leads Inbound do período"],
           ] as const
@@ -191,7 +193,6 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
         <input type="hidden" name="aba" value={aba} />
         {searchParams.base && <input type="hidden" name="base" value={searchParams.base} />}
         {searchParams.modo && <input type="hidden" name="modo" value={searchParams.modo} />}
-        {searchParams.tipo && <input type="hidden" name="tipo" value={searchParams.tipo} />}
         <Campo rotulo="Pré-vendas">
           <select name="pv" defaultValue={f.pv} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
             <option value="">Todos</option>
@@ -219,6 +220,29 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
             ))}
           </select>
         </Campo>
+        )}
+        {aba === "reunioes" && (
+          <Campo rotulo="Faturamento">
+            <select name="fat" defaultValue={searchParams.fat ?? ""} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
+              <option value="">Todos</option>
+              {faturamentos.map(([v, r]) => (
+                <option key={v} value={v}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </Campo>
+        )}
+        {aba === "reunioes" && (
+          <Campo rotulo="Dia da reunião">
+            <input
+              type="date"
+              name="diaR"
+              defaultValue={searchParams.diaR ?? ""}
+              className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200"
+              title="A data marcada da reunião (sem ela, a data em que foi realizada)"
+            />
+          </Campo>
         )}
         {aba === "reunioes" && (
           <Campo rotulo="Situação">
@@ -254,7 +278,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
         <button type="submit" className="rounded border border-gold/60 px-3 py-1 text-gold-bright hover:bg-gold/10">
           Filtrar
         </button>
-        {(f.pv || f.closer || f.canal || f.q || searchParams.situacao || searchParams.temp) && (
+        {(f.pv || f.closer || f.canal || f.q || searchParams.situacao || searchParams.temp || searchParams.fat || searchParams.diaR) && (
           <Link href={`/auditoria-comercial?negocio=${atual.slug}&mes=${mesParam}&aba=${aba}`} className="px-2 py-1 text-stone-400 hover:text-stone-200">
             Limpar filtros
           </Link>
@@ -267,14 +291,10 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
         <AbaReunioes todos={todos} f={f} noMes={noMes} mesParam={mesParam} sp={searchParams} href={href} />
       ) : aba === "closer" ? (
         <AbaCloser todos={todos} f={f} noMes={noMes} sp={searchParams} href={href} />
-      ) : aba === "leads_outbound" || aba === "leads_inbound" ? (
-        aba === "leads_outbound" ? (
-          <AbaLeadsDoPeriodo todos={todos} f={f} noMes={noMes} canal="outbound" href={href} />
-        ) : (
-          <AbaLeadsInbound todos={baseToda} f={f} noMes={noMes} sp={searchParams} href={href} />
-        )
+      ) : aba === "leads_outbound" ? (
+        <AbaLeadsDoPeriodo todos={todos} f={f} noMes={noMes} canal="outbound" href={href} />
       ) : (
-        <AbaMovimentacoes todos={todos} f={f} noMes={noMes} sp={searchParams} href={href} />
+        <AbaLeadsInbound todos={baseToda} f={f} noMes={noMes} sp={searchParams} href={href} />
       )}
 
       {lead && <FichaLead l={lead} cor={cor} fechar={href({ lead: undefined })} />}
@@ -358,21 +378,34 @@ function LinkLead({ l, href }: { l: LeadAuditoria; href: (m: Partial<Params>) =>
   );
 }
 
-const Bant = ({ l }: { l: LeadAuditoria }) => (
-  <span className="whitespace-nowrap text-[11px]">
-    {(
-      [
-        ["B", l.faturamento],
-        ["A", l.cargo],
-        ["N", l.necessidade],
-        ["T", l.timing],
-      ] as const
-    ).map(([k, v]) => (
-      <span key={k} title={v ? `${k}: ${legivel(v)}` : `${k}: não preenchido`} className={`mr-1 ${v ? "text-success-bright" : "text-stone-600"}`}>
-        {k}
-      </span>
+/** BANT em quatro colunas, como no sistema antigo: o texto de cada campo do CRM. */
+const BANT = [
+  { k: "B", nome: "Faturamento", valor: (l: LeadAuditoria) => l.faturamentoRotulo ?? legivel(l.faturamento) },
+  { k: "A", nome: "Cargo", valor: (l: LeadAuditoria) => l.cargoRotulo ?? legivel(l.cargo) },
+  { k: "N", nome: "Necessidade", valor: (l: LeadAuditoria) => l.necessidade },
+  { k: "T", nome: "Timing", valor: (l: LeadAuditoria) => l.timingRotulo ?? legivel(l.timing) },
+] as const;
+const BantCabecalho = () => (
+  <>
+    {BANT.map((c) => (
+      <th key={c.k} className="px-2 py-2 text-left align-bottom font-normal">
+        <span className="block text-xs font-semibold text-stone-200">{c.k}</span>
+        <span className="block text-[10px] uppercase tracking-widest text-stone-500">{c.nome}</span>
+      </th>
     ))}
-  </span>
+  </>
+);
+const BantCelulas = ({ l }: { l: LeadAuditoria }) => (
+  <>
+    {BANT.map((c) => {
+      const v = c.valor(l);
+      return (
+        <td key={c.k} className={`px-2 py-2 align-top text-[12px] ${c.k === "N" ? "min-w-[12rem] max-w-[16rem]" : "min-w-[7rem]"}`}>
+          {v ? <span className="text-stone-200">{v}</span> : <span className="text-stone-600">não preenchido</span>}
+        </td>
+      );
+    })}
+  </>
 );
 
 const thClasse = "px-2 py-2 text-left text-[10px] font-normal uppercase tracking-widest text-stone-500";
@@ -400,7 +433,10 @@ function AbaReunioes({
   const doMes = todos.filter((l) =>
     pelaReuniao ? (l.realizadaEm ? noMes(l.realizadaEm) : dataBR(reuniaoBR(l.reuniaoMarcada) ?? l.agendadaEm)?.slice(0, 7) === mesParam) : noMes(l.agendadaEm),
   );
-  const filtrados = doMes.filter((l) => passaFiltros(l, f));
+  const diaDaReuniao = (l: LeadAuditoria) => dataBR(reuniaoBR(l.reuniaoMarcada) ?? l.realizadaEm);
+  const filtrados = doMes.filter(
+    (l) => passaFiltros(l, f) && (!sp.fat || l.faturamento === sp.fat) && (!sp.diaR || diaDaReuniao(l) === sp.diaR),
+  );
   const lista = sp.situacao ? filtrados.filter((l) => l.situacao === sp.situacao) : filtrados;
   const n = (s: SituacaoReuniao) => filtrados.filter((l) => l.situacao === s).length;
   const realizadas = n("realizada");
@@ -429,7 +465,7 @@ function AbaReunioes({
       />
       <PorPessoa titulo="Por pré-vendas" itens={contarPor(filtrados, (l) => l.preVendas)} href={(nome) => href({ pv: nome, lead: undefined })} />
       <div className="overflow-x-auto rounded-lg border border-imperium-line bg-imperium-surface">
-        <table className="w-full min-w-[960px] text-sm">
+        <table className="w-full min-w-[1250px] text-sm">
           <thead className="border-b border-imperium-line">
             <tr>
               <th className={thClasse}>Lead</th>
@@ -440,9 +476,7 @@ function AbaReunioes({
               <th className={thClasse}>Reunião marcada</th>
               <th className={thClasse}>Realizada em</th>
               <th className={thClasse}>Closer</th>
-              <th className={thClasse} title="Faturamento, Cargo, Necessidade, Timing (verde = preenchido)">
-                BANT
-              </th>
+              <BantCabecalho />
             </tr>
           </thead>
           <tbody className="divide-y divide-imperium-line/60">
@@ -467,9 +501,7 @@ function AbaReunioes({
                 <td className={tdClasse}>{l.reuniaoMarcada ? diaHora(reuniaoBR(l.reuniaoMarcada)) : <span className="text-stone-600">—</span>}</td>
                 <td className={tdClasse}>{l.realizadaEm ? diaHora(l.realizadaEm) : <span className="text-stone-600">—</span>}</td>
                 <td className={tdClasse}>{l.closer ?? "—"}</td>
-                <td className={tdClasse}>
-                  <Bant l={l} />
-                </td>
+                <BantCelulas l={l} />
               </tr>
             ))}
           </tbody>
@@ -519,7 +551,7 @@ function AbaCloser({ todos, f, noMes, sp, href }: { todos: LeadAuditoria[]; f: F
       />
       <PorPessoa titulo="Por closer" itens={contarPor(filtrados, (l) => l.closer ?? l.responsavel)} href={(nome) => href({ closer: nome, lead: undefined })} />
       <div className="overflow-x-auto rounded-lg border border-imperium-line bg-imperium-surface">
-        <table className="w-full min-w-[1100px] text-sm">
+        <table className="w-full min-w-[1450px] text-sm">
           <thead className="border-b border-imperium-line">
             <tr>
               <th className={thClasse}>Lead</th>
@@ -527,7 +559,7 @@ function AbaCloser({ todos, f, noMes, sp, href }: { todos: LeadAuditoria[]; f: F
               <th className={thClasse}>Canal</th>
               <th className={thClasse}>Pré-vendas</th>
               <th className={thClasse}>Closer</th>
-              <th className={thClasse}>BANT</th>
+              <BantCabecalho />
               <th className={thClasse}>RQA</th>
               <th className={thClasse}>Etapa</th>
               <th className={thClasse}>Temperatura</th>
@@ -548,9 +580,7 @@ function AbaCloser({ todos, f, noMes, sp, href }: { todos: LeadAuditoria[]; f: F
                 <td className={tdClasse}>{CANAL[l.canal] ?? l.canal}</td>
                 <td className={tdClasse}>{l.preVendas ?? "—"}</td>
                 <td className={tdClasse}>{l.closer ?? l.responsavel ?? "—"}</td>
-                <td className={tdClasse}>
-                  <Bant l={l} />
-                </td>
+                <BantCelulas l={l} />
                 <td className={tdClasse}>{legivel(l.rqa) ?? <span className="text-stone-600">—</span>}</td>
                 <td className={tdClasse}>{l.etapa}</td>
                 <td className={tdClasse}>{legivel(l.temperatura) ?? <span className="text-stone-600">—</span>}</td>
@@ -579,92 +609,7 @@ function AbaCloser({ todos, f, noMes, sp, href }: { todos: LeadAuditoria[]; f: F
   );
 }
 
-// ------------------------------------------------------------ Movimentações
-function AbaMovimentacoes({
-  todos,
-  f,
-  noMes,
-  sp,
-  href,
-}: {
-  todos: LeadAuditoria[];
-  f: Filtros;
-  noMes: (iso: string | null) => boolean;
-  sp: Params;
-  href: (m: Partial<Params>) => string;
-}) {
-  type Mov = { tipo: TipoMov; quando: string; l: LeadAuditoria; quem: string | null };
-  const movs: Mov[] = [];
-  for (const l of todos) {
-    if (!passaFiltros(l, f)) continue;
-    if (noMes(l.agendadaEm)) movs.push({ tipo: "agendada", quando: l.agendadaEm!, l, quem: l.preVendas });
-    if (noMes(l.realizadaEm)) movs.push({ tipo: "realizada", quando: l.realizadaEm!, l, quem: l.preVendas });
-    if (noMes(l.vendaEm)) movs.push({ tipo: "venda", quando: l.vendaEm!, l, quem: l.vendedor ?? l.responsavel });
-  }
-  movs.sort((a, b) => b.quando.localeCompare(a.quando));
-  const tipo = sp.tipo && sp.tipo in TIPO_MOV ? (sp.tipo as TipoMov) : null;
-  const lista = tipo ? movs.filter((m) => m.tipo === tipo) : movs;
-  const n = (t: TipoMov) => movs.filter((m) => m.tipo === t).length;
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <Segmentos
-          opcoes={[
-            { rotulo: "Todas", href: href({ tipo: undefined, lead: undefined }), ativo: !tipo, contagem: movs.length },
-            { rotulo: "Agendadas", href: href({ tipo: "agendada", lead: undefined }), ativo: tipo === "agendada", contagem: n("agendada") },
-            { rotulo: "Realizadas", href: href({ tipo: "realizada", lead: undefined }), ativo: tipo === "realizada", contagem: n("realizada") },
-            { rotulo: "Vendas", href: href({ tipo: "venda", lead: undefined }), ativo: tipo === "venda", contagem: n("venda") },
-          ]}
-        />
-        <span className="text-[11px] text-stone-500">Cada agendamento, reunião realizada e venda que conta no mês (os mesmos números do Dashboard), com a data e a hora do Pipefácil.</span>
-      </div>
-      <PorPessoa
-        titulo={tipo === "venda" ? "Por quem vendeu" : "Por pré-vendas"}
-        itens={contarPor(
-          lista.map((m) => ({ ...m.l, preVendas: m.quem })),
-          (l) => l.preVendas,
-        )}
-        href={(nome) => href({ pv: nome, lead: undefined })}
-      />
-      <div className="overflow-x-auto rounded-lg border border-imperium-line bg-imperium-surface">
-        <table className="w-full min-w-[820px] text-sm">
-          <thead className="border-b border-imperium-line">
-            <tr>
-              <th className={thClasse}>Quando</th>
-              <th className={thClasse}>Movimentação</th>
-              <th className={thClasse}>Lead</th>
-              <th className={thClasse}>De quem</th>
-              <th className={thClasse}>Canal / origem</th>
-              <th className={`${thClasse} text-right`}>Valor</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-imperium-line/60">
-            {lista.map((m) => (
-              <tr key={`${m.tipo}-${m.l.id}`} className="hover:bg-imperium-raised/40">
-                <td className={`${tdClasse} whitespace-nowrap text-stone-400`}>{diaHora(m.quando)}</td>
-                <td className={tdClasse}>
-                  <span className={`rounded border px-1.5 py-0.5 text-[11px] ${m.tipo === "venda" ? "border-success/50 text-success-bright" : "border-imperium-line text-stone-300"}`}>{TIPO_MOV[m.tipo]}</span>
-                </td>
-                <td className={tdClasse}>
-                  <LinkLead l={m.l} href={href} /> <span className="text-[11px] text-stone-500">#{m.l.seq}</span>
-                </td>
-                <td className={tdClasse}>{m.quem ?? "—"}</td>
-                <td className={`${tdClasse} text-stone-400`}>
-                  {CANAL[m.l.canal] ?? m.l.canal}
-                  {m.tipo === "venda" && m.l.preVendas ? <p className="text-[11px]">pré-vendas de origem: {m.l.preVendas}</p> : null}
-                </td>
-                <td className={`${tdClasse} text-right tabular-nums`}>{m.tipo === "venda" ? moeda(m.l.valor) : ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {lista.length === 0 && <p className="p-4 text-sm text-stone-500">Nenhuma movimentação com esses filtros.</p>}
-      </div>
-    </div>
-  );
-}
 
-// ------------------------------------------------------------ Ficha do lead
 function FichaLead({ l, cor, fechar }: { l: LeadAuditoria; cor: string; fechar: string }) {
   const linha = (rotulo: string, valor: React.ReactNode) => (
     <div>
@@ -718,10 +663,10 @@ function FichaLead({ l, cor, fechar }: { l: LeadAuditoria; cor: string; fechar: 
           {linha("Vendeu", l.vendaEm ? l.vendedor : null)}
           {linha("Reunião marcada", l.reuniaoMarcada ? diaHora(reuniaoBR(l.reuniaoMarcada)) : null)}
           {linha("Situação da reunião", SITUACAO[l.situacao].texto)}
-          {linha("Faturamento", legivel(l.faturamento))}
-          {linha("Cargo", legivel(l.cargo))}
+          {linha("Faturamento", l.faturamentoRotulo ?? legivel(l.faturamento))}
+          {linha("Cargo", l.cargoRotulo ?? legivel(l.cargo))}
           {linha("Necessidade", l.necessidade)}
-          {linha("Timing", legivel(l.timing))}
+          {linha("Timing", l.timingRotulo ?? legivel(l.timing))}
           {linha("RQA", legivel(l.rqa))}
           {linha("Temperatura", legivel(l.temperatura))}
           {linha("Valor", l.valor ? moeda(l.valor) : null)}
@@ -945,4 +890,11 @@ function AbaLeadsInbound({
       </div>
     </div>
   );
+}
+
+/** Ordem das faixas de faturamento pelo primeiro número do valor ("ate_30_mil" < "entre_30_e_100_mil" < …). */
+function ordemFaixa(v: string): number {
+  const n = Number(/\d+/.exec(v)?.[0] ?? 0);
+  const milhao = /milh/.test(v) ? 1000 : 1;
+  return /ate|abaixo/.test(v) ? -1 : /acima/.test(v) ? 1e7 + n * milhao : n * milhao;
 }
