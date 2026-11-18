@@ -31,7 +31,9 @@ import { buscarPaceNegocios, calcularPace } from "@/lib/pace-negocio";
 import { buscarPainelSdr, vinculoPreVendas } from "@/lib/sdr-negocio";
 import { MuralSdr } from "@/components/negocio/PainelSdr";
 import { MuralCloser } from "@/components/negocio/PainelCloser";
-import { buscarPainelCloser, setupDoNegocio, vinculoCloser } from "@/lib/closer-negocio";
+import { buscarPainelCloser, ehPainelCloser, setupDoNegocio, vinculoCloser } from "@/lib/closer-negocio";
+import { buscarPainelHead } from "@/lib/head-negocio";
+import { MuralHead } from "@/components/negocio/PainelHead";
 import DestaqueSetup from "@/components/negocio/DestaqueSetup";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -314,6 +316,24 @@ export default async function MuralPage({
       const eu = pn?.pessoas.find((p) => p.id === meId);
       const time = v.cargo === "head";
       if (!pn || (!time && (!eu || eu.meta === null))) continue;
+      // Head de um negócio com CRM (Match Sales): painel de gestão do time (pace, reuniões e quem precisa de atenção).
+      if (time && ehPainelCloser(pn.negocio.slug)) {
+        try {
+          const painelHead = await buscarPainelHead(createAdminClient(), pn.negocio, { ano, mes, hoje });
+          metaExecutivo = (
+            <MuralHead
+              painel={painelHead}
+              equipe={nomeEquipe(pn.negocio)}
+              cor={NEGOCIO_COR[pn.negocio.slug] ?? "201 162 74"}
+              mesLabel={MESES[mes - 1] + " de " + ano}
+              mesAtual={mesEhAtual}
+            />
+          );
+          break;
+        } catch (e) {
+          console.error("Mural: painel do head falhou", e);
+        }
+      }
       const setupTime = time ? await setupDoNegocio(createAdminClient(), pn.negocio, { ano, mes, hoje }) : null;
       metaExecutivo = (
         <>

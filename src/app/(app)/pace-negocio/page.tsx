@@ -14,6 +14,8 @@ import {
   nomeEquipe,
 } from "@/lib/negocios";
 import { CARGOS_QUE_VENDEM, buscarPaceNegocios, calcularPace, diasUteis, limitesDoMes, type PaceCalculado, type PaceNegocio, type StatusPace } from "@/lib/pace-negocio";
+import { buscarPainelHead, type PainelHead } from "@/lib/head-negocio";
+import DestaqueSetup from "@/components/negocio/DestaqueSetup";
 import { buscarEsforcoNegocio, serieDoMes, type EsforcoNegocio, type IdealFunil, type IndicadorEsforco, type PontoSerie } from "@/lib/pace-esforco";
 import { RealizadoComLeads } from "@/components/negocio/RealizadoComLeads";
 import { PARAMETROS, indiceMes, metaKwhForecast, vendasDoMes } from "@/lib/forecast-negocios";
@@ -223,7 +225,7 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
   const foco =
     negocioEmFoco(searchParams.negocio ?? cookieStore.get(COOKIE_NEGOCIO)?.value, visiveis) ??
     (!veConsolidado(eu.role)
-      ? visiveis.find((n) => CARGOS_PRE_VENDAS.includes(n.cargo) && temPainelSdr(n.slug)) ?? visiveis.find((n) => ehPainelCloser(n.slug) && CARGOS_CLOSER.includes(n.cargo)) ?? null
+      ? visiveis.find((n) => CARGOS_PRE_VENDAS.includes(n.cargo) && temPainelSdr(n.slug)) ?? visiveis.find((n) => ehPainelCloser(n.slug) && CARGOS_CLOSER.includes(n.cargo)) ?? (visiveis.length === 1 ? visiveis[0] : null)
       : null);
   const escolhidos = foco ? [foco] : visiveis;
 
@@ -368,6 +370,17 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
 
   const sufixo = foco ? `&negocio=${foco.slug}` : "";
 
+  // Match Sales: o Head (e o Diretor) veem também MRR, setup e o pace diário do time, somado ou por pessoa.
+  const mesAtualPace = hoje.slice(0, 7) === `${ano}-${String(mes).padStart(2, "0")}`;
+  let gestao: PainelHead | null = null;
+  if (foco && dados.length === 1 && esforco && foco.slug === "matchsales") {
+    try {
+      gestao = await buscarPainelHead(createAdminClient(), foco, { ano, mes, hoje });
+    } catch (e) {
+      console.error("pace: painel de gestão falhou", e);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-5xl space-y-5 px-6 py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -441,6 +454,38 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
       </div>
 
       {esforco && dados[0] && <PaceComercial n={dados[0]} esforco={esforco} ano={ano} mes={mes} />}
+      {gestao && foco && esforco && (
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <PaceEsforcoCard titulo="MRR vendido pelo time no mês" p={gestao.mrr} cor={NEGOCIO_COR[foco.slug] ?? "201 162 74"} mesAtual={mesAtualPace} formato="moeda" />
+            {gestao.setup && <DestaqueSetup setup={gestao.setup} recebidoMeta={gestao.recebido.meta} time cor={NEGOCIO_COR[foco.slug] ?? "201 162 74"} />}
+          </div>
+          {esforco.preVendas.length > 0 && (() => {
+            // Pace diário do time, somado (todos) ou de uma pessoa por vez.
+            const escolhido = esforco.preVendas.find((p) => p.id === searchParams.sdr) ?? null;
+            const pv = escolhido ?? somarPreVendas(esforco.preVendas, { ano, mes, hoje });
+            const href = (sdr: string | null) => `/pace-negocio?mes=${ano}-${String(mes).padStart(2, "0")}&negocio=${foco.slug}${sdr ? `&sdr=${sdr}` : ""}`;
+            const chip = (ativo: boolean) =>
+              `rounded border px-3 py-1 text-xs ${ativo ? "border-gold bg-gold/10 text-stone-100" : "border-imperium-line text-stone-400 hover:text-stone-100"}`;
+            return (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-widest text-stone-500">Pace diário</span>
+                  <Link href={href(null)} className={chip(!escolhido)}>
+                    Todos
+                  </Link>
+                  {esforco.preVendas.map((p) => (
+                    <Link key={p.id} href={href(p.id)} className={chip(escolhido?.id === p.id)}>
+                      {p.nome}
+                    </Link>
+                  ))}
+                </div>
+                <TabelaPaceDiario painel={{ pv }} ano={ano} mes={mes} hoje={hoje} titulo={`Pace diário · ${pv.nome} · etapa por etapa`} />
+              </div>
+            );
+          })()}
+        </div>
+      )}
     </main>
   );
 }
