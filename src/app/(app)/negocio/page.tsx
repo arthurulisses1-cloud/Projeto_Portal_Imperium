@@ -600,8 +600,9 @@ export default async function NegocioDashboardPage({
                     })}
                   </div>
 
-                  {/* Valores: vendido no mês e follow (Funil de Vendas) por temperatura, com o filtro de pré-vendas */}
-                  {follow && (fu.canal === "outbound" || fu.canal === "inbound") && (() => {
+                  {/* Valores: vendido no mês e follow (Funil de Vendas) por temperatura, com o filtro de pré-vendas
+                      (Referidos não têm pré-vendas: sempre o canal todo) */}
+                  {follow && (() => {
                     const pv = pessoasEscolhidas[fu.canal]?.id;
                     const doFunil = (l: { canal: string; pessoa: string | null }) => l.canal === fu.canal && (!pv || l.pessoa === pv);
                     return <CardsValor vendas={(follow.vendas[mesParam] ?? []).filter(doFunil)} abertos={follow.abertos.filter(doFunil)} cor={cor} />;

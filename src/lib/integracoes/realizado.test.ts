@@ -657,6 +657,8 @@ describe("cards de valor (vendido e follow)", () => {
       deal({ deal_id: "p", nome: "Perdido", pipeline_id: FV, status: "lost", valor: 9000, temperatura: "frio" }),
       deal({ deal_id: "o", nome: "No Outbound", pipeline_id: "outro", status: "open", valor: 1000, temperatura: "morno" }),
       deal({ deal_id: "w", nome: "Ganho", pipeline_id: FV, status: "won", valor: 7000, stage_id: ST.ganhoVendas }),
+      deal({ deal_id: "r", nome: "Referido", canal: "referido", pipeline_id: FV, status: "open", valor: 3000, temperatura: "morno" }),
+      deal({ deal_id: "a", nome: "Alternativo", canal: "social_selling", pipeline_id: FV, status: "open", valor: 8000, temperatura: "quente" }),
     ];
     const eventos = [ev("q", ST.agendadaOut, "2026-11-05T13:00:00Z"), ev("w", ST.agendadaOut, "2026-11-03T13:00:00Z"), ev("w", ST.ganhoVendas, "2026-11-10T13:00:00Z")];
     const resp = new Map<string, [string, string][]>([["q", [["2026-11-05T13:00:00Z", "vini"]]], ["w", [["2026-11-03T13:00:00Z", "ryq"]]]]);
@@ -665,7 +667,10 @@ describe("cards de valor (vendido e follow)", () => {
     expect(f.abertos.map((a) => [a.nome, a.valor, a.temperatura, a.pessoa])).toEqual([
       ["Quente SA", 22000, "quente", "vini"],
       ["Sem temp", 5000, null, "jorge"],
+      ["Referido", 3000, "morno", null],
     ]);
+    // Referidos entram no canal deles; canal alternativo fica de fora
+    expect(f.abertos.find((a) => a.nome === "Referido")?.canal).toBe("indicacao");
     expect(f.vendas["2026-11"].map((v) => [v.nome, v.valor, v.pessoa, v.data])).toEqual([["Ganho", 7000, "ryq", "2026-11-10"]]);
   });
 });
