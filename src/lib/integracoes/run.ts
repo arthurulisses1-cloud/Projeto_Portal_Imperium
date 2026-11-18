@@ -366,7 +366,15 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   if (!simular && !cfg.funilUnico) {
     const etapas = new Map<string, { nome: string; funil: string }>();
     for (const f of await api.funis()) for (const st of f.stages ?? []) etapas.set(st.id, { nome: st.name, funil: f.name });
+    // Texto do CRM de cada opção (BANT): falha aqui não derruba a auditoria.
+    const rotulos: Record<string, Record<string, string>> = {};
+    try {
+      for (const c of await api.camposDosLeads()) if (c.options?.length) rotulos[c.slug] = Object.fromEntries(c.options.map((o) => [o.value, o.label]));
+    } catch (e) {
+      console.error(`rótulos dos campos (${slug}) falharam:`, e);
+    }
     const leads = montarAuditoria({
+      rotulos,
       deals: linhasDeals,
       extras: new Map(deals.map((d) => [d.id, d])),
       eventos,

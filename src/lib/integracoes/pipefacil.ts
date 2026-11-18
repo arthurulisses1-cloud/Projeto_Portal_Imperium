@@ -125,6 +125,13 @@ export class Pipefacil {
     return Array.isArray(r.data) ? r.data : r.data.items ?? [];
   }
 
+  /** Campos personalizados dos leads com as opções (valor → rótulo), para mostrar o texto do CRM. */
+  async camposDosLeads(): Promise<{ slug: string; options?: { value: string; label: string }[] }[]> {
+    const r = await this.get<{ data: unknown }>("/custom-fields", { entity: "deal" });
+    const d = r.data as { items?: unknown[] } | unknown[];
+    return (Array.isArray(d) ? d : d.items ?? []) as { slug: string; options?: { value: string; label: string }[] }[];
+  }
+
   async membros(): Promise<MembroPipefacil[]> {
     const r = await this.get<{ data: { members: MembroPipefacil[] } }>("/users");
     return r.data.members ?? [];

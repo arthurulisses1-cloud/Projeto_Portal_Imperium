@@ -29,6 +29,10 @@ export type LeadAuditoria = {
   cargo: string | null;
   necessidade: string | null;
   timing: string | null;
+  /** Texto do CRM de cada opção do BANT (ex.: "Proprietário", "Alta prioridade (agora ou até 15 dias)"). */
+  faturamentoRotulo?: string | null;
+  cargoRotulo?: string | null;
+  timingRotulo?: string | null;
   rqa: string | null;
   temperatura: string | null;
   valor: number;
@@ -77,6 +81,8 @@ type Entrada = {
   vendedores: Map<string, string>;
   /** Usuário do Pipefácil → nome. */
   nomes: Record<string, string>;
+  /** Campo (slug) → valor → rótulo do CRM, para o texto das opções. */
+  rotulos?: Record<string, Record<string, string>>;
 };
 
 const texto = (v: unknown): string | null => {
@@ -89,7 +95,8 @@ const texto = (v: unknown): string | null => {
  * também os que só entraram ou conectaram (desde o início do histórico), para a lista "Leads Inbound do
  * período". Lead falso fica fora (como no funil). A venda só conta com o lead ganho (venda desfeita não).
  */
-export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsaveis, vendedores, nomes }: Entrada): LeadAuditoria[] {
+export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsaveis, vendedores, nomes, rotulos = {} }: Entrada): LeadAuditoria[] {
+  const rotulo = (campo: string | undefined, valor: string | null) => (campo && valor ? rotulos[campo]?.[valor] ?? null : null);
   const marcos = marcosPorLead(eventos, cfg);
   const porLead = new Map<string, EventoCrm[]>();
   for (const e of eventos) (porLead.get(e.deal_id) ?? porLead.set(e.deal_id, []).get(e.deal_id)!).push(e);
@@ -145,6 +152,9 @@ export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsav
       cargo: d.cargo,
       necessidade: texto(p.bant_necessidade),
       timing: texto(p.bant_timing),
+      faturamentoRotulo: rotulo(cfg.campos.faturamento, d.faturamento),
+      cargoRotulo: rotulo(cfg.campos.cargo, d.cargo),
+      timingRotulo: rotulo("bant_timing", texto(p.bant_timing)),
       rqa: texto(p.rqa_validada),
       temperatura: texto(p.temperatura),
       valor: Number(d.valor ?? 0),
