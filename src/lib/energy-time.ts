@@ -202,7 +202,7 @@ export type ComissaoPessoaEnergia = { id: string; nome: string; cargo: string; l
 export type ComissaoEnergia = {
   pessoas: ComissaoPessoaEnergia[];
   pct: { executivo: number; head: number; diretor: number };
-  /** Recebido da Vorp na primeira fatura de todas as vendas do mês, e o que Head e Diretor levam sobre ele. */
+  /** Recebido da Vorp na primeira fatura de todas as vendas do mês; Head e Diretor levam % da primeira fatura. */
   recebidoTotal: number;
   headTotal: number;
   diretorTotal: number;
@@ -210,8 +210,9 @@ export type ComissaoEnergia = {
 };
 
 /**
- * Comissão da primeira fatura de cada venda fechada no mês (pura): o executivo (dono da conta na Sunne) leva `pctExecutivo`%
- * do que a Vorp recebe (80% da primeira fatura; 100% acima de 80 mil kWh no mês). A recorrência não entra aqui.
+ * Comissão da primeira fatura de cada venda fechada no mês (pura): a Vorp recebe 80% da primeira fatura (100% acima de 80 mil kWh
+ * no mês) e o executivo (dono da conta na Sunne) leva `pctExecutivo`% da própria primeira fatura (30%, ou seja, 30 dos 80 que a Vorp
+ * recebe: 40 Vorp, 10 lideranças, 30 executivo). A recorrência não entra aqui.
  */
 export function comissaoDasVendas(deals: SunneDeal[], ano: number, mes: number, orgIds: ReadonlySet<string> | null, kwhTimeNoMes: number, pctExecutivo: number): LinhaComissaoEnergia[] {
   const periodo = `${ano}-${String(mes).padStart(2, "0")}`;
@@ -227,7 +228,7 @@ export function comissaoDasVendas(deals: SunneDeal[], ano: number, mes: number, 
       kwh: d.averageConsumption ?? 0,
       primeiraFatura,
       recebido,
-      comissao: (recebido * pctExecutivo) / 100,
+      comissao: (primeiraFatura * pctExecutivo) / 100,
     });
   }
   return out.sort((a, b) => b.data.localeCompare(a.data));
@@ -258,7 +259,8 @@ export async function buscarComissaoEnergia(supabase: SupabaseClient, ctx: { ano
   });
   const todas = comissaoDasVendas(rede.deals, ctx.ano, ctx.mes, null, kwhTime, pct.executivo);
   const recebidoTotal = todas.reduce((s, l) => s + l.recebido, 0);
-  return { pessoas, pct, recebidoTotal, headTotal: (recebidoTotal * pct.head) / 100, diretorTotal: (recebidoTotal * pct.diretor) / 100, lidoEm: rede.lidoEm };
+  const faturaTotal = todas.reduce((s, l) => s + l.primeiraFatura, 0);
+  return { pessoas, pct, recebidoTotal, headTotal: (faturaTotal * pct.head) / 100, diretorTotal: (faturaTotal * pct.diretor) / 100, lidoEm: rede.lidoEm };
 }
 
 // ------------------------------------------------------------------ compromisso do dia (automático)

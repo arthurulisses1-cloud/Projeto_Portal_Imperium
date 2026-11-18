@@ -81,11 +81,11 @@ describe("comissaoDasVendas", () => {
     deal("b", { isClosed: true, closedAt: "2026-11-12T12:00:00Z", referenceValue: 100, organizationId: "org-b" }),
     deal("c", { isClosed: true, closedAt: "2026-10-30T12:00:00Z", referenceValue: 999 }),
   ];
-  it("30% do que a Vorp recebe (80% da primeira fatura) das contas do vendedor", () => {
+  it("30% da primeira fatura (a Vorp recebe 80%) das contas do vendedor", () => {
     const l = comissaoDasVendas(fechadas, 2026, 11, new Set(["org-a"]), 1000, 30);
     expect(l).toHaveLength(1);
     expect(l[0].recebido).toBe(160);
-    expect(l[0].comissao).toBeCloseTo(48);
+    expect(l[0].comissao).toBeCloseTo(60);
   });
   it("sem filtro de vendedor traz o time todo", () => {
     expect(comissaoDasVendas(fechadas, 2026, 11, null, 1000, 30)).toHaveLength(2);

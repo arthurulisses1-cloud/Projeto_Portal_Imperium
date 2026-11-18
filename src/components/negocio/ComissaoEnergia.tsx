@@ -1,4 +1,4 @@
-// Comissão do mês no Maximus Energy: primeira fatura de cada conta ganha. Executivo vê só as dele (e só o % dele);
+// Comissão do mês no Maximus Energy: % da primeira fatura de cada conta ganha. Executivo vê só as dele (e só o % dele);
 // o Head e o Diretor veem o time. A recorrência (a partir do 3º mês) ainda não é calculada.
 import type { ComissaoEnergia, ComissaoPessoaEnergia } from "@/lib/energy-time";
 
@@ -13,8 +13,8 @@ export function ExplicacaoComissaoEnergia({ pct }: { pct: number }) {
         <div>
           <p className="text-[10px] uppercase tracking-widest text-stone-500">1 · Primeira fatura</p>
           <p className="mt-1">
-            Em cada conta que você sobe e que é <strong>ganha</strong>, a Vorp recebe <strong>80% da primeira fatura</strong> do cliente (kWh compensáveis × valor do kWh). Se o time passar de 80 mil kWh
-            no mês, a Vorp passa a receber 100%. Você recebe <strong>{pct}%</strong> do que a Vorp recebe.
+            Em cada conta que você sobe e que é <strong>ganha</strong>, a Vorp recebe <strong>80% da primeira fatura</strong> do cliente (kWh compensáveis × valor do kWh). Desse valor, 40% fica
+            com a Vorp, 10% com as lideranças e <strong>{pct}% com você</strong>: você recebe {pct}% da própria primeira fatura.
           </p>
         </div>
         <div>
