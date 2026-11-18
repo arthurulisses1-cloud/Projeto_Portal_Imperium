@@ -213,6 +213,38 @@ export async function lerRedeSunne(): Promise<SunneRede> {
   return { deals, organizacoes: Array.from(nomes, ([id, nome]) => ({ id, nome })), lidoEm: new Date().toISOString() };
 }
 
+/**
+ * Contratos assinados hoje, por organização (vendedor). A listagem não traz a data da assinatura, então: lê só os negócios
+ * mexidos hoje (updatedSince), e dos que já estão na validação ou além, lê o detalhe e confere o signedAt dos contratos.
+ */
+export async function lerAssinaturasDoDia(hoje: string): Promise<[string, number][]> {
+  const token = process.env.SUNNE_SYS_API_TOKEN;
+  if (!token) throw new Error("Sunne não configurada");
+  const deals = await listarTudo(token, "deals", "deals", { product: PRODUTO_KWH, updatedSince: `${hoje}T03:00:00.000Z` }, lerDeal);
+  const candidatos = deals.filter((d) => alcanceDoNegocio(d) >= 5);
+  const porOrg = new Map<string, number>();
+  for (let i = 0; i < candidatos.length; i += 5) {
+    await Promise.all(
+      candidatos.slice(i, i + 5).map(async (d) => {
+        try {
+          const resposta = await fetch(new URL(`${BASE}/deals/${d.id}`), { headers: { "s-api-key": token }, cache: "no-store", signal: AbortSignal.timeout(15000) });
+          if (!resposta.ok) return;
+          const corpo = (await resposta.json()) as { contracts?: { status?: string; signedAt?: string | null }[] } | null;
+          const assinouHoje = (corpo?.contracts ?? []).some(
+            (c) => c.status === "signed" && !!c.signedAt && new Date(c.signedAt).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }) === hoje,
+          );
+          if (assinouHoje) porOrg.set(d.organizationId, (porOrg.get(d.organizationId) ?? 0) + 1);
+        } catch {
+          // Sem o detalhe desse negócio, ele fica de fora da contagem do dia.
+        }
+      }),
+    );
+  }
+  return Array.from(porOrg);
+}
+
+export const assinaturasDoDiaEmCache = unstable_cache(lerAssinaturasDoDia, ["sunne-assinaturas-dia-v1"], { revalidate: CACHE_SUNNE_SEGUNDOS, tags: ["sunne"] });
+
 /** Mesma leitura, guardada em cache no servidor por alguns minutos. */
 export const redeSunneEmCache = unstable_cache(lerRedeSunne, ["sunne-rede-v5"], { revalidate: CACHE_SUNNE_SEGUNDOS, tags: ["sunne"] });
 

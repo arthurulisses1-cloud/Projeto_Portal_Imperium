@@ -10,7 +10,7 @@ import { metaForecast, metaKwhForecast } from "@/lib/forecast-negocios";
 import { calcularPace, type PaceCalculado } from "@/lib/pace-negocio";
 import { percentuais } from "@/lib/comissao-negocio";
 import { pctVorpPrimeiraFatura, primeiraFaturaSunne } from "@/lib/energy-canais";
-import { PRODUTO_KWH, alcanceDoNegocio, redeSunneEmCache, vendedoresSunne, type SunneDeal } from "@/lib/sunne";
+import { PRODUTO_KWH, alcanceDoNegocio, assinaturasDoDiaEmCache, redeSunneEmCache, vendedoresSunne, type SunneDeal } from "@/lib/sunne";
 
 export const SLUG_ENERGY = "vorp-energy";
 /** Cargos que vendem no Energy: todos fazem o processo completo. */
@@ -259,4 +259,50 @@ export async function buscarComissaoEnergia(supabase: SupabaseClient, ctx: { ano
   const todas = comissaoDasVendas(rede.deals, ctx.ano, ctx.mes, null, kwhTime, pct.executivo);
   const recebidoTotal = todas.reduce((s, l) => s + l.recebido, 0);
   return { pessoas, pct, recebidoTotal, headTotal: (recebidoTotal * pct.head) / 100, diretorTotal: (recebidoTotal * pct.diretor) / 100, lidoEm: rede.lidoEm };
+}
+
+// ------------------------------------------------------------------ compromisso do dia (automático)
+
+/** Indicadores do compromisso do executivo do Energy. As indicações recebidas entram quando o processo de criar os leads no Pipefácil estiver definido. */
+export const KPIS_ENERGIA = [
+  { chave: "contas_subidas", label: "Contas subidas" },
+  { chave: "assinaturas", label: "Assinaturas" },
+  { chave: "kwh_gerado", label: "kWh gerado" },
+] as const;
+
+export type RealizadoDoDia = { contasSubidas: number; kwh: number };
+
+const diaBR = (iso: string | null) => (iso && Number.isFinite(Date.parse(iso)) ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }) : null);
+
+/** Contas subidas e kWh das contas ganhas hoje (pura). `orgIds` = organizações do vendedor. */
+export function realizadoDoDia(deals: SunneDeal[], orgIds: ReadonlySet<string>, hoje: string): RealizadoDoDia {
+  const r: RealizadoDoDia = { contasSubidas: 0, kwh: 0 };
+  for (const d of deals) {
+    if (!doVendedor(d, orgIds)) continue;
+    if (diaBR(d.createdAt) === hoje) r.contasSubidas++;
+    if (d.isClosed && !d.isLost && diaBR(d.closedAt) === hoje) r.kwh += d.averageConsumption ?? 0;
+  }
+  return r;
+}
+
+export type CompromissoEnergiaDia = RealizadoDoDia & {
+  /** null = a leitura dos contratos da Sunne falhou; não mostra zero no lugar. */
+  assinaturas: number | null;
+};
+
+/** Realizado de hoje de um vendedor do Energy: contas subidas, assinaturas e kWh gerado, direto da Sunne. */
+export async function buscarCompromissoEnergia(supabase: SupabaseClient, profileId: string, hoje: string): Promise<CompromissoEnergiaDia> {
+  const [rede, { data: perfis }] = await Promise.all([redeSunneEmCache(), supabase.from("profiles").select("id, full_name, nomes_planilha").eq("ativo", true)]);
+  const vendedores = vendedoresSunne(rede.organizacoes, perfis ?? []);
+  const orgs = new Set<string>();
+  for (const [orgId, v] of Array.from(vendedores)) if (v.profileId === profileId) orgs.add(orgId);
+  const base = realizadoDoDia(rede.deals, orgs, hoje);
+  let assinaturas: number | null = null;
+  try {
+    const porOrg = new Map(await assinaturasDoDiaEmCache(hoje));
+    assinaturas = Array.from(orgs).reduce((s, o) => s + (porOrg.get(o) ?? 0), 0);
+  } catch (e) {
+    console.error("assinaturas do dia indisponíveis:", e);
+  }
+  return { ...base, assinaturas };
 }

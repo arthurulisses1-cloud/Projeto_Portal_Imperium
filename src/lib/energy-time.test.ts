@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comissaoDasVendas, funilEnergia, kwhParaLimite, motivoDaPerda, producaoEnergia } from "./energy-time";
+import { comissaoDasVendas, funilEnergia, kwhParaLimite, motivoDaPerda, producaoEnergia, realizadoDoDia } from "./energy-time";
 import type { SunneDeal } from "./sunne";
 
 const deal = (id: string, extra: Partial<SunneDeal>): SunneDeal => ({
@@ -89,5 +89,19 @@ describe("comissaoDasVendas", () => {
   });
   it("sem filtro de vendedor traz o time todo", () => {
     expect(comissaoDasVendas(fechadas, 2026, 11, null, 1000, 30)).toHaveLength(2);
+  });
+});
+
+describe("realizadoDoDia", () => {
+  const hoje = "2026-11-18";
+  const deals = [
+    deal("1", { createdAt: "2026-11-18T14:00:00Z" }), // subida hoje
+    deal("2", { createdAt: "2026-11-18T01:00:00Z" }), // 22h de ontem no Brasil
+    deal("3", { createdAt: "2026-11-10T12:00:00Z", isClosed: true, closedAt: "2026-11-18T15:00:00Z", averageConsumption: 400 }), // ganha hoje
+    deal("4", { createdAt: "2026-11-10T12:00:00Z", isClosed: true, isLost: true, closedAt: "2026-11-18T15:00:00Z" }), // cancelada
+    deal("5", { organizationId: "org-b", createdAt: "2026-11-18T14:00:00Z" }), // de outro vendedor
+  ];
+  it("conta as contas subidas e os kWh ganhos hoje, no horário do Brasil", () => {
+    expect(realizadoDoDia(deals, new Set(["org-a"]), hoje)).toEqual({ contasSubidas: 1, kwh: 400 });
   });
 });

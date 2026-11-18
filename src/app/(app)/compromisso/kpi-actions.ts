@@ -3,6 +3,36 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { hojeBR } from "@/lib/data-br";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { KPIS_ENERGIA, buscarCompromissoEnergia, vinculoEnergia } from "@/lib/energy-time";
+
+/** Compromisso do executivo do Energy: o realizado é automático (Sunne), o compromisso (meta) é digitado por ele. */
+export async function salvarCompromissoEnergia(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+  const vinc = await vinculoEnergia(supabase, user.id);
+  if (!vinc) throw new Error("Você não é do Maximus Energy.");
+  const hoje = hojeBR();
+  const real = await buscarCompromissoEnergia(createAdminClient(), user.id, hoje);
+  const realizado: Record<string, number> = { contas_subidas: real.contasSubidas, assinaturas: real.assinaturas ?? 0, kwh_gerado: real.kwh };
+  const num = (v: FormDataEntryValue | null) => Math.max(0, Number(String(v ?? "0").replace(",", ".")) || 0);
+  const linhas = KPIS_ENERGIA.map((k) => ({
+    profile_id: user.id,
+    negocio_id: vinc.id,
+    data: hoje,
+    chave: k.chave,
+    label: k.label,
+    meta: num(formData.get("meta_" + k.chave)),
+    realizado: realizado[k.chave],
+    updated_at: new Date().toISOString(),
+  }));
+  const { error } = await supabase.from("compromisso_kpis").upsert(linhas, { onConflict: "profile_id,negocio_id,data,chave" });
+  if (error) throw new Error(error.message);
+  revalidatePath("/compromisso");
+}
 
 /** BDR do Match Sales: só o compromisso de reuniões agendadas é manual (meta e realizado); as realizadas são automáticas. */
 export async function salvarAgendadasBdr(formData: FormData) {

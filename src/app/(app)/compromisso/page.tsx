@@ -17,6 +17,8 @@ import { buscarPainelCloser, vinculoCloser } from "@/lib/closer-negocio";
 import { createAdminClient } from "@/lib/supabase/admin";
 import CompromissoCloser from "@/components/negocio/CompromissoCloser";
 import CompromissoBdr from "@/components/negocio/CompromissoBdr";
+import CompromissoEnergia from "@/components/negocio/CompromissoEnergia";
+import { buscarCompromissoEnergia, vinculoEnergia } from "@/lib/energy-time";
 import { vinculoPreVendas } from "@/lib/sdr-negocio";
 
 type CompromissoRow = StreakRow;
@@ -67,6 +69,29 @@ export default async function CompromissoPage() {
         return <CompromissoCloser painel={painel} hoje={hoje} />;
       } catch (e) {
         console.error("Compromisso do closer falhou", e);
+      }
+    }
+  }
+
+  // Executivo do Maximus Energy: contas subidas, assinaturas e kWh gerado (realizado automático da Sunne).
+  {
+    const energia = await vinculoEnergia(supabase, meId);
+    if (energia && energia.cargo !== "head") {
+      try {
+        const [real, linhas] = await Promise.all([buscarCompromissoEnergia(createAdminClient(), meId, hoje), buscarLinhasKpis(supabase, meId, energia.id, hoje)]);
+        // Mantém o realizado gravado de hoje em dia com a Sunne (o histórico "Últimos dias" lê daqui).
+        const valores: Record<string, number> = { contas_subidas: real.contasSubidas, assinaturas: real.assinaturas ?? 0, kwh_gerado: real.kwh };
+        if (viewer.authUserId === meId) {
+          await Promise.all(
+            linhas
+              .filter((l) => l.data === hoje && l.chave in valores && (l.chave !== "assinaturas" || real.assinaturas !== null))
+              .map((l) => supabase.from("compromisso_kpis").update({ realizado: valores[l.chave] }).eq("profile_id", meId).eq("negocio_id", energia.id).eq("data", hoje).eq("chave", l.chave)),
+          );
+        }
+        const historico = await buscarLinhasKpis(supabase, meId, energia.id, new Date(Date.now() - 20 * 86400000).toISOString().slice(0, 10));
+        return <CompromissoEnergia hoje={hoje} real={real} linhas={historico.map((l) => (l.data === hoje && l.chave in valores ? { ...l, realizado: valores[l.chave] } : l))} />;
+      } catch (e) {
+        console.error("Compromisso do Energy falhou", e);
       }
     }
   }
