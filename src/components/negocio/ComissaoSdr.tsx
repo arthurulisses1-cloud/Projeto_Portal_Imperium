@@ -161,7 +161,7 @@ export function TabelaComissaoMes({ itens, hoje, detectarPrepago }: { itens: Ite
         <p className="mt-2 text-sm text-stone-500">Nenhuma venda sua gerou comissão neste mês ainda.</p>
       ) : (
         <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[680px] text-sm">
+          <table className="w-full min-w-[680px] text-sm [&_th]:px-3 [&_td]:px-3 [&_th:first-child]:pl-0 [&_td:first-child]:pl-0 [&_th:last-child]:pr-0 [&_td:last-child]:pr-0 [&_td.num]:whitespace-nowrap [&_th]:whitespace-nowrap">
             <thead>
               <tr className="text-[10px] uppercase tracking-wide text-stone-500">
                 <th className="py-1 text-left font-normal">Cliente</th>
@@ -179,10 +179,10 @@ export function TabelaComissaoMes({ itens, hoje, detectarPrepago }: { itens: Ite
                     <td className="py-1.5 text-stone-200">
                       {l.cliente ?? "—"} <span className="text-[11px] text-stone-600">· {dataCurta(l.data)}</span>
                     </td>
-                    <td className="py-1.5 text-right tabular-nums text-stone-300">{moeda(l.recebido)}</td>
-                    <td className={"py-1.5 text-xs " + (r.gera ? "text-success-bright" : "text-amber-400")}>{r.texto}</td>
-                    <td className="py-1.5 text-right tabular-nums text-stone-400">{l.pct}%</td>
-                    <td className="py-1.5 text-right tabular-nums text-stone-100">{moeda(l.valor)}</td>
+                    <td className="num py-1.5 text-right tabular-nums text-stone-300">{moeda(l.recebido)}</td>
+                    <td className={"max-w-[280px] py-1.5 text-xs leading-snug " + (r.gera ? "text-success-bright" : "text-amber-400")}>{r.texto}</td>
+                    <td className="num py-1.5 text-right tabular-nums text-stone-400">{l.pct}%</td>
+                    <td className="num py-1.5 text-right tabular-nums text-stone-100">{moeda(l.valor)}</td>
                   </tr>
                 );
               })}
@@ -190,10 +190,10 @@ export function TabelaComissaoMes({ itens, hoje, detectarPrepago }: { itens: Ite
             <tfoot>
               <tr className="border-t border-imperium-line font-semibold text-stone-200">
                 <td className="py-1.5">Total</td>
-                <td className="py-1.5 text-right tabular-nums">{moeda(linhas.reduce((s, l) => s + l.recebido, 0))}</td>
+                <td className="num py-1.5 text-right tabular-nums">{moeda(linhas.reduce((s, l) => s + l.recebido, 0))}</td>
                 <td />
                 <td />
-                <td className="py-1.5 text-right tabular-nums text-gold-bright">{moeda(total)}</td>
+                <td className="num py-1.5 text-right tabular-nums text-gold-bright">{moeda(total)}</td>
               </tr>
             </tfoot>
           </table>
@@ -296,7 +296,7 @@ export function PainelComissaoSdr({
           <p className="mt-2 text-sm text-stone-500">{reunioes ? "Nenhuma reunião sua foi realizada neste mês." : "Não achamos você no CRM; as RQA não puderam ser lidas."}</p>
         ) : (
           <div className="mt-2 overflow-x-auto">
-            <table className="w-full min-w-[620px] text-sm">
+            <table className="w-full min-w-[620px] text-sm [&_th]:px-3 [&_td]:px-3 [&_th:first-child]:pl-0 [&_td:first-child]:pl-0 [&_th:last-child]:pr-0 [&_td:last-child]:pr-0 [&_td.num]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wide text-stone-500">
                   <th className="py-1 text-left font-normal">Lead</th>
@@ -346,7 +346,7 @@ export function PainelComissaoSdr({
           <p className="mt-2 text-sm text-stone-500">Nenhum contrato com MRR na sua carteira ainda.</p>
         ) : (
           <div className="mt-2 overflow-x-auto">
-            <table className="w-full min-w-[620px] text-sm">
+            <table className="w-full min-w-[620px] text-sm [&_th]:px-3 [&_td]:px-3 [&_th:first-child]:pl-0 [&_td:first-child]:pl-0 [&_th:last-child]:pr-0 [&_td:last-child]:pr-0 [&_td.num]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wide text-stone-500">
                   <th className="py-1 text-left font-normal">Cliente</th>
@@ -366,10 +366,10 @@ export function PainelComissaoSdr({
                     </td>
                     <td className="py-1.5 text-stone-400">{c.desde.slice(8)}/{c.desde.slice(5, 7)}/{c.desde.slice(0, 4)}</td>
                     <td className="py-1.5 text-stone-400">{dataCurta(c.ultimo)}</td>
-                    <td className="py-1.5 text-right tabular-nums text-stone-300">{moeda(c.mrr)}</td>
-                    <td className="py-1.5 text-right tabular-nums text-stone-400">{c.pct}%</td>
-                    <td className="py-1.5 text-right tabular-nums text-stone-100">{c.antecipado || c.sinal ? "—" : moeda(c.porMes)}</td>
-                    <td className={`py-1.5 text-right text-xs ${c.ativo ? "text-success-bright" : c.antecipado || c.sinal ? "text-amber-400" : "text-stone-500"}`}>
+                    <td className="num py-1.5 text-right tabular-nums text-stone-300">{moeda(c.mrr)}</td>
+                    <td className="num py-1.5 text-right tabular-nums text-stone-400">{c.pct}%</td>
+                    <td className="num py-1.5 text-right tabular-nums text-stone-100">{c.antecipado || c.sinal ? "—" : moeda(c.porMes)}</td>
+                    <td className={`max-w-[240px] py-1.5 text-right text-xs leading-snug ${c.ativo ? "text-success-bright" : c.antecipado || c.sinal ? "text-amber-400" : "text-stone-500"}`}>
                       {c.antecipado && c.pagoAte
                         ? `Pago ${c.mesesPagos} meses · recorrência a partir de ${c.pagoAte.slice(5, 7)}/${c.pagoAte.slice(0, 4)}`
                         : c.sinal

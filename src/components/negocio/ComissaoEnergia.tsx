@@ -30,7 +30,7 @@ export function ExplicacaoComissaoEnergia({ pct }: { pct: number }) {
 function Tabela({ pessoa }: { pessoa: ComissaoPessoaEnergia }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[560px] text-sm">
+      <table className="w-full min-w-[560px] text-sm [&_th]:px-3 [&_td]:px-3 [&_th:first-child]:pl-0 [&_td:first-child]:pl-0 [&_th:last-child]:pr-0 [&_td:last-child]:pr-0 [&_td.num]:whitespace-nowrap [&_th]:whitespace-nowrap">
         <thead>
           <tr className="text-[10px] uppercase tracking-wide text-stone-500">
             <th className="py-1 text-left font-normal">Fechada em</th>
@@ -44,10 +44,10 @@ function Tabela({ pessoa }: { pessoa: ComissaoPessoaEnergia }) {
           {pessoa.linhas.map((l) => (
             <tr key={l.id} className="border-t border-imperium-line/60">
               <td className="py-1.5 text-stone-400">{dataCurta(l.data)}</td>
-              <td className="py-1.5 text-right tabular-nums text-stone-300">{l.kwh.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}</td>
-              <td className="py-1.5 text-right tabular-nums text-stone-300">{moeda(l.primeiraFatura)}</td>
-              <td className="py-1.5 text-right tabular-nums text-stone-300">{moeda(l.recebido)}</td>
-              <td className="py-1.5 text-right tabular-nums text-stone-100">{moeda(l.comissao)}</td>
+              <td className="num py-1.5 text-right tabular-nums text-stone-300">{l.kwh.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}</td>
+              <td className="num py-1.5 text-right tabular-nums text-stone-300">{moeda(l.primeiraFatura)}</td>
+              <td className="num py-1.5 text-right tabular-nums text-stone-300">{moeda(l.recebido)}</td>
+              <td className="num py-1.5 text-right tabular-nums text-stone-100">{moeda(l.comissao)}</td>
             </tr>
           ))}
         </tbody>
