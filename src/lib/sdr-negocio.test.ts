@@ -190,6 +190,27 @@ describe("carteira do Head (Match Sales)", () => {
   });
 });
 
+describe("carteira do Diretor no Match (gestão)", () => {
+  const v = { crm_deal_id: null, canal: "outbound", primeiro_contrato: true, valor: 300, data: "2026-11-10", mrr: 300, indicador_id: null };
+  it("só contratos em que o Head participou: sozinho 2%, dupla 1%", () => {
+    const c = montarCarteira(
+      [
+        { ...v, cliente: "Do time", profile_id: "leo", co_closer_id: null },
+        { ...v, cliente: "Dupla", profile_id: "leo", co_closer_id: "davi" },
+        { ...v, cliente: "Sozinho", profile_id: "davi", co_closer_id: null },
+      ],
+      "diretor",
+      "2026-11-18",
+      () => 10,
+      false,
+      false,
+      { pct: 2, diretorDe: "davi" },
+    );
+    const por = Object.fromEntries(c.map((x) => [x.cliente, [x.pct, x.porMes]]));
+    expect(por).toEqual({ Dupla: [1, 3], Sozinho: [2, 6] });
+  });
+});
+
 describe("somarPreVendas", () => {
   const ind = (meta: number, datas: string[]) => ({
     pace: calcularPace({ meta, recebido: datas.length, hoje: "2026-11-18", ano: 2026, mes: 11 }),

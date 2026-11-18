@@ -143,6 +143,17 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
   // Head do Match Sales: carteira de recorrência do time (gestão) e, onde ele é da dupla, o fechamento também.
   let blocoGestaoMatch: React.ReactNode = null;
   const headMatch = ehDiretor ? null : visiveis.find((n) => n.cargo === "head" && n.slug === "matchsales");
+  const matchDoDiretor = ehDiretor ? visiveis.find((n) => n.slug === "matchsales") : undefined;
+  if (matchDoDiretor && (!foco || foco.slug === "matchsales")) {
+    // Diretor: a parte dele na recorrência do Match (gestão de 2% nos contratos em que o Davi fechou sozinho, 1% nos de dupla com ele).
+    const admin = createAdminClient();
+    const { data: chefe } = await admin.from("profile_negocios").select("profile_id").eq("negocio_id", matchDoDiretor.id).eq("cargo", "head").limit(1).maybeSingle();
+    if (chefe?.profile_id) {
+      const gestaoPct = percentuais("matchsales", { id: "", valor: 0, canal: "outbound", closerId: "x", closerCargo: "executivo", indicadorId: null })?.head ?? 2;
+      const carteiraDiretor = await buscarCarteiraGestao(admin, matchDoDiretor.id, chefe.profile_id as string, hoje, pctNegocio("matchsales"), gestaoPct, true, true);
+      blocoGestaoMatch = <CarteiraRecorrencia carteira={carteiraDiretor} titulo="Minha carteira · recorrência · Galácticos (gestão)" />;
+    }
+  }
   if (headMatch && (!foco || foco.slug === "matchsales")) {
     const gestaoPct = percentuais("matchsales", { id: "", valor: 0, canal: "outbound", closerId: "x", closerCargo: "executivo", indicadorId: null })?.head ?? 2;
     const carteiraGestao = await buscarCarteiraGestao(createAdminClient(), headMatch.id, user.id, hoje, pctNegocio("matchsales"), gestaoPct, true);
