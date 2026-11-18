@@ -1,6 +1,6 @@
 // Mural do Vorp Finance: os três paces (R$, entrevistas e subidos) e o funil em R$ por etapa.
 // O executivo vê os dele e os leads dele; o Head, os do time, a tabela por pessoa e o funil de todos.
-import type { EtapaFunilFinance, PainelFinance } from "@/lib/finance-time";
+import type { DiaFinance, EtapaFunilFinance, PainelFinance } from "@/lib/finance-time";
 import { ROTULO_STATUS } from "@/lib/head-negocio";
 import type { PaceCalculado } from "@/lib/pace-negocio";
 import { BarraMes, PaceEsforcoCard } from "@/components/negocio/PainelSdr";
@@ -8,10 +8,10 @@ import { BarraMes, PaceEsforcoCard } from "@/components/negocio/PainelSdr";
 const moeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const num = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 
-function Paces({ reais, entrevistas, subidos, cor, mesAtual, time = false }: { reais: PaceCalculado; entrevistas: PaceCalculado; subidos: PaceCalculado; cor: string; mesAtual: boolean; time?: boolean }) {
+function Paces({ reais, entrevistas, subidos, cor, mesAtual, time = false, semReais = false }: { reais: PaceCalculado; entrevistas: PaceCalculado; subidos: PaceCalculado; cor: string; mesAtual: boolean; time?: boolean; semReais?: boolean }) {
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <PaceEsforcoCard titulo={time ? "Recebido do time no mês" : "Seu recebido no mês"} p={reais} cor={cor} mesAtual={mesAtual} formato="moeda" />
+    <div className={`grid gap-4 ${semReais ? "md:grid-cols-2" : "lg:grid-cols-3"}`}>
+      {!semReais && <PaceEsforcoCard titulo={time ? "Recebido do time no mês" : "Seu recebido no mês"} p={reais} cor={cor} mesAtual={mesAtual} formato="moeda" />}
       <PaceEsforcoCard titulo={time ? "Entrevistas do time" : "Suas entrevistas"} p={entrevistas} cor={cor} mesAtual={mesAtual} />
       <PaceEsforcoCard titulo={time ? "Subidos do time" : "Seus subidos"} p={subidos} cor={cor} mesAtual={mesAtual} />
     </div>
@@ -113,7 +113,7 @@ function Celula({ p, f }: { p: PaceCalculado | null; f: (v: number) => string })
 }
 
 /** Mural do Head do Finance: paces do time, tabela por executivo e o funil de todos. */
-export function MuralFinanceHead({ painel, equipe, cor, mesLabel, mesAtual, vendasParaAprovar }: { painel: PainelFinance; equipe: string; cor: string; mesLabel: string; mesAtual: boolean; vendasParaAprovar: number }) {
+export function MuralFinanceHead({ painel, equipe, cor, mesLabel, mesAtual, vendasParaAprovar, semReais = false }: { painel: PainelFinance; equipe: string; cor: string; mesLabel: string; mesAtual: boolean; vendasParaAprovar: number; /** Tela de Pace: o recebido já aparece no cartão do negócio. */ semReais?: boolean }) {
   const ordenadas = [...painel.pessoas].sort((a, b) => (a.paceReais?.indice ?? 99) - (b.paceReais?.indice ?? 99) || a.nome.localeCompare(b.nome, "pt-BR"));
   const atrasados = ordenadas.filter((p) => p.paceReais && (p.paceReais.status === "atrasado" || p.paceReais.status === "critico")).length;
   return (
@@ -121,13 +121,13 @@ export function MuralFinanceHead({ painel, equipe, cor, mesLabel, mesAtual, vend
       <p className="text-[10px] uppercase tracking-widest text-stone-500">
         Gestão do time · {equipe} · {mesLabel}
       </p>
-      {mesAtual && <BarraMes p={painel.equipe.reais} cor={cor} />}
+      {mesAtual && !semReais && <BarraMes p={painel.equipe.reais} cor={cor} />}
       {vendasParaAprovar > 0 && (
         <a href="/leads" className="block rounded-lg border border-amber-400/50 bg-imperium-surface px-4 py-3 text-sm text-amber-400 hover:opacity-80">
           {vendasParaAprovar} {vendasParaAprovar === 1 ? "venda aguardando" : "vendas aguardando"} a sua aprovação · abrir Meus Leads →
         </a>
       )}
-      <Paces reais={painel.equipe.reais} entrevistas={painel.equipe.entrevistas} subidos={painel.equipe.subidos} cor={cor} mesAtual={mesAtual} time />
+      <Paces reais={painel.equipe.reais} entrevistas={painel.equipe.entrevistas} subidos={painel.equipe.subidos} cor={cor} mesAtual={mesAtual} time semReais={semReais} />
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Time · quem precisa de atenção</p>
@@ -171,5 +171,54 @@ export function MuralFinanceHead({ painel, equipe, cor, mesLabel, mesAtual, vend
       </section>
       <FunilFinanceCard funil={painel.funil} cor={cor} mostrarQuem titulo="Funil do time em R$" />
     </div>
+  );
+}
+
+/** Pace diário de entrevistas e subidos: o que entrou em cada dia, o acumulado e onde deveria estar pela meta. */
+export function TabelaPaceDiarioFinance({ dias, titulo }: { dias: DiaFinance[]; titulo: string }) {
+  const recentes = [...dias].reverse();
+  const cel = (acum: number, ideal: number) => {
+    const cor = ideal <= 0 ? "text-stone-300" : acum >= ideal ? "text-success-bright" : acum >= ideal * 0.85 ? "text-amber-400" : "text-wine-bright";
+    return (
+      <span className={cor}>
+        {num(acum)} <span className="text-stone-500">/ {ideal.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</span>
+      </span>
+    );
+  };
+  return (
+    <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+      <p className="text-[10px] uppercase tracking-widest text-stone-500">{titulo}</p>
+      {dias.length === 0 ? (
+        <p className="mt-2 text-sm text-stone-500">O mês ainda não começou.</p>
+      ) : (
+        <div className="mt-2 max-h-[420px] overflow-auto">
+          <table className="w-full min-w-[560px] text-sm [&_th]:px-3 [&_td]:px-3 [&_th:first-child]:pl-0 [&_td:first-child]:pl-0 [&_th:last-child]:pr-0 [&_td:last-child]:pr-0 [&_td.num]:whitespace-nowrap">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wide text-stone-500">
+                <th className="py-1 text-left font-normal">Dia</th>
+                <th className="py-1 text-right font-normal">Entrevistas no dia</th>
+                <th className="py-1 text-right font-normal">Acumulado / ideal</th>
+                <th className="py-1 text-right font-normal">Subidos no dia</th>
+                <th className="py-1 text-right font-normal">Acumulado / ideal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentes.map((d) => (
+                <tr key={d.data} className="border-t border-imperium-line/60">
+                  <td className="py-1.5 text-stone-300">
+                    {d.data.slice(8)}/{d.data.slice(5, 7)}
+                  </td>
+                  <td className="num py-1.5 text-right tabular-nums text-stone-200">{d.entrevistas}</td>
+                  <td className="num py-1.5 text-right tabular-nums">{cel(d.entrevistasAcum, d.entrevistasIdeal)}</td>
+                  <td className="num py-1.5 text-right tabular-nums text-stone-200">{d.subidos}</td>
+                  <td className="num py-1.5 text-right tabular-nums">{cel(d.subidosAcum, d.subidosIdeal)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="mt-2 text-[11px] text-stone-500">O ideal acumula a meta do mês pelos dias úteis; fim de semana e feriado não somam meta.</p>
+    </section>
   );
 }

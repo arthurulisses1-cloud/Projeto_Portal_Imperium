@@ -1,7 +1,7 @@
 // Painel do Vorp Finance (Mural do executivo e do Head): pace de R$, de entrevistas e de subidos, e o funil de
 // leads em R$ por etapa. Entrevistas e subidos vêm de `entrevistas_leads` (formulário/planilha e Meus Leads).
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { calcularPace, type PaceCalculado, type PaceNegocio } from "@/lib/pace-negocio";
+import { calcularPace, diasUteis, limitesDoMes, type PaceCalculado, type PaceNegocio } from "@/lib/pace-negocio";
 import { funisDoMes } from "@/lib/funil-negocio";
 import { definirExecutivo } from "@/lib/leads-finance";
 
@@ -45,7 +45,12 @@ export type PessoaFinance = {
   paceSubidos: PaceCalculado | null;
 };
 
+/** Um dia do pace diário: o que entrou no dia, o acumulado e onde deveria estar (meta dividida pelos dias úteis). */
+export type DiaFinance = { data: string; entrevistas: number; subidos: number; entrevistasAcum: number; subidosAcum: number; entrevistasIdeal: number; subidosIdeal: number };
+
 export type PainelFinance = {
+  /** Pace diário do time (chave "time") e de cada executivo (id). */
+  diaria: Record<string, DiaFinance[]>;
   pessoas: PessoaFinance[];
   equipe: { reais: PaceCalculado; entrevistas: PaceCalculado; subidos: PaceCalculado };
   /** Meta individual (dividida igualmente entre os executivos) e do time no mês. */
@@ -108,6 +113,39 @@ export function contarEsforcoFinance(leads: LeadFinance[], membros: ReadonlySet<
   return { entrevistas, subidos };
 }
 
+/** Série dia a dia do mês até hoje de um conjunto de executivos (null = todos), com o ideal acumulado pela meta (pura). */
+export function serieDiariaFinance(
+  leads: LeadFinance[],
+  membros: ReadonlySet<string>,
+  filtro: string | null,
+  ctx: { ano: number; mes: number; hoje: string },
+  metas: { entrevistas: number; subidos: number },
+): DiaFinance[] {
+  const { inicio, fim } = limitesDoMes(ctx.ano, ctx.mes);
+  const ate = ctx.hoje > fim ? fim : ctx.hoje;
+  const ent = new Map<string, number>();
+  const sub = new Map<string, number>();
+  for (const l of leads) {
+    const exec = executivoDoLead(l, membros);
+    if (!l.recusada_em && exec && (!filtro || exec === filtro) && l.data >= inicio && l.data <= fim) ent.set(l.data, (ent.get(l.data) ?? 0) + 1);
+    const quem = l.subido_por ?? exec;
+    if (l.subido_em && quem && (!filtro || quem === filtro) && l.subido_em >= inicio && l.subido_em <= fim) sub.set(l.subido_em, (sub.get(l.subido_em) ?? 0) + 1);
+  }
+  const total = diasUteis(inicio, fim) || 1;
+  const dias: DiaFinance[] = [];
+  let ea = 0;
+  let sa = 0;
+  for (let c = inicio; c <= ate; c = new Date(Date.parse(c + "T12:00:00Z") + 86400000).toISOString().slice(0, 10)) {
+    const e = ent.get(c) ?? 0;
+    const s = sub.get(c) ?? 0;
+    ea += e;
+    sa += s;
+    const decorridos = diasUteis(inicio, c);
+    dias.push({ data: c, entrevistas: e, subidos: s, entrevistasAcum: ea, subidosAcum: sa, entrevistasIdeal: (metas.entrevistas * decorridos) / total, subidosIdeal: (metas.subidos * decorridos) / total });
+  }
+  return dias;
+}
+
 export async function buscarPainelFinance(
   admin: SupabaseClient,
   pace: PaceNegocio,
@@ -144,7 +182,11 @@ export async function buscarPainelFinance(
   });
   const totalEntrevistas = Array.from(cont.entrevistas.values()).reduce((s, n) => s + n, 0);
   const totalSubidos = Array.from(cont.subidos.values()).reduce((s, n) => s + n, 0);
+  const doMesLista = (doMes ?? []) as unknown as LeadFinance[];
+  const diaria: Record<string, DiaFinance[]> = { time: serieDiariaFinance(doMesLista, membros, null, ctx, { entrevistas: metas.entrevistasTime, subidos: metas.subidosTime }) };
+  for (const p of executivos) diaria[p.id] = serieDiariaFinance(doMesLista, membros, p.id, ctx, { entrevistas: metas.entrevistasPessoa, subidos: metas.subidosPessoa });
   return {
+    diaria,
     pessoas,
     equipe: {
       reais: pace.pace,

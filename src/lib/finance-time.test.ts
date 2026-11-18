@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contarEsforcoFinance, metasEsforcoFinance, montarFunilFinance, type LeadFinance } from "./finance-time";
+import { contarEsforcoFinance, metasEsforcoFinance, montarFunilFinance, serieDiariaFinance, type LeadFinance } from "./finance-time";
 
 const lead = (o: Partial<LeadFinance>): LeadFinance => ({
   id: "x",
@@ -40,6 +40,20 @@ describe("contarEsforcoFinance", () => {
     expect(c.entrevistas.get("bia")).toBe(1);
     expect(c.subidos.get("ana")).toBe(1);
     expect(c.subidos.get("bia")).toBe(1);
+  });
+});
+
+describe("serieDiariaFinance", () => {
+  it("acumula por dia e calcula o ideal pela meta", () => {
+    const leads = [lead({ id: "1", data: "2026-11-17" }), lead({ id: "2", data: "2026-11-17" }), lead({ id: "3", data: "2026-11-18", subido_em: "2026-11-18" })];
+    const s = serieDiariaFinance(leads, membros, null, { ano: 2026, mes: 11, hoje: "2026-11-18" }, { entrevistas: 20, subidos: 10 });
+    expect(s).toHaveLength(18);
+    const d17 = s.find((d) => d.data === "2026-11-17")!;
+    expect(d17.entrevistas).toBe(2);
+    expect(s[s.length - 1].entrevistasAcum).toBe(3);
+    expect(s[s.length - 1].subidosAcum).toBe(1);
+    expect(s[s.length - 1].entrevistasIdeal).toBeGreaterThan(0);
+    expect(serieDiariaFinance(leads, membros, "bia", { ano: 2026, mes: 11, hoje: "2026-11-18" }, { entrevistas: 20, subidos: 10 }).at(-1)?.entrevistasAcum).toBe(0);
   });
 });
 

@@ -20,6 +20,8 @@ import { MuralEnergia } from "@/components/negocio/PainelEnergia";
 import DestaqueSetup from "@/components/negocio/DestaqueSetup";
 import { buscarEsforcoNegocio, serieDoMes, type EsforcoNegocio, type IdealFunil, type IndicadorEsforco, type PontoSerie } from "@/lib/pace-esforco";
 import { RealizadoComLeads } from "@/components/negocio/RealizadoComLeads";
+import { MuralFinance, MuralFinanceHead, TabelaPaceDiarioFinance } from "@/components/negocio/PainelFinance";
+import { SLUG_FINANCE, buscarPainelFinance, type PainelFinance } from "@/lib/finance-time";
 import { PARAMETROS, indiceMes, metaKwhForecast, vendasDoMes } from "@/lib/forecast-negocios";
 import { buscarAcumuladoKwhSunne } from "@/lib/sunne";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -198,7 +200,7 @@ function CartaoPace({ n, ano, mes, aberto }: { n: PaceNegocio; ano: number; mes:
   );
 }
 
-export default async function PaceNegocioPage({ searchParams }: { searchParams: { negocio?: string; mes?: string; sdr?: string } }) {
+export default async function PaceNegocioPage({ searchParams }: { searchParams: { negocio?: string; mes?: string; sdr?: string; pessoa?: string } }) {
   const supabase = await createClient();
   // Pessoa "vista": respeita o "Ver como" do Diretor.
   const viewer = await getViewerContext(supabase);
@@ -288,6 +290,37 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
         <TabelaPaceDiario painel={painel} ano={ano} mes={mes} hoje={hoje} />
       </main>
     );
+  }
+  // Vorp Finance: o executivo vê os três paces (R$, entrevistas e subidos), o funil em R$ dele e o pace diário.
+  if (individual && foco && foco.slug === SLUG_FINANCE) {
+    try {
+      const painelF = await buscarPainelFinance(createAdminClient(), dados[0], { ano, mes, hoje });
+      const corF = NEGOCIO_COR[foco.slug] ?? "201 162 74";
+      return (
+        <main className="mx-auto max-w-5xl space-y-5 px-6 py-8">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h1 className="font-display text-2xl text-gold-bright">Meu pace</h1>
+              <p className="mt-1 text-sm text-stone-400">
+                {nomeEquipe(foco)} · {MESES[mes]} de {ano}. Dias úteis de segunda a sexta, sem feriados.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Link href={`/pace-negocio?mes=${ant}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
+                ← {MESES[mes === 1 ? 12 : mes - 1]}
+              </Link>
+              <Link href={`/pace-negocio?mes=${seg}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
+                {MESES[mes === 12 ? 1 : mes + 1]} →
+              </Link>
+            </div>
+          </div>
+          <MuralFinance painel={painelF} pessoaId={user.id} equipe={nomeEquipe(foco)} cor={corF} mesLabel={MESES[mes] + " de " + ano} mesAtual={hoje.slice(0, 7) === `${ano}-${String(mes).padStart(2, "0")}`} />
+          <TabelaPaceDiarioFinance dias={painelF.diaria[user.id] ?? []} titulo="Pace diário · você · entrevistas e subidos" />
+        </main>
+      );
+    } catch (e) {
+      console.error("pace do executivo do Finance falhou", e);
+    }
   }
   // Energy: o executivo vê o funil das contas e os paces de kWh e faturamento (todos fazem o processo completo).
   if (individual && foco && foco.slug === "vorp-energy") {
@@ -415,6 +448,16 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
     }
   }
 
+  // Vorp Finance: o Head (e o Diretor) veem também os paces do time em entrevistas e subidos, a tabela por executivo, o funil e o pace diário.
+  let painelFinance: PainelFinance | null = null;
+  if (foco && dados.length === 1 && foco.slug === SLUG_FINANCE) {
+    try {
+      painelFinance = await buscarPainelFinance(createAdminClient(), dados[0], { ano, mes, hoje });
+    } catch (e) {
+      console.error("pace: painel do Finance falhou", e);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-5xl space-y-5 px-6 py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -487,6 +530,36 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
         })}
       </div>
 
+      {painelFinance && foco && (() => {
+        const escolhido = painelFinance.pessoas.find((p) => p.id === searchParams.pessoa) ?? null;
+        const href = (id: string | null) => `/pace-negocio?mes=${ano}-${String(mes).padStart(2, "0")}&negocio=${foco.slug}${id ? `&pessoa=${id}` : ""}`;
+        const chip = (ativo: boolean) => `rounded border px-3 py-1 text-xs ${ativo ? "border-gold bg-gold/10 text-stone-100" : "border-imperium-line text-stone-400 hover:text-stone-100"}`;
+        return (
+          <div className="space-y-4">
+            <MuralFinanceHead
+              painel={painelFinance}
+              equipe={nomeEquipe(foco)}
+              cor={NEGOCIO_COR[foco.slug] ?? "201 162 74"}
+              mesLabel={MESES[mes] + " de " + ano}
+              mesAtual={mesAtualPace}
+              vendasParaAprovar={painelFinance.funil.find((e) => e.chave === "venda")?.leads.length ?? 0}
+              semReais
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] uppercase tracking-widest text-stone-500">Pace diário</span>
+              <Link href={href(null)} className={chip(!escolhido)}>
+                Todos
+              </Link>
+              {painelFinance.pessoas.map((p) => (
+                <Link key={p.id} href={href(p.id)} className={chip(escolhido?.id === p.id)}>
+                  {p.nome}
+                </Link>
+              ))}
+            </div>
+            <TabelaPaceDiarioFinance dias={painelFinance.diaria[escolhido?.id ?? "time"] ?? []} titulo={`Pace diário · ${escolhido?.nome ?? "time"} · entrevistas e subidos`} />
+          </div>
+        );
+      })()}
       {esforco && dados[0] && <PaceComercial n={dados[0]} esforco={esforco} ano={ano} mes={mes} />}
       {gestao && foco && esforco && (
         <div className="space-y-4">
