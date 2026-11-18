@@ -20,6 +20,8 @@ import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { buscarPermissoesAnalista, type AreaAnalista } from "@/lib/permissoes-analista";
 
 export const dynamic = "force-dynamic";
+// Tempo da função (Vercel): o botão "Sincronizar todas as integrações" do menu roda as leituras de todos os negócios.
+export const maxDuration = 60;
 
 // `roles` por item de grupo é opcional — quando omitido, o item herda a
 // visibilidade do grupo inteiro (comportamento de sempre). Usado pra caber

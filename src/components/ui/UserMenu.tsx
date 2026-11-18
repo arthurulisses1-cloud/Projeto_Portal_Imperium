@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { uploadAvatarAction, atualizarNome } from "@/app/(app)/avatar-actions";
 import ThemeToggle from "./ThemeToggle";
 import SincronizarPlanilha from "./SincronizarPlanilha";
+import SincronizarIntegracoes from "./SincronizarIntegracoes";
 
 function iniciais(nome: string) {
   return nome.split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
@@ -90,6 +91,11 @@ export default function UserMenu({
                   Planilha
                 </p>
                 <SincronizarPlanilha compact ultimaSyncInicial={ultimaSync} />
+                {role === "diretor" && (
+                  <div className="mt-2">
+                    <SincronizarIntegracoes />
+                  </div>
+                )}
               </div>
             )}
 
