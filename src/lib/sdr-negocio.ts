@@ -368,7 +368,18 @@ export type ContratoCarteira = {
   /** Até quando o contrato está pago (AAAA-MM-DD) e se ainda vale hoje: a recorrência só começa depois, se houver renovação. */
   pagoAte: string | null;
   antecipado: boolean;
+  /** Plano semestral/anual com só um sinal pago: o restante entra quando for pago (a venda é atualizada) e aí vira pago antecipado. */
+  sinal: boolean;
 };
+
+/** Plano de vários meses (Tipo de Contrato) em que o recebido está entre uma parcela e o período todo: sinal pago, restante a vir (pura). */
+export function ehSinalDePlano(v: { valor: number; mrr: number | null; valor_implantacao?: number | null; tipo_contrato?: string | null }): boolean {
+  const meses = DICA_PLANO.find(([re]) => re.test(v.tipo_contrato ?? ""))?.[1] ?? 1;
+  const mrr = Number(v.mrr ?? 0);
+  if (meses <= 1 || !(mrr > 0)) return false;
+  const razao = Math.max(0, Number(v.valor) - Number(v.valor_implantacao ?? 0)) / mrr;
+  return razao > 1.5 && razao < meses * 0.9;
+}
 
 /** Planos cobrados de uma vez e a quantidade de meses que cobrem. */
 const PLANOS_MESES = [12, 6, 3];
@@ -453,11 +464,13 @@ export function montarCarteira(
       mesesPagos: 1,
       pagoAte: null,
       antecipado: false,
+      sinal: false,
     };
     // Match Sales: plano semestral/anual pago de uma vez cobre o contrato todo; conta pela 1ª venda do cliente.
     if (detectarPrepago && !porChave.has(chave)) {
       c.mesesPagos = mesesPagosDaVenda({ valor: Number(v.valor), mrr: Number(v.mrr), valor_implantacao: v.valor_implantacao, produto: v.produto, tipo_contrato: v.tipo_contrato });
       if (c.mesesPagos > 1) c.pagoAte = somaMesesData(v.data, c.mesesPagos);
+      c.sinal = c.mesesPagos === 1 && ehSinalDePlano({ valor: Number(v.valor), mrr: Number(v.mrr), valor_implantacao: v.valor_implantacao, tipo_contrato: v.tipo_contrato });
     }
     c.ultimo = v.data;
     c.mrr = Number(v.mrr);
@@ -470,7 +483,7 @@ export function montarCarteira(
       const pct = pctDe(c.papel, c.canal, c.comIndicador);
       // Contrato pago de uma vez: não gera recorrência até o fim do período pago (só vigora se houver renovação).
       const antecipado = !!c.pagoAte && hoje < c.pagoAte;
-      const ativo = !antecipado && (c.ultimo.startsWith(mesAtual) || c.ultimo.startsWith(mesAnterior));
+      const ativo = !antecipado && !c.sinal && (c.ultimo.startsWith(mesAtual) || c.ultimo.startsWith(mesAnterior));
       return { ...c, pct, porMes: (c.mrr * pct) / 100, ativo, antecipado };
     })
     .sort((x, y) => Number(y.ativo) - Number(x.ativo) || Number(y.antecipado) - Number(x.antecipado) || y.mrr - x.mrr);

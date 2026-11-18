@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lerDataReuniao, mesesPagosDaVenda, mesmaPessoa, montarCarteira, resumirReunioes, somaMesesData, somarPreVendas, statusRqa, tabelaDiaria, usuarioCrmDoPerfil } from "./sdr-negocio";
+import { ehSinalDePlano, lerDataReuniao, mesesPagosDaVenda, mesmaPessoa, montarCarteira, resumirReunioes, somaMesesData, somarPreVendas, statusRqa, tabelaDiaria, usuarioCrmDoPerfil } from "./sdr-negocio";
 import { calcularPace } from "./pace-negocio";
 import type { LeadAuditoria } from "./integracoes/auditoria";
 
@@ -212,5 +212,24 @@ describe("Tipo de Contrato manda no plano", () => {
   });
   it("Mensal é sempre 1, mesmo que o valor lembre um semestre", () => {
     expect(mesesPagosDaVenda({ valor: 715, mrr: 119.2, tipo_contrato: "Mensal" })).toBe(1);
+  });
+});
+
+describe("sinal de plano de vários meses", () => {
+  it("anual com só parte paga é sinal; parcela mensal e plano inteiro não", () => {
+    expect(ehSinalDePlano({ valor: 650, mrr: 105.61, tipo_contrato: "anual" })).toBe(true);
+    expect(ehSinalDePlano({ valor: 396.8, mrr: 396.8, tipo_contrato: "anual" })).toBe(false);
+    expect(ehSinalDePlano({ valor: 1267, mrr: 105, tipo_contrato: "anual" })).toBe(false);
+    expect(ehSinalDePlano({ valor: 650, mrr: 105.61, tipo_contrato: "mensal" })).toBe(false);
+  });
+  it("na carteira, o sinal não gera recorrência até o restante ser pago", () => {
+    const venda = { data: "2026-11-16", cliente: "Garage Phone", crm_deal_id: "g", mrr: 105.61, valor: 650, canal: "outbound", profile_id: "p", indicador_id: null, primeiro_contrato: true, tipo_contrato: "anual" };
+    const [c] = montarCarteira([venda], "p", "2026-11-18", () => 10, true);
+    expect(c.sinal).toBe(true);
+    expect(c.ativo).toBe(false);
+    // Quando a venda é atualizada com o valor todo, vira pago antecipado.
+    const [pago] = montarCarteira([{ ...venda, valor: 1267 }], "p", "2026-11-18", () => 10, true);
+    expect(pago.sinal).toBe(false);
+    expect(pago.antecipado).toBe(true);
   });
 });

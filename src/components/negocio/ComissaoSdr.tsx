@@ -289,7 +289,7 @@ export function PainelComissaoSdr({
               </thead>
               <tbody>
                 {carteira.map((c) => (
-                  <tr key={c.chave} className={`border-t border-imperium-line/60 ${c.ativo || c.antecipado ? "" : "opacity-50"}`}>
+                  <tr key={c.chave} className={`border-t border-imperium-line/60 ${c.ativo || c.antecipado || c.sinal ? "" : "opacity-50"}`}>
                     <td className="py-1.5 text-stone-200">
                       {c.cliente} <span className="text-[11px] text-stone-500">· {c.papel === "sdr" ? "você agendou" : "você fechou"}</span>
                     </td>
@@ -297,11 +297,13 @@ export function PainelComissaoSdr({
                     <td className="py-1.5 text-stone-400">{dataCurta(c.ultimo)}</td>
                     <td className="py-1.5 text-right tabular-nums text-stone-300">{moeda(c.mrr)}</td>
                     <td className="py-1.5 text-right tabular-nums text-stone-400">{c.pct}%</td>
-                    <td className="py-1.5 text-right tabular-nums text-stone-100">{c.antecipado ? "—" : moeda(c.porMes)}</td>
-                    <td className={`py-1.5 text-right text-xs ${c.ativo ? "text-success-bright" : c.antecipado ? "text-amber-400" : "text-stone-500"}`}>
+                    <td className="py-1.5 text-right tabular-nums text-stone-100">{c.antecipado || c.sinal ? "—" : moeda(c.porMes)}</td>
+                    <td className={`py-1.5 text-right text-xs ${c.ativo ? "text-success-bright" : c.antecipado || c.sinal ? "text-amber-400" : "text-stone-500"}`}>
                       {c.antecipado && c.pagoAte
                         ? `Pago ${c.mesesPagos} meses · recorrência a partir de ${c.pagoAte.slice(5, 7)}/${c.pagoAte.slice(0, 4)}`
-                        : c.ativo
+                        : c.sinal
+                          ? "Sinal pago · aguarda o restante"
+                          : c.ativo
                           ? "Ativo"
                           : "Sem lançamento"}
                     </td>
