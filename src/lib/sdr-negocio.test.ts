@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ehSinalDePlano, lerDataReuniao, mesesPagosDaVenda, mesmaPessoa, montarCarteira, resumirReunioes, somaMesesData, somarPreVendas, statusRqa, tabelaDiaria, usuarioCrmDoPerfil } from "./sdr-negocio";
+import { ehSinalDePlano, lerDataReuniao, mesesPagosDaVenda, recorrenciaDaVenda, mesmaPessoa, montarCarteira, resumirReunioes, somaMesesData, somarPreVendas, statusRqa, tabelaDiaria, usuarioCrmDoPerfil } from "./sdr-negocio";
 import { calcularPace } from "./pace-negocio";
 import type { LeadAuditoria } from "./integracoes/auditoria";
 
@@ -240,5 +240,23 @@ describe("lead repassado pelo BDR (Match Sales)", () => {
     const l2 = lead({ nome: "Meu mesmo", preVendas: "Fernando", closer: null, responsavel: "Fernando", reuniaoMarcada: "21/11/2026 10:00" });
     const r = resumirReunioes([l1, l2], "Fernando", "matchsales", 2026, 11);
     expect(r.aAcontecer.map((x) => x.com)).toEqual(["Davi Ximenes", null]);
+  });
+});
+
+describe("recorrenciaDaVenda (o que gera a comissão do mês)", () => {
+  const base = { data: "2026-11-18", primeiroContrato: true };
+  it("anual pago à vista: não gera recorrência até o fim do período", () => {
+    const r = recorrenciaDaVenda({ ...base, recebido: 4490.7, mrr: 374.22, tipoContrato: "anual", implantacao: null }, "2026-11-18", true);
+    expect(r.gera).toBe(false);
+    expect(r.texto).toContain("12 meses");
+    expect(r.texto).toContain("11/2027");
+  });
+  it("mensal gera recorrência; sinal aguarda o restante; sem MRR não gera", () => {
+    expect(recorrenciaDaVenda({ ...base, recebido: 179, mrr: 179, tipoContrato: "mensal", implantacao: null }, "2026-11-18", true).gera).toBe(true);
+    expect(recorrenciaDaVenda({ ...base, recebido: 650, mrr: 105.61, tipoContrato: "anual", implantacao: null }, "2026-11-18", true).texto).toContain("sinal");
+    expect(recorrenciaDaVenda({ ...base, recebido: 500, mrr: null, tipoContrato: null, implantacao: null }, "2026-11-18", true).gera).toBe(false);
+  });
+  it("na Vorp (sem detecção de plano) com MRR gera recorrência", () => {
+    expect(recorrenciaDaVenda({ ...base, recebido: 8000, mrr: 3000, tipoContrato: null, implantacao: null }, "2026-11-18", false).gera).toBe(true);
   });
 });

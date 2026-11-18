@@ -1,6 +1,7 @@
 // Comissão do mês do SDR da Acrópole (Vorp): regras, RQA, comissão de venda padrão e carteira de recorrência.
 import { percentuais } from "@/lib/comissao-negocio";
-import { RQA_VALOR, type ContratoCarteira, type ResumoReunioes, type StatusRqa } from "@/lib/sdr-negocio";
+import { RQA_VALOR, recorrenciaDaVenda, type ContratoCarteira, type ResumoReunioes, type StatusRqa } from "@/lib/sdr-negocio";
+import type { ItemComissao } from "@/lib/comissao-negocio";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
@@ -144,6 +145,67 @@ export function ExplicacaoComissaoCloserVorp() {
   );
 }
 
+/** O que está gerando a comissão do mês: uma linha por venda, com o valor recebido, se gera recorrência e a comissão. */
+export function TabelaComissaoMes({ itens, hoje, detectarPrepago }: { itens: ItemComissao[]; hoje: string; detectarPrepago: boolean }) {
+  const linhas = itens.slice().sort((a, b) => (a.data < b.data ? 1 : -1));
+  const total = linhas.reduce((s, l) => s + l.valor, 0);
+  return (
+    <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-[10px] uppercase tracking-widest text-stone-500">O que gera a sua comissão no mês</p>
+        <p className="text-sm text-stone-400">
+          {linhas.length} {linhas.length === 1 ? "venda" : "vendas"} · <span className="font-semibold text-gold-bright">{moeda(total)}</span>
+        </p>
+      </div>
+      {linhas.length === 0 ? (
+        <p className="mt-2 text-sm text-stone-500">Nenhuma venda sua gerou comissão neste mês ainda.</p>
+      ) : (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[680px] text-sm">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wide text-stone-500">
+                <th className="py-1 text-left font-normal">Cliente</th>
+                <th className="py-1 text-right font-normal">Valor recebido</th>
+                <th className="py-1 text-left font-normal">Gera recorrência?</th>
+                <th className="py-1 text-right font-normal">Seu %</th>
+                <th className="py-1 text-right font-normal">Comissão</th>
+              </tr>
+            </thead>
+            <tbody>
+              {linhas.map((l, idx) => {
+                const r = recorrenciaDaVenda(l, hoje, detectarPrepago);
+                return (
+                  <tr key={l.vendaId + idx} className="border-t border-imperium-line/60">
+                    <td className="py-1.5 text-stone-200">
+                      {l.cliente ?? "—"} <span className="text-[11px] text-stone-600">· {dataCurta(l.data)}</span>
+                    </td>
+                    <td className="py-1.5 text-right tabular-nums text-stone-300">{moeda(l.recebido)}</td>
+                    <td className={"py-1.5 text-xs " + (r.gera ? "text-success-bright" : "text-amber-400")}>{r.texto}</td>
+                    <td className="py-1.5 text-right tabular-nums text-stone-400">{l.pct}%</td>
+                    <td className="py-1.5 text-right tabular-nums text-stone-100">{moeda(l.valor)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-imperium-line font-semibold text-stone-200">
+                <td className="py-1.5">Total</td>
+                <td className="py-1.5 text-right tabular-nums">{moeda(linhas.reduce((s, l) => s + l.recebido, 0))}</td>
+                <td />
+                <td />
+                <td className="py-1.5 text-right tabular-nums text-gold-bright">{moeda(total)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+      <p className="mt-2 text-[11px] text-stone-500">
+        A comissão é sobre o valor recebido de cada venda. Cliente que antecipa o plano todo já gera a comissão toda agora, e a recorrência só começa depois do período pago.
+      </p>
+    </section>
+  );
+}
+
 const SELO: Record<StatusRqa, { texto: string; classe: string }> = {
   validada: { texto: "RQA validada", classe: "border-success/50 text-success-bright" },
   aguardando: { texto: "Aguardando validação", classe: "border-amber-400/50 text-amber-400" },
@@ -158,7 +220,14 @@ export function PainelComissaoSdr({
   atualizadoEm,
   papel = "sdr",
   temRqa = true,
+  itens,
+  hoje,
+  detectarPrepago = false,
 }: {
+  /** Linhas de comissão do mês da pessoa (para a tabela "o que gera a sua comissão"). */
+  itens?: ItemComissao[];
+  hoje?: string;
+  detectarPrepago?: boolean;
   papel?: "sdr" | "closer";
   /** Só a Acrópole paga RQA; nos outros negócios a tela é só de vendas e carteira. */
   temRqa?: boolean;
@@ -262,6 +331,8 @@ export function PainelComissaoSdr({
         )}
       </section>
       )}
+
+      {itens && hoje && <TabelaComissaoMes itens={itens} hoje={hoje} detectarPrepago={detectarPrepago} />}
 
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">

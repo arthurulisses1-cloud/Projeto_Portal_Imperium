@@ -247,12 +247,30 @@ export function dataPagamento(dataVenda: string): string {
   return `${ano}-${String(mes).padStart(2, "0")}-15`;
 }
 
+/** Uma linha de comissão de uma venda, com o que a explica (valor recebido, MRR, plano). */
+export type ItemComissao = {
+  vendaId: string;
+  data: string;
+  cliente: string | null;
+  papel: PapelComissao;
+  pct: number;
+  base: number;
+  valor: number;
+  tipo?: "base" | "desagio";
+  /** Valor recebido da venda (a base pode ser menor, como o teto de 3 x MRR da Vorp). */
+  recebido: number;
+  mrr: number | null;
+  tipoContrato: string | null;
+  implantacao: number | null;
+  primeiroContrato: boolean;
+};
+
 export type ComissaoPessoa = {
   id: string;
   nome: string;
   total: number;
   porPapel: Partial<Record<PapelComissao, number>>;
-  itens: { vendaId: string; data: string; cliente: string | null; papel: PapelComissao; pct: number; base: number; valor: number; tipo?: "base" | "desagio" }[];
+  itens: ItemComissao[];
 };
 
 export type ComissaoNegocio = {
@@ -280,7 +298,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
   const [{ data: vendas }, { data: membros }, { data: diretor }, { data: perfis }] = await Promise.all([
     supabase
       .from("vendas")
-      .select("id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente, mrr, valor_antecipado, primeiro_contrato, recorrencia, valor_cliente")
+      .select("id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente, mrr, valor_antecipado, primeiro_contrato, recorrencia, valor_cliente, tipo_contrato, valor_implantacao")
       .in("negocio_id", ids)
       .gte("data", inicio)
       .lt("data", fimExcl)
@@ -356,7 +374,21 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
         };
         pessoa.total += l.valor;
         pessoa.porPapel[l.papel] = (pessoa.porPapel[l.papel] ?? 0) + l.valor;
-        pessoa.itens.push({ vendaId: v.id, data: v.data, cliente: v.cliente ?? null, papel: l.papel, pct: l.pct, base: l.base, valor: l.valor, tipo: l.tipo });
+        pessoa.itens.push({
+          vendaId: v.id,
+          data: v.data,
+          cliente: v.cliente ?? null,
+          papel: l.papel,
+          pct: l.pct,
+          base: l.base,
+          valor: l.valor,
+          tipo: l.tipo,
+          recebido: Number(v.valor),
+          mrr: venda.mrr ?? null,
+          tipoContrato: (v.tipo_contrato as string | null) ?? null,
+          implantacao: v.valor_implantacao === null || v.valor_implantacao === undefined ? null : Number(v.valor_implantacao),
+          primeiroContrato: v.primeiro_contrato ?? true,
+        });
         porPessoa.set(l.beneficiarioId, pessoa);
       }
     }

@@ -15,6 +15,7 @@ import type { CanalPortal } from "@/lib/integracoes/config";
 import type { AuditoriaGravada, LeadAuditoria } from "@/lib/integracoes/auditoria";
 import { buscarEsforcoNegocio, diasUteisDoMes, type EtapaEsforco, type PreVendasPace } from "@/lib/pace-esforco";
 import { calcularPace, limitesDoMes } from "@/lib/pace-negocio";
+import type { ItemComissao } from "@/lib/comissao-negocio";
 
 /** Cargos de pré-vendas no negócio (quem agenda reunião). */
 export const CARGOS_PRE_VENDAS = ["sdr", "bdr", "pre_vendas"];
@@ -352,6 +353,20 @@ export async function vinculoPreVendas(
     .filter((l) => l.n && l.n.status === "ativo" && CARGOS_PRE_VENDAS.includes(l.cargo) && temPainelSdr(l.n.slug))
     .sort((a, b) => Number(b.principal) - Number(a.principal))[0];
   return achado?.n ? { id: achado.n.id, slug: achado.n.slug, nome: achado.n.nome, equipe_nome: achado.n.equipe_nome } : null;
+}
+
+/** A venda gera recorrência? Match Sales: plano pago de uma vez só gera depois do período pago; sinal aguarda o restante (pura). */
+export function recorrenciaDaVenda(i: Pick<ItemComissao, "recebido" | "mrr" | "tipoContrato" | "implantacao" | "primeiroContrato" | "data">, hoje: string, detectarPrepago: boolean): { gera: boolean; texto: string } {
+  if (!(Number(i.mrr) > 0) || !i.primeiroContrato) return { gera: false, texto: "Não · sem mensalidade" };
+  if (!detectarPrepago) return { gera: true, texto: "Sim · mensal" };
+  const dados = { valor: i.recebido, mrr: i.mrr, valor_implantacao: i.implantacao, tipo_contrato: i.tipoContrato };
+  const meses = mesesPagosDaVenda(dados);
+  if (meses > 1) {
+    const ate = somaMesesData(i.data, meses);
+    if (hoje < ate) return { gera: false, texto: "Não · pago " + meses + " meses, recorrência a partir de " + ate.slice(5, 7) + "/" + ate.slice(0, 4) };
+  }
+  if (ehSinalDePlano(dados)) return { gera: false, texto: "Não por enquanto · sinal pago, aguarda o restante" };
+  return { gera: true, texto: "Sim · mensal" };
 }
 
 // ------------------------------------------------------------------ carteira de recorrência

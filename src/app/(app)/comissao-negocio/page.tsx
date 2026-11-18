@@ -103,7 +103,16 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
     blocoSdr = (
       <>
         {preVendas.slug === "vorp" ? <ExplicacaoComissaoVorp /> : <ExplicacaoComissaoMatch papel="bdr" />}
-        <PainelComissaoSdr reunioes={painel.reunioes} comissaoVendas={comissaoVendas} carteira={carteira} atualizadoEm={painel.atualizadoEm} temRqa={temRqa(preVendas.slug)} />
+        <PainelComissaoSdr
+          reunioes={painel.reunioes}
+          comissaoVendas={comissaoVendas}
+          carteira={carteira}
+          atualizadoEm={painel.atualizadoEm}
+          temRqa={temRqa(preVendas.slug)}
+          itens={dados.find((d) => d.slug === preVendas.slug)?.pessoas.find((p) => p.id === user.id)?.itens ?? []}
+          hoje={hoje}
+          detectarPrepago={preVendas.slug === "matchsales"}
+        />
       </>
     );
   }
@@ -116,7 +125,16 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
     blocoSdr = (
       <>
         {closerVorp.slug === "vorp" ? <ExplicacaoComissaoCloserVorp /> : <ExplicacaoComissaoMatch papel="executivo" />}
-        <PainelComissaoSdr papel="closer" reunioes={null} comissaoVendas={comissaoVendas} carteira={carteira} atualizadoEm={null} />
+        <PainelComissaoSdr
+          papel="closer"
+          reunioes={null}
+          comissaoVendas={comissaoVendas}
+          carteira={carteira}
+          atualizadoEm={null}
+          itens={dados.find((d) => d.slug === closerVorp.slug)?.pessoas.find((p) => p.id === user.id)?.itens ?? []}
+          hoje={hoje}
+          detectarPrepago={closerVorp.slug === "matchsales"}
+        />
       </>
     );
   }
@@ -192,6 +210,8 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
 
       {dados.map((d) => {
         if (d.slug === "vorp-energy" && blocoEnergia) return null; // o Energy aparece no bloco próprio, acima
+        // Executivo/BDR com tabela própria ("o que gera a sua comissão") não repete as linhas aqui.
+        if (blocoSdr && !veTudo(d) && (d.slug === closerVorp?.slug || d.slug === preVendas?.slug)) return null;
         const cor = NEGOCIO_COR[d.slug] ?? "201 162 74";
         const completo = veTudo(d);
         const pessoas = completo ? d.pessoas : d.pessoas.filter((p) => p.id === user.id);
