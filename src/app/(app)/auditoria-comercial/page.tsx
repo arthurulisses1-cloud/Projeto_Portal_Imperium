@@ -58,6 +58,8 @@ type Params = {
   modo?: string;
   tipo?: string;
   temp?: string;
+  /** Visão da lista do Inbound: todos, mql ou nao_mql. */
+  vq?: string;
   lead?: string;
 };
 
@@ -108,7 +110,10 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
 
   const { data: est } = await createAdminClient().from("integracao_estado").select("valor").eq("chave", `auditoria:${atual.slug}`).maybeSingle();
   const base = (est?.valor as AuditoriaGravada | null) ?? null;
-  const todos = base?.leads ?? [];
+  // A base tem também os leads do Inbound que só entraram ou conectaram (para "Leads Inbound do período");
+  // as demais sub-abas olham só quem chegou a Reunião Agendada.
+  const baseToda = base?.leads ?? [];
+  const todos = baseToda.filter((l) => l.agendadaEm);
   const noMes = (iso: string | null) => dataBR(iso)?.slice(0, 7) === mesParam;
 
   // Opções dos filtros (de toda a base, para não sumirem ao filtrar).
@@ -118,11 +123,11 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
 
   const href = (mudar: Partial<Params>) => {
     const p = new URLSearchParams();
-    const tudo: Params = { negocio: atual.slug, mes: mesParam, aba, pv: f.pv, closer: f.closer, canal: f.canal, q: f.q, base: searchParams.base, situacao: searchParams.situacao, modo: searchParams.modo, tipo: searchParams.tipo, temp: searchParams.temp, ...mudar };
+    const tudo: Params = { negocio: atual.slug, mes: mesParam, aba, pv: f.pv, closer: f.closer, canal: f.canal, q: f.q, base: searchParams.base, situacao: searchParams.situacao, modo: searchParams.modo, tipo: searchParams.tipo, temp: searchParams.temp, vq: searchParams.vq, ...mudar };
     for (const [k, v] of Object.entries(tudo)) if (v) p.set(k, v);
     return `/auditoria-comercial?${p}`;
   };
-  const lead = searchParams.lead ? todos.find((l) => String(l.seq) === searchParams.lead || l.id === searchParams.lead) : undefined;
+  const lead = searchParams.lead ? baseToda.find((l) => String(l.seq) === searchParams.lead || l.id === searchParams.lead) : undefined;
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-6 py-8">
@@ -263,7 +268,11 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
       ) : aba === "closer" ? (
         <AbaCloser todos={todos} f={f} noMes={noMes} sp={searchParams} href={href} />
       ) : aba === "leads_outbound" || aba === "leads_inbound" ? (
-        <AbaLeadsDoPeriodo todos={todos} f={f} noMes={noMes} canal={aba === "leads_outbound" ? "outbound" : "inbound"} href={href} />
+        aba === "leads_outbound" ? (
+          <AbaLeadsDoPeriodo todos={todos} f={f} noMes={noMes} canal="outbound" href={href} />
+        ) : (
+          <AbaLeadsInbound todos={baseToda} f={f} noMes={noMes} sp={searchParams} href={href} />
+        )
       ) : (
         <AbaMovimentacoes todos={todos} f={f} noMes={noMes} sp={searchParams} href={href} />
       )}
@@ -836,5 +845,104 @@ function Passo({ rotulo, em }: { rotulo: string; em: string | null }) {
     </span>
   ) : (
     <span className="rounded border border-imperium-line px-1.5 py-0.5 text-stone-500">{rotulo}</span>
+  );
+}
+
+/**
+ * Leads Inbound do período (como no Funil Inbound do sistema antigo): todo lead do Tráfego Pago com algum
+ * passo no mês (entrou, conectou, agendou, realizou ou vendeu), com o perfil (MQL ou não, faturamento e
+ * cargo), o caminho com a data de cada passo e a etapa de agora. Visões: todos, só MQL ou só não MQL. Lead
+ * falso fica fora (como no funil); os números batem com o funil do Dashboard.
+ */
+function AbaLeadsInbound({
+  todos,
+  f,
+  noMes,
+  sp,
+  href,
+}: {
+  todos: LeadAuditoria[];
+  f: Filtros;
+  noMes: (iso: string | null) => boolean;
+  sp: Params;
+  href: (m: Partial<Params>) => string;
+}) {
+  const doPeriodo = todos
+    .filter((l) => l.canal === "inbound" && passaFiltros(l, { ...f, canal: "" }))
+    .filter((l) => [l.criadoEm, l.conectadoEm, l.agendadaEm, l.realizadaEm, l.vendaEm].some(noMes));
+  const visao = sp.vq === "mql" || sp.vq === "nao_mql" ? sp.vq : "todos";
+  const daVisao = (l: LeadAuditoria) => (visao === "mql" ? l.mql : visao === "nao_mql" ? !l.mql : true);
+  const lista = doPeriodo
+    .filter(daVisao)
+    .map((l) => ({ l, ultimo: [l.vendaEm, l.realizadaEm, l.agendadaEm, l.conectadoEm, l.criadoEm].filter((x): x is string => !!x).sort().pop() ?? "" }))
+    .sort((a, b) => b.ultimo.localeCompare(a.ultimo))
+    .map((x) => x.l);
+  const conta = (t: (l: LeadAuditoria) => boolean) => lista.filter(t).length;
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <Segmentos
+          opcoes={[
+            { rotulo: "Todos", href: href({ vq: undefined, lead: undefined }), ativo: visao === "todos", contagem: doPeriodo.length },
+            { rotulo: "MQL", href: href({ vq: "mql", lead: undefined }), ativo: visao === "mql", contagem: doPeriodo.filter((l) => l.mql).length },
+            { rotulo: "Não MQL", href: href({ vq: "nao_mql", lead: undefined }), ativo: visao === "nao_mql", contagem: doPeriodo.filter((l) => !l.mql).length },
+          ]}
+        />
+        <span className="text-[11px] text-stone-500">
+          Todo lead do Tráfego Pago com algum passo no mês. {conta((l) => noMes(l.criadoEm))} entraram · {conta((l) => noMes(l.conectadoEm))} conectaram ·{" "}
+          {conta((l) => noMes(l.agendadaEm))} agendaram · {conta((l) => noMes(l.realizadaEm))} realizaram · {conta((l) => noMes(l.vendaEm))} venderam no mês.
+        </span>
+      </div>
+      <PorPessoa titulo="Por SDR" itens={contarPor(lista, (l) => l.preVendas)} href={(nome) => href({ pv: nome, lead: undefined })} />
+      <div className="overflow-x-auto rounded-lg border border-imperium-line bg-imperium-surface">
+        <table className="w-full min-w-[980px] text-sm">
+          <thead className="border-b border-imperium-line">
+            <tr>
+              <th className={thClasse}>Lead</th>
+              <th className={thClasse}>SDR</th>
+              <th className={thClasse}>Perfil</th>
+              <th className={thClasse}>Caminho</th>
+              <th className={thClasse}>Etapa agora</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-imperium-line/60">
+            {lista.map((l) => {
+              const naoRealizada = !!l.agendadaEm && !l.realizadaEm && (l.situacao === "no_show" || l.situacao === "cancelada");
+              const perfil = [legivel(l.faturamento), legivel(l.cargo)].filter(Boolean).join(" · ");
+              return (
+                <tr key={l.id} className="hover:bg-imperium-raised/40">
+                  <td className={tdClasse}>
+                    <LinkLead l={l} href={href} /> <span className="text-[11px] text-stone-500">#{l.seq}</span>
+                  </td>
+                  <td className={`${tdClasse} text-stone-400`}>{l.preVendas ?? "—"}</td>
+                  <td className={tdClasse}>
+                    <span className={`rounded border px-1.5 py-0.5 text-[11px] ${l.mql ? "border-success/50 text-success-bright" : "border-imperium-line text-stone-400"}`}>{l.mql ? "MQL" : "Não MQL"}</span>
+                    <p className="mt-0.5 text-[11px] text-stone-500">{perfil || "sem faturamento e cargo"}</p>
+                  </td>
+                  <td className={tdClasse}>
+                    <span className="flex flex-wrap items-center gap-1 text-[11px]">
+                      <Passo rotulo="Entrou" em={l.criadoEm} />
+                      <span className="text-stone-600">→</span>
+                      <Passo rotulo="Conectou" em={l.conectadoEm} />
+                      <span className="text-stone-600">→</span>
+                      <Passo rotulo="Agendada" em={l.agendadaEm} />
+                      <span className="text-stone-600">→</span>
+                      {naoRealizada ? <span className="rounded border border-wine/60 bg-wine/10 px-1.5 py-0.5 text-wine-bright">Não realizada</span> : <Passo rotulo="Realizada" em={l.realizadaEm} />}
+                      <span className="text-stone-600">→</span>
+                      <Passo rotulo="Venda" em={l.vendaEm} />
+                    </span>
+                  </td>
+                  <td className={`${tdClasse} text-stone-300`}>
+                    {l.etapa}
+                    {l.status === "lost" && l.motivoPerda ? <p className="text-[11px] text-stone-500">{l.motivoPerda}</p> : null}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {lista.length === 0 && <p className="p-4 text-sm text-stone-500">Nenhum lead do Tráfego Pago com passo no mês nesta visão.</p>}
+      </div>
+    </div>
   );
 }

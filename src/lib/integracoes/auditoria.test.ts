@@ -74,3 +74,27 @@ describe("base da auditoria", () => {
     expect(r.passos.map((p) => `${p.etapa}:${p.quem}`)).toEqual(["Reunião Agendada:Vinícius", "No Show:Vinícius", "Reunião Agendada:Vinícius", "Ganho:Vinícius"]);
   });
 });
+
+describe("base da auditoria: Inbound completo, sem lead falso, venda só com ganho", () => {
+  it("inclui o lead do Inbound que só entrou, tira o lead falso e não conta venda desfeita", async () => {
+    const { montarAuditoria } = await import("./auditoria");
+    const { CRM_POR_NEGOCIO } = await import("./config");
+    const cfg = CRM_POR_NEGOCIO.vorp;
+    const base = { faturamento: null, cargo: null, valor: 0, mrr: null, empresa: null, produtos: null, closer_user_id: null, sdr_user_id: null, fechado_em: null, stage_id: null };
+    const deals = [
+      { ...base, deal_id: "novo", nome: "Só entrou", canal: "trafego", status: "open", criado_em: "2026-11-05T12:00:00Z", responsavel_user_id: "jorge", faturamento: "entre_400_mil_e_1_milhao", cargo: "diretor" },
+      { ...base, deal_id: "falso", nome: "Falso", canal: "trafego", status: "lost", criado_em: "2026-11-05T12:00:00Z", responsavel_user_id: "jorge", motivo_perda: "Lead Falso" },
+      { ...base, deal_id: "frio", nome: "Outbound sem reunião", canal: "outbound", status: "open", criado_em: "2026-11-05T12:00:00Z", responsavel_user_id: "ryq" },
+      { ...base, deal_id: "desfeita", nome: "Venda desfeita", canal: "outbound", status: "open", criado_em: "2026-11-01T12:00:00Z", responsavel_user_id: "ryq" },
+    ];
+    const eventos = [
+      { deal_id: "desfeita", stage_id: "722cd95f-5518-4fcf-8229-3bb4aea55a7d", ocorrido_em: "2026-11-02T12:00:00Z" },
+      { deal_id: "desfeita", stage_id: "cmq9wwt8l024a41npns90puld", ocorrido_em: "2026-11-10T12:00:00Z" },
+    ];
+    const leads = montarAuditoria({ deals: deals as never, extras: new Map(), eventos, cfg, etapas: new Map(), responsaveis: new Map(), vendedores: new Map(), nomes: { jorge: "Jorge", ryq: "Marcus" } });
+    expect(leads.map((l) => l.nome).sort()).toEqual(["Só entrou", "Venda desfeita"]);
+    const novo = leads.find((l) => l.nome === "Só entrou")!;
+    expect(novo).toMatchObject({ agendadaEm: null, criadoEm: "2026-11-05T12:00:00Z", mql: true, preVendas: "Jorge" });
+    expect(leads.find((l) => l.nome === "Venda desfeita")!.vendaEm).toBeNull();
+  });
+});
