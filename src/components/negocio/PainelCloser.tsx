@@ -30,7 +30,7 @@ export function ReunioesDoDia({ lista, rotulo = "SDR" }: { lista: ReuniaoDoDia[]
             <li key={r.id} className="text-[11px] leading-tight">
               <span className="font-semibold text-gold-bright">{hora(r.quando, r.quandoTexto)}</span> <span className="text-stone-100">{r.nome}</span>
               <span className="block text-stone-500">
-                {rotulo} {r.sdr ?? "—"} · <span className={SITUACAO[r.situacao].classe}>{SITUACAO[r.situacao].texto}</span>
+                {rotulo} {r.sdr ?? "—"}{r.com ? ` · com ${r.com}` : ""} · <span className={SITUACAO[r.situacao].classe}>{SITUACAO[r.situacao].texto}</span>
               </span>
             </li>
           ))}

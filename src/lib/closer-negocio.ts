@@ -34,6 +34,8 @@ export type ReuniaoDoDia = {
   quando: string | null;
   quandoTexto: string | null;
   sdr: string | null;
+  /** Com quem é a reunião, quando o lead foi repassado (visão do BDR/SDR). */
+  com?: string | null;
   situacao: "a_acontecer" | "realizada" | "no_show";
   rqa: StatusRqa;
 };
@@ -85,6 +87,7 @@ export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, a
         quando,
         quandoTexto: quando ? null : l.reuniaoMarcada,
         sdr: l.preVendas,
+        com: l.closer ?? (l.responsavel && l.responsavel !== l.preVendas ? l.responsavel : null),
         situacao: l.situacao as ReuniaoDoDia["situacao"],
         rqa: statusRqa(l.rqa),
       };

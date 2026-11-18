@@ -16,6 +16,8 @@ import { buscarContextoKpis, buscarLinhasKpis } from "@/lib/compromisso-kpis";
 import { buscarPainelCloser, vinculoCloser } from "@/lib/closer-negocio";
 import { createAdminClient } from "@/lib/supabase/admin";
 import CompromissoCloser from "@/components/negocio/CompromissoCloser";
+import CompromissoBdr from "@/components/negocio/CompromissoBdr";
+import { vinculoPreVendas } from "@/lib/sdr-negocio";
 
 type CompromissoRow = StreakRow;
 
@@ -65,6 +67,22 @@ export default async function CompromissoPage() {
         return <CompromissoCloser painel={painel} hoje={hoje} />;
       } catch (e) {
         console.error("Compromisso do closer falhou", e);
+      }
+    }
+  }
+
+  // BDR do Match Sales: agendadas manual (ele lança), realizadas automática (reuniões dele marcadas para hoje).
+  {
+    const bdr = await vinculoPreVendas(supabase, meId);
+    if (bdr && bdr.slug === "matchsales") {
+      try {
+        const [painel, linhas] = await Promise.all([
+          buscarPainelCloser(createAdminClient(), bdr, { id: meId, nome: viewer.effectiveNome }, { ano: Number(hoje.slice(0, 4)), mes: Number(hoje.slice(5, 7)), hoje }),
+          buscarLinhasKpis(supabase, meId, bdr.id, hoje),
+        ]);
+        return <CompromissoBdr painel={painel} hoje={hoje} negocioId={bdr.id} agendadas={linhas.find((l) => l.chave === "reunioes_agendadas" && l.data === hoje) ?? null} />;
+      } catch (e) {
+        console.error("Compromisso do BDR falhou", e);
       }
     }
   }

@@ -4,6 +4,37 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { hojeBR } from "@/lib/data-br";
 
+/** BDR do Match Sales: só o compromisso de reuniões agendadas é manual (meta e realizado); as realizadas são automáticas. */
+export async function salvarAgendadasBdr(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+  const negocioId = String(formData.get("negocio_id") ?? "");
+  if (!negocioId) throw new Error("Negócio ausente.");
+  const { data: vinc } = await supabase.from("profile_negocios").select("cargo").eq("profile_id", user.id).eq("negocio_id", negocioId).maybeSingle();
+  if (!vinc || !["bdr", "sdr", "pre_vendas"].includes(vinc.cargo)) throw new Error("Você não é pré-vendas nesse negócio.");
+  const { data: def } = await supabase.from("kpi_definicoes").select("chave, label").eq("negocio_id", negocioId).eq("chave", "reunioes_agendadas").eq("ativo", true).maybeSingle();
+  if (!def) throw new Error("Indicador de reuniões agendadas não cadastrado.");
+  const num = (v: FormDataEntryValue | null) => Math.max(0, Number(String(v ?? "0").replace(",", ".")) || 0);
+  const { error } = await supabase.from("compromisso_kpis").upsert(
+    {
+      profile_id: user.id,
+      negocio_id: negocioId,
+      data: hojeBR(),
+      chave: def.chave,
+      label: def.label,
+      meta: num(formData.get("meta")),
+      realizado: num(formData.get("realizado")),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "profile_id,negocio_id,data,chave" },
+  );
+  if (error) throw new Error(error.message);
+  revalidatePath("/compromisso");
+}
+
 /** Grava o compromisso (meta do dia) e o realizado de cada KPI do cargo.
  *  Os KPIs válidos vêm do banco (kpi_definicoes), não do formulário. */
 export async function salvarCompromissoKpis(formData: FormData) {
