@@ -646,6 +646,30 @@ describe("valorDaImplantacao", () => {
   });
 });
 
+describe("cards de valor (vendido e follow)", () => {
+  it("follow = abertos no Funil de Vendas por temperatura; vendido = vendas do mês; os dois com quem agendou", async () => {
+    const { montarFollow } = await import("./realizado");
+    const FV = "cmq9wwt6u024441npj37o5f2y";
+    const c = { ...cfg, follow: { pipelineId: FV, campoTemperatura: "temperatura" } };
+    const deals = [
+      deal({ deal_id: "q", nome: "Quente SA", pipeline_id: FV, status: "open", valor: 22000, temperatura: "quente", responsavel_user_id: "jorge" }),
+      deal({ deal_id: "s", nome: "Sem temp", pipeline_id: FV, status: "open", valor: 5000, responsavel_user_id: "jorge" }),
+      deal({ deal_id: "p", nome: "Perdido", pipeline_id: FV, status: "lost", valor: 9000, temperatura: "frio" }),
+      deal({ deal_id: "o", nome: "No Outbound", pipeline_id: "outro", status: "open", valor: 1000, temperatura: "morno" }),
+      deal({ deal_id: "w", nome: "Ganho", pipeline_id: FV, status: "won", valor: 7000, stage_id: ST.ganhoVendas }),
+    ];
+    const eventos = [ev("q", ST.agendadaOut, "2026-11-05T13:00:00Z"), ev("w", ST.agendadaOut, "2026-11-03T13:00:00Z"), ev("w", ST.ganhoVendas, "2026-11-10T13:00:00Z")];
+    const resp = new Map<string, [string, string][]>([["q", [["2026-11-05T13:00:00Z", "vini"]]], ["w", [["2026-11-03T13:00:00Z", "ryq"]]]]);
+    const itens = leadsDoRealizado(deals, eventos, c, "2026-11-01", "2026-12-01");
+    const f = montarFollow(deals, eventos, c, resp, itens);
+    expect(f.abertos.map((a) => [a.nome, a.valor, a.temperatura, a.pessoa])).toEqual([
+      ["Quente SA", 22000, "quente", "vini"],
+      ["Sem temp", 5000, null, "jorge"],
+    ]);
+    expect(f.vendas["2026-11"].map((v) => [v.nome, v.valor, v.pessoa, v.data])).toEqual([["Ganho", 7000, "ryq", "2026-11-10"]]);
+  });
+});
+
 describe("tipoDeContrato", () => {
   it("lê o campo configurado ou o primeiro com 'tipo' e 'contrato' no nome", () => {
     expect(tipoDeContrato({ tipo_de_contrato: "Semestral" })).toBe("Semestral");

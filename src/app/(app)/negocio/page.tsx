@@ -12,6 +12,9 @@ import { buscarLeadsDoFunil, buscarListasGravadas, buscarRankingGravado } from "
 import type { Qualificacao, Recorte } from "@/lib/integracoes/realizado";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RealizadoComLeads } from "@/components/negocio/RealizadoComLeads";
+import { CardsValor } from "@/components/negocio/CardsValor";
+import type { FollowGravado } from "@/lib/integracoes/realizado";
+import { CRM_POR_NEGOCIO } from "@/lib/integracoes/config";
 import { buscarComissoesNegocios } from "@/lib/comissao-negocio";
 import { buscarResumoSunne, type SunneResumo } from "@/lib/sunne";
 import ContasSunne from "@/components/negocio/ContasSunne";
@@ -194,6 +197,16 @@ export default async function NegocioDashboardPage({
         .sort((a, b) => Number(time.includes(b.id)) - Number(time.includes(a.id)) || a.nome.localeCompare(b.nome, "pt-BR"));
       const pedido = canal === "outbound" ? searchParams.pvOut : searchParams.pvIn;
       filtroPv[canal] = { opcoes, escolhido: opcoes.some((o) => o.id === pedido) ? pedido! : null, divisor: time.length || opcoes.length };
+    }
+  }
+  // Cards de valor embaixo dos funis (só negócios com follow, ex.: Acrópole): gravados pela sincronização.
+  let follow: FollowGravado | null = null;
+  if (comVisoes && CRM_POR_NEGOCIO[atual.slug]?.follow) {
+    try {
+      const { data } = await createAdminClient().from("integracao_estado").select("valor").eq("chave", `follow:${atual.slug}`).maybeSingle();
+      follow = (data?.valor as FollowGravado | null) ?? null;
+    } catch (e) {
+      console.error("follow falhou:", e);
     }
   }
   const pessoasEscolhidas: Partial<Record<CanalDoFunil, { id: string; divisor: number }>> = {};
@@ -586,6 +599,13 @@ export default async function NegocioDashboardPage({
                       );
                     })}
                   </div>
+
+                  {/* Valores: vendido no mês e follow (Funil de Vendas) por temperatura, com o filtro de pré-vendas */}
+                  {follow && (fu.canal === "outbound" || fu.canal === "inbound") && (() => {
+                    const pv = pessoasEscolhidas[fu.canal]?.id;
+                    const doFunil = (l: { canal: string; pessoa: string | null }) => l.canal === fu.canal && (!pv || l.pessoa === pv);
+                    return <CardsValor vendas={(follow.vendas[mesParam] ?? []).filter(doFunil)} abertos={follow.abertos.filter(doFunil)} cor={cor} />;
+                  })()}
                 </div>
               );
             })}

@@ -61,6 +61,9 @@ export type ConfigCrm = {
   inicioHistorico?: string;
   /** Sincroniza numa chamada própria (/api/sync-integracoes?negocio=slug), com o tempo da função só para ele. */
   syncSeparado?: boolean;
+  /** Cards de valor embaixo dos funis (vendido no mês e follow por temperatura): o funil de onde vem o follow
+   *  (os leads abertos nele) e o campo de temperatura. Só nos negócios que têm o campo (Acrópole). */
+  follow?: { pipelineId: string; campoTemperatura: string };
 };
 
 export type CriterioMql = "faturamento" | "cargo" | "tamanho_time";
@@ -120,6 +123,8 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     emailsAlternativos: { "arthur.ulisses@grupovorp.com": "arthurulisses1@gmail.com", "bruno.brito@grupovorp.com": "hemerson.brito@grupovorp.com" },
     motivosLeadFalso: ["Lead Falso"], // motivo de perda criado no Pipefácil em 16/11/2026
     pipelinesSemNivelNaCriacao: ["cmq9wwt6u024441npj37o5f2y"], // [Vorp] Funil de Vendas
+    // Follow: os leads abertos no Funil de Vendas, pela Temperatura (17/11/2026; a Match Sales não tem o campo).
+    follow: { pipelineId: "cmq9wwt6u024441npj37o5f2y", campoTemperatura: "temperatura" },
     stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],
     canais: { outbound: "outbound", trafego: "inbound", referido: "indicacao" },
     campos: { faturamento: "quanto_sua_empresa_fatura_por_mes", cargo: "qual_seu_cargo_atual", origem: "origem_lead" },
