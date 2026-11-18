@@ -34,6 +34,8 @@ import { buscarPainelHead } from "@/lib/head-negocio";
 import { buscarPainelEnergia, vinculoEnergia } from "@/lib/energy-time";
 import { MuralEnergia, MuralEnergiaHead } from "@/components/negocio/PainelEnergia";
 import { MuralHead } from "@/components/negocio/PainelHead";
+import { MuralFinance, MuralFinanceHead } from "@/components/negocio/PainelFinance";
+import { SLUG_FINANCE, buscarPainelFinance } from "@/lib/finance-time";
 import DestaqueSetup from "@/components/negocio/DestaqueSetup";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -318,6 +320,29 @@ export default async function MuralPage({
       const eu = pn?.pessoas.find((p) => p.id === meId);
       const time = v.cargo === "head";
       if (!pn || (!time && (!eu || eu.meta === null))) continue;
+      // Vorp Finance: paces de R$, entrevistas e subidos e o funil em R$ por etapa (executivo: o dele; Head: o do time).
+      if (pn.negocio.slug === SLUG_FINANCE) {
+        try {
+          const painelF = await buscarPainelFinance(createAdminClient(), pn, { ano, mes, hoje });
+          const corF = NEGOCIO_COR[SLUG_FINANCE] ?? "201 162 74";
+          const rotuloF = MESES[mes - 1] + " de " + ano;
+          metaExecutivo = time ? (
+            <MuralFinanceHead
+              painel={painelF}
+              equipe={nomeEquipe(pn.negocio)}
+              cor={corF}
+              mesLabel={rotuloF}
+              mesAtual={mesEhAtual}
+              vendasParaAprovar={painelF.funil.find((e) => e.chave === "venda")?.leads.length ?? 0}
+            />
+          ) : (
+            <MuralFinance painel={painelF} pessoaId={meId} equipe={nomeEquipe(pn.negocio)} cor={corF} mesLabel={rotuloF} mesAtual={mesEhAtual} />
+          );
+          break;
+        } catch (e) {
+          console.error("Mural: painel do Finance falhou", e);
+        }
+      }
       // Head de um negócio com CRM (Match Sales): painel de gestão do time (pace, reuniões e quem precisa de atenção).
       if (time && ehPainelCloser(pn.negocio.slug)) {
         try {
