@@ -183,16 +183,6 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
         </div>
       </div>
 
-      <p className="text-xs text-stone-500">
-        Fechamentos até outubro/2026 seguem o modelo antigo: <Link href="/comissao?ano=2026&mes=10" className="text-gold hover:underline">ver outubro</Link>.
-      </p>
-
-      {mostraFinance && <ExplicacaoComissaoFinance completo={ehDiretor || headDe.has("vorp-finance")} />}
-
-      {blocoSdr}
-
-      {blocoEnergia}
-
       {energiaDoHead !== null && (
         <div className="rounded-lg border border-gold/40 bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Sua comissão total em {MESES[mes]} · a pagar em {dataBR(dados[0]?.pagamento ?? seg + "-15")}</p>
@@ -211,6 +201,16 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
           </ul>
         </div>
       )}
+
+      <p className="text-xs text-stone-500">
+        Fechamentos até outubro/2026 seguem o modelo antigo: <Link href="/comissao?ano=2026&mes=10" className="text-gold hover:underline">ver outubro</Link>.
+      </p>
+
+      {mostraFinance && <ExplicacaoComissaoFinance completo={ehDiretor || headDe.has("vorp-finance")} />}
+
+      {blocoSdr}
+
+      {blocoEnergia}
 
       {visiveis.length > 1 && (
         <div className="flex flex-wrap gap-2 text-sm">
