@@ -64,6 +64,8 @@ export type ConfigCrm = {
   /** Cards de valor embaixo dos funis (vendido no mês e follow por temperatura): o funil de onde vem o follow
    *  (os leads abertos nele) e o campo de temperatura. Só nos negócios que têm o campo (Acrópole). */
   follow?: { pipelineId: string; campoTemperatura: string };
+  /** RQA (Auditoria → RQA): valor pago por RQA aprovada pelo gerente e primeiro mês com o critério. */
+  rqa?: { valor: number; desde: string };
 };
 
 export type CriterioMql = "faturamento" | "cargo" | "tamanho_time";
@@ -125,6 +127,9 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     pipelinesSemNivelNaCriacao: ["cmq9wwt6u024441npj37o5f2y"], // [Vorp] Funil de Vendas
     // Follow: os leads abertos no Funil de Vendas, pela Temperatura (17/11/2026; a Match Sales não tem o campo).
     follow: { pipelineId: "cmq9wwt6u024441npj37o5f2y", campoTemperatura: "temperatura" },
+    // RQA: R$ 30 por RQA aprovada pelo gerente (era R$ 80 no sistema antigo); no Senatus, de novembro/2026
+    // em diante (outubro ficou no sistema antigo; 18/11/2026).
+    rqa: { valor: 30, desde: "2026-11" },
     stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],
     canais: { outbound: "outbound", trafego: "inbound", referido: "indicacao" },
     campos: { faturamento: "quanto_sua_empresa_fatura_por_mes", cargo: "qual_seu_cargo_atual", origem: "origem_lead" },

@@ -34,6 +34,9 @@ export type LeadAuditoria = {
   cargoRotulo?: string | null;
   timingRotulo?: string | null;
   rqa: string | null;
+  /** Quando o closer não validou a RQA: os motivos (texto do CRM) e a justificativa. */
+  rqaMotivos?: string[];
+  rqaJustificativa?: string | null;
   temperatura: string | null;
   valor: number;
   mrr: number | null;
@@ -156,6 +159,11 @@ export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsav
       cargoRotulo: rotulo(cfg.campos.cargo, d.cargo),
       timingRotulo: rotulo("bant_timing", texto(p.bant_timing)),
       rqa: texto(p.rqa_validada),
+      rqaMotivos: (Array.isArray(p.rqa_motivo_desqualificacao) ? p.rqa_motivo_desqualificacao : texto(p.rqa_motivo_desqualificacao)?.split(",") ?? [])
+        .map((m) => String(m).trim())
+        .filter(Boolean)
+        .map((m) => rotulos.rqa_motivo_desqualificacao?.[m] ?? m),
+      rqaJustificativa: texto(p.rqa_justificativa),
       temperatura: texto(p.temperatura),
       valor: Number(d.valor ?? 0),
       mrr: d.mrr != null && Number(d.mrr) > 0 ? Number(d.mrr) : null,

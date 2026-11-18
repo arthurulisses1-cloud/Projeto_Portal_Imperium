@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hojeBR } from "@/lib/data-br";
 import { podeVerArea } from "@/lib/permissoes-analista";
 import { vinculoCloser } from "@/lib/closer-negocio";
+import { pagamentoDoMes, resumirRqa, situacaoDaRqa, bantPreenchidos, type SituacaoRqa, type ValidacaoGerente } from "@/lib/rqa";
+import { podeValidarRqa, salvarValidacaoRqa } from "./actions";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { CRM_POR_NEGOCIO } from "@/lib/integracoes/config";
 import type { AuditoriaGravada, LeadAuditoria, SituacaoReuniao } from "@/lib/integracoes/auditoria";
@@ -54,6 +56,10 @@ type Params = {
   base?: string;
   situacao?: string;
   modo?: string;
+  /** RQA: situação da RQA, validação do gerente (aprovada, reprovada, sem) e BANT (completo, incompleto). */
+  sitR?: string;
+  ger?: string;
+  bant?: string;
   /** Pós-reunião: etapa atual, RQA (sim, nao, sem) e mês da previsão de fechamento (AAAA-MM ou "sem"). */
   etapa?: string;
   rqa?: string;
@@ -108,7 +114,10 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
   const [ano, mes] = mesParam.split("-").map(Number);
   const ant = mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, "0")}`;
   const seg = mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;
-  const ABAS = ["closer", "leads_outbound", "leads_inbound"];
+  // RQA: só nos negócios com critério de RQA (Acrópole) e só para a gestão (o closer não vê; 18/11/2026).
+  const cfgRqa = CRM_POR_NEGOCIO[atual.slug]?.rqa;
+  const veRqa = !!cfgRqa && (eu.role === "diretor" || eu.role === "lider" || eu.role === "analista");
+  const ABAS = ["closer", "leads_outbound", "leads_inbound", ...(veRqa ? ["rqa"] : [])];
   const aba = ABAS.includes(searchParams.aba ?? "") ? searchParams.aba! : "reunioes";
   const f: Filtros = { pv: searchParams.pv ?? "", closer: searchParams.closer ?? "", canal: searchParams.canal ?? "", q: (searchParams.q ?? "").trim() };
 
@@ -117,6 +126,24 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
   // A base tem também os leads do Inbound que só entraram ou conectaram (para "Leads Inbound do período");
   // as demais sub-abas olham só quem chegou a Reunião Agendada.
   const baseToda = base?.leads ?? [];
+  // Validações do gerente (Auditoria → RQA): lidas pelo servidor; sem a tabela (migration 0118 ainda não
+  // aplicada), a página mostra a RQA do closer e avisa.
+  const gerenteRqa = new Map<string, ValidacaoGerente>();
+  let rqaIndisponivel = false;
+  let podeValidar = false;
+  let nomesPerfis: Record<string, string> = {};
+  if (aba === "rqa" && veRqa) {
+    const admin = createAdminClient();
+    const { data: vals, error } = await admin.from("rqa_gerente").select("deal_id, decisao, observacao, atualizado_em, atualizado_por").eq("negocio_id", atual.id);
+    if (error) rqaIndisponivel = true;
+    for (const v of vals ?? []) gerenteRqa.set(v.deal_id, { decisao: v.decisao, observacao: v.observacao, atualizadoEm: v.atualizado_em, atualizadoPor: v.atualizado_por });
+    podeValidar = !rqaIndisponivel && (await podeValidarRqa(supabase, user.id, eu.role, atual.id));
+    const ids = Array.from(new Set(Array.from(gerenteRqa.values()).map((v) => v.atualizadoPor).filter((x): x is string => !!x)));
+    if (ids.length) {
+      const { data: perfis } = await admin.from("profiles").select("id, full_name").in("id", ids);
+      nomesPerfis = Object.fromEntries((perfis ?? []).map((p) => [p.id, p.full_name]));
+    }
+  }
   const todos = baseToda.filter((l) => l.agendadaEm);
   const noMes = (iso: string | null) => dataBR(iso)?.slice(0, 7) === mesParam;
 
@@ -134,7 +161,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
 
   const href = (mudar: Partial<Params>) => {
     const p = new URLSearchParams();
-    const tudo: Params = { negocio: atual.slug, mes: mesParam, aba, pv: f.pv, closer: f.closer, canal: f.canal, q: f.q, base: searchParams.base, situacao: searchParams.situacao, modo: searchParams.modo, fat: searchParams.fat, diaR: searchParams.diaR, temp: searchParams.temp, etapa: searchParams.etapa, rqa: searchParams.rqa, prev: searchParams.prev, vq: searchParams.vq, ...mudar };
+    const tudo: Params = { negocio: atual.slug, mes: mesParam, aba, pv: f.pv, closer: f.closer, canal: f.canal, q: f.q, base: searchParams.base, situacao: searchParams.situacao, modo: searchParams.modo, fat: searchParams.fat, diaR: searchParams.diaR, temp: searchParams.temp, sitR: searchParams.sitR, ger: searchParams.ger, bant: searchParams.bant, etapa: searchParams.etapa, rqa: searchParams.rqa, prev: searchParams.prev, vq: searchParams.vq, ...mudar };
     for (const [k, v] of Object.entries(tudo)) if (v) p.set(k, v);
     return `/auditoria-comercial?${p}`;
   };
@@ -182,6 +209,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
             ["closer", "Pós-reunião (closer)"],
             ["leads_outbound", "Leads Outbound do período"],
             ["leads_inbound", "Leads Inbound do período"],
+            ...(veRqa ? ([["rqa", "RQA"]] as const) : []),
           ] as const
         ).map(([k, rotulo]) => (
           <Link
@@ -217,7 +245,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
             ))}
           </select>
         </Campo>
-        {!aba.startsWith("leads_") && (
+        {!aba.startsWith("leads_") && aba !== "rqa" && (
         <Campo rotulo="Canal">
           <select name="canal" defaultValue={f.canal} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
             <option value="">Todos</option>
@@ -308,6 +336,37 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
             </select>
           </Campo>
         )}
+        {aba === "rqa" && (
+          <Campo rotulo="Situação da RQA">
+            <select name="sitR" defaultValue={searchParams.sitR ?? ""} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
+              <option value="">Todas</option>
+              {Object.entries(SITUACAO_RQA).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v.texto}
+                </option>
+              ))}
+            </select>
+          </Campo>
+        )}
+        {aba === "rqa" && (
+          <Campo rotulo="Validação do gerente">
+            <select name="ger" defaultValue={searchParams.ger ?? ""} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
+              <option value="">Todas</option>
+              <option value="aprovada">Aprovada</option>
+              <option value="reprovada">Reprovada</option>
+              <option value="sem">Sem validação</option>
+            </select>
+          </Campo>
+        )}
+        {aba === "rqa" && (
+          <Campo rotulo="BANT">
+            <select name="bant" defaultValue={searchParams.bant ?? ""} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
+              <option value="">Todos</option>
+              <option value="completo">Os 4 preenchidos</option>
+              <option value="incompleto">Falta algum</option>
+            </select>
+          </Campo>
+        )}
         <Campo rotulo="Buscar">
           <input
             name="q"
@@ -319,7 +378,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
         <button type="submit" className="rounded border border-gold/60 px-3 py-1 text-gold-bright hover:bg-gold/10">
           Filtrar
         </button>
-        {(f.pv || f.closer || f.canal || f.q || searchParams.situacao || searchParams.temp || searchParams.fat || searchParams.diaR || searchParams.etapa || searchParams.rqa || searchParams.prev) && (
+        {(f.pv || f.closer || f.canal || f.q || searchParams.situacao || searchParams.temp || searchParams.fat || searchParams.diaR || searchParams.etapa || searchParams.rqa || searchParams.prev || searchParams.sitR || searchParams.ger || searchParams.bant) && (
           <Link href={`/auditoria-comercial?negocio=${atual.slug}&mes=${mesParam}&aba=${aba}`} className="px-2 py-1 text-stone-400 hover:text-stone-200">
             Limpar filtros
           </Link>
@@ -332,6 +391,22 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
         <AbaReunioes todos={todos} f={f} noMes={noMes} mesParam={mesParam} sp={searchParams} href={href} />
       ) : aba === "closer" ? (
         <AbaCloser todos={todos} f={f} noMes={noMes} sp={searchParams} href={href} />
+      ) : aba === "rqa" && cfgRqa ? (
+        <AbaRqa
+          todos={todos}
+          f={f}
+          noMes={noMes}
+          sp={searchParams}
+          href={href}
+          mesParam={mesParam}
+          valor={cfgRqa.valor}
+          desde={cfgRqa.desde}
+          gerente={gerenteRqa}
+          indisponivel={rqaIndisponivel}
+          podeValidar={podeValidar}
+          negocio={atual.slug}
+          nomes={nomesPerfis}
+        />
       ) : aba === "leads_outbound" ? (
         <AbaLeadsDoPeriodo todos={todos} f={f} noMes={noMes} canal="outbound" href={href} />
       ) : (
@@ -1031,4 +1106,248 @@ function SeloTemperatura({ t }: { t: string | null }) {
 function mesCurto(m: string): string {
   const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
   return `${MESES_CURTOS[Number(m.slice(5, 7)) - 1]}/${m.slice(2, 4)}`;
+}
+
+// ------------------------------------------------------------ RQA (só Acrópole, só gestão)
+const SITUACAO_RQA: Record<SituacaoRqa, { texto: string; classe: string; dica: string }> = {
+  validada: { texto: "Validada", classe: "border-success/50 bg-success/10 text-success-bright", dica: 'O closer marcou "RQA validada?" = Sim.' },
+  nao_validada: { texto: "Não validada", classe: "border-wine/60 bg-wine/10 text-wine-bright", dica: 'O closer marcou "RQA validada?" = Não, com o motivo e a justificativa.' },
+  aguardando: { texto: "Aguardando closer", classe: "border-gold/50 text-gold-bright", dica: "Sem a validação e o lead ainda está na Reunião Realizada: o closer ainda vai validar." },
+  sem_registro: { texto: "Sem registro", classe: "border-amber-400/60 bg-amber-400/10 text-amber-300", dica: "Saiu da Reunião Realizada (ou foi perdido) sem a validação: acertar no Pipefácil." },
+};
+
+function AbaRqa({
+  todos,
+  f,
+  noMes,
+  sp,
+  href,
+  mesParam,
+  valor,
+  desde,
+  gerente,
+  indisponivel,
+  podeValidar,
+  negocio,
+  nomes,
+}: {
+  todos: LeadAuditoria[];
+  f: Filtros;
+  noMes: (iso: string | null) => boolean;
+  sp: Params;
+  href: (m: Partial<Params>) => string;
+  mesParam: string;
+  valor: number;
+  desde: string;
+  gerente: Map<string, ValidacaoGerente>;
+  indisponivel: boolean;
+  podeValidar: boolean;
+  negocio: string;
+  nomes: Record<string, string>;
+}) {
+  if (mesParam < desde) return <p className="text-sm text-stone-500">A RQA no Senatus começa em {mesCurto(desde)}. Os meses anteriores ficaram no sistema antigo.</p>;
+  // As reuniões realizadas do mês (o BDR é quem agendou, como no Pace), com os filtros.
+  const doMes = todos.filter((l) => l.realizadaEm && noMes(l.realizadaEm) && passaFiltros(l, { ...f, canal: "" }));
+  const lista = doMes
+    .filter(
+      (l) =>
+        (!sp.sitR || situacaoDaRqa(l) === sp.sitR) &&
+        (!sp.ger || (sp.ger === "sem" ? !gerente.has(l.id) : gerente.get(l.id)?.decisao === sp.ger)) &&
+        (!sp.bant || (sp.bant === "completo" ? bantPreenchidos(l) === 4 : bantPreenchidos(l) < 4)),
+    )
+    .sort((a, b) => (b.realizadaEm ?? "").localeCompare(a.realizadaEm ?? ""));
+  const r = resumirRqa(lista, gerente, valor);
+  const pag = pagamentoDoMes(mesParam);
+  const pagamento = `${pag.slice(8, 10)}/${pag.slice(5, 7)}`;
+  const porBdr = new Map<string, LeadAuditoria[]>();
+  for (const l of lista) porBdr.set(l.preVendas ?? "Sem BDR", [...(porBdr.get(l.preVendas ?? "Sem BDR") ?? []), l]);
+  const linhasBdr = Array.from(porBdr, ([nome, ls]) => ({ nome, ...resumirRqa(ls, gerente, valor) })).sort((a, b) => b.validada - a.validada || b.realizadas - a.realizadas);
+  const regularizar = lista.filter((l) => situacaoDaRqa(l) === "sem_registro");
+  return (
+    <div className="space-y-5">
+      {indisponivel && (
+        <p className="rounded-lg border border-amber-400/50 bg-amber-400/10 p-3 text-sm text-amber-300">
+          A validação do gerente ainda não está disponível (falta aplicar a migration 0118 no banco). A página mostra a RQA do closer; a comissão oficial aparece quando a
+          validação estiver ativa.
+        </p>
+      )}
+      <Kpis
+        colunas={4}
+        itens={[
+          { rotulo: "Realizadas", valor: String(r.realizadas), sub: `em ${mesCurto(mesParam)}`, dica: "Reuniões realizadas no mês (com os filtros). O BDR é quem agendou." },
+          { rotulo: "RQA validadas", valor: String(r.validada), sub: r.realizadas ? `${Math.round((r.validada / r.realizadas) * 100)}% das realizadas` : "—", dica: 'O closer marcou "RQA validada?" = Sim.' },
+          { rotulo: "Não validadas", valor: String(r.nao_validada), sub: "o closer recusou", dica: SITUACAO_RQA.nao_validada.dica },
+          { rotulo: "Aguardando closer", valor: String(r.aguardando), sub: "ainda na Reunião Realizada", dica: SITUACAO_RQA.aguardando.dica },
+        ]}
+      />
+      <Kpis
+        colunas={4}
+        itens={[
+          { rotulo: "Sem registro", valor: String(r.sem_registro), sub: r.sem_registro ? "acertar no Pipefácil" : "nenhuma pendência", dica: SITUACAO_RQA.sem_registro.dica },
+          { rotulo: "BANT incompleto", valor: String(r.bantIncompleto), sub: "falta algum dos 4 campos", dica: "Faturamento, Cargo, Necessidade ou Timing vazio no lead." },
+          { rotulo: "Previsão", valor: moeda(r.previsao), sub: `${r.validada} validadas pelo closer × ${moeda(valor)}`, dica: "O que vem, pela validação do closer. Quem paga é o gerente." },
+          {
+            rotulo: "Comissão oficial",
+            valor: moeda(r.comissao),
+            sub: `${r.aprovadas} aprovadas pelo gerente × ${moeda(valor)} · paga em ${pagamento}`,
+            dica: "Aprovadas pelo gerente comercial × valor da RQA. Paga no dia 15 do mês seguinte. Fica só nesta página (não entra na Comissão do mês).",
+          },
+        ]}
+      />
+
+      {regularizar.length > 0 && (
+        <section className="rounded-lg border border-amber-400/40 bg-amber-400/5 p-4">
+          <p className="text-[10px] uppercase tracking-widest text-amber-300">Para acertar no CRM</p>
+          <p className="mt-0.5 text-sm font-semibold text-stone-100">Saíram da Reunião Realizada sem registro ({regularizar.length})</p>
+          <p className="mt-0.5 text-[12px] text-stone-400">
+            Já saíram da Reunião Realizada do Funil de Vendas (ou foram perdidos), mas o campo &quot;RQA validada?&quot; está vazio. Abra o lead no Pipefácil e preencha a
+            validação (e, se não validada, o motivo e a justificativa). Na próxima sincronização ele sai daqui.
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-2 text-xs">
+            {regularizar.map((l) => (
+              <li key={l.id} className="rounded border border-imperium-line bg-imperium-surface px-2 py-1">
+                <LinkLead l={l} href={href} /> <span className="text-stone-500">#{l.seq} · {l.etapa} · {l.closer ?? l.responsavel ?? "—"}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+        <p className="text-[10px] uppercase tracking-widest text-stone-500">Comissão</p>
+        <p className="text-sm font-semibold text-stone-100">Por BDR</p>
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[900px] text-sm tabular-nums">
+            <thead className="border-b border-imperium-line">
+              <tr>
+                <th className={thClasse}>BDR</th>
+                {["Realizadas", "Validadas closer", "Não validadas", "Aguardando closer", "Sem registro", "BANT incompleto", "Aprovadas gerente", "Previsão", "Comissão oficial"].map((t) => (
+                  <th key={t} className={`${thClasse} text-right`}>
+                    {t}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-imperium-line/60">
+              {linhasBdr.map((b) => (
+                <tr key={b.nome}>
+                  <td className={tdClasse}>
+                    <Link href={href({ pv: b.nome === "Sem BDR" ? undefined : b.nome, lead: undefined })} className="text-stone-100 hover:text-gold-bright">
+                      {b.nome}
+                    </Link>
+                  </td>
+                  <td className={`${tdClasse} text-right`}>{b.realizadas}</td>
+                  <td className={`${tdClasse} text-right text-success-bright`}>{b.validada}</td>
+                  <td className={`${tdClasse} text-right`}>{b.nao_validada}</td>
+                  <td className={`${tdClasse} text-right`}>{b.aguardando}</td>
+                  <td className={`${tdClasse} text-right ${b.sem_registro ? "text-amber-300" : ""}`}>{b.sem_registro}</td>
+                  <td className={`${tdClasse} text-right`}>{b.bantIncompleto}</td>
+                  <td className={`${tdClasse} text-right`}>{b.aprovadas}</td>
+                  <td className={`${tdClasse} text-right`}>{moeda(b.previsao)}</td>
+                  <td className={`${tdClasse} text-right font-semibold text-stone-100`}>{moeda(b.comissao)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {linhasBdr.length === 0 && <p className="p-3 text-sm text-stone-500">Nenhuma reunião realizada com esses filtros.</p>}
+        </div>
+      </section>
+
+      <div className="overflow-x-auto rounded-lg border border-imperium-line bg-imperium-surface">
+        <p className="px-3 pt-3 text-[11px] text-stone-500">
+          B: Faturamento · A: Cargo · N: Necessidade · T: Timing (o BANT do lead, preenchido pelo BDR). Closer: o &quot;RQA validada?&quot; que o closer preenche para tirar o
+          lead da Reunião Realizada. Gerente: a validação do gerente comercial, aqui no Senatus (é ela que paga).
+        </p>
+        <table className="w-full min-w-[1500px] text-sm">
+          <thead className="border-b border-imperium-line">
+            <tr>
+              <th className={thClasse}>Lead</th>
+              <th className={thClasse}>BDR</th>
+              <th className={thClasse}>Realizada em</th>
+              <th className={thClasse}>Closer</th>
+              <BantCabecalho />
+              <th className={thClasse}>RQA do closer</th>
+              <th className={thClasse}>Gerente</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-imperium-line/60">
+            {lista.map((l) => {
+              const sit = SITUACAO_RQA[situacaoDaRqa(l)];
+              const g = gerente.get(l.id);
+              return (
+                <tr key={l.id} className="hover:bg-imperium-raised/40">
+                  <td className={tdClasse}>
+                    <LinkLead l={l} href={href} />
+                    <p className="text-[11px] text-stone-500">
+                      #{l.seq} · {l.etapa}
+                    </p>
+                  </td>
+                  <td className={tdClasse}>{l.preVendas ?? "—"}</td>
+                  <td className={`${tdClasse} whitespace-nowrap`}>{dia(l.realizadaEm)}</td>
+                  <td className={tdClasse}>{l.closer ?? l.responsavel ?? "—"}</td>
+                  <BantCelulas l={l} />
+                  <td className={`${tdClasse} min-w-[12rem]`}>
+                    <span title={sit.dica} className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] ${sit.classe}`}>
+                      {sit.texto}
+                    </span>
+                    {(l.rqaMotivos?.length ?? 0) > 0 && <p className="mt-1 text-[11px] text-stone-400">{l.rqaMotivos!.join(", ")}</p>}
+                    {l.rqaJustificativa && <p className="mt-0.5 text-[11px] italic text-stone-500">&quot;{l.rqaJustificativa}&quot;</p>}
+                  </td>
+                  <td className={`${tdClasse} min-w-[13rem]`}>
+                    {g ? (
+                      <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] ${g.decisao === "aprovada" ? SITUACAO_RQA.validada.classe : SITUACAO_RQA.nao_validada.classe}`}>
+                        {g.decisao === "aprovada" ? "Aprovada" : "Reprovada"}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-stone-500">sem validação</span>
+                    )}
+                    {g?.observacao && <p className="mt-1 text-[11px] text-stone-400">{g.observacao}</p>}
+                    {g && (
+                      <p className="text-[10px] text-stone-600">
+                        {g.atualizadoPor ? nomes[g.atualizadoPor] ?? "" : ""} {diaHora(g.atualizadoEm)}
+                      </p>
+                    )}
+                    {podeValidar && (
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-[11px] text-gold-bright hover:underline">{g ? "Alterar" : "Validar"}</summary>
+                        <form action={salvarValidacaoRqa} className="mt-1 space-y-1.5 rounded border border-imperium-line bg-imperium-raised p-2">
+                          <input type="hidden" name="negocio" value={negocio} />
+                          <input type="hidden" name="deal" value={l.id} />
+                          <div className="flex flex-wrap gap-2 text-[11px] text-stone-200">
+                            <label className="flex items-center gap-1">
+                              <input type="radio" name="decisao" value="aprovada" defaultChecked={g?.decisao !== "reprovada"} /> Aprovar
+                            </label>
+                            <label className="flex items-center gap-1">
+                              <input type="radio" name="decisao" value="reprovada" defaultChecked={g?.decisao === "reprovada"} /> Reprovar
+                            </label>
+                            {g && (
+                              <label className="flex items-center gap-1 text-stone-400">
+                                <input type="radio" name="decisao" value="limpar" /> Limpar
+                              </label>
+                            )}
+                          </div>
+                          <textarea
+                            name="observacao"
+                            defaultValue={g?.observacao ?? ""}
+                            maxLength={1000}
+                            rows={2}
+                            placeholder="Observação (opcional)"
+                            className="w-full rounded border border-imperium-line bg-imperium-surface px-2 py-1 text-[11px] text-stone-200 placeholder:text-stone-600"
+                          />
+                          <button type="submit" className="rounded border border-gold/60 px-2 py-0.5 text-[11px] text-gold-bright hover:bg-gold/10">
+                            Salvar
+                          </button>
+                        </form>
+                      </details>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {lista.length === 0 && <p className="p-4 text-sm text-stone-500">Nenhuma reunião realizada com esses filtros.</p>}
+      </div>
+    </div>
+  );
 }
