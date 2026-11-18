@@ -105,7 +105,7 @@ export function valorDaImplantacao(p: Record<string, unknown>, chave?: string): 
   return k ? ler(p[k]) : null;
 }
 
-/** Id do co-responsável do lead (venda em dupla): procura um campo "co-responsável" no lead e nas propriedades. */
+/** Id do co-responsável do lead (venda em dupla): lê coOwner (co-responsável) do lead. */
 export function coResponsavelDoDeal(d: DealPipefacil): string | null {
   const id = (v: unknown): string | null => {
     if (typeof v === "string" && v.trim()) return v.trim();
@@ -122,7 +122,8 @@ export function coResponsavelDoDeal(d: DealPipefacil): string | null {
     }
     return null;
   };
-  const eh = (k: string) => /co[-_ ]?respons|corespons|secondary|co[-_ ]?owner|collaborator|colaborador|assistant|auxiliar|support/i.test(k);
+  // A API do Pipefácil devolve o co-responsável como "coOwner" ({ userId, name }) e "coOwnerUserId".
+  const eh = (k: string) => /co[-_ ]?owner|co[-_ ]?respons|corespons/i.test(k);
   for (const fonte of [d as unknown as Record<string, unknown>, d.properties ?? {}]) {
     for (const [k, v] of Object.entries(fonte)) {
       if (eh(k)) {
@@ -216,16 +217,6 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
   const inicioExecucao = new Date().toISOString();
   let nomesUsuarios: Record<string, string> = {};
   const linhasDeals = deals.map((d) => dealParaLinha(negocioId, d, cfg));
-  // Diagnóstico: estrutura de um lead com co-responsável (card #15235 do Match), sem os dados de contato,
-  // para descobrir como a API do Pipefácil devolve o campo. Remover depois de confirmado.
-  if (!simular && slug === "matchsales") {
-    const amostra = deals.find((d) => d.seq === 15235);
-    if (amostra) {
-      const copia: Record<string, unknown> = { ...(amostra as unknown as Record<string, unknown>) };
-      for (const k of ["contact", "contactId", "company", "name"]) delete copia[k];
-      await supabase.from("integracao_estado").upsert({ chave: `diagnostico:${slug}:deal_15235`, valor: copia, atualizado_em: new Date().toISOString() });
-    }
-  }
   // Identidade (códigos do telefone e do nome) para casar com a Sunne; só nos negócios que pedem.
   const identidade = cfg.identificarContato ? await identidadesDosDeals(deals, () => api.contatos()) : null;
   if (!simular) {
