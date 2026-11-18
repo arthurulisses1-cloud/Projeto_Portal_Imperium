@@ -81,6 +81,55 @@ export function ComissaoEnergiaExecutivo({ pessoa, pct }: { pessoa: ComissaoPess
   );
 }
 
+/** Comissão do Head: as vendas individuais dele e a parte da gestão sobre o time, sem abrir o que cada executivo ganha. */
+export function ComissaoEnergiaHead({ dados, headId }: { dados: ComissaoEnergia; headId: string }) {
+  const eu = dados.pessoas.find((p) => p.id === headId) ?? null;
+  const individual = eu?.total ?? 0;
+  const n = eu?.linhas.length ?? 0;
+  return (
+    <div className="space-y-4">
+      <details className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-gold-bright">Como sua comissão é calculada · Maximus Energy</summary>
+        <div className="mt-3 space-y-3 text-sm text-stone-300">
+          <p>
+            A Vorp recebe <strong>80% da primeira fatura</strong> de cada conta ganha (100% se o time passar de 80 mil kWh no mês). Desse valor, 40% fica com a Vorp, 10% com as lideranças e 30% com o executivo.
+          </p>
+          <p>
+            <strong>Vendas individuais:</strong> nas contas que você mesmo sobe e ganha, você recebe {dados.pct.executivo}% da primeira fatura. <strong>Time:</strong> você recebe {dados.pct.head}% da
+            primeira fatura de todas as contas ganhas pelo time.
+          </p>
+        </div>
+      </details>
+      <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Maximus Energy · suas vendas individuais</p>
+          <p className="text-sm text-stone-400">
+            {n} {n === 1 ? "conta" : "contas"} · comissão <span className="font-semibold text-gold-bright">{moeda(individual)}</span>
+          </p>
+        </div>
+        {!eu || n === 0 ? (
+          <p className="mt-3 text-sm text-stone-500">Nenhuma conta sua foi ganha neste mês ainda.</p>
+        ) : (
+          <div className="mt-2">
+            <Tabela pessoa={eu} />
+          </div>
+        )}
+      </section>
+      <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Maximus Energy · comissão sobre o time</p>
+          <p className="text-sm text-stone-400">
+            {dados.pct.head}% de {moeda(dados.faturaTotal)} · <span className="font-semibold text-gold-bright">{moeda(dados.headTotal)}</span>
+          </p>
+        </div>
+        <p className="mt-2 text-xs text-stone-500">
+          {dados.contasTotal} {dados.contasTotal === 1 ? "conta ganha" : "contas ganhas"} pelo time no mês, primeira fatura somada. Recorrência (a partir do 3º mês) ainda não entra neste cálculo.
+        </p>
+      </section>
+    </div>
+  );
+}
+
 /** Comissão do time (Head e Diretor): cada vendedor, mais o que a gestão leva. */
 export function ComissaoEnergiaTime({ dados, verGestao }: { dados: ComissaoEnergia; verGestao: boolean }) {
   const totalTime = dados.pessoas.reduce((s, p) => s + p.total, 0);

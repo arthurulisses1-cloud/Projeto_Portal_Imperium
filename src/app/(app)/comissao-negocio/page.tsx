@@ -11,7 +11,7 @@ import { buscarCarteira, buscarPainelSdr, temRqa, vinculoPreVendas } from "@/lib
 import { ExplicacaoComissaoCloserVorp, ExplicacaoComissaoMatch, ExplicacaoComissaoVorp, PainelComissaoSdr, pctNegocio } from "@/components/negocio/ComissaoSdr";
 import { vinculoCloser } from "@/lib/closer-negocio";
 import { buscarComissaoEnergia, vinculoEnergia } from "@/lib/energy-time";
-import { ComissaoEnergiaExecutivo, ComissaoEnergiaTime } from "@/components/negocio/ComissaoEnergia";
+import { ComissaoEnergiaExecutivo, ComissaoEnergiaHead, ComissaoEnergiaTime } from "@/components/negocio/ComissaoEnergia";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -141,16 +141,28 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
 
   // Maximus Energy: comissão da primeira fatura de cada conta ganha na Sunne (o executivo vê só as dele; Head e Diretor, o time).
   let blocoEnergia: React.ReactNode = null;
+  let energiaDoHead: number | null = null; // comissão do Head do Energy (individual + time), para o total do mês
   const vEnergia = ehDiretor ? null : await vinculoEnergia(supabase, user.id);
   if ((vEnergia || ehDiretor) && (!foco || foco.slug === "vorp-energy")) {
     try {
       const ce = await buscarComissaoEnergia(createAdminClient(), { ano, mes });
-      if (ehDiretor || vEnergia?.cargo === "head") blocoEnergia = <ComissaoEnergiaTime dados={ce} verGestao />;
-      else blocoEnergia = <ComissaoEnergiaExecutivo pessoa={ce.pessoas.find((p) => p.id === user.id) ?? null} pct={ce.pct.executivo} />;
+      if (ehDiretor) blocoEnergia = <ComissaoEnergiaTime dados={ce} verGestao />;
+      else if (vEnergia?.cargo === "head") {
+        // O Head não vê o que cada executivo ganha: só as vendas individuais dele e a comissão sobre o time.
+        blocoEnergia = <ComissaoEnergiaHead dados={ce} headId={user.id} />;
+        energiaDoHead = (ce.pessoas.find((p) => p.id === user.id)?.total ?? 0) + ce.headTotal;
+      } else blocoEnergia = <ComissaoEnergiaExecutivo pessoa={ce.pessoas.find((p) => p.id === user.id) ?? null} pct={ce.pct.executivo} />;
     } catch (e) {
       console.error("Comissão do Energy falhou", e);
     }
   }
+
+  // Total pessoal do Head do Energy: Sunne (individual + time) somado ao que ele tem em outros negócios.
+  const outrasComissoes = dados
+    .filter((d) => d.slug !== "vorp-energy")
+    .map((d) => ({ slug: d.slug, nome: d.equipeNome || d.nome, total: d.pessoas.find((p) => p.id === user.id)?.total ?? 0 }))
+    .filter((o) => o.total > 0);
+  const totalPessoal = (energiaDoHead ?? 0) + outrasComissoes.reduce((s, o) => s + o.total, 0);
 
   return (
     <main className="mx-auto max-w-4xl space-y-5 px-6 py-8">
@@ -181,6 +193,25 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
 
       {blocoEnergia}
 
+      {energiaDoHead !== null && (
+        <div className="rounded-lg border border-gold/40 bg-imperium-surface p-4">
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Sua comissão total em {MESES[mes]} · a pagar em {dataBR(dados[0]?.pagamento ?? seg + "-15")}</p>
+          <p className="mt-1 text-2xl font-semibold text-gold-bright">{moeda(totalPessoal)}</p>
+          <ul className="mt-2 divide-y divide-imperium-line text-sm">
+            <li className="flex justify-between py-1">
+              <span className="text-stone-300">Maximus Energy (Sunne)</span>
+              <span className="text-stone-100">{moeda(energiaDoHead)}</span>
+            </li>
+            {outrasComissoes.map((o) => (
+              <li key={o.slug} className="flex justify-between py-1">
+                <span className="text-stone-300">{o.nome}</span>
+                <span className="text-stone-100">{moeda(o.total)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {visiveis.length > 1 && (
         <div className="flex flex-wrap gap-2 text-sm">
           <Link
@@ -201,7 +232,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
         </div>
       )}
 
-      {dados.length > 1 && totalGeral > 0 && (
+      {energiaDoHead === null && dados.length > 1 && totalGeral > 0 && (
         <div className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Total de comissões a pagar em {dataBR(dados[0].pagamento)}</p>
           <p className="mt-1 text-2xl font-semibold text-gold-bright">{moeda(totalGeral)}</p>

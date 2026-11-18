@@ -204,6 +204,9 @@ export type ComissaoEnergia = {
   pct: { executivo: number; head: number; diretor: number };
   /** Recebido da Vorp na primeira fatura de todas as vendas do mês; Head e Diretor levam % da primeira fatura. */
   recebidoTotal: number;
+  /** Primeira fatura somada e número de contas ganhas do time no mês (base da comissão da gestão). */
+  faturaTotal: number;
+  contasTotal: number;
   headTotal: number;
   diretorTotal: number;
   lidoEm: string;
@@ -245,12 +248,13 @@ export async function buscarComissaoEnergia(supabase: SupabaseClient, ctx: { ano
     supabase.from("profiles").select("id, full_name, nomes_planilha").eq("ativo", true),
   ]);
   type M = { cargo: string; profiles: { id: string; full_name: string; ativo: boolean } | { id: string; full_name: string; ativo: boolean }[] };
-  const vendem = ((membros ?? []) as unknown as M[])
-    .map((m) => ({ cargo: m.cargo, p: Array.isArray(m.profiles) ? m.profiles[0] : m.profiles }))
-    .filter((m) => m.p?.ativo && CARGOS_VENDEM_ENERGY.includes(m.cargo));
   const vendedores = vendedoresSunne(rede.organizacoes, perfis ?? []);
   const orgsDe = new Map<string, Set<string>>();
   for (const [orgId, v] of Array.from(vendedores)) if (v.profileId) orgsDe.set(v.profileId, (orgsDe.get(v.profileId) ?? new Set()).add(orgId));
+  // Vendem: os cargos de venda e o Head que também tem conta própria na Sunne (vende e leva o % de executivo).
+  const vendem = ((membros ?? []) as unknown as M[])
+    .map((m) => ({ cargo: m.cargo, p: Array.isArray(m.profiles) ? m.profiles[0] : m.profiles }))
+    .filter((m) => m.p?.ativo && (CARGOS_VENDEM_ENERGY.includes(m.cargo) || (m.cargo === "head" && orgsDe.has(m.p.id))));
 
   const kwhTime = kwhParaLimite(rede.deals, ctx.ano, ctx.mes);
   const pessoas: ComissaoPessoaEnergia[] = vendem.map(({ cargo, p: pe }) => {
@@ -260,7 +264,7 @@ export async function buscarComissaoEnergia(supabase: SupabaseClient, ctx: { ano
   const todas = comissaoDasVendas(rede.deals, ctx.ano, ctx.mes, null, kwhTime, pct.executivo);
   const recebidoTotal = todas.reduce((s, l) => s + l.recebido, 0);
   const faturaTotal = todas.reduce((s, l) => s + l.primeiraFatura, 0);
-  return { pessoas, pct, recebidoTotal, headTotal: (faturaTotal * pct.head) / 100, diretorTotal: (faturaTotal * pct.diretor) / 100, lidoEm: rede.lidoEm };
+  return { pessoas, pct, recebidoTotal, faturaTotal, contasTotal: todas.length, headTotal: (faturaTotal * pct.head) / 100, diretorTotal: (faturaTotal * pct.diretor) / 100, lidoEm: rede.lidoEm };
 }
 
 // ------------------------------------------------------------------ compromisso do dia (automático)
