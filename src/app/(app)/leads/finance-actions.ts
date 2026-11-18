@@ -188,6 +188,24 @@ export async function aprovarVendaFinance(leadId: string): Promise<EstadoForm> {
   );
   if (!executivoId) return { erro: "O lead está sem executivo na planilha." };
 
+  // Barra duplicata: venda do mesmo executivo, no mesmo dia e com o mesmo cliente (sem acento/caixa) já lançada.
+  const semAcento = (t: string | null) => (t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const { data: doDia } = await supabase
+    .from("vendas")
+    .select("id, cliente, valor, origem")
+    .eq("negocio_id", lead.negocio_id)
+    .eq("profile_id", executivoId)
+    .eq("data", lead.venda_data);
+  const jaLancada = (doDia ?? []).find((v) => semAcento(v.cliente as string | null) === semAcento(lead.lead_nome as string | null));
+  if (jaLancada) {
+    return {
+      erro:
+        "Já existe uma venda de " + lead.lead_nome + " neste dia para o mesmo executivo (" +
+        String(jaLancada.origem ?? "lançamento") + ", R$ " + Number(jaLancada.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) +
+        "). Apague a venda lançada à mão antes de aprovar, para não duplicar a comissão.",
+    };
+  }
+
   const { data: venda, error: vendaErro } = await supabase
     .from("vendas")
     .insert({
