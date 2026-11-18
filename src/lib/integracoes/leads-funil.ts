@@ -56,7 +56,7 @@ export async function buscarLeadsDoFunil(
     const sdr = nome(d.sdr_user_id);
     const k = `${l.canal}|${l.etapa}`;
     const lista = out.get(k) ?? [];
-    lista.push({ nome: d.nome || d.empresa || "(sem nome)", responsavel, preVendas: sdr && sdr !== responsavel ? sdr : null, data: l.data });
+    lista.push({ nome: d.nome || d.empresa || "(sem nome)", responsavel, preVendas: sdr && sdr !== responsavel ? sdr : null, data: l.data, faturamento: d.faturamento ?? null });
     out.set(k, lista);
   }
   return out;
@@ -69,7 +69,7 @@ export async function buscarListasGravadas(admin: SupabaseClient, slug: string, 
   return new Map(Object.entries(data.valor as Record<string, LeadEtapa[]>));
 }
 
-export type RankingGravado = Record<string, { nome: string; total: number; leads: { nome: string; data: string; canal: string; origem?: string | null }[] }[]>;
+export type RankingGravado = Record<string, { nome: string; total: number; leads: { nome: string; data: string; canal: string; origem?: string | null; faturamento?: string | null }[] }[]>;
 
 /** Ranking de pré-vendas gravado pela sincronização para o mês. null = sem ranking gravado. */
 export async function buscarRankingGravado(admin: SupabaseClient, slug: string, mes: string): Promise<RankingGravado | null> {

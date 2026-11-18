@@ -31,6 +31,8 @@ export type LeadEtapa = {
   data: string;
   /** Origem do lead quando difere do canal (campo "Origem do lead" do CRM, ex.: "trafego"). */
   origem?: string | null;
+  /** Faixa de faturamento do lead (valor do CRM); ausente nas listas gravadas antes de 18/11/2026. */
+  faturamento?: string | null;
 };
 
 export type FunilDoCanal = { canal: CanalDoFunil; titulo: string; etapas: EtapaFunil[] };

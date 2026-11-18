@@ -257,7 +257,7 @@ export function responsavelNoAgendamento(d: DealCrm, marcos: Partial<Record<Nive
   const t = marcos?.[NIVEL.agendada];
   return (t ? responsavelEm(hist, t) : null) ?? d.sdr_user_id ?? d.responsavel_user_id;
 }
-export type PessoaRanking = { pessoa: string | null; leads: { nome: string; data: string; canal: CanalPortal; origem?: string | null }[] };
+export type PessoaRanking = { pessoa: string | null; leads: { nome: string; data: string; canal: CanalPortal; origem?: string | null; faturamento?: string | null }[] };
 
 /**
  * Ranking de pré-vendas por etapa (agendadas, realizadas, vendas): cada contagem do mês vai para quem era o
@@ -281,7 +281,7 @@ export function rankingPreVendas(
       if (it.etapa !== etapa) continue;
       const pessoa = quemAgendou(it.deal);
       const p = porPessoa.get(pessoa) ?? { pessoa, leads: [] };
-      p.leads.push({ nome: it.deal.nome || it.deal.empresa || "(sem nome)", data: it.data, canal: it.canal, origem: it.deal.origem ?? null });
+      p.leads.push({ nome: it.deal.nome || it.deal.empresa || "(sem nome)", data: it.data, canal: it.canal, origem: it.deal.origem ?? null, faturamento: it.deal.faturamento ?? null });
       porPessoa.set(pessoa, p);
     }
     out[etapa] = Array.from(porPessoa.values())

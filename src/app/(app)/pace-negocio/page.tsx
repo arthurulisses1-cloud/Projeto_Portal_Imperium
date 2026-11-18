@@ -26,6 +26,7 @@ import { PARAMETROS, indiceMes, metaKwhForecast, vendasDoMes } from "@/lib/forec
 import { buscarAcumuladoKwhSunne } from "@/lib/sunne";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getViewerContext } from "@/lib/preview";
+import { faixasAcima100k, pctAcima100k, resumirAcima100k } from "@/lib/faturamento-100k";
 import { CARGOS_PRE_VENDAS, buscarPainelSdr, somarPreVendas, temPainelSdr } from "@/lib/sdr-negocio";
 import { CARGOS_CLOSER, SLUG_VORP, ehPainelCloser } from "@/lib/closer-negocio";
 import { AvisoSdr, BarraMes, PaceEsforcoCard, QuadradosSdr, TabelaPaceDiario } from "@/components/negocio/PainelSdr";
@@ -692,8 +693,22 @@ function linhaFalta(p: PaceCalculado, fmt: (v: number) => string) {
   return p.necessarioPorDia === null ? `faltaram ${fmt(p.falta)}` : `faltam ${fmt(p.falta)} · ${fmt(p.necessarioPorDia)} por dia útil`;
 }
 
+/** Faturamento acima de 100 mil (Acrópole): quantas das reuniões são de leads a partir de 100 mil/mês. */
+function LinhaAcima100k({ leads, faixas, base, className = "mt-1.5" }: { leads?: IndicadorEsforco["leads"]; faixas?: string[] | null; base: string; className?: string }) {
+  const r = resumirAcima100k(leads, faixas ?? null);
+  if (!r) return null;
+  return (
+    <p
+      className={`${className} text-[11px] text-stone-500`}
+      title={`Leads com faturamento a partir de 100 mil/mês no Pipefácil, sobre as ${base}.${r.semFaturamento > 0 ? ` ${r.semFaturamento} sem faturamento preenchido.` : ""}`}
+    >
+      Faturamento &gt;100k <span className="text-stone-300">{r.qtd}</span> · <span className="text-stone-300">{pctAcima100k(r)}</span> das {base}
+    </p>
+  );
+}
+
 /** Cartão de um indicador do time no topo (recebido, agendadas, realizadas). */
-function CartaoIndicador({ titulo, p, fmt, canais, leads }: { titulo: string; p: PaceCalculado; fmt: (v: number) => string; canais?: IndicadorEsforco["canais"]; leads?: IndicadorEsforco["leads"] }) {
+function CartaoIndicador({ titulo, p, fmt, canais, leads, faixas, base }: { titulo: string; p: PaceCalculado; fmt: (v: number) => string; canais?: IndicadorEsforco["canais"]; leads?: IndicadorEsforco["leads"]; faixas?: string[] | null; base?: string }) {
   return (
     <div className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
       <div className="flex items-center justify-between gap-2">
@@ -719,12 +734,13 @@ function CartaoIndicador({ titulo, p, fmt, canais, leads }: { titulo: string; p:
           ))}
         </p>
       )}
+      {base && <LinhaAcima100k leads={leads} faixas={faixas} base={base} />}
     </div>
   );
 }
 
 /** Bloco de um indicador dentro do cartão de uma pessoa: o total com pace e, embaixo, os canais. */
-function BlocoPessoa({ titulo, ind }: { titulo: string; ind: IndicadorEsforco }) {
+function BlocoPessoa({ titulo, ind, faixas, base }: { titulo: string; ind: IndicadorEsforco; faixas?: string[] | null; base?: string }) {
   const p = ind.pace;
   return (
     <div>
@@ -751,6 +767,7 @@ function BlocoPessoa({ titulo, ind }: { titulo: string; ind: IndicadorEsforco })
           ))}
         </p>
       )}
+      {base && <LinhaAcima100k leads={ind.leads} faixas={faixas} base={base} className="mt-0.5" />}
     </div>
   );
 }
@@ -765,6 +782,7 @@ function Avatar({ nome, cor }: { nome: string; cor: string }) {
 
 function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: EsforcoNegocio; ano: number; mes: number }) {
   const cor = NEGOCIO_COR[n.negocio.slug] ?? "201 162 74";
+  const faixas100k = faixasAcima100k(n.negocio.slug);
   const p = n.pace;
   const pctMes = p.diasUteisTotal > 0 ? p.diasUteisDecorridos / p.diasUteisTotal : 0;
   const hoje = hojeBR();
@@ -804,8 +822,8 @@ function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: Esfo
       {/* Topo: recebido, agendadas e realizadas do time */}
       <div className="grid gap-4 md:grid-cols-3">
         <CartaoIndicador titulo="Recebido" p={p} fmt={moeda} />
-        <CartaoIndicador titulo="Reuniões agendadas" p={esforco.time.reunioes_agendadas.pace} fmt={dec} canais={esforco.time.reunioes_agendadas.canais} leads={esforco.time.reunioes_agendadas.leads} />
-        <CartaoIndicador titulo="Reuniões realizadas" p={esforco.time.reunioes_realizadas.pace} fmt={dec} canais={esforco.time.reunioes_realizadas.canais} leads={esforco.time.reunioes_realizadas.leads} />
+        <CartaoIndicador titulo="Reuniões agendadas" p={esforco.time.reunioes_agendadas.pace} fmt={dec} canais={esforco.time.reunioes_agendadas.canais} leads={esforco.time.reunioes_agendadas.leads} faixas={faixas100k} base="agendadas" />
+        <CartaoIndicador titulo="Reuniões realizadas" p={esforco.time.reunioes_realizadas.pace} fmt={dec} canais={esforco.time.reunioes_realizadas.canais} leads={esforco.time.reunioes_realizadas.leads} faixas={faixas100k} base="realizadas" />
       </div>
 
       {/* Time comercial: pré-vendas (pace total de cada um; um canal compensa o outro) e closers (recebido,
@@ -827,8 +845,8 @@ function PaceComercial({ n, esforco, ano, mes }: { n: PaceNegocio; esforco: Esfo
                     </p>
                   </div>
                 </div>
-                <BlocoPessoa titulo="Reuniões agendadas" ind={pv.indicadores.reunioes_agendadas} />
-                <BlocoPessoa titulo="Reuniões realizadas" ind={pv.indicadores.reunioes_realizadas} />
+                <BlocoPessoa titulo="Reuniões agendadas" ind={pv.indicadores.reunioes_agendadas} faixas={faixas100k} base="agendadas" />
+                <BlocoPessoa titulo="Reuniões realizadas" ind={pv.indicadores.reunioes_realizadas} faixas={faixas100k} base="realizadas" />
               </section>
             ))}
             {closers.map((c) => {

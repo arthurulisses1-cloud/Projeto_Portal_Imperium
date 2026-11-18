@@ -162,7 +162,7 @@ export function montarEsforco(
       indicadores[etapa] = {
         pace: pace(canais.reduce((s, c) => s + (c.meta ?? 0), 0), leads.length),
         canais,
-        leads: leads.map((l) => ({ nome: l.nome, data: l.data, responsavel: NOME_CANAL[l.canal] ?? l.canal, preVendas: null, origem: l.origem ?? null })),
+        leads: leads.map((l) => ({ nome: l.nome, data: l.data, responsavel: NOME_CANAL[l.canal] ?? l.canal, preVendas: null, origem: l.origem ?? null, faturamento: l.faturamento })),
       };
     }
     return { id, nome, indicadores, ideal: idealDe(indicadores) };

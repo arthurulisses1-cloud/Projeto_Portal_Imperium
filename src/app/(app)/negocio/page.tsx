@@ -22,6 +22,7 @@ import { buscarLigacoesSunne, type LigacoesResumo } from "@/lib/api4com";
 import { calcularPace, type PaceCalculado, type StatusPace } from "@/lib/pace-negocio";
 import { metaKwhForecast } from "@/lib/forecast-negocios";
 import { buscarAcumuladoKwhSunne } from "@/lib/sunne";
+import { faixasAcima100k, pctAcima100k, resumirAcima100k } from "@/lib/faturamento-100k";
 import { BotaoAtualizarRealizado } from "@/components/negocio/BotaoAtualizarRealizado";
 
 export const dynamic = "force-dynamic";
@@ -141,6 +142,8 @@ export default async function NegocioDashboardPage({
 
   const { pace } = dados.pace;
   const cor = NEGOCIO_COR[atual.slug] ?? "201 162 74";
+  // Faturamento acima de 100 mil (Acrópole): discreto, embaixo das reuniões agendadas e realizadas.
+  const faixas100k = faixasAcima100k(atual.slug);
   const st = STATUS[pace.status];
   const pctMeta = pace.meta > 0 ? Math.round((pace.recebido / pace.meta) * 100) : null;
   const ant = mes === 1 ? `${ano - 1}-12` : `${ano}-${String(mes - 1).padStart(2, "0")}`;
@@ -270,7 +273,7 @@ export default async function NegocioDashboardPage({
             nome: p.nome,
             meta: 0,
             realizado: p.total,
-            leads: p.leads.map((l) => ({ nome: l.nome, data: l.data, responsavel: CANAL_LEAD[l.canal] ?? l.canal, preVendas: null, origem: l.origem ?? null })) as LeadEtapa[],
+            leads: p.leads.map((l) => ({ nome: l.nome, data: l.data, responsavel: CANAL_LEAD[l.canal] ?? l.canal, preVendas: null, origem: l.origem ?? null, faturamento: l.faturamento })) as LeadEtapa[],
           })),
           fonte: "Pipefácil" as string | null,
         };
@@ -559,6 +562,7 @@ export default async function NegocioDashboardPage({
                               )}
                               <div className="absolute inset-y-0 w-px bg-stone-200" style={{ left: `${Math.min(100, fracaoMes * 100)}%` }} />
                             </div>
+                            {faixas100k && (e.chave === "reunioes_agendadas" || e.chave === "reunioes_realizadas") && <Acima100kFunil leads={e.leads} faixas={faixas100k} />}
                           </div>
                           <span className="text-right text-stone-400">{num(e.meta * fracaoMes)}</span>
                           <RealizadoComLeads valor={e.realizado === null ? "—" : num(e.realizado)} leads={e.leads} />
@@ -701,6 +705,14 @@ export default async function NegocioDashboardPage({
                             {p.nome}
                             {i === 0 && p.realizado > 0 && <span className="ml-1.5 text-[10px] uppercase tracking-widest text-gold">líder</span>}
                           </span>
+                          {faixas100k && (rk.chave === "reunioes_agendadas" || rk.chave === "reunioes_realizadas") && (() => {
+                            const r = resumirAcima100k(p.leads, faixas100k);
+                            return r ? (
+                              <span className="shrink-0 text-[10px] tabular-nums text-stone-500" title="Leads com faturamento a partir de 100 mil/mês no Pipefácil">
+                                &gt;100k {r.qtd} · {pctAcima100k(r)}
+                              </span>
+                            ) : null;
+                          })()}
                           <span className={i === 0 ? "text-base font-semibold" : ""}>
                             <RealizadoComLeads valor={num(p.realizado)} leads={p.leads} />
                           </span>
@@ -928,6 +940,21 @@ function nomeCanalOrigem(c: string) {
 const LABEL_RANKING: Record<string, string> = { reunioes_agendadas: "Reuniões agendadas", reunioes_realizadas: "Reuniões realizadas" };
 
 /** Grupo de botões (links) de uma visão do funil; o ativo fica destacado. */
+/** Linha discreta embaixo da barra da etapa: quantas reuniões são de leads com faturamento a partir de 100 mil.
+ *  Sem a lista com o campo (gravada antes), ocupa o mesmo espaço vazio para não desalinhar os canais. */
+function Acima100kFunil({ leads, faixas }: { leads?: LeadEtapa[]; faixas: string[] }) {
+  const r = resumirAcima100k(leads, faixas);
+  if (!r) return <p className="invisible mt-0.5 text-[10px]" aria-hidden="true">.</p>;
+  return (
+    <p
+      className="mt-0.5 truncate text-[10px] text-stone-500"
+      title={`${r.qtd} de ${r.total} com faturamento a partir de 100 mil/mês no Pipefácil${r.semFaturamento > 0 ? ` · ${r.semFaturamento} sem faturamento` : ""}`}
+    >
+      &gt;100k {r.qtd} · {pctAcima100k(r)}
+    </p>
+  );
+}
+
 function Seletor({ opcoes }: { opcoes: { rotulo: string; href: string; ativo: boolean; contagem?: number; dica?: string }[] }) {
   return (
     <span className="inline-flex rounded-lg border border-imperium-line bg-imperium-raised p-0.5 text-[11px]">

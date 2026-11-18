@@ -67,6 +67,9 @@ export type ConfigCrm = {
   /** RQA (Auditoria → RQA): valor pago por RQA aprovada pelo gerente e primeiro mês com o critério;
    *  `validadores`: perfis (id) que também validam, além do Diretor e do Head do negócio. */
   rqa?: { valor: number; desde: string; validadores?: string[] };
+  /** Faixas do campo de faturamento que contam como "faturamento acima de 100 mil" (ao lado das reuniões
+   *  agendadas e realizadas no Pace e no Dashboard). Sem a lista, o indicador não aparece. */
+  acima100k?: string[];
 };
 
 export type CriterioMql = "faturamento" | "cargo" | "tamanho_time";
@@ -132,6 +135,16 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     // em diante (outubro ficou no sistema antigo; 18/11/2026).
     // Validam: o Diretor, o Head e o gestor comercial (Ricássio; 18/11/2026).
     rqa: { valor: 30, desde: "2026-11", validadores: ["3ec29ffe-471f-4d5b-bae7-f9cdae8b5c5e"] },
+    // Faturamento acima de 100 mil: da faixa "entre 100 e 200 mil" para cima (18/11/2026).
+    acima100k: [
+      "entre_100_e_200_mil",
+      "entre_200_e_400_mil",
+      "entre_400_mil_e_1_milhao",
+      "entre_1_e_5_milhoes",
+      "entre_5_e_20_milhoes",
+      "entre_20_e_50_milhoes",
+      "acima_de_50_milhoes",
+    ],
     stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],
     canais: { outbound: "outbound", trafego: "inbound", referido: "indicacao" },
     campos: { faturamento: "quanto_sua_empresa_fatura_por_mes", cargo: "qual_seu_cargo_atual", origem: "origem_lead" },
