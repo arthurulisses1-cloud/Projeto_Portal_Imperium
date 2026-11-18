@@ -54,6 +54,10 @@ type Params = {
   base?: string;
   situacao?: string;
   modo?: string;
+  /** Pós-reunião: etapa atual, RQA (sim, nao, sem) e mês da previsão de fechamento (AAAA-MM ou "sem"). */
+  etapa?: string;
+  rqa?: string;
+  prev?: string;
   /** Reuniões: faturamento (valor do CRM) e dia da reunião (AAAA-MM-DD). */
   fat?: string;
   diaR?: string;
@@ -120,13 +124,17 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
   const preVendas = Array.from(new Set(todos.map((l) => l.preVendas).filter((x): x is string => !!x))).sort((a, b) => a.localeCompare(b, "pt-BR"));
   const closers = Array.from(new Set(todos.flatMap((l) => [l.closer, l.responsavel]).filter((x): x is string => !!x))).sort((a, b) => a.localeCompare(b, "pt-BR"));
   const canais = Array.from(new Set(todos.map((l) => l.canal)));
+  // Opções dos filtros da aba closer: das reuniões realizadas da base (etapa de agora e mês da previsão).
+  const realizadasBase = todos.filter((l) => l.realizadaEm);
+  const etapasCloser = Array.from(new Set(realizadasBase.map((l) => l.etapa))).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const mesesPrevisao = Array.from(new Set(realizadasBase.map((l) => l.previsao?.slice(0, 7)).filter((x): x is string => !!x))).sort();
   const faturamentos = Array.from(new Map(todos.filter((l) => l.faturamento).map((l) => [l.faturamento!, l.faturamentoRotulo ?? legivel(l.faturamento)!])).entries()).sort(
     (a, b) => ordemFaixa(a[0]) - ordemFaixa(b[0]) || a[1].localeCompare(b[1], "pt-BR"),
   );
 
   const href = (mudar: Partial<Params>) => {
     const p = new URLSearchParams();
-    const tudo: Params = { negocio: atual.slug, mes: mesParam, aba, pv: f.pv, closer: f.closer, canal: f.canal, q: f.q, base: searchParams.base, situacao: searchParams.situacao, modo: searchParams.modo, fat: searchParams.fat, diaR: searchParams.diaR, temp: searchParams.temp, vq: searchParams.vq, ...mudar };
+    const tudo: Params = { negocio: atual.slug, mes: mesParam, aba, pv: f.pv, closer: f.closer, canal: f.canal, q: f.q, base: searchParams.base, situacao: searchParams.situacao, modo: searchParams.modo, fat: searchParams.fat, diaR: searchParams.diaR, temp: searchParams.temp, etapa: searchParams.etapa, rqa: searchParams.rqa, prev: searchParams.prev, vq: searchParams.vq, ...mudar };
     for (const [k, v] of Object.entries(tudo)) if (v) p.set(k, v);
     return `/auditoria-comercial?${p}`;
   };
@@ -257,6 +265,39 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
           </Campo>
         )}
         {aba === "closer" && (
+          <Campo rotulo="Etapa">
+            <select name="etapa" defaultValue={searchParams.etapa ?? ""} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
+              <option value="">Todas</option>
+              {etapasCloser.map((x) => (
+                <option key={x}>{x}</option>
+              ))}
+            </select>
+          </Campo>
+        )}
+        {aba === "closer" && (
+          <Campo rotulo="RQA">
+            <select name="rqa" defaultValue={searchParams.rqa ?? ""} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
+              <option value="">Todas</option>
+              <option value="sim">Sim</option>
+              <option value="nao">Não</option>
+              <option value="sem">Sem validação</option>
+            </select>
+          </Campo>
+        )}
+        {aba === "closer" && (
+          <Campo rotulo="Previsão">
+            <select name="prev" defaultValue={searchParams.prev ?? ""} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
+              <option value="">Todas</option>
+              {mesesPrevisao.map((m) => (
+                <option key={m} value={m}>
+                  {mesCurto(m)}
+                </option>
+              ))}
+              <option value="sem">Sem previsão</option>
+            </select>
+          </Campo>
+        )}
+        {aba === "closer" && (
           <Campo rotulo="Temperatura">
             <select name="temp" defaultValue={searchParams.temp ?? ""} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
               <option value="">Todas</option>
@@ -278,7 +319,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
         <button type="submit" className="rounded border border-gold/60 px-3 py-1 text-gold-bright hover:bg-gold/10">
           Filtrar
         </button>
-        {(f.pv || f.closer || f.canal || f.q || searchParams.situacao || searchParams.temp || searchParams.fat || searchParams.diaR) && (
+        {(f.pv || f.closer || f.canal || f.q || searchParams.situacao || searchParams.temp || searchParams.fat || searchParams.diaR || searchParams.etapa || searchParams.rqa || searchParams.prev) && (
           <Link href={`/auditoria-comercial?negocio=${atual.slug}&mes=${mesParam}&aba=${aba}`} className="px-2 py-1 text-stone-400 hover:text-stone-200">
             Limpar filtros
           </Link>
@@ -311,11 +352,12 @@ function Campo({ rotulo, children }: { rotulo: string; children: React.ReactNode
   );
 }
 
-function Kpis({ itens }: { itens: { rotulo: string; valor: string; sub?: string }[] }) {
+function Kpis({ itens, colunas = 6 }: { itens: { rotulo: string; valor: string; sub?: string; dica?: string }[]; colunas?: 2 | 4 | 6 }) {
+  const grade = colunas === 2 ? "sm:grid-cols-2" : colunas === 4 ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3 lg:grid-cols-6";
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    <div className={`grid grid-cols-2 gap-3 ${grade}`}>
       {itens.map((k) => (
-        <div key={k.rotulo} className="rounded-lg border border-imperium-line bg-imperium-surface p-3">
+        <div key={k.rotulo} className="rounded-lg border border-imperium-line bg-imperium-surface p-3" title={k.dica}>
           <p className="text-[10px] uppercase tracking-widest text-stone-500">{k.rotulo}</p>
           <p className="mt-0.5 text-xl font-semibold text-stone-100">{k.valor}</p>
           {k.sub && <p className="text-[11px] text-stone-500">{k.sub}</p>}
@@ -495,7 +537,7 @@ function AbaReunioes({
                 </td>
                 <td className={tdClasse}>{diaHora(l.agendadaEm)}</td>
                 <td className={tdClasse}>
-                  <span className={`rounded border px-1.5 py-0.5 text-[11px] ${SITUACAO[l.situacao].classe}`}>{SITUACAO[l.situacao].texto}</span>
+                  <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] ${SITUACAO[l.situacao].classe}`}>{SITUACAO[l.situacao].texto}</span>
                   {l.situacao === "no_show" && <p className="mt-0.5 text-[11px] text-stone-500">no-show em {dia(l.noShowEm)}</p>}
                 </td>
                 <td className={tdClasse}>{l.reuniaoMarcada ? diaHora(reuniaoBR(l.reuniaoMarcada)) : <span className="text-stone-600">—</span>}</td>
@@ -521,13 +563,29 @@ function AbaCloser({ todos, f, noMes, sp, href }: { todos: LeadAuditoria[]; f: F
     const t = (l.temperatura ?? "").toLowerCase();
     return ["quente", "morno", "frio"].includes(t) ? t : "sem";
   };
-  const lista = sp.temp ? filtrados.filter((l) => temp(l) === sp.temp) : filtrados;
-  const ganhos = filtrados.filter((l) => l.status === "won");
-  const perdidos = filtrados.filter((l) => l.status === "lost");
-  const comRqa = filtrados.filter((l) => l.rqa);
-  const abertos = filtrados.filter((l) => l.status === "open");
+  const rqaDe = (l: LeadAuditoria) => (/^(sim|true)$/i.test(l.rqa ?? "") ? "sim" : /^(nao|não|false)$/i.test(l.rqa ?? "") ? "nao" : "sem");
+  // Os filtros da aba valem para a lista e para os cards (como no sistema antigo).
+  const lista = filtrados.filter(
+    (l) =>
+      (!sp.temp || temp(l) === sp.temp) &&
+      (!sp.etapa || l.etapa === sp.etapa) &&
+      (!sp.rqa || rqaDe(l) === sp.rqa) &&
+      (!sp.prev || (sp.prev === "sem" ? !l.previsao : l.previsao?.slice(0, 7) === sp.prev)),
+  );
+  const ganhos = lista.filter((l) => l.status === "won");
+  const perdidos = lista.filter((l) => l.status === "lost");
+  const comRqa = lista.filter((l) => l.rqa);
+  const abertos = lista.filter((l) => l.status === "open");
   const follow = (t: string) => abertos.filter((l) => temp(l) === t);
   const soma = (ls: LeadAuditoria[]) => ls.reduce((s, l) => s + l.valor, 0);
+  // Previsão de fechamento no mês vigente (o do calendário, como no sistema antigo).
+  const mesVigente = hojeBR().slice(0, 7);
+  const MES_CURTO = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  const mesNome = `${MES_CURTO[Number(mesVigente.slice(5, 7)) - 1]}/${mesVigente.slice(2, 4)}`;
+  const previstoNoMes = abertos.filter((l) => l.previsao?.slice(0, 7) === mesVigente);
+  const quaseFechando = previstoNoMes.filter((l) => temp(l) === "quente" || temp(l) === "morno");
+  const comRqaSim = comRqa.filter((l) => /^(sim|true)$/i.test(l.rqa ?? "")).length;
+  const leads = (n: number) => (n === 0 ? "nenhum lead" : `${n} ${n === 1 ? "lead" : "leads"}`);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -540,25 +598,66 @@ function AbaCloser({ todos, f, noMes, sp, href }: { todos: LeadAuditoria[]; f: F
         />
       </div>
       <Kpis
+        colunas={4}
         itens={[
-          { rotulo: "Reuniões realizadas", valor: String(filtrados.length), sub: emAberto ? "em aberto, de qualquer mês" : "no mês" },
-          { rotulo: "RQA validada", valor: String(comRqa.filter((l) => /^(sim|true)$/i.test(l.rqa ?? "")).length), sub: `${comRqa.length} preenchidas pelo closer` },
-          { rotulo: "Ganhos", valor: moeda(soma(ganhos)), sub: `${ganhos.length} ${ganhos.length === 1 ? "venda" : "vendas"}` },
-          { rotulo: "Perdidos", valor: String(perdidos.length) },
-          { rotulo: "Follow quente", valor: moeda(soma(follow("quente"))), sub: `${follow("quente").length} leads` },
-          { rotulo: "Follow morno / frio", valor: moeda(soma(follow("morno")) + soma(follow("frio"))), sub: `${follow("morno").length} mornos · ${follow("frio").length} frios · ${follow("sem").length} sem temperatura` },
+          { rotulo: "Reuniões realizadas", valor: String(lista.length), sub: emAberto ? "em aberto, de qualquer mês" : "no mês", dica: "Leads que chegaram à reunião realizada (com os filtros)." },
+          {
+            rotulo: "RQA",
+            valor: String(comRqaSim),
+            sub: comRqa.length ? `${Math.round((comRqaSim / comRqa.length) * 1000) / 10}% das ${comRqa.length} validadas pelo closer`.replace(".", ",") : "nenhuma validada ainda",
+            dica: 'Reuniões com "RQA validada?" = Sim no CRM. A porcentagem é sobre as que o closer já validou (Sim ou Não).',
+          },
+          { rotulo: "Ganhos", valor: moeda(soma(ganhos)), sub: `${ganhos.length} ${ganhos.length === 1 ? "venda" : "vendas"}`, dica: "Leads ganhos: soma do valor do lead." },
+          { rotulo: "Perdidos", valor: String(perdidos.length), sub: "perdidos no Pipefácil", dica: "Leads perdidos; o motivo aparece na lista." },
         ]}
       />
-      <PorPessoa titulo="Por closer" itens={contarPor(filtrados, (l) => l.closer ?? l.responsavel)} href={(nome) => href({ closer: nome, lead: undefined })} />
+      <p className="text-sm font-semibold text-stone-200">
+        Em negociação, por temperatura <span className="font-normal text-stone-400">{moeda(soma(abertos))} em {leads(abertos.length)}</span>
+      </p>
+      <Kpis
+        colunas={4}
+        itens={[
+          { rotulo: "Follow quente", valor: moeda(soma(follow("quente"))), sub: leads(follow("quente").length), dica: "Em negociação (nem ganho nem perdido), Temperatura Quente: soma do valor." },
+          { rotulo: "Follow morno", valor: moeda(soma(follow("morno"))), sub: leads(follow("morno").length), dica: "Em negociação, Temperatura Morno: soma do valor." },
+          { rotulo: "Follow frio", valor: moeda(soma(follow("frio"))), sub: leads(follow("frio").length), dica: "Em negociação, Temperatura Frio: soma do valor." },
+          { rotulo: "Follow sem temperatura", valor: moeda(soma(follow("sem"))), sub: leads(follow("sem").length), dica: "Em negociação sem a Temperatura preenchida no Pipefácil." },
+        ]}
+      />
+      <p className="text-sm font-semibold text-stone-200">
+        Previsão de fechamento <span className="font-normal text-stone-400">mês vigente: {mesNome}</span>
+      </p>
+      <Kpis
+        colunas={2}
+        itens={[
+          {
+            rotulo: `Follow com previsão em ${mesNome}`,
+            valor: moeda(soma(previstoNoMes)),
+            sub: leads(previstoNoMes.length),
+            dica: `Em negociação, com a Previsão de fechamento no mês vigente (${mesNome}). Acompanha o mês do calendário.`,
+          },
+          {
+            rotulo: `Quente/Morno · ${mesNome}`,
+            valor: moeda(soma(quaseFechando)),
+            sub: leads(quaseFechando.length),
+            dica: `O follow mais perto de fechar: em negociação, Temperatura Quente ou Morno e Previsão de fechamento em ${mesNome}.`,
+          },
+        ]}
+      />
+      <PorPessoa titulo="Por closer" itens={contarPor(lista, (l) => l.closer ?? l.responsavel)} href={(nome) => href({ closer: nome, lead: undefined })} />
       <div className="overflow-x-auto rounded-lg border border-imperium-line bg-imperium-surface">
-        <table className="w-full min-w-[1450px] text-sm">
+        <table className="w-full min-w-[1600px] text-sm">
           <thead className="border-b border-imperium-line">
             <tr>
               <th className={thClasse}>Lead</th>
               <th className={thClasse}>Realizada</th>
               <th className={thClasse}>Canal</th>
               <th className={thClasse}>Pré-vendas</th>
-              <th className={thClasse}>Closer</th>
+              <th className={thClasse} title="Quem fez a reunião (campo Closer do CRM)">
+                Closer
+              </th>
+              <th className={thClasse} title="O responsável pelo lead agora no Pipefácil">
+                Com quem está agora
+              </th>
               <BantCabecalho />
               <th className={thClasse}>RQA</th>
               <th className={thClasse}>Etapa</th>
@@ -579,11 +678,20 @@ function AbaCloser({ todos, f, noMes, sp, href }: { todos: LeadAuditoria[]; f: F
                 <td className={tdClasse}>{dia(l.realizadaEm)}</td>
                 <td className={tdClasse}>{CANAL[l.canal] ?? l.canal}</td>
                 <td className={tdClasse}>{l.preVendas ?? "—"}</td>
-                <td className={tdClasse}>{l.closer ?? l.responsavel ?? "—"}</td>
+                <td className={tdClasse}>{l.closer ?? <span className="text-stone-600">—</span>}</td>
+                <td className={tdClasse}>
+                  {l.responsavel ?? "—"}
+                  {/* Lead aberto com outra pessoa que não o closer da reunião: em destaque, como no sistema antigo */}
+                  {l.status === "open" && l.closer && l.responsavel && l.responsavel !== l.closer && <p className="text-[11px] text-amber-300">não é o closer da reunião</p>}
+                </td>
                 <BantCelulas l={l} />
-                <td className={tdClasse}>{legivel(l.rqa) ?? <span className="text-stone-600">—</span>}</td>
+                <td className={tdClasse}>
+                  <SeloRqa rqa={l.rqa} />
+                </td>
                 <td className={tdClasse}>{l.etapa}</td>
-                <td className={tdClasse}>{legivel(l.temperatura) ?? <span className="text-stone-600">—</span>}</td>
+                <td className={tdClasse}>
+                  <SeloTemperatura t={l.temperatura} />
+                </td>
                 <td className={`${tdClasse} text-right tabular-nums`}>
                   {l.valor ? moeda(l.valor) : "—"}
                   {l.mrr ? <p className="text-[11px] text-stone-500">MRR {moeda(l.mrr)}</p> : null}
@@ -897,4 +1005,30 @@ function ordemFaixa(v: string): number {
   const n = Number(/\d+/.exec(v)?.[0] ?? 0);
   const milhao = /milh/.test(v) ? 1000 : 1;
   return /ate|abaixo/.test(v) ? -1 : /acima/.test(v) ? 1e7 + n * milhao : n * milhao;
+}
+
+/** RQA com cor, como no sistema antigo: Sim verde, Não vermelho, sem validação em cinza. */
+function SeloRqa({ rqa }: { rqa: string | null }) {
+  const v = (rqa ?? "").toLowerCase();
+  if (/^(sim|true)$/.test(v)) return <span className="whitespace-nowrap rounded border border-success/50 bg-success/10 px-1.5 py-0.5 text-[11px] text-success-bright">Sim</span>;
+  if (/^(nao|não|false)$/.test(v)) return <span className="whitespace-nowrap rounded border border-wine/60 bg-wine/10 px-1.5 py-0.5 text-[11px] text-wine-bright">Não</span>;
+  return <span className="text-[11px] text-stone-500">validar no CRM</span>;
+}
+
+/** Temperatura com cor: quente vermelho, morno âmbar, frio azul. */
+function SeloTemperatura({ t }: { t: string | null }) {
+  const v = (t ?? "").toLowerCase();
+  const cores: Record<string, string> = {
+    quente: "border-red-400/60 bg-red-400/10 text-red-300",
+    morno: "border-amber-400/60 bg-amber-400/10 text-amber-300",
+    frio: "border-sky-400/60 bg-sky-400/10 text-sky-300",
+  };
+  if (!cores[v]) return <span className="text-stone-600">—</span>;
+  return <span className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] ${cores[v]}`}>{legivel(v)}</span>;
+}
+
+/** "2026-11" → "nov/26". */
+function mesCurto(m: string): string {
+  const MESES_CURTOS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+  return `${MESES_CURTOS[Number(m.slice(5, 7)) - 1]}/${m.slice(2, 4)}`;
 }
