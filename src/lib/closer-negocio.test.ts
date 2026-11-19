@@ -40,9 +40,8 @@ describe("resumirReunioesCloser", () => {
   ];
   const r = resumirReunioesCloser(leads, "Bruno Brito", 2026, 11, hoje);
 
-  it("previstas: só as a acontecer dele, da mais próxima para a mais distante", () => {
-    expect(r.previstas.map((x) => x.nome)).toEqual(["Hoje cedo", "Hoje tarde", "Amanhã"]);
-    expect(r.previstas[1].sdr).toBe("Marcus Ryquelme");
+  it("previstas: só as a acontecer dele de amanhã em diante (as de hoje ficam em do dia)", () => {
+    expect(r.previstas.map((x) => x.nome)).toEqual(["Amanhã"]);
   });
   it("do dia: reuniões marcadas para hoje por horário, com o SDR, sem cancelada nem de outro closer", () => {
     expect(r.doDia.map((x) => x.nome)).toEqual(["Feita hoje", "Hoje cedo", "Hoje tarde"]);
@@ -62,6 +61,19 @@ describe("metaMrrDaPessoa", () => {
     expect(metaMrrDaPessoa(0, 25000, 100000)).toBe(0);
     expect(metaMrrDaPessoa(60000, null, 100000)).toBe(0);
     expect(metaMrrDaPessoa(60000, 25000, 0)).toBe(0);
+  });
+});
+
+describe("canceladas e agendadas de hoje (Match Sales)", () => {
+  it("lista as agendadas do mês que caíram, com o motivo da perda, e conta as agendadas hoje", () => {
+    const leads = [
+      lead({ nome: "X", closer: null, preVendas: "Matheus", agendadaEm: "2026-11-05T13:00:00Z", situacao: "cancelada", motivoPerda: "Sem interesse", perdidaEm: "2026-11-08T13:00:00Z" }),
+      lead({ nome: "Y", closer: null, preVendas: "Matheus", agendadaEm: "2026-11-06T13:00:00Z", situacao: "cancelada", motivoPerda: null }),
+      lead({ nome: "Z", closer: null, preVendas: "Matheus", agendadaEm: "2026-11-19T13:00:00Z", situacao: "a_acontecer" }),
+    ];
+    const r = resumirReunioesCloser(leads, "Matheus", 2026, 11, "2026-11-19", true);
+    expect(r.canceladas.map((c) => [c.nome, c.motivo])).toEqual([["X", "Sem interesse"], ["Y", "Sem motivo informado"]]);
+    expect(r.agendadasHoje).toBe(1);
   });
 });
 
@@ -88,9 +100,9 @@ describe("reuniões para reagendar (Match Sales)", () => {
     lead({ nome: "Sem data", closer: null, preVendas: "Matheus", reuniaoMarcada: null }),
     lead({ nome: "Não veio", closer: null, preVendas: "Matheus", reuniaoMarcada: "2026-11-18T09:00", situacao: "no_show" }),
   ];
-  it("separa o que ainda vai acontecer (hoje em diante ou sem data) do que precisa reagendar (data passada ou no-show)", () => {
+  it("separa o que ainda vai acontecer (de amanhã em diante ou sem data) do que precisa reagendar (data passada ou no-show)", () => {
     const r = resumirReunioesCloser(leads, "Matheus", 2026, 11, hoje, true);
-    expect(r.previstas.map((x) => x.nome)).toEqual(["Hoje", "Amanhã", "Sem data"]);
+    expect(r.previstas.map((x) => x.nome)).toEqual(["Amanhã", "Sem data"]);
     expect(r.reagendar.map((x) => [x.nome, x.motivo])).toEqual([["Passou", "data_passada"], ["Não veio", "no_show"]]);
     expect(r.doDia.map((x) => x.nome)).toContain("Hoje");
   });
@@ -104,8 +116,8 @@ describe("resumirReunioesCloser no Match Sales (dono da reunião)", () => {
   ];
   it("conta as reuniões que ele agendou, tocadas por ele ou por outro", () => {
     const r = resumirReunioesCloser(leads, "Arthur Soares", 2026, 11, "2026-11-18", true);
-    expect(r.previstas.map((x) => x.nome)).toEqual(["Minha, sem closer", "Minha, levada pelo Davi"]);
-    expect(r.doDia).toHaveLength(2);
+    expect(r.previstas).toHaveLength(0);
+    expect(r.doDia.map((x) => x.nome)).toEqual(["Minha, sem closer", "Minha, levada pelo Davi"]);
   });
   it("sem o modo dono (Vorp), só vale o campo closer", () => {
     expect(resumirReunioesCloser(leads, "Arthur Soares", 2026, 11, "2026-11-18").previstas).toHaveLength(0);

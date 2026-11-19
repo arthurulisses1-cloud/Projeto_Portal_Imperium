@@ -1,6 +1,6 @@
 // Mural do Closer da Acrópole (Vorp): pace de recebido ou MRR (à escolha) e, logo abaixo, três quadrados:
 // reuniões previstas, reuniões do dia (horário e SDR) e pace de reuniões realizadas.
-import type { PainelCloser, ReuniaoDoDia } from "@/lib/closer-negocio";
+import type { PainelCloser, ReuniaoCancelada, ReuniaoDoDia } from "@/lib/closer-negocio";
 import PaceAlternavel from "@/components/negocio/PaceAlternavel";
 import DestaqueSetup from "@/components/negocio/DestaqueSetup";
 import { BarraMes, PaceEsforcoCard, ReunioesAAcontecer, ReunioesParaReagendar } from "@/components/negocio/PainelSdr";
@@ -36,6 +36,35 @@ export function ReunioesDoDia({ lista, rotulo = "SDR" }: { lista: ReuniaoDoDia[]
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** Reuniões que o lead cancelou (perdeu) no mês, agrupadas por motivo da perda do CRM. */
+export function ReunioesCanceladas({ lista }: { lista: ReuniaoCancelada[] }) {
+  const porMotivo = new Map<string, ReuniaoCancelada[]>();
+  for (const r of lista) porMotivo.set(r.motivo, [...(porMotivo.get(r.motivo) ?? []), r]);
+  const grupos = Array.from(porMotivo, ([motivo, itens]) => ({ motivo, itens })).sort((a, b) => b.itens.length - a.itens.length || a.motivo.localeCompare(b.motivo, "pt-BR"));
+  return (
+    <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+      <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões agendadas que caíram no mês</p>
+      <p className={`mt-1 text-3xl font-semibold ${lista.length === 0 ? "text-stone-400" : "text-wine-bright"}`}>{lista.length}</p>
+      {lista.length === 0 ? (
+        <p className="mt-1 text-xs text-stone-500">nenhuma reunião agendada no mês foi perdida</p>
+      ) : (
+        <ul className="mt-2 space-y-2">
+          {grupos.map((g) => (
+            <li key={g.motivo} className="text-sm">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-stone-200">{g.motivo}</span>
+                <span className="tabular-nums text-stone-400">{g.itens.length}</span>
+              </div>
+              <p className="text-[11px] leading-snug text-stone-500">{g.itens.map((r) => r.nome).join(" · ")}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-2 text-[11px] text-stone-500">São as reuniões agendadas por você no mês cujo lead foi perdido depois; contam como agendadas, mas não viram realizadas.</p>
     </section>
   );
 }
@@ -79,6 +108,7 @@ export function MuralCloser({
       <div className="grid gap-4 md:grid-cols-3">
         <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões previstas pra acontecer</p>
+          <p className="text-[10px] text-stone-600">a partir de amanhã</p>
           {previstas ? <ReunioesAAcontecer lista={previstas} rotulo={rotulo} /> : <p className="mt-1 text-3xl font-semibold text-stone-400">—</p>}
           <p className="mt-1 text-xs text-stone-500">{previstas && previstas.length > 0 ? "passe o mouse no número para ver quais e quando" : "agendadas para você no CRM"}</p>
         </section>
@@ -93,6 +123,7 @@ export function MuralCloser({
         <PaceEsforcoCard titulo="Reuniões agendadas no mês" p={painel.agendadas} cor={cor} mesAtual={mesAtual} />
         <PaceEsforcoCard titulo="Reuniões realizadas no mês" p={painel.realizadas} cor={cor} mesAtual={mesAtual} />
       </div>
+      {painel.reunioes && <ReunioesCanceladas lista={painel.reunioes.canceladas} />}
     </div>
   );
 }

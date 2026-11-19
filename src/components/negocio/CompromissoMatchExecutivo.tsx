@@ -60,6 +60,9 @@ export default function CompromissoMatchExecutivo({ painel, hoje, negocioId, lin
                 <input name="realizado_agendadas" type="number" min={0} step="any" defaultValue={ag?.realizado ?? ""} className={campo} />
               </label>
             </div>
+            <p className="mt-2 text-[11px] text-stone-500">
+              {painel.reunioes ? "O CRM mostra " + painel.reunioes.agendadasHoje + (painel.reunioes.agendadasHoje === 1 ? " reunião agendada por você hoje." : " reuniões agendadas por você hoje.") : "Sem leitura do CRM para você."} &quot;Cumprido&quot; aparece quando o realizado chega ao compromisso.
+            </p>
           </section>
 
           <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">

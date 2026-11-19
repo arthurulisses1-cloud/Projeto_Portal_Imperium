@@ -25,6 +25,9 @@ const dataBR = (iso: string | null) =>
   !iso ? null : iso.length <= 10 ? iso : new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 const noMes = (iso: string | null, inicio: string, fimExcl: string) => !!iso && iso.slice(0, 10) >= inicio && iso.slice(0, 10) < fimExcl;
 
+/** Reunião agendada no mês que caiu: o lead foi perdido. */
+export type ReuniaoCancelada = { id: string; nome: string; empresa: string | null; canal: string; motivo: string; perdidaEm: string | null };
+
 /** Reunião de hoje: horário, lead, SDR que agendou e como está. */
 export type ReuniaoDoDia = {
   id: string;
@@ -41,7 +44,7 @@ export type ReuniaoDoDia = {
 };
 
 export type ResumoReunioesCloser = {
-  /** Reuniões dele ainda por acontecer (de hoje em diante, ou sem data), da mais próxima para a mais distante. */
+  /** Reuniões dele ainda por acontecer a partir de amanhã (ou sem data), da mais próxima para a mais distante. As de hoje ficam em doDia. */
   previstas: ReuniaoFutura[];
   /** Reuniões para reagendar: a data já passou sem desfecho no CRM, ou o lead está em No Show. */
   reagendar: ReuniaoFutura[];
@@ -49,6 +52,10 @@ export type ResumoReunioesCloser = {
   doDia: ReuniaoDoDia[];
   /** Reuniões que ele agendou no mês (pela data em que o lead chegou a Reunião Agendada), incluindo as que depois caíram. */
   agendadasNoMes: number;
+  /** Reuniões que ele agendou hoje (pelo CRM). */
+  agendadasHoje: number;
+  /** Das agendadas no mês, as que o lead depois perdeu (canceladas), com o motivo da perda do CRM. */
+  canceladas: ReuniaoCancelada[];
   /** Reuniões que ele realizou no mês (pela data em que foram realizadas). */
   realizadasNoMes: number;
   /** Realizadas hoje. */
@@ -62,7 +69,7 @@ export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, a
   // Match Sales: o executivo é dono das reuniões que ele agendou (tocando ele ou levando para outro); o campo closer quase não é preenchido.
   const meus = leads.filter((l) => l.closer === nomeCrm || (donoDaReuniao && l.preVendas === nomeCrm));
 
-  const { aAcontecer: previstas, reagendar } = separarReunioes(meus, hoje, (l, quando) => ({
+  const { aAcontecer: todasAAcontecer, reagendar } = separarReunioes(meus, hoje, (l, quando) => ({
     id: l.id,
     nome: l.nome,
     empresa: l.empresa,
@@ -72,6 +79,13 @@ export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, a
     quandoTexto: quando ? null : l.reuniaoMarcada,
     sdr: l.preVendas,
   }));
+
+  // As de hoje aparecem em "do dia"; previstas é daqui para frente (e as sem data), para não contar duas vezes.
+  const previstas = todasAAcontecer.filter((r) => !(r.quando && dataBR(r.quando) === hoje));
+  const canceladas: ReuniaoCancelada[] = meus
+    .filter((l) => l.situacao === "cancelada" && noMes(dataBR(l.agendadaEm), inicio, fimExcl))
+    .map((l) => ({ id: l.id, nome: l.nome, empresa: l.empresa, canal: l.canal, motivo: l.motivoPerda?.trim() || "Sem motivo informado", perdidaEm: dataBR(l.perdidaEm) }))
+    .sort((a, b) => (b.perdidaEm ?? "").localeCompare(a.perdidaEm ?? ""));
 
   const doDia: ReuniaoDoDia[] = meus
     .filter((l) => (l.situacao === "a_acontecer" || l.situacao === "realizada" || l.situacao === "no_show") && dataBR(lerDataReuniao(l.reuniaoMarcada)) === hoje)
@@ -97,6 +111,8 @@ export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, a
     reagendar,
     doDia,
     agendadasNoMes: meus.filter((l) => noMes(dataBR(l.agendadaEm), inicio, fimExcl)).length,
+    agendadasHoje: meus.filter((l) => dataBR(l.agendadaEm) === hoje).length,
+    canceladas,
     realizadasNoMes: meus.filter((l) => noMes(dataBR(l.realizadaEm), inicio, fimExcl)).length,
     realizadasHoje: meus.filter((l) => dataBR(l.realizadaEm) === hoje).length,
   };
