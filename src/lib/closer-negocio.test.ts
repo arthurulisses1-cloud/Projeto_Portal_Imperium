@@ -65,6 +65,20 @@ describe("metaMrrDaPessoa", () => {
   });
 });
 
+describe("agendadas e realizadas no mês (Match Sales)", () => {
+  const leads = [
+    lead({ nome: "A", closer: null, preVendas: "Matheus", agendadaEm: "2026-11-05T13:00:00Z", realizadaEm: "2026-11-06T13:00:00Z", situacao: "realizada" }),
+    lead({ nome: "B", closer: null, preVendas: "Matheus", agendadaEm: "2026-11-10T13:00:00Z", situacao: "cancelada" }),
+    lead({ nome: "C", closer: null, preVendas: "Matheus", agendadaEm: "2026-10-28T13:00:00Z", realizadaEm: "2026-11-02T13:00:00Z", situacao: "realizada" }),
+    lead({ nome: "D", closer: null, preVendas: "Outro", agendadaEm: "2026-11-05T13:00:00Z" }),
+  ];
+  it("conta as agendadas pela data do agendamento e as realizadas pela data da realização", () => {
+    const r = resumirReunioesCloser(leads, "Matheus", 2026, 11, "2026-11-19", true);
+    expect(r.agendadasNoMes).toBe(2);
+    expect(r.realizadasNoMes).toBe(2);
+  });
+});
+
 describe("reuniões para reagendar (Match Sales)", () => {
   const hoje = "2026-11-19";
   const leads = [

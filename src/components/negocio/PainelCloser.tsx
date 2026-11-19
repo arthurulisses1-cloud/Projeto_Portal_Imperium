@@ -76,7 +76,7 @@ export function MuralCloser({
         ]}
       />
       {painel.setup && <DestaqueSetup setup={painel.setup} recebidoMeta={painel.recebido.meta} cor={cor} />}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões previstas pra acontecer</p>
           {previstas ? <ReunioesAAcontecer lista={previstas} rotulo={rotulo} /> : <p className="mt-1 text-3xl font-semibold text-stone-400">—</p>}
@@ -88,7 +88,10 @@ export function MuralCloser({
           {painel.reunioes ? <ReunioesParaReagendar lista={painel.reunioes.reagendar} rotulo={rotulo} /> : <p className="mt-1 text-3xl font-semibold text-stone-400">—</p>}
           <p className="mt-1 text-xs text-stone-500">{painel.reunioes && painel.reunioes.reagendar.length > 0 ? "passe o mouse no número para ver quais" : "nenhuma com data passada ou no-show"}</p>
         </section>
-        <PaceEsforcoCard titulo="Reuniões realizadas" p={painel.realizadas} cor={cor} mesAtual={mesAtual} />
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <PaceEsforcoCard titulo="Reuniões agendadas no mês" p={painel.agendadas} cor={cor} mesAtual={mesAtual} />
+        <PaceEsforcoCard titulo="Reuniões realizadas no mês" p={painel.realizadas} cor={cor} mesAtual={mesAtual} />
       </div>
     </div>
   );

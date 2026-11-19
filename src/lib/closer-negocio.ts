@@ -47,6 +47,8 @@ export type ResumoReunioesCloser = {
   reagendar: ReuniaoFutura[];
   /** Reuniões marcadas para hoje (qualquer situação, menos cancelada), por horário. */
   doDia: ReuniaoDoDia[];
+  /** Reuniões que ele agendou no mês (pela data em que o lead chegou a Reunião Agendada), incluindo as que depois caíram. */
+  agendadasNoMes: number;
   /** Reuniões que ele realizou no mês (pela data em que foram realizadas). */
   realizadasNoMes: number;
   /** Realizadas hoje. */
@@ -94,6 +96,7 @@ export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, a
     previstas,
     reagendar,
     doDia,
+    agendadasNoMes: meus.filter((l) => noMes(dataBR(l.agendadaEm), inicio, fimExcl)).length,
     realizadasNoMes: meus.filter((l) => noMes(dataBR(l.realizadaEm), inicio, fimExcl)).length,
     realizadasHoje: meus.filter((l) => dataBR(l.realizadaEm) === hoje).length,
   };
@@ -111,7 +114,8 @@ export type PainelCloser = {
   nomeCrm: string | null;
   recebido: PaceCalculado;
   mrr: PaceCalculado;
-  /** Pace de reuniões realizadas (meta do forecast dividida entre os closers). */
+  /** Pace de reuniões agendadas e de realizadas (meta do forecast dividida entre os closers). */
+  agendadas: PaceCalculado;
   realizadas: PaceCalculado;
   reunioes: ResumoReunioesCloser | null;
   atualizadoEm: string | null;
@@ -154,7 +158,9 @@ export async function buscarPainelCloser(
   const mrrMes = (vendas ?? []).reduce((s, v) => s + Number(v.mrr ?? 0), 0);
   const base = { hoje: ctx.hoje, ano: ctx.ano, mes: ctx.mes };
 
-  const metasRealizadas = Object.values(metasPorCanal(negocio.slug, ctx.ano, ctx.mes).reunioes_realizadas).reduce((s, v) => s + (v ?? 0), 0);
+  const metasCanal = metasPorCanal(negocio.slug, ctx.ano, ctx.mes);
+  const metasRealizadas = Object.values(metasCanal.reunioes_realizadas).reduce((s, v) => s + (v ?? 0), 0);
+  const metasAgendadas = Object.values(metasCanal.reunioes_agendadas).reduce((s, v) => s + (v ?? 0), 0);
   // Vorp: a meta de reuniões realizadas se divide entre os closers; Match: entre quem agenda (time do negócio).
   const idsTime = new Set(Object.values(TIMES_POR_CANAL[negocio.slug] ?? {}).flat());
   const nClosers = negocio.slug !== SLUG_VORP && idsTime.size > 0 ? idsTime.size : Math.max(1, (closers ?? []).length);
@@ -173,6 +179,7 @@ export async function buscarPainelCloser(
     nomeCrm,
     recebido: calcularPace({ meta: eu?.meta ?? 0, recebido: recebidoMes, ...base }),
     mrr: calcularPace({ meta: metaMrrDaPessoa(metaMrrForecast(negocio.slug, ctx.ano, ctx.mes), eu?.meta ?? null, pn?.pace.meta ?? 0), recebido: mrrMes, ...base }),
+    agendadas: calcularPace({ meta: metasAgendadas / nClosers, recebido: reunioes?.agendadasNoMes ?? 0, ...base }),
     realizadas: calcularPace({ meta: metasRealizadas / nClosers, recebido: reunioes?.realizadasNoMes ?? 0, ...base }),
     reunioes,
     atualizadoEm: auditoria?.atualizado_em ?? null,
