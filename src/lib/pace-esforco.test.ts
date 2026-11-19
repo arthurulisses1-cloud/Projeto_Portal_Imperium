@@ -56,6 +56,17 @@ describe("pace de esforço (Pace por B.U)", () => {
   });
 });
 
+describe("Match Sales: Referidos também tem meta de agendadas (com o no-show)", () => {
+  it("agendadas dos referidos = leads indicados; realizadas = agendadas × comparecimento (70%)", () => {
+    const m = metasPorCanal("matchsales", 2026, 11);
+    expect(m.reunioes_agendadas.indicacao).toBeGreaterThan(0);
+    expect(m.reunioes_realizadas.indicacao! / m.reunioes_agendadas.indicacao!).toBeCloseTo(0.7);
+    const ag = Object.values(m.reunioes_agendadas).reduce((s, v) => s + (v ?? 0), 0);
+    const re = Object.values(m.reunioes_realizadas).reduce((s, v) => s + (v ?? 0), 0);
+    expect(re / ag).toBeCloseTo(0.7);
+  });
+});
+
 describe("gráfico esperado × realizado e conversões ideais", () => {
   it("um ponto por dia útil; fim de semana entra no dia útil seguinte; dia que não chegou fica sem realizado", () => {
     const dias = diasUteisDoMes(2026, 11);

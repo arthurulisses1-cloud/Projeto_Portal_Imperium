@@ -70,6 +70,12 @@ export function metasPorCanal(slug: string, ano: number, mes: number): Record<Et
       const meta = f.etapas.find((e) => e.chave === etapa)?.meta;
       if (meta != null) out[etapa][f.canal] = meta;
     }
+    // Match Sales, Referidos: o lead indicado agenda a reunião e só parte comparece (comparecimento do forecast, já descontado o no-show).
+    // Os leads indicados são as reuniões agendadas; as realizadas são esses leads vezes o comparecimento (49,5 agendadas → 34,6 realizadas).
+    if (f.canal === "indicacao" && slug === "matchsales") {
+      const leads = f.etapas.find((e) => e.chave === "leads_indicados")?.meta;
+      if (leads != null) out.reunioes_agendadas.indicacao = leads;
+    }
   }
   return out;
 }
