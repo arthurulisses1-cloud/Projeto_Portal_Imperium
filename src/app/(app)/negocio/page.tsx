@@ -23,7 +23,7 @@ import { calcularPace, type PaceCalculado, type StatusPace } from "@/lib/pace-ne
 import { metaKwhForecast } from "@/lib/forecast-negocios";
 import { buscarAcumuladoKwhSunne } from "@/lib/sunne";
 import { faixasAcima100k, pctAcima100k, resumirAcima100k } from "@/lib/faturamento-100k";
-import { resumirDesfechoAgendadas, type DesfechoAgendadas } from "@/lib/desfecho-agendadas";
+import { resumirDesfechoAgendadas, type DesfechoAgendadas, type LeadDesfecho } from "@/lib/desfecho-agendadas";
 import type { AuditoriaGravada, LeadAuditoria } from "@/lib/integracoes/auditoria";
 import { BotaoAtualizarRealizado } from "@/components/negocio/BotaoAtualizarRealizado";
 
@@ -965,15 +965,18 @@ const LABEL_RANKING: Record<string, string> = { reunioes_agendadas: "Reuniões a
  *  em todos os canais, zeros apagados) e a taxa de no-show (no-show ÷ realizadas + no-show). Altura fixa: os
  *  canais sem o bloco reservam o mesmo espaço, e as linhas seguintes continuam alinhadas. */
 function DesfechoAgendadasFunil({ d }: { d: DesfechoAgendadas | null }) {
-  const caixa = "h-[4.4rem] overflow-hidden rounded-md border px-2 py-1.5";
+  // Sem overflow-hidden: a lista de leads de cada item abre por cima do que vem embaixo.
+  const caixa = "h-[4.4rem] rounded-md border px-2 py-1.5";
   if (!d) return <div className={`${caixa} invisible border-transparent`} aria-hidden="true" />;
   const partes = [
-    { rotulo: d.realizadas === 1 ? "realizada" : "realizadas", qtd: d.realizadas, cor: "bg-success-bright", dica: "Reunião realizada" },
-    { rotulo: "no-show", qtd: d.noShow, cor: "bg-wine-bright", dica: "Passou pelo No Show e não realizou" },
-    { rotulo: "a acontecer", qtd: d.aAcontecer, cor: "bg-stone-400", dica: "Em aberto, com a reunião de hoje em diante (ou sem data)" },
-    { rotulo: "reagendar", qtd: d.reagendar, cor: "bg-warning-bright", dica: "Em aberto, com a data da reunião já passada e sem desfecho no Pipefácil" },
-    { rotulo: d.canceladas === 1 ? "cancelada" : "canceladas", qtd: d.canceladas, cor: "bg-stone-600", dica: "Perdida antes da reunião" },
-    ...(d.semInfo > 0 ? [{ rotulo: "sem info", qtd: d.semInfo, cor: "bg-imperium-line-strong", dica: "Lead não encontrado na Auditoria (aguarda a próxima sincronização)" }] : []),
+    { rotulo: d.realizadas === 1 ? "realizada" : "realizadas", qtd: d.realizadas, leads: d.leads.realizadas, cor: "bg-success-bright", dica: "Reunião realizada" },
+    { rotulo: "no-show", qtd: d.noShow, leads: d.leads.noShow, cor: "bg-wine-bright", dica: "Passou pelo No Show e não realizou" },
+    { rotulo: "a acontecer", qtd: d.aAcontecer, leads: d.leads.aAcontecer, cor: "bg-stone-400", dica: "Em aberto, com a reunião de hoje em diante (ou sem data)" },
+    { rotulo: "reagendar", qtd: d.reagendar, leads: d.leads.reagendar, cor: "bg-warning-bright", dica: "Em aberto, com a data da reunião já passada e sem desfecho no Pipefácil" },
+    { rotulo: d.canceladas === 1 ? "cancelada" : "canceladas", qtd: d.canceladas, leads: d.leads.canceladas, cor: "bg-stone-600", dica: "Perdida antes da reunião" },
+    ...(d.semInfo > 0
+      ? [{ rotulo: "sem info", qtd: d.semInfo, leads: d.leads.semInfo, cor: "bg-imperium-line-strong", dica: "Lead não encontrado na Auditoria (aguarda a próxima sincronização)" }]
+      : []),
   ];
   const pct = d.pctNoShow;
   const corPct = pct === null ? "text-stone-500" : pct > 0.3 ? "text-wine-bright" : pct > 0.15 ? "text-warning-bright" : "text-success-bright";
@@ -993,15 +996,54 @@ function DesfechoAgendadasFunil({ d }: { d: DesfechoAgendadas | null }) {
         ))}
       </div>
       <div className="mt-1 grid grid-cols-3 gap-x-2 gap-y-0.5 text-[10px] text-stone-400">
-        {partes.map((p) => (
-          <span key={p.rotulo} className={`inline-flex min-w-0 items-center gap-1 whitespace-nowrap ${p.qtd === 0 ? "opacity-40" : ""}`} title={p.dica}>
-            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${p.cor}`} />
-            <span className="text-stone-200">{p.qtd}</span>
-            <span className="truncate">{p.rotulo}</span>
-          </span>
+        {partes.map((p, i) => (
+          <ItemDesfecho key={p.rotulo} {...p} lado={i % 3 === 2 ? "direita" : "esquerda"} />
         ))}
       </div>
     </div>
+  );
+}
+
+/** Item da legenda do desfecho; com leads, mostra a lista (lead, pré-vendas que agendou e data da reunião) ao passar o mouse. */
+function ItemDesfecho({ rotulo, qtd, leads, cor, dica, lado }: { rotulo: string; qtd: number; leads: LeadDesfecho[]; cor: string; dica: string; lado: "esquerda" | "direita" }) {
+  const conteudo = (
+    <>
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cor}`} />
+      <span className="text-stone-200">{qtd}</span>
+      <span className={`truncate ${leads.length > 0 ? "underline decoration-stone-600 decoration-dotted underline-offset-2" : ""}`}>{rotulo}</span>
+    </>
+  );
+  if (leads.length === 0) {
+    return (
+      <span className={`inline-flex min-w-0 items-center gap-1 whitespace-nowrap ${qtd === 0 ? "opacity-40" : ""}`} title={dica}>
+        {conteudo}
+      </span>
+    );
+  }
+  const dataReuniao = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return (
+    <span className="group relative inline-flex min-w-0 cursor-help items-center gap-1 whitespace-nowrap" tabIndex={0}>
+      {conteudo}
+      <span
+        className={`pointer-events-none invisible absolute ${lado === "direita" ? "right-0" : "left-0"} top-full z-30 mt-1 w-72 whitespace-normal rounded-md border border-imperium-line bg-imperium-surface p-2 text-left opacity-0 shadow-xl transition-opacity group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus:pointer-events-auto group-focus:visible group-focus:opacity-100`}
+      >
+        <span className="mb-1 block text-[10px] uppercase tracking-widest text-stone-500">
+          {qtd} {rotulo}
+        </span>
+        <span className="mb-1.5 block text-[10px] text-stone-500">{dica}</span>
+        <span className="block max-h-72 space-y-1.5 overflow-y-auto">
+          {leads.map((l, i) => (
+            <span key={i} className="block text-[11px] leading-tight">
+              <span className="text-stone-100">{l.nome}</span>
+              <span className="block text-stone-400">
+                pré-vendas: {l.preVendas ?? "—"}
+                {l.reuniao ? <span className="text-stone-500"> · reunião {dataReuniao(l.reuniao)}</span> : null}
+              </span>
+            </span>
+          ))}
+        </span>
+      </span>
+    </span>
   );
 }
 
