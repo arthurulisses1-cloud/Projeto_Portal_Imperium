@@ -593,6 +593,32 @@ export async function runSyncIntegracoes(opts: OpcoesSync = {}): Promise<Resulta
     }),
   );
 
+  // Diagnóstico temporário (Acrópole): todos os funis do Pipefácil e o que mudou hoje nos que o portal não lê (canal de parcerias).
+  if (!opts.simular && slugs.includes("vorp")) {
+    try {
+      const cfg = CRM_POR_NEGOCIO.vorp;
+      const token = process.env[cfg.tokenEnv];
+      if (token) {
+        const api = new Pipefacil(token);
+        const funis = await api.funis();
+        const lidos = new Set(cfg.pipelines);
+        const resumo = funis.map((f) => ({ seq: f.seq, nome: f.name, lido: lidos.has(f.seq), etapas: f.stages.map((s) => s.name) }));
+        const hojeIso = hoje;
+        const doDia: Record<string, unknown>[] = [];
+        for (const f of funis.filter((x) => !lidos.has(x.seq) && /parc|parce|network|evento|social/i.test(x.name))) {
+          const deals = await api.dealsDoFunil(f.seq);
+          for (const d of deals) {
+            const criado = d.createdAt?.slice(0, 10);
+            if (criado === hojeIso || (d.closedAt ?? "").slice(0, 10) === hojeIso) doDia.push({ funil: f.name, seq: d.seq, criado: d.createdAt, etapa: f.stages.find((s) => s.id === d.stageId)?.name ?? null, responsavel: d.responsibleUserId });
+          }
+        }
+        await supabase.from("integracao_estado").upsert({ chave: "diagnostico:vorp:funis", valor: { funis: resumo, doDiaNosNaoLidos: doDia }, atualizado_em: new Date().toISOString() });
+      }
+    } catch (e) {
+      console.error("diagnóstico da Acrópole falhou:", e);
+    }
+  }
+
   // Diagnóstico temporário (Energy): lista dos negócios de GD fechados no mês, sem nome nem contato, para conferir os kWh. Remover depois.
   if (!opts.simular && slugs.includes("vorp-energy")) {
     try {
