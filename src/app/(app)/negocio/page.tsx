@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -261,14 +260,9 @@ export default async function NegocioDashboardPage({
   };
   const ultimaSyncFunil = (linhasRealizado ?? []).reduce<string | null>((m, l) => (!m || l.synced_at > m ? l.synced_at : m), null);
   const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
-  // Desfecho das agendadas de cada funil; os canais sem ele reservam o mesmo espaço (linhas alinhadas).
+  // Desfecho das agendadas de cada funil; os canais sem ele reservam o mesmo espaço (conversões alinhadas).
   const desfechos = funis.map((fu) => resumirDesfechoAgendadas(fu.etapas.find((e) => e.chave === "reunioes_agendadas")?.leads, auditoria, hoje));
   const algumDesfecho = desfechos.some(Boolean);
-  // Linha (já com o preenchimento do topo) logo abaixo das agendadas, a mesma em todos os canais.
-  const maxEtapas = Math.max(0, ...funis.map((f) => f.etapas.length));
-  const linhaDesfecho = algumDesfecho
-    ? Math.max(...funis.map((f) => maxEtapas - f.etapas.length + f.etapas.findIndex((e) => e.chave === "reunioes_agendadas") + 1))
-    : -1;
   // Energy: contas subidas vêm da Sunne (negócios criados no mês por vendedor), não do compromisso do dia.
   // Ranking de pré-vendas pelo Pipefácil (agendadas e realizadas, todos os leads e canais), gravado pela
   // sincronização. Sem ele (negócio sem CRM ou mês fora da janela), vale o Compromisso do dia.
@@ -536,7 +530,6 @@ export default async function NegocioDashboardPage({
                     <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Meta</span>
                     {Array.from({ length: pad }).map((_, i) => (
                       <div key={`pv${i}`} className="contents" aria-hidden="true">
-                        {i === linhaDesfecho && <DesfechoAgendadasFunil d={null} />}
                         <div className="invisible">
                           <p>.</p>
                           <div className="mt-1 h-1.5" />
@@ -546,10 +539,8 @@ export default async function NegocioDashboardPage({
                         <span className="invisible">0</span>
                       </div>
                     ))}
-                    {fu.etapas.map((e, iEtapa) => (
-                      <Fragment key={e.label}>
-                      {pad + iEtapa === linhaDesfecho && <DesfechoAgendadasFunil d={desfechos[iFunil]} />}
-                      {e.meta === null ? (
+                    {fu.etapas.map((e) =>
+                      e.meta === null ? (
                         // Etapa sem meta (funil próprio do CRM): a barra é o realizado em relação à 1ª etapa.
                         <div key={e.label} className="contents">
                           <div className="min-w-0">
@@ -592,10 +583,16 @@ export default async function NegocioDashboardPage({
                           <RealizadoComLeads valor={e.realizado === null ? "—" : num(e.realizado)} leads={e.leads} />
                           <span className="text-right text-stone-300">{num(e.meta)}</span>
                         </div>
-                      )}
-                      </Fragment>
-                    ))}
+                      ),
+                    )}
                   </div>
+
+                  {/* Desfecho das agendadas: entre o funil e as conversões (os canais sem ele reservam o espaço) */}
+                  {algumDesfecho && (
+                    <div className="mt-3">
+                      <DesfechoAgendadasFunil d={desfechos[iFunil]} />
+                    </div>
+                  )}
 
                   {/* Conversões: mesma grade, uma linha por passagem de etapa */}
                   <div className="mt-5 grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem] items-center gap-x-2 text-xs tabular-nums">
@@ -964,11 +961,11 @@ function nomeCanalOrigem(c: string) {
 
 const LABEL_RANKING: Record<string, string> = { reunioes_agendadas: "Reuniões agendadas", reunioes_realizadas: "Reuniões realizadas" };
 
-/** Desfecho das agendadas do mês, logo abaixo da linha delas: barra empilhada, legenda fixa (as mesmas posições
+/** Desfecho das agendadas do mês, abaixo do funil (antes das conversões): barra empilhada, legenda fixa (as mesmas posições
  *  em todos os canais, zeros apagados) e a taxa de no-show (no-show ÷ realizadas + no-show). Altura fixa: os
  *  canais sem o bloco reservam o mesmo espaço, e as linhas seguintes continuam alinhadas. */
 function DesfechoAgendadasFunil({ d }: { d: DesfechoAgendadas | null }) {
-  const caixa = "col-span-4 mb-1 h-[4.4rem] overflow-hidden rounded-md border px-2 py-1.5";
+  const caixa = "h-[4.4rem] overflow-hidden rounded-md border px-2 py-1.5";
   if (!d) return <div className={`${caixa} invisible border-transparent`} aria-hidden="true" />;
   const partes = [
     { rotulo: d.realizadas === 1 ? "realizada" : "realizadas", qtd: d.realizadas, cor: "bg-success-bright", dica: "Reunião realizada" },
