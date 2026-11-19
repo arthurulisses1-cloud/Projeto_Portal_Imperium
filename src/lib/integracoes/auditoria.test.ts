@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CRM_POR_NEGOCIO } from "./config";
-import { montarAuditoria } from "./auditoria";
+import { dataDaReuniao, montarAuditoria } from "./auditoria";
 import type { DealCrm, EventoCrm } from "./realizado";
 
 const cfg = CRM_POR_NEGOCIO.vorp;
@@ -19,6 +19,18 @@ const deal = (p: Partial<DealCrm> & { deal_id: string }): DealCrm & { seq: numbe
   produtos: null, responsavel_user_id: "u-jorge", closer_user_id: null, sdr_user_id: null, criado_em: "2026-11-01T12:00:00Z", fechado_em: null, seq: 1, ...p,
 });
 const ev = (deal_id: string, stage_id: string, ocorrido_em: string): EventoCrm => ({ deal_id, stage_id, ocorrido_em, tipo: "STAGE_CHANGED" });
+
+describe("dataDaReuniao", () => {
+  it("Acrópole: reuniao_agendada", () => {
+    expect(dataDaReuniao({ reuniao_agendada: "19/11/2026 14:00" })).toBe("19/11/2026 14:00");
+  });
+  it("Match: Data da Reunião (data_da_reuniao_1) e a mais recente quando há mais de uma", () => {
+    expect(dataDaReuniao({ data_da_reuniao_1: "2026-11-19T16:00" })).toBe("2026-11-19T16:00");
+    expect(dataDaReuniao({ data_da_reuniao_1: "2026-11-10T16:00", data_da_reuniao_2: "2026-11-19T10:00" })).toBe("2026-11-19T10:00");
+    expect(dataDaReuniao({ data_da_reuniao_1: "2026-11-10T16:00", data_da_reuniao_2: "" })).toBe("2026-11-10T16:00");
+    expect(dataDaReuniao({})).toBeNull();
+  });
+});
 
 describe("base da auditoria", () => {
   const deals = [

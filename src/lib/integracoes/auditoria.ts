@@ -98,6 +98,24 @@ const texto = (v: unknown): string | null => {
  * também os que só entraram ou conectaram (desde o início do histórico), para a lista "Leads Inbound do
  * período". Lead falso fica fora (como no funil). A venda só conta com o lead ganho (venda desfeita não).
  */
+/**
+ * Data da reunião do lead: a Acrópole usa o campo "reuniao_agendada"; o Match Sales, "Data da Reunião" (data_da_reuniao_1, _2...).
+ * Havendo mais de uma, vale a mais recente (a reunião remarcada ou a seguinte).
+ */
+export function dataDaReuniao(p: Record<string, unknown>): string | null {
+  const unica = texto(p.reuniao_agendada);
+  if (unica) return unica;
+  const campos = Object.keys(p)
+    .map((k) => ({ k, m: /^data_da_reuniao(?:_(d+))?$/.exec(k) }))
+    .filter((x): x is { k: string; m: RegExpExecArray } => !!x.m)
+    .sort((a, b) => Number(b.m[1] ?? 1) - Number(a.m[1] ?? 1));
+  for (const c of campos) {
+    const v = texto(p[c.k]);
+    if (v) return v;
+  }
+  return null;
+}
+
 export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsaveis, vendedores, nomes, rotulos = {} }: Entrada): LeadAuditoria[] {
   const rotulo = (campo: string | undefined, valor: string | null) => (campo && valor ? rotulos[campo]?.[valor] ?? null : null);
   const marcos = marcosPorLead(eventos, cfg);
@@ -171,7 +189,7 @@ export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsav
       previsao: ex.expectedCloseAt ?? null,
       motivoPerda: ex.lostReason ?? null,
       tags: (ex.tags ?? []).map((t) => t.name),
-      reuniaoMarcada: texto(p.reuniao_agendada),
+      reuniaoMarcada: dataDaReuniao(p),
       criadoEm: d.criado_em,
       conectadoEm: m[NIVEL.conectado] ?? null,
       mql: ehMql(d, cfg),
