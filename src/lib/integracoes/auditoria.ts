@@ -106,7 +106,7 @@ export function dataDaReuniao(p: Record<string, unknown>): string | null {
   const unica = texto(p.reuniao_agendada);
   if (unica) return unica;
   const campos = Object.keys(p)
-    .map((k) => ({ k, m: /^data_da_reuniao(?:_(d+))?$/.exec(k) }))
+    .map((k) => ({ k, m: /^data_da_reuniao(?:_([0-9]+))?$/.exec(k) }))
     .filter((x): x is { k: string; m: RegExpExecArray } => !!x.m)
     .sort((a, b) => Number(b.m[1] ?? 1) - Number(a.m[1] ?? 1));
   for (const c of campos) {
