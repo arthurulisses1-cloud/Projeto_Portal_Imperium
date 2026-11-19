@@ -3,6 +3,8 @@
 // (vendas de hoje no Match; Sunne no Energy), porque a linha gravada só muda quando a pessoa abre a própria tela.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarCompromissoEnergia } from "@/lib/energy-time";
+import type { AuditoriaGravada, LeadAuditoria } from "@/lib/integracoes/auditoria";
+import { usuarioCrmDoPerfil } from "@/lib/sdr-negocio";
 
 export type KpiPessoa = { chave: string; label: string; meta: number; realizado: number };
 export type PessoaCompromisso = {
@@ -36,6 +38,17 @@ export function atingimentoDaPessoa(kpis: Pick<KpiPessoa, "meta" | "realizado">[
   const comMeta = kpis.filter((k) => k.meta > 0);
   if (comMeta.length === 0) return null;
   return comMeta.reduce((s, k) => s + Math.min(1, k.realizado / k.meta), 0) / comMeta.length;
+}
+
+const diaBR = (iso: string | null) => (!iso ? null : iso.length <= 10 ? iso : new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }));
+
+/** Reuniões que a pessoa agendou e realizou hoje, pela auditoria do CRM: quem agendou (pré-vendas) ou fechou (closer) (pura). */
+export function reunioesDeHoje(leads: Pick<LeadAuditoria, "preVendas" | "closer" | "agendadaEm" | "realizadaEm">[], nomeCrm: string, hoje: string): { agendadas: number; realizadas: number } {
+  const meus = leads.filter((l) => l.preVendas === nomeCrm || l.closer === nomeCrm);
+  return {
+    agendadas: meus.filter((l) => l.preVendas === nomeCrm && diaBR(l.agendadaEm) === hoje).length,
+    realizadas: meus.filter((l) => diaBR(l.realizadaEm) === hoje).length,
+  };
 }
 
 /** Monta o consolidado de um time (pura). `kpisPorPessoa`: indicadores gravados hoje; `faltaram`: quem foi marcado como ausente. */
@@ -116,6 +129,26 @@ export async function buscarCompromissosDosTimes(admin: SupabaseClient, hoje: st
         for (const k of kpisPor.get(m.id) ?? []) {
           if (k.chave === "recebido") k.realizado = minhas.reduce((s, v) => s + Number(v.valor ?? 0), 0);
           if (k.chave === "mrr") k.realizado = minhas.reduce((s, v) => s + Number(v.mrr ?? 0), 0);
+        }
+      }
+    }
+    // Acrópole: as reuniões agendadas e realizadas de hoje vêm do CRM (antes valia só o que a pessoa digitava).
+    if (n.slug === "vorp") {
+      const [{ data: mb }, { data: pf }, { data: au }] = await Promise.all([
+        admin.from("integracao_estado").select("valor").eq("chave", "pipefacil:vorp:membros").maybeSingle(),
+        admin.from("integracao_estado").select("valor").eq("chave", "pipefacil:vorp:perfis").maybeSingle(),
+        admin.from("integracao_estado").select("valor").eq("chave", "auditoria:vorp").maybeSingle(),
+      ]);
+      const nomesCrm = (mb?.valor as Record<string, string> | null) ?? {};
+      const leads = ((au?.valor as AuditoriaGravada | null)?.leads ?? []) as LeadAuditoria[];
+      for (const m of membros) {
+        const usuario = usuarioCrmDoPerfil((pf?.valor as Record<string, string> | null) ?? null, nomesCrm, m.id, m.nome);
+        const nomeCrm = usuario ? nomesCrm[usuario] ?? null : null;
+        if (!nomeCrm) continue;
+        const r = reunioesDeHoje(leads, nomeCrm, hoje);
+        for (const k of kpisPor.get(m.id) ?? []) {
+          if (k.chave === "reunioes_agendadas") k.realizado = r.agendadas;
+          if (k.chave === "reunioes_realizadas") k.realizado = r.realizadas;
         }
       }
     }

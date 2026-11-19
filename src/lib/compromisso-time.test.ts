@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { atingimentoDaPessoa, montarTime, type KpiPessoa } from "./compromisso-time";
+import { atingimentoDaPessoa, montarTime, reunioesDeHoje, type KpiPessoa } from "./compromisso-time";
 
 const k = (chave: string, meta: number, realizado: number): KpiPessoa => ({ chave, label: chave, meta, realizado });
 
@@ -7,6 +7,18 @@ describe("atingimentoDaPessoa", () => {
   it("média dos indicadores com meta, cada um limitado a 100%", () => {
     expect(atingimentoDaPessoa([k("a", 10, 5), k("b", 2, 6), k("c", 0, 9)])).toBeCloseTo(0.75);
     expect(atingimentoDaPessoa([k("a", 0, 3)])).toBeNull();
+  });
+});
+
+describe("reunioesDeHoje", () => {
+  const leads = [
+    { preVendas: "Jorge", closer: null, agendadaEm: "2026-11-19T13:45:00Z", realizadaEm: null },
+    { preVendas: "Jorge", closer: "Bruno", agendadaEm: "2026-11-18T13:45:00Z", realizadaEm: "2026-11-19T18:00:00Z" },
+    { preVendas: "Outro", closer: null, agendadaEm: "2026-11-19T13:45:00Z", realizadaEm: null },
+  ];
+  it("conta as agendadas de hoje de quem agendou e as realizadas de hoje de quem agendou ou fechou", () => {
+    expect(reunioesDeHoje(leads, "Jorge", "2026-11-19")).toEqual({ agendadas: 1, realizadas: 1 });
+    expect(reunioesDeHoje(leads, "Bruno", "2026-11-19")).toEqual({ agendadas: 0, realizadas: 1 });
   });
 });
 
