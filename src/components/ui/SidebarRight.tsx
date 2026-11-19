@@ -96,26 +96,41 @@ export default async function SidebarRight({ userId }: { userId: string }) {
     console.error("SidebarRight: comissão do mês falhou", e);
   }
 
-  // ---------- Meu time: quem está no mesmo negócio ----------
+  // ---------- Meu time: quem está no mesmo negócio (o Diretor está em todos: vê os times de todos os negócios) ----------
   type Membro = { id: string; nome: string; cargo: CargoNegocio; role: string | null; avatarUrl: string | null };
-  let time: Membro[] = [];
-  if (principal) {
+  type Grupo = { negocio: Vinculo["negocio"]; membros: Membro[] };
+  let grupos: Grupo[] = [];
+  let negociosDoTime: Vinculo["negocio"][] = principal ? [principal.negocio] : [];
+  if (ehDiretor) {
+    const { data: todos } = await supabase.from("negocios").select("id, slug, nome, equipe_nome, equipe_bandeira, status").eq("status", "ativo").order("ordem");
+    negociosDoTime = (todos ?? []) as Vinculo["negocio"][];
+  }
+  if (negociosDoTime.length > 0) {
     const { data: membrosRaw } = await supabase
       .from("profile_negocios")
-      .select("cargo, profiles!inner(id, full_name, avatar_url, ativo, role)")
-      .eq("negocio_id", principal.negocio.id);
+      .select("negocio_id, cargo, profiles!inner(id, full_name, avatar_url, ativo, role)")
+      .in("negocio_id", negociosDoTime.map((n) => n.id));
     type P = { id: string; full_name: string; avatar_url: string | null; ativo: boolean; role: string | null };
-    type M = { cargo: CargoNegocio; profiles: P | P[] };
-    time = ((membrosRaw ?? []) as unknown as M[])
+    type M = { negocio_id: string; cargo: CargoNegocio; profiles: P | P[] };
+    const todosMembros = ((membrosRaw ?? []) as unknown as M[])
       .map((m) => ({ m, p: Array.isArray(m.profiles) ? m.profiles[0] : m.profiles }))
-      .filter((x) => x.p && x.p.ativo)
-      .map((x) => ({ id: x.p.id, nome: x.p.full_name, cargo: x.m.cargo, role: x.p.role ?? null, avatarUrl: x.p.avatar_url }))
-      .sort(
-        (a, b) =>
-          Number(b.role === "diretor") - Number(a.role === "diretor") ||
-          Number(b.cargo === "head") - Number(a.cargo === "head") ||
-          a.nome.localeCompare(b.nome, "pt-BR"),
-      );
+      .filter((x) => x.p && x.p.ativo);
+    grupos = negociosDoTime
+      .map((negocio) => ({
+        negocio,
+        membros: todosMembros
+          .filter((x) => x.m.negocio_id === negocio.id)
+          // O Diretor não se lista no próprio time.
+          .filter((x) => !(ehDiretor && x.p.role === "diretor"))
+          .map((x): Membro => ({ id: x.p.id, nome: x.p.full_name, cargo: x.m.cargo, role: x.p.role ?? null, avatarUrl: x.p.avatar_url }))
+          .sort(
+            (a, b) =>
+              Number(b.role === "diretor") - Number(a.role === "diretor") ||
+              Number(b.cargo === "head") - Number(a.cargo === "head") ||
+              a.nome.localeCompare(b.nome, "pt-BR"),
+          ),
+      }))
+      .filter((g) => g.membros.length > 0);
   }
 
   return (
@@ -182,11 +197,13 @@ export default async function SidebarRight({ userId }: { userId: string }) {
         </a>
       )}
 
-      {time.length > 0 && principal && (
-        <div className="border-t border-imperium-line pt-4">
-          <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">Meu time · {nomeEquipe(principal.negocio)}</p>
+      {grupos.map((g) => (
+        <div key={g.negocio.id} className="border-t border-imperium-line pt-4">
+          <p className="mb-2 text-[10px] uppercase tracking-wide text-stone-500">
+            {ehDiretor ? "Time" : "Meu time"} · <span style={{ color: `rgb(${NEGOCIO_COR[g.negocio.slug] ?? "201 162 74"})` }}>{nomeEquipe(g.negocio)}</span>
+          </p>
           <ul className="space-y-2">
-            {time.map((m) => (
+            {g.membros.map((m) => (
               <li key={m.id} className="flex items-center gap-2.5">
                 {m.avatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -204,7 +221,7 @@ export default async function SidebarRight({ userId }: { userId: string }) {
             ))}
           </ul>
         </div>
-      )}
+      ))}
     </aside>
   );
 }
