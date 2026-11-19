@@ -6,6 +6,10 @@ import type { LeadEtapa } from "@/lib/funil-negocio";
 import type { LeadAuditoria } from "@/lib/integracoes/auditoria";
 import { lerDataReuniao } from "@/lib/sdr-negocio";
 
+/** Lead de um desfecho (lista ao passar o mouse): quem agendou e a data da reunião, quando há. */
+export type LeadDesfecho = { nome: string; preVendas: string | null; reuniao: string | null };
+export type CategoriaDesfecho = "realizadas" | "noShow" | "canceladas" | "aAcontecer" | "reagendar" | "semInfo";
+
 export type DesfechoAgendadas = {
   total: number;
   realizadas: number;
@@ -19,6 +23,8 @@ export type DesfechoAgendadas = {
   semInfo: number;
   /** No-show ÷ (realizadas + no-show); null sem nenhuma reunião com desfecho. */
   pctNoShow: number | null;
+  /** Os leads de cada desfecho, na ordem das agendadas. */
+  leads: Record<CategoriaDesfecho, LeadDesfecho[]>;
 };
 
 const dataBR = (iso: string | null) => (!iso ? null : iso.length <= 10 ? iso : new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }));
@@ -35,7 +41,21 @@ export function resumirDesfechoAgendadas(agendadas: LeadEtapa[] | undefined, aud
   for (const l of auditoria) if (l.agendadaEm) (porNome.get(l.nome) ?? porNome.set(l.nome, []).get(l.nome)!).push(l);
   const usados = new Set<string>();
 
-  const r: DesfechoAgendadas = { total: agendadas.length, realizadas: 0, noShow: 0, canceladas: 0, aAcontecer: 0, reagendar: 0, semInfo: 0, pctNoShow: null };
+  const r: DesfechoAgendadas = {
+    total: agendadas.length,
+    realizadas: 0,
+    noShow: 0,
+    canceladas: 0,
+    aAcontecer: 0,
+    reagendar: 0,
+    semInfo: 0,
+    pctNoShow: null,
+    leads: { realizadas: [], noShow: [], canceladas: [], aAcontecer: [], reagendar: [], semInfo: [] },
+  };
+  const contar = (c: CategoriaDesfecho, lead: LeadDesfecho) => {
+    r[c]++;
+    r.leads[c].push(lead);
+  };
   for (const a of agendadas) {
     let l = a.id ? porId.get(a.id) : undefined;
     if (!l && !a.id) {
@@ -43,18 +63,18 @@ export function resumirDesfechoAgendadas(agendadas: LeadEtapa[] | undefined, aud
       l = livres.find((x) => dataBR(x.agendadaEm) === a.data) ?? livres[0];
     }
     if (!l || usados.has(l.id)) {
-      r.semInfo++;
+      contar("semInfo", { nome: a.nome, preVendas: a.preVendas ?? a.responsavel, reuniao: null });
       continue;
     }
     usados.add(l.id);
-    if (l.situacao === "realizada") r.realizadas++;
-    else if (l.situacao === "no_show") r.noShow++;
-    else if (l.situacao === "cancelada") r.canceladas++;
-    else {
-      const dia = dataBR(lerDataReuniao(l.reuniaoMarcada));
-      if (dia && dia < hoje) r.reagendar++;
-      else r.aAcontecer++;
-    }
+    const quando = lerDataReuniao(l.reuniaoMarcada);
+    const dia = dataBR(quando);
+    const lead: LeadDesfecho = { nome: l.nome, preVendas: l.preVendas, reuniao: quando };
+    if (l.situacao === "realizada") contar("realizadas", lead);
+    else if (l.situacao === "no_show") contar("noShow", lead);
+    else if (l.situacao === "cancelada") contar("canceladas", lead);
+    else if (dia && dia < hoje) contar("reagendar", lead);
+    else contar("aAcontecer", lead);
   }
   if (r.semInfo === r.total) return null;
   const comDesfecho = r.realizadas + r.noShow;

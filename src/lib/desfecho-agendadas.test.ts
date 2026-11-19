@@ -16,12 +16,14 @@ describe("desfecho das agendadas", () => {
       aud({ id: "3", situacao: "no_show" }),
       aud({ id: "4", situacao: "cancelada" }),
       aud({ id: "5", reuniaoMarcada: "25/11/2026 10:00" }),
-      aud({ id: "6", reuniaoMarcada: "10/11/2026 10:00" }),
+      aud({ id: "6", reuniaoMarcada: "10/11/2026 10:00", preVendas: "Ana" }),
       aud({ id: "7" }),
       aud({ id: "fora", situacao: "no_show" }),
     ];
     const r = resumirDesfechoAgendadas(["1", "2", "3", "4", "5", "6", "7", "sumiu"].map((id) => ag({ id })), auditoria, HOJE);
-    expect(r).toEqual({ total: 8, realizadas: 2, noShow: 1, canceladas: 1, aAcontecer: 2, reagendar: 1, semInfo: 1, pctNoShow: 1 / 3 });
+    expect(r).toMatchObject({ total: 8, realizadas: 2, noShow: 1, canceladas: 1, aAcontecer: 2, reagendar: 1, semInfo: 1, pctNoShow: 1 / 3 });
+    expect(r?.leads.realizadas).toHaveLength(2);
+    expect(r?.leads.reagendar).toEqual([{ nome: "Lead", preVendas: "Ana", reuniao: "2026-11-10T13:00:00.000Z" }]);
   });
 
   it("lista antiga (sem id): casa pelo nome, preferindo o mesmo dia, e cada lead uma vez só", () => {
