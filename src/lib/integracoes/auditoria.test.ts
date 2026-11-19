@@ -20,6 +20,34 @@ const deal = (p: Partial<DealCrm> & { deal_id: string }): DealCrm & { seq: numbe
 });
 const ev = (deal_id: string, stage_id: string, ocorrido_em: string): EventoCrm => ({ deal_id, stage_id, ocorrido_em, tipo: "STAGE_CHANGED" });
 
+describe("situação da reunião", () => {
+  const deals = [
+    deal({ deal_id: "in-sem", canal: "trafego", stage_id: CONECTADO }),
+    deal({ deal_id: "in-perdido", canal: "trafego", status: "lost", stage_id: "perda" }),
+    deal({ deal_id: "reag", stage_id: AG }),
+    deal({ deal_id: "ainda-ns", stage_id: NS }),
+  ];
+  const eventos = [
+    ev("in-sem", CONECTADO, "2026-11-05T13:00:00Z"),
+    ev("in-perdido", CONECTADO, "2026-11-05T13:00:00Z"),
+    ev("reag", AG, "2026-11-05T13:00:00Z"),
+    ev("reag", NS, "2026-11-06T13:00:00Z"),
+    ev("reag", AG, "2026-11-08T13:00:00Z"),
+    ev("ainda-ns", AG, "2026-11-05T13:00:00Z"),
+    ev("ainda-ns", NS, "2026-11-06T13:00:00Z"),
+  ];
+  const leads = montarAuditoria({ deals, extras: new Map(), eventos, cfg, etapas, responsaveis: new Map(), vendedores: new Map(), nomes: {} });
+  const por = (id: string) => leads.find((l) => l.id === id);
+  it("Inbound que nunca teve reunião agendada não conta como reunião a acontecer", () => {
+    expect(por("in-sem")?.situacao).toBe("sem_reuniao");
+    expect(por("in-perdido")?.situacao).toBe("sem_reuniao");
+  });
+  it("lead que teve no-show e voltou para Reunião Agendada é reunião a acontecer; no No Show continua no-show", () => {
+    expect(por("reag")?.situacao).toBe("a_acontecer");
+    expect(por("ainda-ns")?.situacao).toBe("no_show");
+  });
+});
+
 describe("dataDaReuniao", () => {
   it("Acrópole: reuniao_agendada", () => {
     expect(dataDaReuniao({ reuniao_agendada: "19/11/2026 14:00" })).toBe("19/11/2026 14:00");

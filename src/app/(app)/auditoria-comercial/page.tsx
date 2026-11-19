@@ -25,6 +25,7 @@ const SITUACAO: Record<SituacaoReuniao, { texto: string; classe: string }> = {
   realizada: { texto: "Realizada", classe: "border-success/50 text-success-bright" },
   no_show: { texto: "No-show", classe: "border-wine/60 text-wine-bright" },
   cancelada: { texto: "Cancelada", classe: "border-imperium-line text-stone-400" },
+  sem_reuniao: { texto: "Sem reunião", classe: "border-imperium-line text-stone-500" },
 };
 
 const dataBR = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }) : null);

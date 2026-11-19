@@ -8,7 +8,8 @@ import { canalPortal, ehLeadFalso, ehMql, marcosPorLead, responsavelEm, responsa
 
 /** Situação da reunião: a acontecer, realizada, no-show (passou pelo No Show e não realizou) ou
  *  cancelada (perdida antes da reunião). */
-export type SituacaoReuniao = "a_acontecer" | "realizada" | "no_show" | "cancelada";
+/** sem_reuniao = o lead nunca chegou a ter reunião agendada (Inbound ainda em atendimento ou perdido antes). */
+export type SituacaoReuniao = "a_acontecer" | "realizada" | "no_show" | "cancelada" | "sem_reuniao";
 
 export type PassoLead = { em: string; etapa: string; funil: string; quem: string | null; tipo: string };
 
@@ -148,7 +149,17 @@ export function montarAuditoria({ deals, extras, eventos, cfg, etapas, responsav
     const noShow = evs.find((e) => ehNoShow(e.stage_id))?.ocorrido_em ?? null;
     const realizada = m[NIVEL.realizada] ?? null;
     const perdida = d.status === "lost" ? ex.closedAt ?? d.fechado_em ?? null : null;
-    const situacao: SituacaoReuniao = !m[NIVEL.agendada] ? "a_acontecer" : realizada ? "realizada" : noShow ? "no_show" : d.status === "lost" ? "cancelada" : "a_acontecer";
+    // Reagendada: já teve no-show, mas hoje está de volta numa etapa de reunião agendada (aberto, fora do No Show).
+    const reagendada = d.status === "open" && !!d.stage_id && cfg.niveis[d.stage_id] === NIVEL.agendada && !ehNoShow(d.stage_id);
+    const situacao: SituacaoReuniao = !m[NIVEL.agendada]
+      ? "sem_reuniao"
+      : realizada
+        ? "realizada"
+        : noShow && !reagendada
+          ? "no_show"
+          : d.status === "lost"
+            ? "cancelada"
+            : "a_acontecer";
     const atual = d.stage_id ? etapas.get(d.stage_id) : undefined;
 
     out.push({
