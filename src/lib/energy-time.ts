@@ -9,7 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { metaForecast, metaKwhForecast } from "@/lib/forecast-negocios";
 import { calcularPace, type PaceCalculado } from "@/lib/pace-negocio";
 import { percentuais } from "@/lib/comissao-negocio";
-import { pctVorpPrimeiraFatura, primeiraFaturaSunne } from "@/lib/energy-canais";
+import { PCT_VORP_PRIMEIRA_FATURA, pctVorpPrimeiraFatura, primeiraFaturaSunne } from "@/lib/energy-canais";
 import { PRODUTO_KWH, alcanceDoNegocio, assinaturasDoDiaEmCache, redeSunneEmCache, vendedoresSunne, type SunneDeal } from "@/lib/sunne";
 
 export const SLUG_ENERGY = "vorp-energy";
@@ -25,6 +25,9 @@ export type FunilEnergia = {
   ganhas: number;
   /** Em validação ainda (com pendência, em análise ou aguardando retorno): nem ganha nem perdida. */
   emAndamento: number;
+  /** kWh (consumo médio) e R$ (80% da primeira fatura) das contas ainda em validação. */
+  emAndamentoKwh: number;
+  emAndamentoValor: number;
   perdidas: number;
   /** Das perdidas, as que não chegaram à validação. */
   perdidasAntes: number;
@@ -60,7 +63,7 @@ const doVendedor = (d: SunneDeal, orgIds: ReadonlySet<string> | null) => d.produ
 /** Funil das contas que o vendedor subiu no mês (pura). `orgIds` = organizações dele; null = o time todo. */
 export function funilEnergia(deals: SunneDeal[], ano: number, mes: number, orgIds: ReadonlySet<string> | null): FunilEnergia {
   const periodo = `${ano}-${String(mes).padStart(2, "0")}`;
-  const f: FunilEnergia = { subidas: 0, contrato: 0, validacao: 0, ganhas: 0, emAndamento: 0, perdidas: 0, perdidasAntes: 0, motivos: [] };
+  const f: FunilEnergia = { subidas: 0, contrato: 0, validacao: 0, ganhas: 0, emAndamento: 0, emAndamentoKwh: 0, emAndamentoValor: 0, perdidas: 0, perdidasAntes: 0, motivos: [] };
   const motivos = new Map<string, number>();
   for (const d of deals) {
     if (!doVendedor(d, orgIds) || mesLocal(d.createdAt) !== periodo) continue;
@@ -72,7 +75,11 @@ export function funilEnergia(deals: SunneDeal[], ano: number, mes: number, orgId
       if (d.isLost) {
         /* conta nas perdidas abaixo */
       } else if (d.isClosed) f.ganhas++;
-      else f.emAndamento++;
+      else {
+        f.emAndamento++;
+        f.emAndamentoKwh += d.averageConsumption ?? 0;
+        f.emAndamentoValor += primeiraFaturaSunne(d) * PCT_VORP_PRIMEIRA_FATURA;
+      }
     }
     if (d.isLost) {
       f.perdidas++;

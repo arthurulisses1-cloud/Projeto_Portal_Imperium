@@ -35,6 +35,8 @@ describe("funilEnergia", () => {
   it("conta o funil de um vendedor", () => {
     const f = funilEnergia(deals, 2026, 11, new Set(["org-a"]));
     expect(f).toMatchObject({ subidas: 6, contrato: 4, validacao: 3, ganhas: 1, emAndamento: 1, perdidas: 2, perdidasAntes: 1 });
+    expect(f.emAndamentoKwh).toBeGreaterThanOrEqual(0);
+    expect(f.emAndamentoValor).toBeGreaterThanOrEqual(0);
   });
   it("sem filtro de vendedor soma o time", () => {
     const f = funilEnergia(deals, 2026, 11, null);

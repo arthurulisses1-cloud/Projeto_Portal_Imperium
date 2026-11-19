@@ -42,7 +42,10 @@ export function FunilEnergiaCard({ funil, titulo, cor }: { funil: FunilEnergia; 
         <div className="rounded border border-amber-400/40 p-3">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Ainda em validação</p>
           <p className="mt-0.5 text-2xl font-semibold text-amber-400">{funil.emAndamento}</p>
-          <p className="text-[11px] text-stone-500">aguardando a Sunne agora, entre as que passaram pela validação</p>
+          <p className="text-sm text-stone-200">
+            {num(funil.emAndamentoKwh)} kWh · <span className="text-gold-bright">{moeda(funil.emAndamentoValor)}</span>
+          </p>
+          <p className="text-[11px] text-stone-500">aguardando a Sunne agora, entre as que passaram pela validação. R$ = 80% da primeira fatura</p>
         </div>
         <div className="rounded border border-success/40 p-3">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Ganhas</p>
