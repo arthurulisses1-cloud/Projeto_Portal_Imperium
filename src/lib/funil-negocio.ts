@@ -25,6 +25,8 @@ export type EtapaFunil = {
 
 /** Lead que compõe o realizado de uma etapa: aparece ao passar o mouse no número. */
 export type LeadEtapa = {
+  /** Id do lead no CRM; ausente nas listas gravadas antes de 19/11/2026. */
+  id?: string;
   nome: string;
   responsavel: string | null;
   preVendas: string | null;
