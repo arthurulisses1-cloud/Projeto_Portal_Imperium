@@ -150,7 +150,8 @@ export default async function MuralPage({
   // closer, SDR e head de uma BU não enxergam quem é de outra empresa.
   let apenasIdsCentral: string[] | undefined;
   if (meRole === "closer" || meRole === "sdr" || meRole === "lider") {
-    const { data: meusNegocios } = await supabase.from("profile_negocios").select("negocio_id").eq("profile_id", meId);
+    // Só negócios ativos: quem foi de uma tribo da Matri (arquivada) não vê mais aquele time na Central.
+    const { data: meusNegocios } = await supabase.from("profile_negocios").select("negocio_id, negocios!inner(status)").eq("profile_id", meId).eq("negocios.status", "ativo");
     const idsNegocios = Array.from(new Set((meusNegocios ?? []).map((n) => n.negocio_id as string)));
     const { data: timeNegocios } = idsNegocios.length ? await supabase.from("profile_negocios").select("profile_id").in("negocio_id", idsNegocios) : { data: [] };
     apenasIdsCentral = Array.from(new Set([meId, ...(timeNegocios ?? []).map((t) => t.profile_id as string)]));

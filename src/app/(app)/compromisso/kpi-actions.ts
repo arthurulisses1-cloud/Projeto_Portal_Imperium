@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { hojeBR } from "@/lib/data-br";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { KPIS_ENERGIA, buscarCompromissoEnergia, vinculoEnergia } from "@/lib/energy-time";
+import { buscarPainelCloser, vinculoCloser } from "@/lib/closer-negocio";
 
 /** Compromisso do executivo do Energy: o realizado é automático (Sunne), o compromisso (meta) é digitado por ele. */
 export async function salvarCompromissoEnergia(formData: FormData) {
@@ -29,6 +30,33 @@ export async function salvarCompromissoEnergia(formData: FormData) {
     realizado: realizado[k.chave],
     updated_at: new Date().toISOString(),
   }));
+  const { error } = await supabase.from("compromisso_kpis").upsert(linhas, { onConflict: "profile_id,negocio_id,data,chave" });
+  if (error) throw new Error(error.message);
+  revalidatePath("/compromisso");
+}
+
+/**
+ * Executivo do Match Sales: o compromisso de reuniões agendadas (e o realizado delas), de recebido e de MRR é digitado por ele;
+ * o realizado de recebido e de MRR vem das vendas de hoje, e as reuniões realizadas são automáticas (não passam por aqui).
+ */
+export async function salvarCompromissoMatchExecutivo(formData: FormData) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Não autenticado.");
+  const vinc = await vinculoCloser(supabase, user.id);
+  if (!vinc || vinc.slug !== "matchsales" || String(formData.get("negocio_id") ?? "") !== vinc.id) throw new Error("Você não é executivo do Match Sales.");
+  const hoje = hojeBR();
+  const painel = await buscarPainelCloser(createAdminClient(), vinc, { id: user.id, nome: "" }, { ano: Number(hoje.slice(0, 4)), mes: Number(hoje.slice(5, 7)), hoje });
+  const num = (v: FormDataEntryValue | null) => Math.max(0, Number(String(v ?? "0").replace(",", ".")) || 0);
+  const agora = new Date().toISOString();
+  const base = { profile_id: user.id, negocio_id: vinc.id, data: hoje, updated_at: agora };
+  const linhas = [
+    { ...base, chave: "reunioes_agendadas", label: "Reuniões agendadas", meta: num(formData.get("meta_agendadas")), realizado: num(formData.get("realizado_agendadas")) },
+    { ...base, chave: "recebido", label: "Recebido (R$)", meta: num(formData.get("meta_recebido")), realizado: painel.hoje.recebido },
+    { ...base, chave: "mrr", label: "MRR (R$)", meta: num(formData.get("meta_mrr")), realizado: painel.hoje.mrr },
+  ];
   const { error } = await supabase.from("compromisso_kpis").upsert(linhas, { onConflict: "profile_id,negocio_id,data,chave" });
   if (error) throw new Error(error.message);
   revalidatePath("/compromisso");

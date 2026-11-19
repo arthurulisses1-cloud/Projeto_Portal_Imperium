@@ -17,6 +17,7 @@ import { buscarPainelCloser, vinculoCloser } from "@/lib/closer-negocio";
 import { createAdminClient } from "@/lib/supabase/admin";
 import CompromissoCloser from "@/components/negocio/CompromissoCloser";
 import CompromissoBdr from "@/components/negocio/CompromissoBdr";
+import CompromissoMatchExecutivo from "@/components/negocio/CompromissoMatchExecutivo";
 import CompromissoEnergia from "@/components/negocio/CompromissoEnergia";
 import { buscarCompromissoEnergia, vinculoEnergia } from "@/lib/energy-time";
 import { vinculoPreVendas } from "@/lib/sdr-negocio";
@@ -66,6 +67,11 @@ export default async function CompromissoPage() {
     if (closerVorp) {
       try {
         const painel = await buscarPainelCloser(createAdminClient(), closerVorp, { id: meId, nome: viewer.effectiveNome }, { ano: Number(hoje.slice(0, 4)), mes: Number(hoje.slice(5, 7)), hoje });
+        // Match Sales: o executivo digita o compromisso de reuniões agendadas, recebido e MRR (o realizado de vendas é automático).
+        if (closerVorp.slug === "matchsales") {
+          const linhasMatch = await buscarLinhasKpis(supabase, meId, closerVorp.id, hoje);
+          return <CompromissoMatchExecutivo painel={painel} hoje={hoje} negocioId={closerVorp.id} linhas={linhasMatch} />;
+        }
         return <CompromissoCloser painel={painel} hoje={hoje} />;
       } catch (e) {
         console.error("Compromisso do closer falhou", e);
