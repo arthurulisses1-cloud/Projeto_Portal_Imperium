@@ -11,6 +11,7 @@ import { DISPENSADOS_COMPROMISSO } from "@/lib/acessos-especiais";
 import { buscarFeedbacksMes, type AlvoFeedback } from "@/lib/feedback-mes";
 import FeedbackMes, { type ItemFeedback } from "@/components/FeedbackMes";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { desmarcarFaltaTime, marcarFaltaTime } from "@/app/(app)/exercito/actions";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -371,6 +372,7 @@ export default async function CentralNotificacoes({
 
   if (
     naoLancaram.length === 0 &&
+    (pessoal || ehFimDeSemana(hoje) || !pessoas.some((p) => faltouHoje.has(p.id))) &&
     bateuMarco.length === 0 &&
     pertoDeMarco.length === 0 &&
     aniversarios.length === 0 &&
@@ -573,16 +575,47 @@ export default async function CentralNotificacoes({
               {pessoal ? "Você ainda não lançou o compromisso hoje" : `Não lançaram o compromisso hoje (${naoLancaram.length})`}
             </p>
             {!pessoal && (
-              <ul className="flex flex-wrap gap-2">
-                {naoLancaram.map((p) => (
+              <>
+                <ul className="flex flex-wrap gap-2">
+                  {naoLancaram.map((p) => (
+                    <li key={p.id}>
+                      {/* Um clique no nome registra a falta de hoje (dá para desfazer logo abaixo). */}
+                      <form action={marcarFaltaTime}>
+                        <input type="hidden" name="profile_id" value={p.id} />
+                        <button type="submit" title={"Clique para registrar falta de " + p.full_name + " hoje"} className="cursor-pointer transition hover:opacity-70">
+                          <Badge tone="warning" variant="tag">
+                            {p.full_name}
+                          </Badge>
+                        </button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1.5 text-[11px] text-stone-600">Clique no nome de quem faltou para registrar a falta de hoje.</p>
+              </>
+            )}
+          </div>
+        )}
+
+        {!pessoal && !ehFimDeSemana(hoje) && pessoas.some((p) => faltouHoje.has(p.id)) && (
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-stone-500">Faltaram hoje</p>
+            <ul className="flex flex-wrap gap-2">
+              {pessoas
+                .filter((p) => faltouHoje.has(p.id))
+                .map((p) => (
                   <li key={p.id}>
-                    <Badge tone="warning" variant="tag">
-                      {p.full_name}
-                    </Badge>
+                    <form action={desmarcarFaltaTime}>
+                      <input type="hidden" name="profile_id" value={p.id} />
+                      <button type="submit" title={"Desfazer a falta de " + p.full_name} className="cursor-pointer transition hover:opacity-70">
+                        <Badge tone="neutral" variant="tag">
+                          {p.full_name} · desfazer
+                        </Badge>
+                      </button>
+                    </form>
                   </li>
                 ))}
-              </ul>
-            )}
+            </ul>
           </div>
         )}
 

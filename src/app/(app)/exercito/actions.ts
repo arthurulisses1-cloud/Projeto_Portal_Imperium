@@ -70,6 +70,7 @@ export async function marcarFaltaTime(formData: FormData) {
     { onConflict: "profile_id,data" }
   );
   if (error) throw new Error(error.message);
+  revalidatePath("/");
   revalidatePath("/exercito");
   revalidatePath("/tribo");
   revalidatePath("/compromissos");
@@ -94,6 +95,7 @@ export async function desmarcarFaltaTime(formData: FormData) {
     .eq("profile_id", profileId)
     .eq("data", hoje);
   if (error) throw new Error(error.message);
+  revalidatePath("/");
   revalidatePath("/exercito");
   revalidatePath("/tribo");
   revalidatePath("/compromissos");
