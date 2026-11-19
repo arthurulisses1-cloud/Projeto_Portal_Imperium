@@ -39,6 +39,8 @@ import { SLUG_FINANCE, buscarPainelFinance } from "@/lib/finance-time";
 import DestaqueSetup from "@/components/negocio/DestaqueSetup";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MATRI_ANTIGO_ATIVO } from "@/lib/rotas-legadas";
+import CompromissosDosTimes from "@/components/negocio/CompromissosDosTimes";
+import { buscarCompromissosDosTimes } from "@/lib/compromisso-time";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -244,6 +246,16 @@ export default async function MuralPage({
   // quem enxerga $ da firma. Se a migration ainda não rodou, vem vazio e some.
   const verPainelNegocios = meRole === "diretor" || meRole === "investidor" || analistaFinanceiroLiberado;
   const painelNegocios = verPainelNegocios ? await buscarPainelNegocios(supabase, ano, mes) : [];
+
+  // Diretor: o compromisso do dia de cada time, consolidado (4 quadros).
+  let compromissosTimes: Awaited<ReturnType<typeof buscarCompromissosDosTimes>> = [];
+  if (meRole === "diretor") {
+    try {
+      compromissosTimes = await buscarCompromissosDosTimes(createAdminClient(), hoje);
+    } catch (e) {
+      console.error("Mural: compromissos dos times falhou", e);
+    }
+  }
 
   // Ritmo: só no mês corrente, % do mês já transcorrido.
   const ritmoPct =
@@ -453,10 +465,12 @@ export default async function MuralPage({
       </div>
 
       {metaExecutivo}
+      {compromissosTimes.length > 0 && <CompromissosDosTimes times={compromissosTimes} dia={hoje} />}
       {painelNegocios.length > 0 && (
         <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} ritmoPct={ritmoPct} />
       )}
-      {(meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
+      {/* O Diretor não vê o resumo de tarefas em aberto no Mural (pedido em 2026-11-19); as tarefas seguem na aba Tarefas. */}
+      {(meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
         <TarefasMuralWidget userId={meId} />
       )}
 
