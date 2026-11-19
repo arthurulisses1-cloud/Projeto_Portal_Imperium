@@ -56,7 +56,7 @@ export async function buscarLeadsDoFunil(
     const sdr = nome(d.sdr_user_id);
     const k = `${l.canal}|${l.etapa}`;
     const lista = out.get(k) ?? [];
-    lista.push({ nome: d.nome || d.empresa || "(sem nome)", responsavel, preVendas: sdr && sdr !== responsavel ? sdr : null, data: l.data, faturamento: d.faturamento ?? null });
+    lista.push({ id: d.deal_id, nome: d.nome || d.empresa || "(sem nome)", responsavel, preVendas: sdr && sdr !== responsavel ? sdr : null, data: l.data, faturamento: d.faturamento ?? null });
     out.set(k, lista);
   }
   return out;

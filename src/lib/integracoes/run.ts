@@ -340,7 +340,7 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
       const k = `${v.canal}|${v.etapa}`;
       const responsavel = nome(v.deal.responsavel_user_id);
       const sdr = nome(v.deal.sdr_user_id);
-      (doMes[k] ??= []).push({ nome: v.deal.nome || v.deal.empresa || "(sem nome)", responsavel, preVendas: sdr && sdr !== responsavel ? sdr : null, data: v.data, origem: v.deal.origem ?? null, faturamento: v.deal.faturamento ?? null });
+      (doMes[k] ??= []).push({ id: v.deal.deal_id, nome: v.deal.nome || v.deal.empresa || "(sem nome)", responsavel, preVendas: sdr && sdr !== responsavel ? sdr : null, data: v.data, origem: v.deal.origem ?? null, faturamento: v.deal.faturamento ?? null });
       porMes.set(mes, doMes);
     }
     // Ranking de pré-vendas (agendadas e realizadas, todos os leads e canais): quem era o responsável no

@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -23,6 +24,8 @@ import { calcularPace, type PaceCalculado, type StatusPace } from "@/lib/pace-ne
 import { metaKwhForecast } from "@/lib/forecast-negocios";
 import { buscarAcumuladoKwhSunne } from "@/lib/sunne";
 import { faixasAcima100k, pctAcima100k, resumirAcima100k } from "@/lib/faturamento-100k";
+import { resumirDesfechoAgendadas, type DesfechoAgendadas } from "@/lib/desfecho-agendadas";
+import type { AuditoriaGravada, LeadAuditoria } from "@/lib/integracoes/auditoria";
 import { BotaoAtualizarRealizado } from "@/components/negocio/BotaoAtualizarRealizado";
 
 export const dynamic = "force-dynamic";
@@ -212,6 +215,16 @@ export default async function NegocioDashboardPage({
       console.error("follow falhou:", e);
     }
   }
+  // Desfecho das agendadas (realizadas, no-show, em aberto): a situação de cada reunião vem da base da Auditoria.
+  let auditoria: LeadAuditoria[] = [];
+  if (comVisoes) {
+    try {
+      const { data } = await createAdminClient().from("integracao_estado").select("valor").eq("chave", `auditoria:${atual.slug}`).maybeSingle();
+      auditoria = (data?.valor as AuditoriaGravada | null)?.leads ?? [];
+    } catch (e) {
+      console.error("auditoria (desfecho das agendadas) falhou:", e);
+    }
+  }
   const pessoasEscolhidas: Partial<Record<CanalDoFunil, { id: string; divisor: number }>> = {};
   for (const [canal, f] of Object.entries(filtroPv) as [CanalDoFunil, NonNullable<(typeof filtroPv)[CanalDoFunil]>][]) {
     if (f.escolhido) pessoasEscolhidas[canal] = { id: f.escolhido, divisor: f.divisor };
@@ -248,6 +261,14 @@ export default async function NegocioDashboardPage({
   };
   const ultimaSyncFunil = (linhasRealizado ?? []).reduce<string | null>((m, l) => (!m || l.synced_at > m ? l.synced_at : m), null);
   const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
+  // Desfecho das agendadas de cada funil; os canais sem ele reservam o mesmo espaço (linhas alinhadas).
+  const desfechos = funis.map((fu) => resumirDesfechoAgendadas(fu.etapas.find((e) => e.chave === "reunioes_agendadas")?.leads, auditoria, hoje));
+  const algumDesfecho = desfechos.some(Boolean);
+  // Linha (já com o preenchimento do topo) logo abaixo das agendadas, a mesma em todos os canais.
+  const maxEtapas = Math.max(0, ...funis.map((f) => f.etapas.length));
+  const linhaDesfecho = algumDesfecho
+    ? Math.max(...funis.map((f) => maxEtapas - f.etapas.length + f.etapas.findIndex((e) => e.chave === "reunioes_agendadas") + 1))
+    : -1;
   // Energy: contas subidas vêm da Sunne (negócios criados no mês por vendedor), não do compromisso do dia.
   // Ranking de pré-vendas pelo Pipefácil (agendadas e realizadas, todos os leads e canais), gravado pela
   // sincronização. Sem ele (negócio sem CRM ou mês fora da janela), vale o Compromisso do dia.
@@ -470,7 +491,7 @@ export default async function NegocioDashboardPage({
           <p className="mt-2 text-sm text-stone-500">Este negócio ainda não tem forecast neste mês.</p>
         ) : (
           <div className={`mt-3 grid gap-5 ${funis.length >= 3 ? "lg:grid-cols-3" : funis.length === 2 ? "lg:grid-cols-2" : ""}`}>
-            {funis.map((fu) => {
+            {funis.map((fu, iFunil) => {
               // Todos os canais têm o mesmo número de linhas: os mais curtos ganham linhas vazias no topo,
               // assim as etapas finais (reuniões, propostas, vendas) e os cabeçalhos ficam na mesma altura.
               const pad = Math.max(...funis.map((x) => x.etapas.length)) - fu.etapas.length;
@@ -515,6 +536,7 @@ export default async function NegocioDashboardPage({
                     <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Meta</span>
                     {Array.from({ length: pad }).map((_, i) => (
                       <div key={`pv${i}`} className="contents" aria-hidden="true">
+                        {i === linhaDesfecho && <DesfechoAgendadasFunil d={null} />}
                         <div className="invisible">
                           <p>.</p>
                           <div className="mt-1 h-1.5" />
@@ -524,8 +546,10 @@ export default async function NegocioDashboardPage({
                         <span className="invisible">0</span>
                       </div>
                     ))}
-                    {fu.etapas.map((e) =>
-                      e.meta === null ? (
+                    {fu.etapas.map((e, iEtapa) => (
+                      <Fragment key={e.label}>
+                      {pad + iEtapa === linhaDesfecho && <DesfechoAgendadasFunil d={desfechos[iFunil]} />}
+                      {e.meta === null ? (
                         // Etapa sem meta (funil próprio do CRM): a barra é o realizado em relação à 1ª etapa.
                         <div key={e.label} className="contents">
                           <div className="min-w-0">
@@ -568,8 +592,9 @@ export default async function NegocioDashboardPage({
                           <RealizadoComLeads valor={e.realizado === null ? "—" : num(e.realizado)} leads={e.leads} />
                           <span className="text-right text-stone-300">{num(e.meta)}</span>
                         </div>
-                      ),
-                    )}
+                      )}
+                      </Fragment>
+                    ))}
                   </div>
 
                   {/* Conversões: mesma grade, uma linha por passagem de etapa */}
@@ -938,6 +963,50 @@ function nomeCanalOrigem(c: string) {
 }
 
 const LABEL_RANKING: Record<string, string> = { reunioes_agendadas: "Reuniões agendadas", reunioes_realizadas: "Reuniões realizadas" };
+
+/** Desfecho das agendadas do mês, logo abaixo da linha delas: barra empilhada, legenda fixa (as mesmas posições
+ *  em todos os canais, zeros apagados) e a taxa de no-show (no-show ÷ realizadas + no-show). Altura fixa: os
+ *  canais sem o bloco reservam o mesmo espaço, e as linhas seguintes continuam alinhadas. */
+function DesfechoAgendadasFunil({ d }: { d: DesfechoAgendadas | null }) {
+  const caixa = "col-span-4 mb-1 h-[4.4rem] overflow-hidden rounded-md border px-2 py-1.5";
+  if (!d) return <div className={`${caixa} invisible border-transparent`} aria-hidden="true" />;
+  const partes = [
+    { rotulo: d.realizadas === 1 ? "realizada" : "realizadas", qtd: d.realizadas, cor: "bg-success-bright", dica: "Reunião realizada" },
+    { rotulo: "no-show", qtd: d.noShow, cor: "bg-wine-bright", dica: "Passou pelo No Show e não realizou" },
+    { rotulo: "a acontecer", qtd: d.aAcontecer, cor: "bg-stone-400", dica: "Em aberto, com a reunião de hoje em diante (ou sem data)" },
+    { rotulo: "reagendar", qtd: d.reagendar, cor: "bg-warning-bright", dica: "Em aberto, com a data da reunião já passada e sem desfecho no Pipefácil" },
+    { rotulo: d.canceladas === 1 ? "cancelada" : "canceladas", qtd: d.canceladas, cor: "bg-stone-600", dica: "Perdida antes da reunião" },
+    ...(d.semInfo > 0 ? [{ rotulo: "sem info", qtd: d.semInfo, cor: "bg-imperium-line-strong", dica: "Lead não encontrado na Auditoria (aguarda a próxima sincronização)" }] : []),
+  ];
+  const pct = d.pctNoShow;
+  const corPct = pct === null ? "text-stone-500" : pct > 0.3 ? "text-wine-bright" : pct > 0.15 ? "text-warning-bright" : "text-success-bright";
+  return (
+    <div className={`${caixa} border-imperium-line/60 bg-imperium-raised/40`}>
+      <div className="flex items-baseline justify-between gap-2 whitespace-nowrap">
+        <span className="truncate text-[10px] uppercase tracking-widest text-stone-500" title="O que aconteceu com as reuniões agendadas no mês">
+          Das {num(d.total)} agendadas
+        </span>
+        <span className="text-[11px] text-stone-400" title={`${d.noShow} no-show de ${d.realizadas + d.noShow} reuniões com desfecho (realizadas + no-show)`}>
+          No-show <span className={`font-semibold ${corPct}`}>{pct === null ? "—" : `${(Math.round(pct * 1000) / 10).toLocaleString("pt-BR")}%`}</span>
+        </span>
+      </div>
+      <div className="mt-1 flex h-1.5 gap-px overflow-hidden rounded-full bg-imperium-raised">
+        {partes.filter((p) => p.qtd > 0).map((p) => (
+          <div key={p.rotulo} className={p.cor} style={{ width: `${(p.qtd / d.total) * 100}%` }} title={`${p.qtd} ${p.rotulo}`} />
+        ))}
+      </div>
+      <div className="mt-1 grid grid-cols-3 gap-x-2 gap-y-0.5 text-[10px] text-stone-400">
+        {partes.map((p) => (
+          <span key={p.rotulo} className={`inline-flex min-w-0 items-center gap-1 whitespace-nowrap ${p.qtd === 0 ? "opacity-40" : ""}`} title={p.dica}>
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${p.cor}`} />
+            <span className="text-stone-200">{p.qtd}</span>
+            <span className="truncate">{p.rotulo}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** Grupo de botões (links) de uma visão do funil; o ativo fica destacado. */
 /** Linha discreta embaixo da barra da etapa: quantas reuniões são de leads com faturamento a partir de 100 mil.
