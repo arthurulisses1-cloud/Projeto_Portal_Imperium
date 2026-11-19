@@ -966,7 +966,7 @@ const LABEL_RANKING: Record<string, string> = { reunioes_agendadas: "Reuniões a
  *  no-show sobre o total de agendadas. Altura fixa: os canais sem o bloco reservam o mesmo espaço. */
 function DesfechoAgendadasFunil({ d }: { d: DesfechoAgendadas | null }) {
   // Sem overflow-hidden: as listas de leads abrem por cima do que vem embaixo.
-  const caixa = "h-[7rem] rounded-md border px-2 py-1.5";
+  const caixa = "h-[8rem] rounded-md border px-2 py-1.5";
   if (!d) return <div className={`${caixa} invisible border-transparent`} aria-hidden="true" />;
   const partes = [
     { rotulo: d.qtd.realizadas === 1 ? "realizada" : "realizadas", qtd: d.qtd.realizadas, leads: d.leads.realizadas, cor: "bg-success-bright", dica: "A reunião aconteceu (inclusive depois de um no-show)" },
