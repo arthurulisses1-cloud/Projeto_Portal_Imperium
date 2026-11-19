@@ -28,7 +28,7 @@ function Celula({ p, moedaFmt = false }: { p: PaceCalculado | null; moedaFmt?: b
   );
 }
 
-function TabelaTime({ time }: { time: LinhaTime[] }) {
+export function TabelaTime({ time }: { time: LinhaTime[] }) {
   const atrasados = time.filter((l) => l.recebido && (l.recebido.status === "atrasado" || l.recebido.status === "critico"));
   return (
     <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">

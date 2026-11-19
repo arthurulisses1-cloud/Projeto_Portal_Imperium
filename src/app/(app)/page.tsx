@@ -33,7 +33,7 @@ import { buscarPainelCloser, ehPainelCloser, setupDoNegocio, vinculoCloser } fro
 import { buscarPainelHead } from "@/lib/head-negocio";
 import { buscarPainelEnergia, vinculoEnergia } from "@/lib/energy-time";
 import { MuralEnergia, MuralEnergiaHead } from "@/components/negocio/PainelEnergia";
-import { MuralHead } from "@/components/negocio/PainelHead";
+import { TabelaTime } from "@/components/negocio/PainelHead";
 import { MuralFinance, MuralFinanceHead } from "@/components/negocio/PainelFinance";
 import { SLUG_FINANCE, buscarPainelFinance } from "@/lib/finance-time";
 import DestaqueSetup from "@/components/negocio/DestaqueSetup";
@@ -348,15 +348,26 @@ export default async function MuralPage({
       // Head de um negócio com CRM (Match Sales): painel de gestão do time (pace, reuniões e quem precisa de atenção).
       if (time && ehPainelCloser(pn.negocio.slug)) {
         try {
-          const painelHead = await buscarPainelHead(createAdminClient(), pn.negocio, { ano, mes, hoje });
+          const adminHead = createAdminClient();
+          const painelHead = await buscarPainelHead(adminHead, pn.negocio, { ano, mes, hoje });
+          const corHead = NEGOCIO_COR[pn.negocio.slug] ?? "201 162 74";
+          // O Head vê o Mural igual ao do executivo (as reuniões, os paces e os quadrados dele) e, abaixo, a tabela do time.
+          const painelProprio = await buscarPainelCloser(adminHead, pn.negocio, { id: meId, nome: profile?.full_name ?? "" }, { ano, mes, hoje });
           metaExecutivo = (
-            <MuralHead
-              painel={painelHead}
-              equipe={nomeEquipe(pn.negocio)}
-              cor={NEGOCIO_COR[pn.negocio.slug] ?? "201 162 74"}
-              mesLabel={MESES[mes - 1] + " de " + ano}
-              mesAtual={mesEhAtual}
-            />
+            <div className="space-y-6">
+              <MuralCloser painel={painelProprio} equipe={nomeEquipe(pn.negocio)} cor={corHead} mesLabel={MESES[mes - 1] + " de " + ano} mesAtual={mesEhAtual} />
+              <div className="space-y-2">
+                <p className="text-[10px] uppercase tracking-widest text-stone-500">
+                  Gestão do time · {nomeEquipe(pn.negocio)} · {MESES[mes - 1] + " de " + ano}
+                </p>
+                <TabelaTime time={painelHead.time} />
+                <p className="text-right text-[11px] text-stone-500">
+                  <a href="/pace-negocio" className="text-gold hover:underline">
+                    Ver o Pace completo do time →
+                  </a>
+                </p>
+              </div>
+            </div>
           );
           break;
         } catch (e) {
