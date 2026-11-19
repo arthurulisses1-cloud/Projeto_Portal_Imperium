@@ -24,7 +24,7 @@ type Vinculo = {
 export default async function SidebarRight({ userId }: { userId: string }) {
   const supabase = await createClient();
 
-  const { data: profile, error: profileError } = await supabase.from("profiles").select("role, full_name").eq("id", userId).single();
+  const { data: profile, error: profileError } = await supabase.from("profiles").select("role, full_name, avatar_url").eq("id", userId).single();
   logErroSupabase(`SidebarRight: profiles (userId=${userId})`, profileError);
   if (!profile) return null;
 
@@ -122,9 +122,19 @@ export default async function SidebarRight({ userId }: { userId: string }) {
     <aside className="hidden w-72 shrink-0 space-y-6 border-l border-imperium-line bg-imperium-surface p-5 xl:block">
       <div className="text-center">
         <p className="kicker mb-3">Meu cargo</p>
-        {principal?.negocio.equipe_bandeira && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={principal.negocio.equipe_bandeira} alt="" className="mx-auto mb-2 h-16 w-16 rounded-md object-cover" />
+        {ehDiretor ? (
+          // O Diretor aparece com a própria foto (não com a bandeira de um time).
+          profile.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={profile.avatar_url} alt={profile.full_name} className="mx-auto mb-2 h-20 w-20 rounded-full border-2 border-gold/50 object-cover" />
+          ) : (
+            <div className="mx-auto mb-2 flex h-20 w-20 items-center justify-center rounded-full border-2 border-gold/50 bg-imperium-bg font-display text-2xl text-gold">{iniciais(profile.full_name)}</div>
+          )
+        ) : (
+          principal?.negocio.equipe_bandeira && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={principal.negocio.equipe_bandeira} alt="" className="mx-auto mb-2 h-16 w-16 rounded-md object-cover" />
+          )
         )}
         <p className="font-display text-base text-gold-bright">{cargoLabel}</p>
         {principal && !ehDiretor && (
