@@ -126,12 +126,39 @@ export function ReunioesAAcontecer({ lista, rotulo = "SDR" }: { lista: ReuniaoFu
   );
 }
 
+/** Reuniões para reagendar: data passada sem desfecho no CRM, ou No Show. Ao passar o mouse, quais são e há quanto tempo. */
+export function ReunioesParaReagendar({ lista, rotulo = "SDR" }: { lista: ReuniaoFutura[]; rotulo?: string }) {
+  if (lista.length === 0) return <p className="mt-1 text-3xl font-semibold text-success-bright">0</p>;
+  return (
+    <span className="group relative mt-1 inline-block" tabIndex={0}>
+      <span className="cursor-help text-3xl font-semibold text-wine-bright underline decoration-stone-500 decoration-dotted underline-offset-8">{lista.length}</span>
+      <span className="pointer-events-none invisible absolute left-0 top-full z-30 mt-2 w-80 rounded-md border border-imperium-line bg-imperium-surface p-2 text-left opacity-0 shadow-xl transition-opacity group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus:pointer-events-auto group-focus:visible group-focus:opacity-100">
+        <span className="mb-1 block text-[10px] uppercase tracking-widest text-stone-500">
+          {lista.length} {lista.length === 1 ? "reunião para reagendar" : "reuniões para reagendar"}
+        </span>
+        <span className="block max-h-72 space-y-1.5 overflow-y-auto">
+          {lista.map((r) => (
+            <span key={r.id} className="block text-[11px] leading-tight">
+              <span className="text-wine-bright">{quandoReuniao(r)}</span> <span className="text-stone-100">{r.nome}</span>
+              {r.empresa && r.empresa !== r.nome && <span className="text-stone-500"> · {r.empresa}</span>}
+              {r.sdr && <span className="text-stone-500"> · {rotulo} {r.sdr}</span>}
+              {r.com && <span className="text-stone-500"> · com {r.com}</span>}
+              <span className="block text-stone-500">{r.motivo === "no_show" ? "no-show: reagende com o lead" : "a data já passou sem desfecho: reagende ou atualize a etapa"}</span>
+            </span>
+          ))}
+        </span>
+      </span>
+    </span>
+  );
+}
+
 /** Quadrados do Mural: % de no-show, reuniões a acontecer e vendas do mês (MRR e recebido). */
 export function QuadradosSdr({ painel, cor }: { painel: PainelSdr; cor: string }) {
   const ns = painel.reunioes?.noShow ?? null;
   const futuras = painel.reunioes?.aAcontecer ?? null;
+  const reagendar = painel.reunioes?.reagendar ?? null;
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <p className="text-[10px] uppercase tracking-widest text-stone-500">No-show do mês</p>
         <p className={`mt-1 text-3xl font-semibold ${ns?.pct == null ? "text-stone-400" : ns.pct > 0.3 ? "text-wine-bright" : ns.pct > 0.15 ? "text-amber-400" : "text-success-bright"}`}>
@@ -145,6 +172,11 @@ export function QuadradosSdr({ painel, cor }: { painel: PainelSdr; cor: string }
         <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões a acontecer</p>
         {futuras ? <ReunioesAAcontecer lista={futuras} /> : <p className="mt-1 text-3xl font-semibold text-stone-400">—</p>}
         <p className="mt-1 text-xs text-stone-500">{futuras && futuras.length > 0 ? "passe o mouse no número para ver data e lead" : "agendadas por você no CRM"}</p>
+      </section>
+      <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+        <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões para reagendar</p>
+        {reagendar ? <ReunioesParaReagendar lista={reagendar} /> : <p className="mt-1 text-3xl font-semibold text-stone-400">—</p>}
+        <p className="mt-1 text-xs text-stone-500">{reagendar && reagendar.length > 0 ? "passe o mouse no número para ver quais" : "nenhuma com data passada ou no-show"}</p>
       </section>
       <section className="rounded-lg border bg-imperium-surface p-4" style={{ borderColor: `rgb(${cor} / 0.55)` }}>
         <p className="text-[10px] uppercase tracking-widest text-stone-500">Vendido no mês</p>

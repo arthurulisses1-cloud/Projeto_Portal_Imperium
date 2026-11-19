@@ -3,7 +3,7 @@
 import type { PainelCloser, ReuniaoDoDia } from "@/lib/closer-negocio";
 import PaceAlternavel from "@/components/negocio/PaceAlternavel";
 import DestaqueSetup from "@/components/negocio/DestaqueSetup";
-import { BarraMes, PaceEsforcoCard, ReunioesAAcontecer } from "@/components/negocio/PainelSdr";
+import { BarraMes, PaceEsforcoCard, ReunioesAAcontecer, ReunioesParaReagendar } from "@/components/negocio/PainelSdr";
 
 function hora(iso: string | null, texto: string | null): string {
   if (!iso) return texto ?? "sem horário";
@@ -76,13 +76,18 @@ export function MuralCloser({
         ]}
       />
       {painel.setup && <DestaqueSetup setup={painel.setup} recebidoMeta={painel.recebido.meta} cor={cor} />}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões previstas pra acontecer</p>
           {previstas ? <ReunioesAAcontecer lista={previstas} rotulo={rotulo} /> : <p className="mt-1 text-3xl font-semibold text-stone-400">—</p>}
           <p className="mt-1 text-xs text-stone-500">{previstas && previstas.length > 0 ? "passe o mouse no número para ver quais e quando" : "agendadas para você no CRM"}</p>
         </section>
         <ReunioesDoDia lista={painel.reunioes?.doDia ?? []} rotulo={rotulo} />
+        <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões para reagendar</p>
+          {painel.reunioes ? <ReunioesParaReagendar lista={painel.reunioes.reagendar} rotulo={rotulo} /> : <p className="mt-1 text-3xl font-semibold text-stone-400">—</p>}
+          <p className="mt-1 text-xs text-stone-500">{painel.reunioes && painel.reunioes.reagendar.length > 0 ? "passe o mouse no número para ver quais" : "nenhuma com data passada ou no-show"}</p>
+        </section>
         <PaceEsforcoCard titulo="Reuniões realizadas" p={painel.realizadas} cor={cor} mesAtual={mesAtual} />
       </div>
     </div>

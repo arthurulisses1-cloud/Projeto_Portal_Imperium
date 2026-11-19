@@ -12,7 +12,7 @@ import type { AuditoriaGravada, LeadAuditoria } from "@/lib/integracoes/auditori
 import { metaMrrForecast, metaSetupForecast } from "@/lib/forecast-negocios";
 import { calcularPace, limitesDoMes, buscarPaceNegocios, type PaceCalculado } from "@/lib/pace-negocio";
 import { TIMES_POR_CANAL, metasPorCanal } from "@/lib/pace-esforco";
-import { lerDataReuniao, statusRqa, usuarioCrmDoPerfil, type ReuniaoFutura, type StatusRqa } from "@/lib/sdr-negocio";
+import { lerDataReuniao, separarReunioes, statusRqa, usuarioCrmDoPerfil, type ReuniaoFutura, type StatusRqa } from "@/lib/sdr-negocio";
 
 /** Cargos de closer no negócio (quem faz a reunião e fecha). */
 export const CARGOS_CLOSER = ["closer", "executivo"];
@@ -41,8 +41,10 @@ export type ReuniaoDoDia = {
 };
 
 export type ResumoReunioesCloser = {
-  /** Reuniões dele ainda por acontecer (qualquer mês), da mais próxima para a mais distante. */
+  /** Reuniões dele ainda por acontecer (de hoje em diante, ou sem data), da mais próxima para a mais distante. */
   previstas: ReuniaoFutura[];
+  /** Reuniões para reagendar: a data já passou sem desfecho no CRM, ou o lead está em No Show. */
+  reagendar: ReuniaoFutura[];
   /** Reuniões marcadas para hoje (qualquer situação, menos cancelada), por horário. */
   doDia: ReuniaoDoDia[];
   /** Reuniões que ele realizou no mês (pela data em que foram realizadas). */
@@ -58,22 +60,16 @@ export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, a
   // Match Sales: o executivo é dono das reuniões que ele agendou (tocando ele ou levando para outro); o campo closer quase não é preenchido.
   const meus = leads.filter((l) => l.closer === nomeCrm || (donoDaReuniao && l.preVendas === nomeCrm));
 
-  const previstas: ReuniaoFutura[] = meus
-    .filter((l) => l.situacao === "a_acontecer")
-    .map((l) => {
-      const quando = lerDataReuniao(l.reuniaoMarcada);
-      return {
-        id: l.id,
-        nome: l.nome,
-        empresa: l.empresa,
-        canal: l.canal,
-        agendadaEm: dataBR(l.agendadaEm),
-        quando,
-        quandoTexto: quando ? null : l.reuniaoMarcada,
-        sdr: l.preVendas,
-      };
-    })
-    .sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
+  const { aAcontecer: previstas, reagendar } = separarReunioes(meus, hoje, (l, quando) => ({
+    id: l.id,
+    nome: l.nome,
+    empresa: l.empresa,
+    canal: l.canal,
+    agendadaEm: dataBR(l.agendadaEm),
+    quando,
+    quandoTexto: quando ? null : l.reuniaoMarcada,
+    sdr: l.preVendas,
+  }));
 
   const doDia: ReuniaoDoDia[] = meus
     .filter((l) => (l.situacao === "a_acontecer" || l.situacao === "realizada" || l.situacao === "no_show") && dataBR(lerDataReuniao(l.reuniaoMarcada)) === hoje)
@@ -96,6 +92,7 @@ export function resumirReunioesCloser(leads: LeadAuditoria[], nomeCrm: string, a
 
   return {
     previstas,
+    reagendar,
     doDia,
     realizadasNoMes: meus.filter((l) => noMes(dataBR(l.realizadaEm), inicio, fimExcl)).length,
     realizadasHoje: meus.filter((l) => dataBR(l.realizadaEm) === hoje).length,

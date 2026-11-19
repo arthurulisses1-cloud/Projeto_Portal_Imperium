@@ -16,6 +16,7 @@ import type { AuditoriaGravada, LeadAuditoria } from "@/lib/integracoes/auditori
 import { buscarEsforcoNegocio, diasUteisDoMes, type EtapaEsforco, type PreVendasPace } from "@/lib/pace-esforco";
 import { calcularPace, limitesDoMes } from "@/lib/pace-negocio";
 import type { ItemComissao } from "@/lib/comissao-negocio";
+import { hojeBR } from "@/lib/data-br";
 
 /** Cargos de pré-vendas no negócio (quem agenda reunião). */
 export const CARGOS_PRE_VENDAS = ["sdr", "bdr", "pre_vendas"];
@@ -113,7 +114,28 @@ export type ReuniaoFutura = {
   sdr?: string | null;
   /** Com quem é a reunião (visão do SDR/BDR): o closer, ou a pessoa para quem o lead foi repassado. */
   com?: string | null;
+  /** Reunião para reagendar: a data já passou e o lead segue em "Reunião Agendada", ou o lead está em No Show. */
+  motivo?: "data_passada" | "no_show";
 };
+
+/**
+ * Separa as reuniões em aberto em "a acontecer" (hoje em diante, ou sem data) e "para reagendar" (a data já passou e o lead
+ * continua agendado, ou está em No Show) (pura). `mapa` monta cada item; as mais atrasadas vêm primeiro em reagendar.
+ */
+export function separarReunioes(leads: LeadAuditoria[], hoje: string, mapa: (l: LeadAuditoria, quando: string | null) => ReuniaoFutura): { aAcontecer: ReuniaoFutura[]; reagendar: ReuniaoFutura[] } {
+  const aAcontecer: ReuniaoFutura[] = [];
+  const reagendar: ReuniaoFutura[] = [];
+  for (const l of leads) {
+    if (l.situacao !== "a_acontecer" && l.situacao !== "no_show") continue;
+    const quando = lerDataReuniao(l.reuniaoMarcada);
+    const dia = quando ? dataBR(quando) : null;
+    if (l.situacao === "no_show") reagendar.push({ ...mapa(l, quando), motivo: "no_show" });
+    else if (dia && dia < hoje) reagendar.push({ ...mapa(l, quando), motivo: "data_passada" });
+    else aAcontecer.push(mapa(l, quando));
+  }
+  const porData = (a: ReuniaoFutura, b: ReuniaoFutura) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999");
+  return { aAcontecer: aAcontecer.sort(porData), reagendar: reagendar.sort(porData) };
+}
 
 /** Lê o campo de data da reunião: ISO, "dd/mm/aaaa" ou "dd/mm/aaaa hh:mm" (horário de Brasília). */
 export function lerDataReuniao(v: string | null): string | null {
@@ -132,8 +154,10 @@ export function lerDataReuniao(v: string | null): string | null {
 }
 
 export type ResumoReunioes = {
-  /** Reuniões dele ainda por acontecer (qualquer mês), da mais próxima para a mais distante. */
+  /** Reuniões dele ainda por acontecer (de hoje em diante, ou sem data), da mais próxima para a mais distante. */
   aAcontecer: ReuniaoFutura[];
+  /** Reuniões para reagendar: data passada sem desfecho no CRM, ou No Show. */
+  reagendar: ReuniaoFutura[];
   /** Reuniões realizadas no mês (pela data em que foram realizadas), com o status da RQA. */
   realizadas: ReuniaoSdr[];
   noShow: { qtd: number; base: number; pct: number | null };
@@ -155,7 +179,7 @@ const dataBR = (iso: string | null) =>
  * No-show: das reuniões que ele agendou no mês e que já tiveram desfecho (realizada ou no-show), quantas
  * foram no-show. RQA: as reuniões realizadas no mês, com o status preenchido pelo closer.
  */
-export function resumirReunioes(leads: LeadAuditoria[], nomeCrm: string, slug: string, ano: number, mes: number): ResumoReunioes {
+export function resumirReunioes(leads: LeadAuditoria[], nomeCrm: string, slug: string, ano: number, mes: number, hoje: string = hojeBR()): ResumoReunioes {
   const { inicio, fim } = limitesDoMes(ano, mes);
   const fimExcl = new Date(Date.parse(fim + "T00:00:00Z") + 86400_000).toISOString().slice(0, 10);
   const valores = RQA_VALOR[slug] ?? { outbound: 0, inbound: 0, indicacao: 0 };
@@ -180,26 +204,21 @@ export function resumirReunioes(leads: LeadAuditoria[], nomeCrm: string, slug: s
     }))
     .sort((a, b) => (b.realizadaEm ?? "").localeCompare(a.realizadaEm ?? ""));
 
-  const aAcontecer: ReuniaoFutura[] = meus
-    .filter((l) => l.situacao === "a_acontecer")
-    .map((l) => {
-      const quando = lerDataReuniao(l.reuniaoMarcada);
-      return {
-        id: l.id,
-        nome: l.nome,
-        empresa: l.empresa,
-        canal: l.canal,
-        agendadaEm: dataBR(l.agendadaEm),
-        quando,
-        quandoTexto: quando ? null : l.reuniaoMarcada,
-        com: l.closer ?? repassadoPara(l),
-      };
-    })
-    .sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
+  const { aAcontecer, reagendar } = separarReunioes(meus, hoje, (l, quando) => ({
+    id: l.id,
+    nome: l.nome,
+    empresa: l.empresa,
+    canal: l.canal,
+    agendadaEm: dataBR(l.agendadaEm),
+    quando,
+    quandoTexto: quando ? null : l.reuniaoMarcada,
+    com: l.closer ?? repassadoPara(l),
+  }));
 
   const de = (s: StatusRqa) => realizadas.filter((r) => r.rqa === s);
   return {
     aAcontecer,
+    reagendar,
     realizadas,
     noShow: { qtd: qtdNoShow, base: comDesfecho.length, pct: comDesfecho.length > 0 ? qtdNoShow / comDesfecho.length : null },
     rqa: {
@@ -331,7 +350,7 @@ export async function buscarPainelSdr(
     usuarioCrm,
     nomeCrm,
     pv: (usuarioCrm && esforco?.preVendas.find((p) => p.id === usuarioCrm)) || null,
-    reunioes: nomeCrm && auditoria ? resumirReunioes(auditoria.leads ?? [], nomeCrm, negocio.slug, ctx.ano, ctx.mes) : null,
+    reunioes: nomeCrm && auditoria ? resumirReunioes(auditoria.leads ?? [], nomeCrm, negocio.slug, ctx.ano, ctx.mes, ctx.hoje) : null,
     atualizadoEm: auditoria?.atualizado_em ?? null,
     vendas: { lista, recebido: lista.reduce((s, v) => s + v.valor, 0), mrr: lista.reduce((s, v) => s + (v.mrr ?? 0), 0) },
   };

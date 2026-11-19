@@ -65,6 +65,23 @@ describe("metaMrrDaPessoa", () => {
   });
 });
 
+describe("reuniões para reagendar (Match Sales)", () => {
+  const hoje = "2026-11-19";
+  const leads = [
+    lead({ nome: "Hoje", closer: null, preVendas: "Matheus", reuniaoMarcada: "2026-11-19T15:00" }),
+    lead({ nome: "Amanhã", closer: null, preVendas: "Matheus", reuniaoMarcada: "2026-11-20T10:00" }),
+    lead({ nome: "Passou", closer: null, preVendas: "Matheus", reuniaoMarcada: "2026-11-17T10:00" }),
+    lead({ nome: "Sem data", closer: null, preVendas: "Matheus", reuniaoMarcada: null }),
+    lead({ nome: "Não veio", closer: null, preVendas: "Matheus", reuniaoMarcada: "2026-11-18T09:00", situacao: "no_show" }),
+  ];
+  it("separa o que ainda vai acontecer (hoje em diante ou sem data) do que precisa reagendar (data passada ou no-show)", () => {
+    const r = resumirReunioesCloser(leads, "Matheus", 2026, 11, hoje, true);
+    expect(r.previstas.map((x) => x.nome)).toEqual(["Hoje", "Amanhã", "Sem data"]);
+    expect(r.reagendar.map((x) => [x.nome, x.motivo])).toEqual([["Passou", "data_passada"], ["Não veio", "no_show"]]);
+    expect(r.doDia.map((x) => x.nome)).toContain("Hoje");
+  });
+});
+
 describe("resumirReunioesCloser no Match Sales (dono da reunião)", () => {
   const leads = [
     lead({ nome: "Minha, sem closer", closer: null, preVendas: "Arthur Soares", reuniaoMarcada: "18/11/2026 10:00" }),
