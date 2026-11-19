@@ -593,6 +593,21 @@ export async function runSyncIntegracoes(opts: OpcoesSync = {}): Promise<Resulta
     }),
   );
 
+  // Diagnóstico temporário (Energy): lista dos negócios de GD fechados no mês, sem nome nem contato, para conferir os kWh. Remover depois.
+  if (!opts.simular && slugs.includes("vorp-energy")) {
+    try {
+      const { lerRedeSunne } = await import("@/lib/sunne");
+      const rede = await lerRedeSunne();
+      const mesAtual = hoje.slice(0, 7);
+      const fechados = rede.deals
+        .filter((d) => d.isClosed && d.closedAt && new Date(d.closedAt).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" }).startsWith(mesAtual))
+        .map((d) => ({ id: d.id.slice(0, 8), fechado: d.closedAt, perdido: d.isLost, etapa: d.stageKey, consumoMedio: d.averageConsumption, kwhCompensavel: d.compensableKwh ?? null, primeiraFatura: d.referenceValue ?? null }));
+      await supabase.from("integracao_estado").upsert({ chave: "diagnostico:vorp-energy:fechados_mes", valor: { mes: mesAtual, total: rede.deals.length, fechados }, atualizado_em: new Date().toISOString() });
+    } catch (e) {
+      console.error("diagnóstico do Energy falhou:", e);
+    }
+  }
+
   if (!opts.simular) {
     await supabase.from("sync_log").insert({
       fonte: "integracoes:3c+pipefacil",
