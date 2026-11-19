@@ -5,8 +5,8 @@ import { ROTULO_STATUS } from "@/lib/head-negocio";
 import type { PaceCalculado } from "@/lib/pace-negocio";
 import PaceAlternavel from "@/components/negocio/PaceAlternavel";
 import DestaqueSetup from "@/components/negocio/DestaqueSetup";
-import { ReunioesDoDia } from "@/components/negocio/PainelCloser";
-import { BarraMes, PaceEsforcoCard, ReunioesAAcontecer } from "@/components/negocio/PainelSdr";
+import { ReunioesCanceladas, ReunioesDoDia } from "@/components/negocio/PainelCloser";
+import { BarraMes, PaceEsforcoCard, ReunioesAAcontecer, ReunioesParaReagendar } from "@/components/negocio/PainelSdr";
 
 const moeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`);
@@ -96,7 +96,6 @@ export function MuralHead({
   mesLabel: string;
   mesAtual: boolean;
 }) {
-  const ns = painel.noShow;
   return (
     <div className="space-y-4">
       <p className="text-[10px] uppercase tracking-widest text-stone-500">
@@ -114,29 +113,39 @@ export function MuralHead({
       />
       {painel.setup && <DestaqueSetup setup={painel.setup} recebidoMeta={painel.recebido.meta} time cor={cor} />}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões previstas do time</p>
+          <p className="text-[10px] text-stone-600">a partir de amanhã</p>
           <ReunioesAAcontecer lista={painel.previstas} rotulo="agendada por" />
           <p className="mt-1 text-xs text-stone-500">{painel.previstas.length > 0 ? "passe o mouse no número para ver quem e quando" : "nenhuma reunião a acontecer no CRM"}</p>
         </section>
         <ReunioesDoDia lista={painel.doDia} rotulo="agendada por" />
-        {painel.realizadas ? (
-          <PaceEsforcoCard titulo="Reuniões realizadas do time" p={painel.realizadas} cor={cor} mesAtual={mesAtual} />
+        <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões para reagendar do time</p>
+          <ReunioesParaReagendar lista={painel.reagendar} rotulo="agendada por" />
+          <p className="mt-1 text-xs text-stone-500">{painel.reagendar.length > 0 ? "passe o mouse no número para ver quais" : "nenhuma com data passada ou no-show"}</p>
+        </section>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {painel.agendadas ? (
+          <PaceEsforcoCard titulo="Reuniões agendadas do time no mês" p={painel.agendadas} cor={cor} mesAtual={mesAtual} />
         ) : (
           <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
-            <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões realizadas do time</p>
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões agendadas do time no mês</p>
             <p className="mt-1 text-3xl font-semibold text-stone-400">—</p>
           </section>
         )}
-        <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
-          <p className="text-[10px] uppercase tracking-widest text-stone-500">No-show do time</p>
-          <p className={`mt-1 text-3xl font-semibold ${ns?.pct == null ? "text-stone-400" : ns.pct > 0.3 ? "text-wine-bright" : ns.pct > 0.15 ? "text-amber-400" : "text-success-bright"}`}>
-            {ns ? pct(ns.pct) : "—"}
-          </p>
-          <p className="mt-1 text-xs text-stone-500">{ns ? `${ns.qtd} no-show de ${ns.base} reuniões do mês que já aconteceram (ou deveriam)` : "sem dados de reuniões no CRM"}</p>
-        </section>
+        {painel.realizadas ? (
+          <PaceEsforcoCard titulo="Reuniões realizadas do time no mês" p={painel.realizadas} cor={cor} mesAtual={mesAtual} />
+        ) : (
+          <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Reuniões realizadas do time no mês</p>
+            <p className="mt-1 text-3xl font-semibold text-stone-400">—</p>
+          </section>
+        )}
       </div>
+      <ReunioesCanceladas lista={painel.canceladas} />
 
       <TabelaTime time={painel.time} />
       <p className="text-right text-[11px] text-stone-500">

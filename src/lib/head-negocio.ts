@@ -9,7 +9,7 @@ import { metaMrrForecast } from "@/lib/forecast-negocios";
 import { calcularPace, limitesDoMes, buscarPaceNegocios, type PaceCalculado, type StatusPace } from "@/lib/pace-negocio";
 import { buscarEsforcoNegocio, type EsforcoNegocio } from "@/lib/pace-esforco";
 import { resumirReunioes, usuarioCrmDoPerfil, type ReuniaoFutura } from "@/lib/sdr-negocio";
-import { resumirReunioesCloser, setupDoNegocio, type ReuniaoDoDia } from "@/lib/closer-negocio";
+import { resumirReunioesCloser, setupDoNegocio, type ReuniaoCancelada, type ReuniaoDoDia } from "@/lib/closer-negocio";
 
 export type LinhaTime = {
   id: string;
@@ -31,10 +31,16 @@ export type PainelHead = {
   recebido: PaceCalculado;
   mrr: PaceCalculado;
   setup: PaceCalculado | null;
+  /** Pace de reuniões agendadas e realizadas do time (meta do forecast). */
+  agendadas: PaceCalculado | null;
   realizadas: PaceCalculado | null;
   noShow: { qtd: number; base: number; pct: number | null } | null;
-  /** Reuniões do time ainda por acontecer, da mais próxima para a mais distante. */
+  /** Reuniões do time ainda por acontecer a partir de amanhã (ou sem data), da mais próxima para a mais distante. */
   previstas: ReuniaoFutura[];
+  /** Reuniões do time para reagendar (data passada sem desfecho, ou No Show). */
+  reagendar: ReuniaoFutura[];
+  /** Reuniões agendadas no mês que o lead depois perdeu, com o motivo. */
+  canceladas: ReuniaoCancelada[];
   /** Reuniões do time marcadas para hoje. */
   doDia: ReuniaoDoDia[];
   time: LinhaTime[];
@@ -90,6 +96,8 @@ export async function buscarPainelHead(
   }
 
   const previstas: ReuniaoFutura[] = [];
+  const reagendar: ReuniaoFutura[] = [];
+  const canceladas: ReuniaoCancelada[] = [];
   const doDia: ReuniaoDoDia[] = [];
   const time: LinhaTime[] = [];
   for (const p of pn?.pessoas ?? []) {
@@ -100,6 +108,8 @@ export async function buscarPainelHead(
     if (nomeCrm && leads.length > 0) {
       const r = resumirReunioesCloser(leads, nomeCrm, ctx.ano, ctx.mes, ctx.hoje, true);
       previstas.push(...r.previstas);
+      reagendar.push(...r.reagendar);
+      canceladas.push(...r.canceladas);
       doDia.push(...r.doDia);
     }
     const recebido = p.meta !== null ? calcularPace({ meta: p.meta, recebido: p.recebido, ...base }) : null;
@@ -117,6 +127,8 @@ export async function buscarPainelHead(
     });
   }
   previstas.sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
+  reagendar.sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
+  canceladas.sort((a, b) => (b.perdidaEm ?? "").localeCompare(a.perdidaEm ?? ""));
   doDia.sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
 
   const qtd = time.reduce((s, l) => s + (l.noShow?.qtd ?? 0), 0);
@@ -127,9 +139,12 @@ export async function buscarPainelHead(
     recebido: pn?.pace ?? calcularPace({ meta: 0, recebido: 0, ...base }),
     mrr: calcularPace({ meta: metaMrrForecast(negocio.slug, ctx.ano, ctx.mes), recebido: mrrTotal, ...base }),
     setup: setupTime,
+    agendadas: esforco?.time.reunioes_agendadas.pace ?? null,
     realizadas: esforco?.time.reunioes_realizadas.pace ?? null,
     noShow: leads.length > 0 ? { qtd, base: baseNs, pct: baseNs > 0 ? qtd / baseNs : null } : null,
     previstas,
+    reagendar,
+    canceladas,
     doDia,
     time: ordenarPorAtencao(time),
     esforco,
