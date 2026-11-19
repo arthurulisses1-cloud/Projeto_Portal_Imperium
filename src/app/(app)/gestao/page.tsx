@@ -1,4 +1,6 @@
 import { Fragment } from "react";
+import { unstable_cache } from "next/cache";
+import FormSalvar from "@/components/ui/FormSalvar";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -15,6 +17,10 @@ import EnviarAcessoForm from "@/components/ui/EnviarAcessoForm";
 import GerarSenhaButton from "@/components/ui/GerarSenhaButton";
 import CriarUsuarioForm from "@/components/ui/CriarUsuarioForm";
 import ExcluirUsuarioButton from "@/components/ui/ExcluirUsuarioButton";
+
+// A lista de nomes da planilha vem de 3 downloads do Google Sheets; guarda 30 minutos para a tela não esperar o Google a cada abertura
+// nem a cada "Salvar" (que recarrega a página).
+const nomesPlanilhaEmCache = unstable_cache(listarNomesPlanilha, ["gestao-nomes-planilha-v1"], { revalidate: 1800 });
 
 const ROLES = ["sdr", "closer", "lider", "diretor", "investidor", "analista"] as const;
 const CARGOS = Object.keys(CARGO_LABEL) as CargoNegocio[];
@@ -51,7 +57,7 @@ export default async function GestaoPage() {
     supabase.from("profiles").select("id, full_name, role, ativo, nomes_planilha").order("full_name"),
     supabase.from("negocios").select("id, slug, nome, equipe_nome").eq("status", "ativo").order("ordem"),
     supabase.from("profile_negocios").select("profile_id, negocio_id, cargo, principal"),
-    listarNomesPlanilha(),
+    nomesPlanilhaEmCache(),
     buscarUltimaSyncOk(supabase),
     admin.auth.admin.listUsers({ perPage: 200 }),
   ]);
@@ -98,7 +104,7 @@ export default async function GestaoPage() {
                 <div key={p.id} className="rounded border border-imperium-line bg-imperium-bg/40 p-3">
                   <p className="mb-2 text-sm text-stone-100">{p.full_name}</p>
                   <div className="flex flex-wrap items-end gap-3">
-                    <form action={atualizarCargo} className="flex items-end gap-2">
+                    <FormSalvar action={atualizarCargo} className="flex items-end gap-2">
                       <input type="hidden" name="profile_id" value={p.id} />
                       <div>
                         <label className="mb-1 block text-[10px] uppercase text-stone-500">Papel</label>
@@ -113,7 +119,7 @@ export default async function GestaoPage() {
                       <button type="submit" className="btn-outline px-3 py-1.5 text-xs">
                         Salvar
                       </button>
-                    </form>
+                    </FormSalvar>
                   </div>
 
                   <div className="mt-3">
@@ -125,7 +131,7 @@ export default async function GestaoPage() {
                         const cor = NEGOCIO_COR[n.slug] ?? "201 162 74";
                         return (
                           <div key={v.negocio_id} className="flex flex-wrap items-center gap-2">
-                            <form action={salvarVinculoNegocio} className="flex flex-wrap items-center gap-2">
+                            <FormSalvar action={salvarVinculoNegocio} className="flex flex-wrap items-center gap-2">
                               <input type="hidden" name="profile_id" value={p.id} />
                               <input type="hidden" name="negocio_id" value={v.negocio_id} />
                               <span className="w-36 truncate text-xs" style={{ color: `rgb(${cor})` }}>
@@ -144,7 +150,7 @@ export default async function GestaoPage() {
                               <button type="submit" className="btn-outline px-2 py-1 text-xs">
                                 Salvar
                               </button>
-                            </form>
+                            </FormSalvar>
                             <form action={removerVinculoNegocio}>
                               <input type="hidden" name="profile_id" value={p.id} />
                               <input type="hidden" name="negocio_id" value={v.negocio_id} />
@@ -212,7 +218,7 @@ export default async function GestaoPage() {
                         dela. &ldquo;Editar&rdquo; ainda não libera nenhuma ação de escrita — só fica
                         salvo pra quando essa parte for implementada.
                       </p>
-                      <form action={salvarPermissoesAnalista} className="space-y-1.5">
+                      <FormSalvar action={salvarPermissoesAnalista} className="space-y-1.5">
                         <input type="hidden" name="profile_id" value={p.id} />
                         <div className="grid grid-cols-[1fr,auto,auto] items-center gap-x-3 gap-y-1 text-xs">
                           <span className="text-[10px] uppercase text-stone-600">Área</span>
@@ -242,7 +248,7 @@ export default async function GestaoPage() {
                         <button type="submit" className="btn-outline mt-2 px-3 py-1.5 text-xs">
                           Salvar permissões
                         </button>
-                      </form>
+                      </FormSalvar>
                     </details>
                   )}
 
