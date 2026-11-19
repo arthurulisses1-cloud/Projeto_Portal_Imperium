@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarCompromissoEnergia } from "@/lib/energy-time";
 import type { AuditoriaGravada, LeadAuditoria } from "@/lib/integracoes/auditoria";
 import { usuarioCrmDoPerfil } from "@/lib/sdr-negocio";
+import { contarEsforcoFinance, type LeadFinance } from "@/lib/finance-time";
 
 export type KpiPessoa = { chave: string; label: string; meta: number; realizado: number };
 export type PessoaCompromisso = {
@@ -49,6 +50,56 @@ export function reunioesDeHoje(leads: Pick<LeadAuditoria, "preVendas" | "closer"
     agendadas: meus.filter((l) => l.preVendas === nomeCrm && diaBR(l.agendadaEm) === hoje).length,
     realizadas: meus.filter((l) => diaBR(l.realizadaEm) === hoje).length,
   };
+}
+
+/**
+ * Realizado de hoje que o sistema calcula sozinho para uma pessoa, por indicador (chave). O que não está aqui é digitado.
+ * Acrópole e Match: reuniões agendadas e realizadas (CRM); Match: recebido e MRR (vendas de hoje); Finance: entrevistas e subidos
+ * (leads do dia); Energy: contas subidas, assinaturas e kWh (Sunne).
+ */
+export async function realizadoAutomaticoHoje(admin: SupabaseClient, negocio: { id: string; slug: string }, pessoa: { id: string; nome: string }, hoje: string): Promise<Record<string, number>> {
+  const out: Record<string, number> = {};
+  try {
+    if (negocio.slug === "vorp" || negocio.slug === "matchsales") {
+      const [{ data: mb }, { data: pf }, { data: au }] = await Promise.all([
+        admin.from("integracao_estado").select("valor").eq("chave", `pipefacil:${negocio.slug}:membros`).maybeSingle(),
+        admin.from("integracao_estado").select("valor").eq("chave", `pipefacil:${negocio.slug}:perfis`).maybeSingle(),
+        admin.from("integracao_estado").select("valor").eq("chave", `auditoria:${negocio.slug}`).maybeSingle(),
+      ]);
+      const nomesCrm = (mb?.valor as Record<string, string> | null) ?? {};
+      const usuario = usuarioCrmDoPerfil((pf?.valor as Record<string, string> | null) ?? null, nomesCrm, pessoa.id, pessoa.nome);
+      const nomeCrm = usuario ? nomesCrm[usuario] ?? null : null;
+      if (nomeCrm) {
+        const r = reunioesDeHoje(((au?.valor as AuditoriaGravada | null)?.leads ?? []) as LeadAuditoria[], nomeCrm, hoje);
+        out.reunioes_agendadas = r.agendadas;
+        out.reunioes_realizadas = r.realizadas;
+      }
+    }
+    if (negocio.slug === "matchsales") {
+      const { data: vendas } = await admin.from("vendas").select("valor, mrr").eq("negocio_id", negocio.id).eq("profile_id", pessoa.id).eq("data", hoje);
+      out.recebido = (vendas ?? []).reduce((s, v) => s + Number(v.valor ?? 0), 0);
+      out.mrr = (vendas ?? []).reduce((s, v) => s + Number(v.mrr ?? 0), 0);
+    }
+    if (negocio.slug === "vorp-finance") {
+      const colunas = "id, lead_nome, data, status_followup, sdr_profile_id, closer_profile_id, subido_em, subido_por, sub_comissao_prevista, venda_valor_recebido, recusada_em, ultimo_movimento_em";
+      const [{ data: leads }, { data: membros }] = await Promise.all([
+        admin.from("entrevistas_leads").select(colunas).eq("negocio_id", negocio.id).or(`data.eq.${hoje},subido_em.eq.${hoje}`).limit(2000),
+        admin.from("profile_negocios").select("profile_id").eq("negocio_id", negocio.id),
+      ]);
+      const c = contarEsforcoFinance((leads ?? []) as unknown as LeadFinance[], new Set((membros ?? []).map((m) => m.profile_id as string)), hoje, hoje + "~");
+      out.entrevistas = c.entrevistas.get(pessoa.id) ?? 0;
+      out.subidos = c.subidos.get(pessoa.id) ?? 0;
+    }
+    if (negocio.slug === "vorp-energy") {
+      const real = await buscarCompromissoEnergia(admin, pessoa.id, hoje);
+      out.contas_subidas = real.contasSubidas;
+      if (real.assinaturas !== null) out.assinaturas = real.assinaturas;
+      out.kwh_gerado = real.kwh;
+    }
+  } catch (e) {
+    console.error("realizadoAutomaticoHoje falhou:", e);
+  }
+  return out;
 }
 
 /** Monta o consolidado de um time (pura). `kpisPorPessoa`: indicadores gravados hoje; `faltaram`: quem foi marcado como ausente. */
@@ -132,12 +183,24 @@ export async function buscarCompromissosDosTimes(admin: SupabaseClient, hoje: st
         }
       }
     }
-    // Acrópole: as reuniões agendadas e realizadas de hoje vêm do CRM (antes valia só o que a pessoa digitava).
-    if (n.slug === "vorp") {
+    // Finance: entrevistas e subidos de hoje vêm dos leads (antes valia só o que a pessoa digitava).
+    if (n.slug === "vorp-finance") {
+      const colunas = "id, lead_nome, data, status_followup, sdr_profile_id, closer_profile_id, subido_em, subido_por, sub_comissao_prevista, venda_valor_recebido, recusada_em, ultimo_movimento_em";
+      const { data: leadsHoje } = await admin.from("entrevistas_leads").select(colunas).eq("negocio_id", n.id).or(`data.eq.${hoje},subido_em.eq.${hoje}`).limit(2000);
+      const c = contarEsforcoFinance((leadsHoje ?? []) as unknown as LeadFinance[], new Set(membros.map((m) => m.id)), hoje, hoje + "~");
+      for (const m of membros) {
+        for (const k of kpisPor.get(m.id) ?? []) {
+          if (k.chave === "entrevistas") k.realizado = c.entrevistas.get(m.id) ?? 0;
+          if (k.chave === "subidos") k.realizado = c.subidos.get(m.id) ?? 0;
+        }
+      }
+    }
+    // Acrópole e Match: as reuniões agendadas e realizadas de hoje vêm do CRM (antes valia só o que a pessoa digitava).
+    if (n.slug === "vorp" || n.slug === "matchsales") {
       const [{ data: mb }, { data: pf }, { data: au }] = await Promise.all([
-        admin.from("integracao_estado").select("valor").eq("chave", "pipefacil:vorp:membros").maybeSingle(),
-        admin.from("integracao_estado").select("valor").eq("chave", "pipefacil:vorp:perfis").maybeSingle(),
-        admin.from("integracao_estado").select("valor").eq("chave", "auditoria:vorp").maybeSingle(),
+        admin.from("integracao_estado").select("valor").eq("chave", `pipefacil:${n.slug}:membros`).maybeSingle(),
+        admin.from("integracao_estado").select("valor").eq("chave", `pipefacil:${n.slug}:perfis`).maybeSingle(),
+        admin.from("integracao_estado").select("valor").eq("chave", `auditoria:${n.slug}`).maybeSingle(),
       ]);
       const nomesCrm = (mb?.valor as Record<string, string> | null) ?? {};
       const leads = ((au?.valor as AuditoriaGravada | null)?.leads ?? []) as LeadAuditoria[];

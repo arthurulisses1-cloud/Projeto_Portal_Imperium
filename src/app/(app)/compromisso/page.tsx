@@ -13,6 +13,7 @@ import { IconFlame, IconCheck, IconAlert } from "@/components/ui/icons";
 import { Badge } from "@/components/ui/Badge";
 import CompromissoKpis from "@/components/CompromissoKpis";
 import { buscarContextoKpis, buscarLinhasKpis } from "@/lib/compromisso-kpis";
+import { realizadoAutomaticoHoje } from "@/lib/compromisso-time";
 import { buscarPainelCloser, vinculoCloser } from "@/lib/closer-negocio";
 import { createAdminClient } from "@/lib/supabase/admin";
 import CompromissoCloser from "@/components/negocio/CompromissoCloser";
@@ -124,7 +125,8 @@ export default async function CompromissoPage() {
   if (ctxKpis) {
     const desde = new Date(Date.now() - 60 * 86400000).toISOString().slice(0, 10);
     const linhasKpis = await buscarLinhasKpis(supabase, meId, ctxKpis.negocioId, desde);
-    return <CompromissoKpis ctx={ctxKpis} hoje={hoje} linhas={linhasKpis} />;
+    const automatico = await realizadoAutomaticoHoje(createAdminClient(), { id: ctxKpis.negocioId, slug: ctxKpis.negocioSlug }, { id: meId, nome: viewer.effectiveNome }, hoje);
+    return <CompromissoKpis ctx={ctxKpis} hoje={hoje} linhas={linhasKpis} automatico={automatico} />;
   }
 
   const { data: hojeRow } = await supabase

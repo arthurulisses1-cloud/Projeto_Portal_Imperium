@@ -6,6 +6,7 @@ import { hojeBR } from "@/lib/data-br";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { KPIS_ENERGIA, buscarCompromissoEnergia, vinculoEnergia } from "@/lib/energy-time";
 import { buscarPainelCloser, vinculoCloser } from "@/lib/closer-negocio";
+import { realizadoAutomaticoHoje } from "@/lib/compromisso-time";
 
 /** Compromisso do executivo do Energy: o realizado é automático (Sunne), o compromisso (meta) é digitado por ele. */
 export async function salvarCompromissoEnergia(formData: FormData) {
@@ -53,7 +54,7 @@ export async function salvarCompromissoMatchExecutivo(formData: FormData) {
   const agora = new Date().toISOString();
   const base = { profile_id: user.id, negocio_id: vinc.id, data: hoje, updated_at: agora };
   const linhas = [
-    { ...base, chave: "reunioes_agendadas", label: "Reuniões agendadas", meta: num(formData.get("meta_agendadas")), realizado: num(formData.get("realizado_agendadas")) },
+    { ...base, chave: "reunioes_agendadas", label: "Reuniões agendadas", meta: num(formData.get("meta_agendadas")), realizado: painel.reunioes?.agendadasHoje ?? num(formData.get("realizado_agendadas")) },
     { ...base, chave: "recebido", label: "Recebido (R$)", meta: num(formData.get("meta_recebido")), realizado: painel.hoje.recebido },
     { ...base, chave: "mrr", label: "MRR (R$)", meta: num(formData.get("meta_mrr")), realizado: painel.hoje.mrr },
   ];
@@ -76,6 +77,9 @@ export async function salvarAgendadasBdr(formData: FormData) {
   const { data: def } = await supabase.from("kpi_definicoes").select("chave, label").eq("negocio_id", negocioId).eq("chave", "reunioes_agendadas").eq("ativo", true).maybeSingle();
   if (!def) throw new Error("Indicador de reuniões agendadas não cadastrado.");
   const num = (v: FormDataEntryValue | null) => Math.max(0, Number(String(v ?? "0").replace(",", ".")) || 0);
+  // O realizado de agendadas vem do CRM; o digitado só vale se o CRM não puder ser lido.
+  const { data: perfilBdr } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
+  const autoBdr = await realizadoAutomaticoHoje(createAdminClient(), { id: negocioId, slug: "matchsales" }, { id: user.id, nome: (perfilBdr?.full_name as string) ?? "" }, hojeBR());
   const { error } = await supabase.from("compromisso_kpis").upsert(
     {
       profile_id: user.id,
@@ -84,7 +88,7 @@ export async function salvarAgendadasBdr(formData: FormData) {
       chave: def.chave,
       label: def.label,
       meta: num(formData.get("meta")),
-      realizado: num(formData.get("realizado")),
+      realizado: autoBdr.reunioes_agendadas ?? num(formData.get("realizado")),
       updated_at: new Date().toISOString(),
     },
     { onConflict: "profile_id,negocio_id,data,chave" },
@@ -124,6 +128,10 @@ export async function salvarCompromissoKpis(formData: FormData) {
 
   const num = (v: FormDataEntryValue | null) => Math.max(0, Number(String(v ?? "0").replace(",", ".")) || 0);
   const hoje = hojeBR();
+  // O que o sistema calcula sozinho (CRM, leads, vendas, Sunne) vale no lugar do que vier digitado.
+  const { data: negocioRow } = await supabase.from("negocios").select("id, slug").eq("id", negocioId).maybeSingle();
+  const { data: perfilRow } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
+  const auto = negocioRow ? await realizadoAutomaticoHoje(createAdminClient(), { id: negocioRow.id as string, slug: negocioRow.slug as string }, { id: user.id, nome: (perfilRow?.full_name as string) ?? "" }, hoje) : {};
   const linhas = (defs ?? []).map((d) => ({
     profile_id: user.id,
     negocio_id: negocioId,
@@ -131,7 +139,7 @@ export async function salvarCompromissoKpis(formData: FormData) {
     chave: d.chave,
     label: d.label,
     meta: num(formData.get(`meta_${d.chave}`)),
-    realizado: num(formData.get(`real_${d.chave}`)),
+    realizado: d.chave in auto ? auto[d.chave] : num(formData.get(`real_${d.chave}`)),
     updated_at: new Date().toISOString(),
   }));
   if (linhas.length === 0) throw new Error("Esse cargo não tem indicadores cadastrados.");

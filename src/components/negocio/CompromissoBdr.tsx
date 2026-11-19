@@ -45,8 +45,8 @@ export default function CompromissoBdr({ painel, hoje, negocioId, agendadas }: {
                 <input name="meta" type="number" min={0} step="any" defaultValue={agendadas?.meta ?? ""} className={campo} />
               </label>
               <label className="text-xs text-stone-400">
-                Realizado
-                <input name="realizado" type="number" min={0} step="any" defaultValue={agendadas?.realizado ?? ""} className={campo} />
+                Realizado (automático)
+                <input name="realizado" type="number" readOnly value={painel.reunioes?.agendadasHoje ?? agendadas?.realizado ?? 0} className={campo + " cursor-not-allowed opacity-70"} />
               </label>
             </div>
             <button type="submit" className="rounded border border-gold/50 bg-gold/10 px-4 py-1.5 text-sm text-gold-bright hover:bg-gold/20">

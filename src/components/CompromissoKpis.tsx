@@ -14,10 +14,13 @@ export default function CompromissoKpis({
   ctx,
   hoje,
   linhas,
+  automatico = {},
 }: {
   ctx: ContextoKpis;
   hoje: string;
   linhas: KpiLinha[];
+  /** Realizado de hoje que o sistema calcula sozinho, por indicador (esses campos não são digitados). */
+  automatico?: Record<string, number>;
 }) {
   const porDia = agruparPorDia(linhas);
   const hojeLinhas = new Map((porDia.get(hoje) ?? []).map((l) => [l.chave, l]));
@@ -60,7 +63,9 @@ export default function CompromissoKpis({
             <span className="text-[10px] uppercase tracking-widest text-stone-500">Realizado</span>
             {ctx.definicoes.map((d) => {
               const l = hojeLinhas.get(d.chave);
-              const batido = l && l.meta > 0 && l.realizado >= l.meta;
+              const auto = d.chave in automatico;
+              const realizado = auto ? automatico[d.chave] : l?.realizado ?? 0;
+              const batido = !!l && l.meta > 0 && realizado >= l.meta;
               return (
                 <div key={d.chave} className="contents">
                   <span className={batido ? "text-success-bright" : "text-stone-200"}>{d.label}</span>
@@ -72,14 +77,21 @@ export default function CompromissoKpis({
                     defaultValue={l?.meta ?? ""}
                     className="w-full rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-100 focus:border-gold focus:outline-none"
                   />
-                  <input
-                    name={`real_${d.chave}`}
-                    type="number"
-                    min={0}
-                    step="any"
-                    defaultValue={l?.realizado ?? ""}
-                    className="w-full rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-100 focus:border-gold focus:outline-none"
-                  />
+                  {auto ? (
+                    <span className="flex items-center gap-1 rounded border border-imperium-line bg-imperium-bg/40 px-2 py-1 text-stone-100" title="Calculado sozinho pelo sistema">
+                      {realizado}
+                      <span className="text-[9px] uppercase text-stone-500">auto</span>
+                    </span>
+                  ) : (
+                    <input
+                      name={`real_${d.chave}`}
+                      type="number"
+                      min={0}
+                      step="any"
+                      defaultValue={l?.realizado ?? ""}
+                      className="w-full rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-100 focus:border-gold focus:outline-none"
+                    />
+                  )}
                 </div>
               );
             })}

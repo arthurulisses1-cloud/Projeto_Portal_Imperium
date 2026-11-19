@@ -56,8 +56,8 @@ export default function CompromissoMatchExecutivo({ painel, hoje, negocioId, lin
                 <input name="meta_agendadas" type="number" min={0} step="any" defaultValue={ag?.meta ?? ""} className={campo} />
               </label>
               <label className="text-xs text-stone-400">
-                Realizado
-                <input name="realizado_agendadas" type="number" min={0} step="any" defaultValue={ag?.realizado ?? ""} className={campo} />
+                Realizado (automático)
+                <input name="realizado_agendadas" type="number" readOnly value={painel.reunioes?.agendadasHoje ?? ag?.realizado ?? 0} className={campo + " cursor-not-allowed opacity-70"} />
               </label>
             </div>
             <p className="mt-2 text-[11px] text-stone-500">
