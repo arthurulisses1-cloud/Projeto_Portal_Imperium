@@ -11,6 +11,7 @@ import { DISPENSADOS_COMPROMISSO } from "@/lib/acessos-especiais";
 import { buscarFeedbacksMes, type AlvoFeedback } from "@/lib/feedback-mes";
 import FeedbackMes, { type ItemFeedback } from "@/components/FeedbackMes";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ReactNode } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MATRI_ANTIGO_ATIVO } from "@/lib/rotas-legadas";
 import { desmarcarFaltaTime, marcarFaltaTime } from "@/app/(app)/exercito/actions";
@@ -81,7 +82,10 @@ export default async function CentralNotificacoes({
   viewerId,
   ocultarLegado = true,
   apenasIds,
+  topo,
 }: {
+  /** Conteúdo no alto da Central (ex.: os quadros de compromisso do dia de cada time, na visão do Diretor). */
+  topo?: ReactNode;
   /** Só as pessoas do time (negócio) de quem vê: fora delas ninguém aparece, e os números da firma inteira somem. Só o Diretor vê tudo. */
   apenasIds?: string[];
   escopo?: Escopo;
@@ -383,7 +387,8 @@ export default async function CentralNotificacoes({
     aniversarios.length === 0 &&
     !temAlgumaMeta &&
     !temCompromissoPraMostrar &&
-    itensFeedback.length === 0
+    itensFeedback.length === 0 &&
+    !topo
   )
     return null;
 
@@ -398,13 +403,14 @@ export default async function CentralNotificacoes({
       </summary>
       <div className="mb-4">
         <a
-          href="/pace"
+          href="/pace-negocio"
           className="inline-flex items-center gap-1.5 rounded-full border border-gold/40 px-3 py-1 text-xs text-gold hover:bg-gold/10"
         >
           Ver pace →
         </a>
       </div>
       <div className="space-y-5">
+        {topo}
         {!ocultarLegado && <FeedbackMes titulo={tituloFeedback} itens={itensFeedback} />}
 
         {temCompromissoPraMostrar && (

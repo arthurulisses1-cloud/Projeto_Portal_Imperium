@@ -464,11 +464,10 @@ export default async function MuralPage({
         </div>
       </div>
 
-      {metaExecutivo}
-      {compromissosTimes.length > 0 && <CompromissosDosTimes times={compromissosTimes} dia={hoje} />}
       {painelNegocios.length > 0 && (
         <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} ritmoPct={ritmoPct} />
       )}
+      {metaExecutivo}
       {/* O Diretor não vê o resumo de tarefas em aberto no Mural (pedido em 2026-11-19); as tarefas seguem na aba Tarefas. */}
       {(meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
         <TarefasMuralWidget userId={meId} />
@@ -480,7 +479,12 @@ export default async function MuralPage({
 
       {!isAcademyRh &&
         (meRole === "diretor" || meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
-          <CentralNotificacoes escopo={escopoCentral} viewerId={meId} apenasIds={apenasIdsCentral} />
+          <CentralNotificacoes
+            escopo={escopoCentral}
+            viewerId={meId}
+            apenasIds={apenasIdsCentral}
+            topo={compromissosTimes.length > 0 ? <CompromissosDosTimes times={compromissosTimes} dia={hoje} /> : undefined}
+          />
         )}
 
       {MATRI_ANTIGO_ATIVO && !metaExecutivo && meRole === "sdr" && metaIndividual > 0 && (
