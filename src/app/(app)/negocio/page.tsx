@@ -961,34 +961,32 @@ function nomeCanalOrigem(c: string) {
 
 const LABEL_RANKING: Record<string, string> = { reunioes_agendadas: "Reuniões agendadas", reunioes_realizadas: "Reuniões realizadas" };
 
-/** Desfecho das agendadas do mês, abaixo do funil (antes das conversões): barra empilhada, legenda fixa (as mesmas posições
- *  em todos os canais, zeros apagados) e a taxa de no-show (no-show ÷ realizadas + no-show). Altura fixa: os
- *  canais sem o bloco reservam o mesmo espaço, e as linhas seguintes continuam alinhadas. */
+/** Desfecho das agendadas do mês, abaixo do funil (antes das conversões): a barra e a legenda mostram a situação
+ *  atual de cada lead (uma categoria por lead, a soma fecha com as agendadas); embaixo, os dois indicadores de
+ *  no-show sobre o total de agendadas. Altura fixa: os canais sem o bloco reservam o mesmo espaço. */
 function DesfechoAgendadasFunil({ d }: { d: DesfechoAgendadas | null }) {
-  // Sem overflow-hidden: a lista de leads de cada item abre por cima do que vem embaixo.
-  const caixa = "h-[4.4rem] rounded-md border px-2 py-1.5";
+  // Sem overflow-hidden: as listas de leads abrem por cima do que vem embaixo.
+  const caixa = "h-[7rem] rounded-md border px-2 py-1.5";
   if (!d) return <div className={`${caixa} invisible border-transparent`} aria-hidden="true" />;
   const partes = [
-    { rotulo: d.realizadas === 1 ? "realizada" : "realizadas", qtd: d.realizadas, leads: d.leads.realizadas, cor: "bg-success-bright", dica: "Reunião realizada" },
-    { rotulo: "no-show", qtd: d.noShow, leads: d.leads.noShow, cor: "bg-wine-bright", dica: "Passou pelo No Show e não realizou" },
-    { rotulo: "a acontecer", qtd: d.aAcontecer, leads: d.leads.aAcontecer, cor: "bg-stone-400", dica: "Em aberto, com a reunião de hoje em diante (ou sem data)" },
-    { rotulo: "reagendar", qtd: d.reagendar, leads: d.leads.reagendar, cor: "bg-warning-bright", dica: "Em aberto, com a data da reunião já passada e sem desfecho no Pipefácil" },
-    { rotulo: d.canceladas === 1 ? "cancelada" : "canceladas", qtd: d.canceladas, leads: d.leads.canceladas, cor: "bg-stone-600", dica: "Perdida antes da reunião" },
-    ...(d.semInfo > 0
-      ? [{ rotulo: "sem info", qtd: d.semInfo, leads: d.leads.semInfo, cor: "bg-imperium-line-strong", dica: "Lead não encontrado na Auditoria (aguarda a próxima sincronização)" }]
+    { rotulo: d.qtd.realizadas === 1 ? "realizada" : "realizadas", qtd: d.qtd.realizadas, leads: d.leads.realizadas, cor: "bg-success-bright", dica: "A reunião aconteceu (inclusive depois de um no-show)" },
+    { rotulo: "no-show", qtd: d.qtd.noShow, leads: d.leads.noShow, cor: "bg-wine-bright", dica: "Parado no No Show, ou perdido depois de um no-show sem realizar" },
+    { rotulo: "a acontecer", qtd: d.qtd.aAcontecer, leads: d.leads.aAcontecer, cor: "bg-stone-400", dica: "Em Reunião Agendada com data de hoje em diante (ou sem data), inclusive reagendados após no-show" },
+    { rotulo: d.qtd.vencidas === 1 ? "vencida" : "vencidas", qtd: d.qtd.vencidas, leads: d.leads.vencidas, cor: "bg-warning-bright", dica: "Em Reunião Agendada com a data já passada, sem atualização no Pipefácil" },
+    { rotulo: d.qtd.canceladas === 1 ? "cancelada" : "canceladas", qtd: d.qtd.canceladas, leads: d.leads.canceladas, cor: "bg-stone-600", dica: "Perdido sem ter dado no-show nem realizado" },
+    ...(d.qtd.semInfo > 0
+      ? [{ rotulo: "sem info", qtd: d.qtd.semInfo, leads: d.leads.semInfo, cor: "bg-imperium-line-strong", dica: "Lead não encontrado na Auditoria (aguarda a próxima sincronização)" }]
       : []),
   ];
-  const pct = d.pctNoShow;
-  const corPct = pct === null ? "text-stone-500" : pct > 0.3 ? "text-wine-bright" : pct > 0.15 ? "text-warning-bright" : "text-success-bright";
+  const pctTexto = (p: number) => `${(Math.round(p * 1000) / 10).toLocaleString("pt-BR")}%`;
+  const corNaoRecuperado = d.naoRecuperado.pct > 0.3 ? "text-wine-bright" : d.naoRecuperado.pct > 0.15 ? "text-warning-bright" : "text-success-bright";
   return (
     <div className={`${caixa} border-imperium-line/60 bg-imperium-raised/40`}>
       <div className="flex items-baseline justify-between gap-2 whitespace-nowrap">
-        <span className="truncate text-[10px] uppercase tracking-widest text-stone-500" title="O que aconteceu com as reuniões agendadas no mês">
+        <span className="truncate text-[10px] uppercase tracking-widest text-stone-500" title="Situação atual de cada lead agendado no mês">
           Das {num(d.total)} agendadas
         </span>
-        <span className="text-[11px] text-stone-400" title={`${d.noShow} no-show de ${d.realizadas + d.noShow} reuniões com desfecho (realizadas + no-show)`}>
-          No-show <span className={`font-semibold ${corPct}`}>{pct === null ? "—" : `${(Math.round(pct * 1000) / 10).toLocaleString("pt-BR")}%`}</span>
-        </span>
+        <span className="text-[10px] text-stone-500">situação atual</span>
       </div>
       <div className="mt-1 flex h-1.5 gap-px overflow-hidden rounded-full bg-imperium-raised">
         {partes.filter((p) => p.qtd > 0).map((p) => (
@@ -997,44 +995,65 @@ function DesfechoAgendadasFunil({ d }: { d: DesfechoAgendadas | null }) {
       </div>
       <div className="mt-1 grid grid-cols-3 gap-x-2 gap-y-0.5 text-[10px] text-stone-400">
         {partes.map((p, i) => (
-          <ItemDesfecho key={p.rotulo} {...p} lado={i % 3 === 2 ? "direita" : "esquerda"} />
+          <ListaLeads key={p.rotulo} titulo={`${p.qtd} ${p.rotulo}`} dica={p.dica} leads={p.leads} lado={i % 3 === 2 ? "direita" : "esquerda"} apagado={p.qtd === 0}>
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${p.cor}`} />
+            <span className="text-stone-200">{p.qtd}</span>
+            <span className={`truncate ${p.leads.length > 0 ? "underline decoration-stone-600 decoration-dotted underline-offset-2" : ""}`}>{p.rotulo}</span>
+          </ListaLeads>
         ))}
+      </div>
+      <div className="mt-1.5 grid grid-cols-2 gap-2 border-t border-imperium-line/60 pt-1">
+        <div className="min-w-0">
+          <p className="truncate text-[10px] text-stone-500" title="(Parados no No Show + perdidos após no-show) ÷ agendadas">
+            No-show não recuperado
+          </p>
+          <ListaLeads titulo={`${d.naoRecuperado.qtd} no-show não recuperado`} dica="Parados no No Show ou perdidos depois do no-show, sem realizar. Sobre o total de agendadas." leads={d.naoRecuperado.leads} lado="esquerda">
+            <span className={`text-sm font-semibold ${corNaoRecuperado} ${d.naoRecuperado.qtd > 0 ? "underline decoration-dotted underline-offset-2" : ""}`}>{d.naoRecuperado.qtd}</span>
+            <span className="text-[11px] text-stone-400">· {pctTexto(d.naoRecuperado.pct)}</span>
+          </ListaLeads>
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-[10px] text-stone-500" title="Leads que passaram pelo No Show ao menos uma vez ÷ agendadas">
+            No-show histórico
+          </p>
+          <ListaLeads titulo={`${d.historico.qtd} no-show histórico`} dica="Passaram pelo No Show ao menos uma vez, qualquer que seja a situação atual. Sobre o total de agendadas." leads={d.historico.leads} lado="direita">
+            <span className={`text-sm font-semibold text-stone-100 ${d.historico.qtd > 0 ? "underline decoration-dotted underline-offset-2" : ""}`}>{d.historico.qtd}</span>
+            <span className="text-[11px] text-stone-400">· {pctTexto(d.historico.pct)}</span>
+          </ListaLeads>
+        </div>
       </div>
     </div>
   );
 }
 
-/** Item da legenda do desfecho; com leads, mostra a lista (lead, pré-vendas que agendou e data da reunião) ao passar o mouse. */
-function ItemDesfecho({ rotulo, qtd, leads, cor, dica, lado }: { rotulo: string; qtd: number; leads: LeadDesfecho[]; cor: string; dica: string; lado: "esquerda" | "direita" }) {
-  const conteudo = (
-    <>
-      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${cor}`} />
-      <span className="text-stone-200">{qtd}</span>
-      <span className={`truncate ${leads.length > 0 ? "underline decoration-stone-600 decoration-dotted underline-offset-2" : ""}`}>{rotulo}</span>
-    </>
-  );
+/** Conteúdo com a lista de leads (lead, pré-vendas que agendou, data da reunião e situação após o no-show) ao passar o mouse. */
+function ListaLeads({ titulo, dica, leads, lado, apagado = false, children }: { titulo: string; dica: string; leads: LeadDesfecho[]; lado: "esquerda" | "direita"; apagado?: boolean; children: React.ReactNode }) {
   if (leads.length === 0) {
     return (
-      <span className={`inline-flex min-w-0 items-center gap-1 whitespace-nowrap ${qtd === 0 ? "opacity-40" : ""}`} title={dica}>
-        {conteudo}
+      <span className={`inline-flex min-w-0 items-center gap-1 whitespace-nowrap ${apagado ? "opacity-40" : ""}`} title={dica}>
+        {children}
       </span>
     );
   }
+  // Leads com no-show: quantos em cada situação (parado no No Show, perdido, reagendado, realizada depois).
+  const porDepois = new Map<string, number>();
+  for (const l of leads) if (l.depois) porDepois.set(l.depois, (porDepois.get(l.depois) ?? 0) + 1);
+  const resumoDepois = Array.from(porDepois.entries()).map(([k, n]) => `${n} ${k}`).join(" · ");
   const dataReuniao = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   return (
     <span className="group relative inline-flex min-w-0 cursor-help items-center gap-1 whitespace-nowrap" tabIndex={0}>
-      {conteudo}
+      {children}
       <span
-        className={`pointer-events-none invisible absolute ${lado === "direita" ? "right-0" : "left-0"} top-full z-30 mt-1 w-72 whitespace-normal rounded-md border border-imperium-line bg-imperium-surface p-2 text-left opacity-0 shadow-xl transition-opacity group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus:pointer-events-auto group-focus:visible group-focus:opacity-100`}
+        className={`pointer-events-none invisible absolute ${lado === "direita" ? "right-0" : "left-0"} top-full z-30 mt-1 w-72 whitespace-normal rounded-md border border-imperium-line bg-imperium-surface p-2 text-left font-normal opacity-0 shadow-xl transition-opacity group-hover:pointer-events-auto group-hover:visible group-hover:opacity-100 group-focus:pointer-events-auto group-focus:visible group-focus:opacity-100`}
       >
-        <span className="mb-1 block text-[10px] uppercase tracking-widest text-stone-500">
-          {qtd} {rotulo}
-        </span>
+        <span className="mb-1 block text-[10px] uppercase tracking-widest text-stone-500">{titulo}</span>
         <span className="mb-1.5 block text-[10px] text-stone-500">{dica}</span>
+        {resumoDepois && <span className="mb-1.5 block text-[10px] text-stone-300">{resumoDepois}</span>}
         <span className="block max-h-72 space-y-1.5 overflow-y-auto">
           {leads.map((l, i) => (
             <span key={i} className="block text-[11px] leading-tight">
               <span className="text-stone-100">{l.nome}</span>
+              {l.depois ? <span className="ml-1.5 rounded border border-imperium-line px-1 text-[10px] text-stone-300">{l.depois}</span> : null}
               <span className="block text-stone-400">
                 pré-vendas: {l.preVendas ?? "—"}
                 {l.reuniao ? <span className="text-stone-500"> · reunião {dataReuniao(l.reuniao)}</span> : null}
