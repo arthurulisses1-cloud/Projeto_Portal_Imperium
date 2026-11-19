@@ -5,6 +5,7 @@ import { salvarCompromissoMatchExecutivo } from "@/app/(app)/compromisso/kpi-act
 import type { PainelCloser } from "@/lib/closer-negocio";
 import type { KpiLinha } from "@/lib/compromisso-kpis";
 import { ReunioesDoDia } from "@/components/negocio/PainelCloser";
+import FormSalvar from "@/components/ui/FormSalvar";
 
 const campo = "w-full rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-100 focus:border-gold focus:outline-none";
 const moeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -41,7 +42,7 @@ export default function CompromissoMatchExecutivo({ painel, hoje, negocioId, lin
         </p>
       )}
 
-      <form action={salvarCompromissoMatchExecutivo} className="space-y-4">
+      <FormSalvar action={salvarCompromissoMatchExecutivo} className="space-y-4">
         <input type="hidden" name="negocio_id" value={negocioId} />
         <div className="grid gap-4 md:grid-cols-3">
           <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
@@ -90,7 +91,7 @@ export default function CompromissoMatchExecutivo({ painel, hoje, negocioId, lin
         <button type="submit" className="rounded border border-gold/50 bg-gold/10 px-4 py-1.5 text-sm text-gold-bright hover:bg-gold/20">
           Salvar compromisso
         </button>
-      </form>
+      </FormSalvar>
 
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <div className="flex items-baseline justify-between gap-2">

@@ -11,6 +11,7 @@ import { DISPENSADOS_COMPROMISSO } from "@/lib/acessos-especiais";
 import { buscarFeedbacksMes, type AlvoFeedback } from "@/lib/feedback-mes";
 import FeedbackMes, { type ItemFeedback } from "@/components/FeedbackMes";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { desmarcarFaltaTime, marcarFaltaTime } from "@/app/(app)/exercito/actions";
 
 function moeda(v: number) {
@@ -182,7 +183,10 @@ export default async function CentralNotificacoes({
   const souCloser = !!viewerId && idsComSubido.includes(viewerId);
   const mostrarSubidos = !ocultarLegado && idsComSubido.length > 0 && (!pessoal || souCloser);
 
-  const lancouHoje = new Set((compromissosHoje ?? []).filter((c) => c.lancado).map((c) => c.profile_id));
+  // Quem lança pelo compromisso dos negócios (indicadores do cargo, em compromisso_kpis) também já lançou: conta se há
+  // algum indicador com compromisso do dia. Lido com o admin porque a RLS só deixa cada um ver o próprio.
+  const { data: kpisHoje } = ids.length ? await createAdminClient().from("compromisso_kpis").select("profile_id, meta").eq("data", hoje).gt("meta", 0).in("profile_id", ids) : { data: [] };
+  const lancouHoje = new Set([...(compromissosHoje ?? []).filter((c) => c.lancado).map((c) => c.profile_id), ...(kpisHoje ?? []).map((k) => k.profile_id as string)]);
   // Quem já foi marcado como falta hoje não "esqueceu" de lançar — não faz
   // sentido cobrar compromisso de quem tá ausente.
   const faltouHoje = new Set((compromissosHoje ?? []).filter((c) => c.falta).map((c) => c.profile_id));

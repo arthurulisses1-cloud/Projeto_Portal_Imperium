@@ -1,4 +1,5 @@
 import { salvarCompromissoKpis } from "@/app/(app)/compromisso/kpi-actions";
+import FormSalvar from "@/components/ui/FormSalvar";
 import Card from "@/components/ui/Card";
 import { CARGO_LABEL, type CargoNegocio } from "@/lib/negocios";
 import { agruparPorDia, diaCumprido, streakKpis, type ContextoKpis, type KpiLinha } from "@/lib/compromisso-kpis";
@@ -50,7 +51,7 @@ export default function CompromissoKpis({
       </div>
 
       <Card>
-        <form action={salvarCompromissoKpis} className="space-y-4">
+        <FormSalvar action={salvarCompromissoKpis} className="space-y-4">
           <input type="hidden" name="negocio_id" value={ctx.negocioId} />
           <input type="hidden" name="cargo" value={ctx.cargo} />
           <div className="grid grid-cols-[1fr_6rem_6rem] items-center gap-x-3 gap-y-2 text-sm">
@@ -86,7 +87,7 @@ export default function CompromissoKpis({
           <button type="submit" className="rounded border border-gold/50 bg-gold/10 px-4 py-2 text-sm text-gold-bright hover:bg-gold/20">
             Salvar
           </button>
-        </form>
+        </FormSalvar>
       </Card>
 
       {historico.length > 0 && (

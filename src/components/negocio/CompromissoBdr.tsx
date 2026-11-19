@@ -4,6 +4,7 @@ import { salvarAgendadasBdr } from "@/app/(app)/compromisso/kpi-actions";
 import type { PainelCloser } from "@/lib/closer-negocio";
 import type { KpiLinha } from "@/lib/compromisso-kpis";
 import { ReunioesDoDia } from "@/components/negocio/PainelCloser";
+import FormSalvar from "@/components/ui/FormSalvar";
 
 const campo = "w-full rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-100 focus:border-gold focus:outline-none";
 
@@ -36,7 +37,7 @@ export default function CompromissoBdr({ painel, hoje, negocioId, agendadas }: {
               <span className={"rounded border px-2 py-0.5 text-xs " + (agBatido ? "border-success/50 text-success-bright" : "border-amber-400/50 text-amber-400")}>{agBatido ? "Cumprido" : "Em andamento"}</span>
             )}
           </div>
-          <form action={salvarAgendadasBdr} className="mt-3 space-y-3">
+          <FormSalvar action={salvarAgendadasBdr} className="mt-3 space-y-3">
             <input type="hidden" name="negocio_id" value={negocioId} />
             <div className="grid grid-cols-2 gap-3 text-sm">
               <label className="text-xs text-stone-400">
@@ -51,7 +52,7 @@ export default function CompromissoBdr({ painel, hoje, negocioId, agendadas }: {
             <button type="submit" className="rounded border border-gold/50 bg-gold/10 px-4 py-1.5 text-sm text-gold-bright hover:bg-gold/20">
               Salvar
             </button>
-          </form>
+          </FormSalvar>
         </section>
 
         <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">

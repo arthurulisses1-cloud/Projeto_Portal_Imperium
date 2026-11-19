@@ -1,6 +1,7 @@
 // Compromisso do dia do executivo do Maximus Energy: contas subidas, assinaturas e kWh gerado, com o realizado automático
 // (Sunne) e o compromisso digitado por ele de manhã. Indicações recebidas entra depois, quando o processo estiver definido.
 import { salvarCompromissoEnergia } from "@/app/(app)/compromisso/kpi-actions";
+import FormSalvar from "@/components/ui/FormSalvar";
 import { KPIS_ENERGIA, type CompromissoEnergiaDia } from "@/lib/energy-time";
 import type { KpiLinha } from "@/lib/compromisso-kpis";
 import { agruparPorDia, diaCumprido, streakKpis } from "@/lib/compromisso-kpis";
@@ -30,7 +31,7 @@ export default function CompromissoEnergia({ hoje, real, linhas }: { hoje: strin
         </span>
       </div>
 
-      <form action={salvarCompromissoEnergia} className="space-y-4">
+      <FormSalvar action={salvarCompromissoEnergia} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-3">
           {KPIS_ENERGIA.map((k) => {
             const v = valores[k.chave];
@@ -63,7 +64,7 @@ export default function CompromissoEnergia({ hoje, real, linhas }: { hoje: strin
           </button>
           <p className="text-[11px] text-stone-500">Indicações recebidas entra em breve.</p>
         </div>
-      </form>
+      </FormSalvar>
 
       {historico.length > 0 && (
         <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
