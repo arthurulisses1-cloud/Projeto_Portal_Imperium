@@ -38,6 +38,7 @@ import { MuralFinance, MuralFinanceHead } from "@/components/negocio/PainelFinan
 import { SLUG_FINANCE, buscarPainelFinance } from "@/lib/finance-time";
 import DestaqueSetup from "@/components/negocio/DestaqueSetup";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MATRI_ANTIGO_ATIVO } from "@/lib/rotas-legadas";
 
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
@@ -137,10 +138,10 @@ export default async function MuralPage({
     | { tipo: "tribo"; triboId: string }
     | { tipo: "individual"; profileId: string }
     | null = null;
-  if (meRole === "lider") {
+  if (MATRI_ANTIGO_ATIVO && meRole === "lider") {
     const { data: exercitoLiderado } = await supabase.from("exercitos").select("id").eq("legado_id", meId).maybeSingle();
     if (exercitoLiderado) escopoCentral = { tipo: "exercito", exercitoId: exercitoLiderado.id };
-  } else if (meRole === "closer" && triboAtual?.id) {
+  } else if (MATRI_ANTIGO_ATIVO && meRole === "closer" && triboAtual?.id) {
     escopoCentral = { tipo: "tribo", triboId: triboAtual.id };
   } else if (meRole === "sdr") {
     escopoCentral = { tipo: "individual", profileId: meId };
@@ -467,13 +468,13 @@ export default async function MuralPage({
           <CentralNotificacoes escopo={escopoCentral} viewerId={meId} apenasIds={apenasIdsCentral} />
         )}
 
-      {!metaExecutivo && meRole === "sdr" && metaIndividual > 0 && (
+      {MATRI_ANTIGO_ATIVO && !metaExecutivo && meRole === "sdr" && metaIndividual > 0 && (
         <Card title={mesEhAtual ? "Meta do mês" : `Meta de ${MESES[mes - 1]}/${ano}`}>
           <BarraMeta realizado={pagosMes} meta={metaIndividual} mesFechado={!mesEhAtual} />
         </Card>
       )}
 
-      {!metaExecutivo && meRole === "closer" && (metaTribo > 0 || metaIndividual > 0) && (
+      {MATRI_ANTIGO_ATIVO && !metaExecutivo && meRole === "closer" && (metaTribo > 0 || metaIndividual > 0) && (
         <Card title={mesEhAtual ? "Meta do mês" : `Meta de ${MESES[mes - 1]}/${ano}`}>
           <BarraMetaToggle
             individual={{ realizado: pagosMes, meta: metaIndividual }}
@@ -484,7 +485,7 @@ export default async function MuralPage({
         </Card>
       )}
 
-      {!metaExecutivo && meRole === "lider" && metaExercito > 0 && (
+      {MATRI_ANTIGO_ATIVO && !metaExecutivo && meRole === "lider" && metaExercito > 0 && (
         <Card
           title={`Meta ${mesEhAtual ? "do mês" : `de ${MESES[mes - 1]}/${ano}`} · ${escopoCentral?.tipo === "exercito" ? "Exército" : "time"}`}
         >
@@ -492,7 +493,7 @@ export default async function MuralPage({
         </Card>
       )}
 
-      {(meRole === "diretor" || meRole === "investidor" || analistaFinanceiroLiberado) && metaFirma > 0 && (
+      {MATRI_ANTIGO_ATIVO && (meRole === "diretor" || meRole === "investidor" || analistaFinanceiroLiberado) && metaFirma > 0 && (
         <Card title={`Meta ${mesEhAtual ? "do mês" : `de ${MESES[mes - 1]}/${ano}`} · Firma`}>
           <BarraMeta realizado={pagoFirmaMes} meta={metaFirma} mesFechado={!mesEhAtual} />
         </Card>
@@ -508,7 +509,7 @@ export default async function MuralPage({
         </div>
       )}
 
-      {campanhasAtivas.length > 0 && (
+      {MATRI_ANTIGO_ATIVO && campanhasAtivas.length > 0 && (
         <CampanhasFeed
           campanhas={campanhasAtivas}
           podeGerenciar={meRole === "lider" || meRole === "diretor"}
@@ -532,7 +533,7 @@ export default async function MuralPage({
           </summary>
           <div className="mt-4">
             <MuralForm podeAviso={meRole === "lider" || meRole === "diretor"} podeEnquete={meRole === "diretor"} />
-            {(meRole === "lider" || meRole === "diretor") && (
+            {MATRI_ANTIGO_ATIVO && (meRole === "lider" || meRole === "diretor") && (
               <a
                 href="/campanhas"
                 className="mt-3 block rounded border border-imperium-line px-3 py-2 text-center text-xs text-gold transition hover:border-gold hover:bg-gold/10"

@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { ehRotaLegada } from "@/lib/rotas-legadas";
 
 export async function middleware(request: NextRequest) {
   // A demonstração usa apenas dados fictícios e só existe em desenvolvimento.
@@ -52,6 +53,14 @@ export async function middleware(request: NextRequest) {
   if (!user && !isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  // Sistema antigo da Matri desativado: as rotas dele levam ao Mural.
+  if (user && ehRotaLegada(request.nextUrl.pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    url.search = "";
     return NextResponse.redirect(url);
   }
 

@@ -12,6 +12,7 @@ import { buscarFeedbacksMes, type AlvoFeedback } from "@/lib/feedback-mes";
 import FeedbackMes, { type ItemFeedback } from "@/components/FeedbackMes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { MATRI_ANTIGO_ATIVO } from "@/lib/rotas-legadas";
 import { desmarcarFaltaTime, marcarFaltaTime } from "@/app/(app)/exercito/actions";
 
 function moeda(v: number) {
@@ -247,7 +248,7 @@ export default async function CentralNotificacoes({
   // batido no mês — sem esse corte, a lista sempre mostrava as 5 pessoas
   // MENOS LONGE (mesmo estando a 50-80% de distância), o que não é "perto"
   // de nada na prática.
-  const pertoDeMarco = (pessoas ?? [])
+  const pertoDeMarco = (MATRI_ANTIGO_ATIVO ? pessoas : [])
     .map((p) => {
       const producao = producaoMesPorPessoa.get(p.id) ?? 0;
       const proximo = marcosDisponiveisPara(p.id)
@@ -266,7 +267,7 @@ export default async function CentralNotificacoes({
   // CARO, entre os ainda NÃO resgatados por essa pessoa, que a produção do
   // mês já alcança — celebra a maior conquista disponível, não repete um
   // marco que ela já ganhou em outro mês.
-  const bateuMarco = (pessoas ?? [])
+  const bateuMarco = (MATRI_ANTIGO_ATIVO ? pessoas : [])
     .map((p) => {
       const producao = producaoMesPorPessoa.get(p.id) ?? 0;
       const maiorBatido = marcosDisponiveisPara(p.id)
@@ -363,7 +364,7 @@ export default async function CentralNotificacoes({
   const rAssinadoOntem = (opsAssinadoOntem ?? []).reduce((s, o) => s + Number(o.valor), 0);
   const rPagoOntem = (opsPagoOntem ?? []).reduce((s, o) => s + Number(o.valor), 0);
 
-  const temAlgumaMeta = !apenasIds && Object.values(metaOntemPorEtapa).some((v) => v !== null);
+  const temAlgumaMeta = MATRI_ANTIGO_ATIVO && !apenasIds && Object.values(metaOntemPorEtapa).some((v) => v !== null);
   // Sempre mostra a seção pra quem tem escopo pessoal/time (mesmo sem ter
   // lançado ainda — vira um call-to-action, igual o card antigo fazia).
   const temCompromissoPraMostrar = pessoal || mostrarCompromissoTime;
@@ -372,7 +373,7 @@ export default async function CentralNotificacoes({
   // seu time está fazendo", só que quebrada por Exército/Tribo, só na visão
   // do Diretor (escopo=null=firma inteira; Líder/Closer/SDR já têm o
   // próprio recorte acima, não precisam ver o detalhe dos outros times).
-  const statusPorTime = !escopo && !apenasIds ? await buscarStatusPorTime(supabase, hojeStr, diasNoMes) : [];
+  const statusPorTime = MATRI_ANTIGO_ATIVO && !escopo && !apenasIds ? await buscarStatusPorTime(supabase, hojeStr, diasNoMes) : [];
 
   if (
     naoLancaram.length === 0 &&

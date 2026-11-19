@@ -59,17 +59,7 @@ const NAV_ITEMS: NavConfigEntry[] = [
   // também ganham o link (é por papel, não por pessoa), mas a página fica
   // vazia pra eles (sem plano de comissão cadastrado), sem problema.
   { type: "link", href: "/comissao-negocio", label: "Comissão do Mês", roles: ["sdr", "closer", "lider", "analista"] },
-  {
-    type: "group",
-    label: "Legado",
-    roles: ["sdr", "closer", "lider", "diretor", "investidor", "analista"],
-    area: "legado",
-    items: [
-      { href: "/ranking", label: "Ranking" },
-      { href: "/recordes", label: "Recordes" },
-    ],
-  },
-  { type: "link", href: "/trilha", label: "Trilha de Formação", roles: ["sdr", "closer", "lider"] },
+  // Ranking, Recordes e Trilha de Formação (sistema antigo da Matri) saíram em 2026-11-19; ver src/lib/rotas-legadas.ts.
   {
     type: "group",
     label: "Imperium Academy",
@@ -122,8 +112,6 @@ const NAV_ITEMS: NavConfigEntry[] = [
     roles: ["sdr", "closer", "lider", "diretor", "investidor"],
     area: "pessoas",
     items: [
-      { href: "/estrelas", label: "Estrelas", roles: ["sdr", "closer"] },
-      { href: "/estrelas/time", label: "Estrelas do Time", roles: ["lider", "diretor"] },
       { href: "/legado", label: "Meu Legado", roles: ["diretor"] },
       { href: "/gestao", label: "Gestão de Pessoas", roles: ["diretor"] },
     ],
