@@ -222,6 +222,38 @@ describe("regras de correção da Acrópole (auditoria 16/11)", () => {
     ).toEqual(["conectados", "propostas", "reunioes_agendadas", "reunioes_realizadas"]);
   });
 
+  it("Galáticos: etapas novas do Inbound (20/11/2026)", () => {
+    const ms = CRM_POR_NEGOCIO.matchsales;
+    const I = {
+      conectados: "626eef2e-4d84-49ab-ac8b-4d59d1cea87b",
+      agendada: "a4252513-8bce-41cd-9fe1-43af1d1cb12f",
+      noShow: "37711003-af90-4cc9-a846-9d7ccccd1ddc",
+      realizada: "9ebbf333-bcad-4c07-9310-bc7a5c775e33",
+      proposta: "d40dee61-af9a-459e-8220-0887456a4346",
+      followUp: "86eb5f00-82e7-497e-ab9d-68c9b1f72cf9",
+      negociacao: "424f1202-e824-46e5-8604-08ff31ea703d",
+      futura: "6e54190d-9453-4b1b-b619-09f12b344a39",
+    };
+    const contar = (eventos: EventoCrm[]) =>
+      calcularRealizadoCrm([deal({ deal_id: "i1", canal: "trafego" })], eventos, ms, "2026-11-01", "2026-12-01").map((x) => x.etapa).sort();
+    // Reunião realizada sem proposta passa a contar.
+    expect(contar([ev("i1", I.conectados, "2026-11-20T10:00:00Z"), ev("i1", I.agendada, "2026-11-20T11:00:00Z"), ev("i1", I.realizada, "2026-11-21T15:00:00Z")])).toEqual([
+      "conectados",
+      "reunioes_agendadas",
+      "reunioes_realizadas",
+    ]);
+    // No Show conta só a agendada; realizada marcada por engano e devolvida para No Show deixa de contar.
+    expect(contar([ev("i1", I.agendada, "2026-11-20T11:00:00Z"), ev("i1", I.noShow, "2026-11-21T15:00:00Z")])).toEqual(["conectados", "reunioes_agendadas"]);
+    expect(contar([ev("i1", I.agendada, "2026-11-20T11:00:00Z"), ev("i1", I.realizada, "2026-11-21T15:00:00Z"), ev("i1", I.noShow, "2026-11-21T15:01:00Z")])).toEqual([
+      "conectados",
+      "reunioes_agendadas",
+    ]);
+    // Follow-Up e Em Negociação contam como proposta; Contratação Futura não conta nada.
+    for (const etapa of [I.followUp, I.negociacao])
+      expect(contar([ev("i1", I.agendada, "2026-11-20T11:00:00Z"), ev("i1", etapa, "2026-11-22T15:00:00Z")])).toContain("propostas");
+    expect(contar([ev("i1", I.conectados, "2026-11-20T10:00:00Z"), ev("i1", I.futura, "2026-11-22T15:00:00Z")])).toEqual(["conectados"]);
+  });
+
   it("Galáticos: Contratação Futura não conta etapa (vale o que o lead fez antes)", () => {
     const ms = CRM_POR_NEGOCIO.matchsales;
     const C = {
