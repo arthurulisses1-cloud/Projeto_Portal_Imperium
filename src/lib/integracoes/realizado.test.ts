@@ -221,6 +221,29 @@ describe("regras de correção da Acrópole (auditoria 16/11)", () => {
       contar([ev("m1", M.agendadaIn, "2026-11-08T20:25:00Z"), ev("m1", M.propostaIn, "2026-11-09T18:18:00Z"), ev("m1", M.followUpIn, "2026-11-12T13:11:00Z")], "trafego"),
     ).toEqual(["conectados", "propostas", "reunioes_agendadas", "reunioes_realizadas"]);
   });
+
+  it("Galáticos: Contratação Futura não conta etapa (vale o que o lead fez antes)", () => {
+    const ms = CRM_POR_NEGOCIO.matchsales;
+    const C = {
+      conectado: "0de7c924-4532-4a78-9e6f-938676487b38",
+      agendada: "7184f5de-b7d6-4271-8dee-b7fcf29cf93f",
+      noShow: "576ef8ec-5359-4c03-b183-96f88b371bcd",
+      proposta: "058201af-9ad4-4b43-adfb-145b820358eb",
+      futura: "382bcdf9-310a-401f-bc9a-f4d4ab20efb4",
+    };
+    const contar = (eventos: EventoCrm[]) =>
+      calcularRealizadoCrm([deal({ deal_id: "c1" })], eventos, ms, "2026-11-01", "2026-12-01").map((x) => x.etapa).sort();
+    // Agendada → No Show → Contratação Futura: só a agendada.
+    expect(contar([ev("c1", C.agendada, "2026-11-10T19:18:00Z"), ev("c1", C.noShow, "2026-11-12T13:44:00Z"), ev("c1", C.futura, "2026-11-12T13:44:00Z")])).toEqual(["reunioes_agendadas"]);
+    // Conectado → Contratação Futura: nada no funil.
+    expect(contar([ev("c1", C.conectado, "2026-11-11T11:45:00Z"), ev("c1", C.futura, "2026-11-17T21:35:00Z")])).toEqual([]);
+    // Proposta apresentada que vai para Contratação Futura continua contando.
+    expect(contar([ev("c1", C.agendada, "2026-11-05T12:00:00Z"), ev("c1", C.proposta, "2026-11-09T12:00:00Z"), ev("c1", C.futura, "2026-11-10T12:00:00Z")])).toEqual([
+      "propostas",
+      "reunioes_agendadas",
+      "reunioes_realizadas",
+    ]);
+  });
 });
 
 describe("vendas a partir do Ganho", () => {
