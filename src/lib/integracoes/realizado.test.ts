@@ -199,10 +199,27 @@ describe("regras de correção da Acrópole (auditoria 16/11)", () => {
     expect(r.find((x) => x.etapa === "reunioes_realizadas")?.data).toBe("2026-11-06");
   });
 
-  it("Galáticos não usa essas regras: voltar de etapa não desfaz", () => {
+  it("Galáticos: só voltar para Reunião Agendada ou No Show desfaz a realizada", () => {
     const ms = CRM_POR_NEGOCIO.matchsales;
     expect(ms.regressaoDesfaz).toBeFalsy();
     expect(ms.pipelinesSemNivelNaCriacao).toBeUndefined();
+    const M = {
+      agendadaOut: "7184f5de-b7d6-4271-8dee-b7fcf29cf93f",
+      realizadaOut: "8e2ee4e7-e369-4d57-b9c7-26370d9d48d0",
+      agendadaIn: "a4252513-8bce-41cd-9fe1-43af1d1cb12f",
+      propostaIn: "d40dee61-af9a-459e-8220-0887456a4346",
+      followUpIn: "44da3e0a-3f86-4e4a-8d1d-8c52c41db97e",
+    };
+    const contar = (eventos: EventoCrm[], canal: string) =>
+      calcularRealizadoCrm([deal({ deal_id: "m1", canal })], eventos, ms, "2026-11-01", "2026-12-01").map((x) => x.etapa).sort();
+    // Realizada marcada por engano e devolvida para Reunião Agendada um minuto depois: não conta.
+    expect(
+      contar([ev("m1", M.agendadaOut, "2026-11-07T12:20:00Z"), ev("m1", M.realizadaOut, "2026-11-13T13:06:00Z"), ev("m1", M.agendadaOut, "2026-11-13T13:07:00Z")], "outbound"),
+    ).toEqual(["reunioes_agendadas"]);
+    // Proposta que vai para Follow Up (acompanhamento depois da proposta) continua contando.
+    expect(
+      contar([ev("m1", M.agendadaIn, "2026-11-08T20:25:00Z"), ev("m1", M.propostaIn, "2026-11-09T18:18:00Z"), ev("m1", M.followUpIn, "2026-11-12T13:11:00Z")], "trafego"),
+    ).toEqual(["conectados", "propostas", "reunioes_agendadas", "reunioes_realizadas"]);
   });
 });
 
