@@ -103,6 +103,7 @@ describe("reuniões a acontecer", () => {
       "vorp",
       2026,
       11,
+      "2026-11-18", // data fixa: o teste não pode depender do dia em que roda
     );
     expect(r.aAcontecer.map((x) => x.nome)).toEqual(["Dia 19", "Dia 25", "Sem data"]);
     expect(r.aAcontecer[2].quandoTexto).toBe("a combinar");
