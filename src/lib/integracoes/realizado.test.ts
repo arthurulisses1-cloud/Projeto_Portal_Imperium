@@ -696,6 +696,7 @@ describe("valorDaImplantacao", () => {
   it("lê o campo configurado ou o primeiro com 'implanta' no nome", () => {
     expect(valorDaImplantacao({ valor_da_implantacao: 2500 })).toBe(2500);
     expect(valorDaImplantacao({ valor_implantacao: "R$ 2.500,50" })).toBe(2500.5);
+    expect(valorDaImplantacao({ implementacao: 1000 })).toBe(1000);
     expect(valorDaImplantacao({ mrr_competencia: 600, outro: 1 })).toBeNull();
     expect(valorDaImplantacao({ x_setup: 100, impl: 3 }, "x_setup")).toBe(100);
     expect(valorDaImplantacao({ valor_implantacao: "" })).toBeNull();

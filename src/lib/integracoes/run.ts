@@ -91,7 +91,7 @@ export function tipoDeContrato(p: Record<string, unknown>, chave?: string): stri
   return k ? ler(p[k]) : null;
 }
 
-/** "Valor da implantação" do lead: o campo configurado ou, sem ele, a primeira propriedade com "implanta" no nome (R$ 1.234,56 também vale). */
+/** "Valor da implantação" do lead: o campo configurado ou, sem ele, a primeira propriedade com "implanta" ou "implementa" no nome (R$ 1.234,56 também vale). */
 export function valorDaImplantacao(p: Record<string, unknown>, chave?: string): number | null {
   const ler = (v: unknown): number | null => {
     if (typeof v === "number") return Number.isFinite(v) ? v : null;
@@ -101,7 +101,8 @@ export function valorDaImplantacao(p: Record<string, unknown>, chave?: string): 
     return Number.isFinite(n) ? n : null;
   };
   if (chave) return ler(p[chave]);
-  const k = Object.keys(p).find((x) => /implanta/i.test(x));
+  // No Pipefácil do Match o campo chega como "implementacao" (visto no card de 06/11); "implanta" cobre os demais nomes.
+  const k = Object.keys(p).find((x) => /implanta|implementa/i.test(x));
   return k ? ler(p[k]) : null;
 }
 
