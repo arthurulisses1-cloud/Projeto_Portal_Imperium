@@ -50,6 +50,10 @@ export type ConfigCrm = {
   /** Motivos de perda de lead falso (cadastro inválido): o lead sai do funil inteiro, inclusive de
    *  "Leads", seja ou não MQL (17/11/2026). */
   motivosLeadFalso?: string[];
+  /** Conexões marcadas à mão em leads que nunca responderam, antes de o CRM mover para Conectados só com a
+   *  resposta do lead: a entrada desses leads numa etapa de conexão antes de `ate` não conta. Etapas acima
+   *  (agendada em diante) seguem valendo. */
+  conexoesDesconsideradas?: { ate: string; leads: string[] };
   /**
    * Funil próprio no dashboard: as etapas do funil do CRM, sem canais nem meta do forecast. Com ele,
    * `niveis` e `canais` não são usados. Gravado em funil_realizado com canal "outbound".
@@ -238,6 +242,39 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     inicioVendas: "2026-11-01",
     // Lead perdido como Duplicado sai do funil inteiro: conta só o lead original, que segue andando (20/11/2026).
     motivosLeadFalso: ["Duplicado"],
+    // Novembro/2026: até 20/11 o time movia o lead para Atendimento Humano (hoje Conectados) ao assumir o
+    // atendimento, antes da resposta. Estes 25 contavam como conectados sem nunca terem mandado uma mensagem
+    // (auditoria de 20/11, lendo as conversas). Desde 20/11 a automação só move quando o lead responde.
+    conexoesDesconsideradas: {
+      ate: "2026-11-21T00:00:00-03:00",
+      leads: [
+        "ee2d0495-6636-4764-98f9-ddc54fc5e10e", // #15660 Anderson Costa
+        "857cb773-94ae-443a-aaca-23de60dd0279", // #15655 Giovani
+        "fd273ccd-0628-4f0c-8ff9-a140c58a9503", // #15616 Gustavo Garcia
+        "04419aab-2565-4e32-9b6b-597d9a01170a", // #15607 Carrion Benefícios
+        "7df98cb9-6e88-4776-909c-d0c70b4b99f7", // #15605 Kennaldy
+        "21e765ef-646b-4492-9e72-ff6af46bef04", // #15592 Gabriel Trindade
+        "b0b3d62b-7326-4b31-b826-27dc395f9317", // #15576 Valéria Eloy
+        "02fed48a-3495-4dbf-845a-ed0f48e49ed8", // #15573 Cristiane Gonçalves
+        "7635e816-1ed2-47bd-8604-a5d66d644948", // #15565 Amanda Luizetto
+        "f6e1db92-5ea7-4ef8-b1ef-e09cbfcc04a0", // #15562 Charles Marques
+        "48026ae6-fd88-4764-a4ed-e91a2c5a7c28", // #15561 Imagiliê
+        "bc6efa49-752b-4599-96dd-c53136fc9b53", // #15560 Fernando
+        "e82d35ed-8160-4653-91c9-ec4323bc9d77", // #15542 Antoni Luis Schlagel
+        "f0f93282-f028-400b-9d88-2f280a05e91b", // #15495 Samuel
+        "58e492f5-19ae-4c36-8273-a27374448946", // #15455 Elvis Marcelino
+        "eebb9e4d-cc70-443d-bbde-6ec8396da8e4", // #15423 Roberta Dias da Silva
+        "2586168b-dda4-4d2c-8edb-95cbfcf2fd70", // #15400 Suelen Rodrigues Ferreira
+        "0e0cd91e-6b6c-4d53-bc34-1d3956eeeccd", // #15346 Nilton Nepomuceno
+        "259e46a2-6cd8-4ea9-ac11-30c22e1d7fac", // #15342 Maria do livramento
+        "596f1394-4de6-4fe0-b190-2f168385d76d", // #15311 Tiago Souza
+        "77980f0d-bf56-4f6c-8fbe-153ea227fce0", // #15303 Eduardo Tadeu
+        "6ae68c00-7f25-4b36-88c6-c7f66b4ee9d6", // #15297 Valdir Lopes
+        "ba3076d2-e2ab-4016-bbd2-37a2d67e56db", // #15295 Tiago Santos
+        "da22386b-e0db-4782-a83a-855d47183b88", // #15294 Tiago
+        "d45c6f5c-f5e4-427d-8fbe-7f575b64b0c1", // #15279 João Júnior
+      ],
+    },
     // Login do portal ainda com outro e-mail (17/11/2026), até ajustarem lá.
     emailsAlternativos: { "arthur.ulisses@grupovorp.com": "arthurulisses1@gmail.com" },
   },

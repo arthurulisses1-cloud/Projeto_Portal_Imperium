@@ -234,6 +234,25 @@ describe("regras de correção da Acrópole (auditoria 16/11)", () => {
     expect(total(r, "inbound", "conectados")).toBe(1);
   });
 
+  it("Galáticos: conexão marcada sem resposta (lista de novembro) não conta; resposta depois do corte conta", () => {
+    const ms = CRM_POR_NEGOCIO.matchsales;
+    const conectados = "626eef2e-4d84-49ab-ac8b-4d59d1cea87b";
+    const agendada = "a4252513-8bce-41cd-9fe1-43af1d1cb12f";
+    const anderson = "ee2d0495-6636-4764-98f9-ddc54fc5e10e"; // #15660, na lista
+    const kennaldy = "7df98cb9-6e88-4776-909c-d0c70b4b99f7"; // #15605, na lista, com agendada
+    const contar = (id: string, eventos: EventoCrm[]) =>
+      calcularRealizadoCrm([deal({ deal_id: id, canal: "trafego", criado_em: "2026-11-15T13:00:00Z" })], eventos, ms, "2026-11-01", "2026-12-01").map((x) => x.etapa).sort();
+    expect(ms.conexoesDesconsideradas?.leads).toHaveLength(25);
+    // Movido à mão para Conectados em 20/11, sem resposta: não conta.
+    expect(contar(anderson, [ev(anderson, conectados, "2026-11-20T14:20:00Z")])).toEqual(["leads"]);
+    // Se responder depois do corte, a automação move de novo e conta.
+    expect(contar(anderson, [ev(anderson, conectados, "2026-11-20T14:20:00Z"), ev(anderson, conectados, "2026-11-23T12:00:00Z")])).toEqual(["conectados", "leads"]);
+    // A agendada segue contando (e leva a conexão junto, como em qualquer lead).
+    expect(contar(kennaldy, [ev(kennaldy, agendada, "2026-11-18T12:48:00Z")])).toEqual(["conectados", "leads", "reunioes_agendadas"]);
+    // Lead fora da lista: nada muda.
+    expect(contar("outro", [ev("outro", conectados, "2026-11-20T14:20:00Z")])).toEqual(["conectados", "leads"]);
+  });
+
   it("Galáticos: etapas novas do Inbound (20/11/2026)", () => {
     const ms = CRM_POR_NEGOCIO.matchsales;
     const I = {

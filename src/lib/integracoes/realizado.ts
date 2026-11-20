@@ -79,10 +79,14 @@ function marcosDoLead(eventos: EventoCrm[], cfg: ConfigCrm): Marcos {
     if (e.tipo === "DEAL_CREATED" && e.pipeline_id && cfg.pipelinesSemNivelNaCriacao?.includes(e.pipeline_id)) return undefined;
     return e.stage_id ? cfg.niveis[e.stage_id] : undefined;
   };
+  // Conexão marcada sem resposta do lead (lista da configuração): a entrada na etapa de conexão antes do corte não conta.
+  const excl = cfg.conexoesDesconsideradas;
+  const corte = excl && eventos[0] && excl.leads.includes(eventos[0].deal_id) ? Date.parse(excl.ate) : null;
   // Mesmo instante: o nível menor primeiro (o CRM grava "Agendada" e "Ganho" no mesmo segundo).
   const ordem = eventos
     .map((e) => ({ t: e.ocorrido_em, n: nivelDe(e), desfaz: !!cfg.regressaoDesfaz || (!!e.stage_id && !!cfg.etapasQueDesfazem?.includes(e.stage_id)) }))
     .filter((e): e is { t: string; n: Nivel; desfaz: boolean } => e.n !== undefined)
+    .filter((e) => corte === null || e.n !== NIVEL.conectado || Date.parse(e.t) >= corte)
     .sort((a, b) => Date.parse(a.t) - Date.parse(b.t) || a.n - b.n);
   const m: Marcos = {};
   for (const { t, n, desfaz } of ordem) {
