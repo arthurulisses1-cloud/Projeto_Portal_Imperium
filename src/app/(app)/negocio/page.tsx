@@ -184,8 +184,9 @@ export default async function NegocioDashboardPage({
   // Filtro de pré-vendas de cada funil (Outbound e Tráfego Pago): o time do canal (Pace) mais quem tem número
   // no mês. Meta da pessoa = meta do canal ÷ tamanho do time do canal.
   const filtroPv: Partial<Record<CanalDoFunil, { opcoes: { id: string; nome: string }[]; escolhido: string | null; divisor: number }>> = {};
+  // Nome de cada usuário do Pipefácil (filtro de pré-vendas e lista por BDR das etapas do 3C).
+  let nomes: Record<string, string> = {};
   if (comVisoes) {
-    let nomes: Record<string, string> = {};
     try {
       const { data } = await createAdminClient().from("integracao_estado").select("valor").eq("chave", `pipefacil:${atual.slug}:membros`).maybeSingle();
       nomes = (data?.valor as Record<string, string> | null) ?? {};
@@ -580,7 +581,11 @@ export default async function NegocioDashboardPage({
                             {faixas100k && (e.chave === "reunioes_agendadas" || e.chave === "reunioes_realizadas") && <Acima100kFunil leads={e.leads} faixas={faixas100k} />}
                           </div>
                           <span className="text-right text-stone-400">{num(e.meta * fracaoMes)}</span>
-                          <RealizadoComLeads valor={e.realizado === null ? "—" : num(e.realizado)} leads={e.leads} />
+                          <RealizadoComLeads
+                            valor={e.realizado === null ? "—" : num(e.realizado)}
+                            leads={e.leads}
+                            porPessoa={e.porPessoa && e.realizado ? { rotulo: e.label.toLowerCase(), total: e.realizado, fonte: e.chave === "tentativas" ? "pela campanha do BDR no 3C" : "pelo pré-vendas que atendeu no 3C", pessoas: e.porPessoa.map((p) => ({ nome: nomes[p.id] ?? "Sem nome", quantidade: p.quantidade })) } : undefined}
+                          />
                           <span className="text-right text-stone-300">{num(e.meta)}</span>
                         </div>
                       ),

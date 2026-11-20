@@ -21,6 +21,9 @@ export type EtapaFunil = {
   realizado: number | null;
   /** Os leads por trás do realizado (agendadas, realizadas, propostas e vendas do CRM). */
   leads?: LeadEtapa[];
+  /** Etapas do 3C (tentativas, alôs, conexões) na visão do time: o realizado de cada pré-vendas (usuário do
+   *  Pipefácil), do maior para o menor. */
+  porPessoa?: { id: string; quantidade: number }[];
 };
 
 /** Lead que compõe o realizado de uma etapa: aparece ao passar o mouse no número. */
@@ -169,6 +172,16 @@ export function montarFunisDaVisao(
 ): FunilDoCanal[] {
   const soma = new Map<string, number>();
   for (const l of linhas) soma.set(`${l.canal}|${l.etapa}`, (soma.get(`${l.canal}|${l.etapa}`) ?? 0) + Number(l.quantidade));
+  // Etapas do 3C por pré-vendas ("pv:<id>:tentativas"), para a lista ao passar o mouse na visão do time.
+  const doDiscador = new Map<string, Map<string, number>>();
+  for (const l of linhas) {
+    const m = /^pv:([^:]+):([^:]+)$/.exec(l.etapa);
+    if (!m || !ETAPA_DO_DISCADOR(l.canal, m[2])) continue;
+    const k = `${l.canal}|${m[2]}`;
+    const porId = doDiscador.get(k) ?? new Map<string, number>();
+    porId.set(m[1], (porId.get(m[1]) ?? 0) + Number(l.quantidade));
+    doDiscador.set(k, porId);
+  }
   return funis.map((f) => {
     let etapas = f.etapas;
     const iMql = etapas.findIndex((e) => e.chave === "mql");
@@ -188,7 +201,11 @@ export function montarFunisDaVisao(
         // Alôs e conexões vêm do 3C: iguais em todas as visões, só mudam com a pessoa.
         const chave = ETAPA_DO_DISCADOR(f.canal, e.chave) ? (pv ? `pv:${pv.id}:${e.chave}` : e.chave) : chaveVisao(e.chave, f.canal, recorte, qualificacao, pv?.id);
         const lista = leads.get(`${f.canal}|${chave}`);
-        return { ...e, realizado: soma.get(`${f.canal}|${chave}`) ?? 0, ...(lista ? { leads: lista } : {}) };
+        const pessoas = !pv && ETAPA_DO_DISCADOR(f.canal, e.chave) ? doDiscador.get(`${f.canal}|${e.chave}`) : undefined;
+        const porPessoa = pessoas
+          ? Array.from(pessoas, ([id, quantidade]) => ({ id, quantidade })).filter((x) => x.quantidade > 0).sort((a, b) => b.quantidade - a.quantidade)
+          : undefined;
+        return { ...e, realizado: soma.get(`${f.canal}|${chave}`) ?? 0, ...(lista ? { leads: lista } : {}), ...(porPessoa && porPessoa.length > 0 ? { porPessoa } : {}) };
       }),
     };
   });

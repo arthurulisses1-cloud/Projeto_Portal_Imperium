@@ -70,5 +70,13 @@ describe("funil por pré-vendas", () => {
     expect(pessoasDoCanal(linhas, "outbound").sort()).toEqual(["marcus", "vini"]);
     expect(pessoasDoCanal(linhas, "inbound")).toEqual(["jorge"]);
     expect(leadsPorQualificacao(linhas, "todos", "jorge")).toEqual({ completo: 7, mql: 2, nao_mql: 0 });
+    // Visão do time: tentativas, alôs e conexões trazem o realizado de cada pré-vendas, do maior para o menor;
+    // etapas do CRM não (já têm a lista de leads). Com a pessoa escolhida, não há lista por pessoa.
+    expect(out(time, "alos").porPessoa).toEqual([
+      { id: "marcus", quantidade: 20 },
+      { id: "vini", quantidade: 10 },
+    ]);
+    expect(out(time, "reunioes_agendadas").porPessoa).toBeUndefined();
+    expect(out(marcus, "alos").porPessoa).toBeUndefined();
   });
 });
