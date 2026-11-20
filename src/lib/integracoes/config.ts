@@ -186,12 +186,20 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       // Contratação Futura (382bcdf9-310a-401f-bc9a-f4d4ab20efb4) fica fora do mapa (20/11/2026): o time usa a
       // etapa para lead que só contrata mais para frente, mesmo sem reunião. Não conta etapa; vale o que veio antes.
       "31aab8a9-79f7-4824-b229-4d1a4eac8319": NIVEL.venda, // Ganho
-      // Inbound (1). Sem etapa de Reunião Realizada: a reunião conta como realizada quando vira proposta.
-      "626eef2e-4d84-49ab-ac8b-4d59d1cea87b": NIVEL.conectado, // Atendimento Humano
-      "44da3e0a-3f86-4e4a-8d1d-8c52c41db97e": NIVEL.conectado, // Follow Up
+      // Inbound (1). Reestruturado em 20/11/2026 no modelo do Outbound: o lead vai para Conectados por automação
+      // quando responde. Antes disso não havia Reunião Realizada (a reunião contava como realizada ao virar proposta).
+      "626eef2e-4d84-49ab-ac8b-4d59d1cea87b": NIVEL.conectado, // Conectados (antes "Atendimento Humano")
+      // Follow Up antigo (usado antes e depois da proposta; sai quando os últimos leads forem movidos). Segue como
+      // conexão para não mudar o histórico; o Follow-Up novo (pós-proposta) conta como proposta.
+      "44da3e0a-3f86-4e4a-8d1d-8c52c41db97e": NIVEL.conectado, // Follow Up (antigo)
       "a4252513-8bce-41cd-9fe1-43af1d1cb12f": NIVEL.agendada, // Reunião Agendada
-      "d40dee61-af9a-459e-8220-0887456a4346": NIVEL.proposta, // Proposta enviada
-      "cb69fb19-dd9d-41cb-8ae0-5618484aeb30": NIVEL.proposta, // Aguardando pagamento
+      "37711003-af90-4cc9-a846-9d7ccccd1ddc": NIVEL.agendada, // No Show
+      "9ebbf333-bcad-4c07-9310-bc7a5c775e33": NIVEL.realizada, // Reunião Realizada
+      "d40dee61-af9a-459e-8220-0887456a4346": NIVEL.proposta, // Proposta Enviada
+      "86eb5f00-82e7-497e-ab9d-68c9b1f72cf9": NIVEL.proposta, // Follow-Up
+      "424f1202-e824-46e5-8604-08ff31ea703d": NIVEL.proposta, // Em Negociação
+      "cb69fb19-dd9d-41cb-8ae0-5618484aeb30": NIVEL.proposta, // Proposta Aceita/Aguardando Pagamento
+      // Contratação Futura (6e54190d-9453-4b1b-b619-09f12b344a39) fica fora do mapa, como no Outbound.
       "8c448cb1-7c1a-4244-bb64-690a70f453d0": NIVEL.venda, // Ganho
     },
     // Realizada marcada por engano e devolvida para Reunião Agendada ou No Show deixa de contar (20/11/2026).
@@ -200,6 +208,7 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "7184f5de-b7d6-4271-8dee-b7fcf29cf93f", // Outbound: Reunião Agendada
       "576ef8ec-5359-4c03-b183-96f88b371bcd", // Outbound: No Show
       "a4252513-8bce-41cd-9fe1-43af1d1cb12f", // Inbound: Reunião Agendada
+      "37711003-af90-4cc9-a846-9d7ccccd1ddc", // Inbound: No Show
     ],
     stagesGanhoVenda: ["8c448cb1-7c1a-4244-bb64-690a70f453d0", "31aab8a9-79f7-4824-b229-4d1a4eac8319"],
     // Inbound = só Tráfego Pago; Referidos = "Referido". Google, Instagram, WhatsApp IA, Parceiros, Indicação
