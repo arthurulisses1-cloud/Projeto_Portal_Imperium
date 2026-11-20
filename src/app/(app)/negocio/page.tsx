@@ -587,13 +587,6 @@ export default async function NegocioDashboardPage({
                     )}
                   </div>
 
-                  {/* Desfecho das agendadas: entre o funil e as conversões (os canais sem ele reservam o espaço) */}
-                  {algumDesfecho && (
-                    <div className="mt-3">
-                      <DesfechoAgendadasFunil d={desfechos[iFunil]} />
-                    </div>
-                  )}
-
                   {/* Conversões: mesma grade, uma linha por passagem de etapa */}
                   <div className="mt-5 grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem] items-center gap-x-2 text-xs tabular-nums">
                     <span className="border-b border-imperium-line pb-1 text-[10px] uppercase tracking-widest text-stone-500">Conversões</span>
@@ -624,6 +617,13 @@ export default async function NegocioDashboardPage({
                       );
                     })}
                   </div>
+
+                  {/* Desfecho das agendadas: depois das conversões (os canais sem ele reservam o espaço) */}
+                  {algumDesfecho && (
+                    <div className="mt-4">
+                      <DesfechoAgendadasFunil d={desfechos[iFunil]} />
+                    </div>
+                  )}
 
                   {/* Valores: vendido no mês e follow (Funil de Vendas) por temperatura, com o filtro de pré-vendas
                       (Referidos não têm pré-vendas: sempre o canal todo) */}
@@ -961,7 +961,7 @@ function nomeCanalOrigem(c: string) {
 
 const LABEL_RANKING: Record<string, string> = { reunioes_agendadas: "Reuniões agendadas", reunioes_realizadas: "Reuniões realizadas" };
 
-/** Desfecho das agendadas do mês, abaixo do funil (antes das conversões): a barra e a legenda mostram a situação
+/** Desfecho das agendadas do mês, abaixo das conversões: a barra e a legenda mostram a situação
  *  atual de cada lead (uma categoria por lead, a soma fecha com as agendadas); embaixo, os dois indicadores de
  *  no-show sobre o total de agendadas. Altura fixa: os canais sem o bloco reservam o mesmo espaço. */
 function DesfechoAgendadasFunil({ d }: { d: DesfechoAgendadas | null }) {
