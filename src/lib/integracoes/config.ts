@@ -236,6 +236,8 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
     },
     // As vendas de novembro inteiro vêm dos Ganhos (o lançamento manual até 15/11 não foi feito; 17/11/2026).
     inicioVendas: "2026-11-01",
+    // Lead perdido como Duplicado sai do funil inteiro: conta só o lead original, que segue andando (20/11/2026).
+    motivosLeadFalso: ["Duplicado"],
     // Login do portal ainda com outro e-mail (17/11/2026), até ajustarem lá.
     emailsAlternativos: { "arthur.ulisses@grupovorp.com": "arthurulisses1@gmail.com" },
   },

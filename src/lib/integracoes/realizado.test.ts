@@ -222,6 +222,18 @@ describe("regras de correção da Acrópole (auditoria 16/11)", () => {
     ).toEqual(["conectados", "propostas", "reunioes_agendadas", "reunioes_realizadas"]);
   });
 
+  it("Galáticos: lead perdido como Duplicado sai do funil (conta só o original)", () => {
+    const ms = CRM_POR_NEGOCIO.matchsales;
+    const conectados = "626eef2e-4d84-49ab-ac8b-4d59d1cea87b";
+    const mql = { faturamento: "acima_de_500_mil", tamanho_time: "entre_2_e_5_vendedores", canal: "trafego", criado_em: "2026-11-07T13:00:00Z" };
+    const deals = [deal({ deal_id: "orig", ...mql }), deal({ deal_id: "dup", ...mql, status: "lost", motivo_perda: "Duplicado" })];
+    const eventos = [ev("orig", conectados, "2026-11-07T14:00:00Z"), ev("dup", conectados, "2026-11-07T14:00:00Z")];
+    const r = calcularRealizadoCrm(deals, eventos, ms, "2026-11-01", "2026-12-01");
+    expect(total(r, "inbound", "leads")).toBe(1);
+    expect(total(r, "inbound", "mql")).toBe(1);
+    expect(total(r, "inbound", "conectados")).toBe(1);
+  });
+
   it("Galáticos: etapas novas do Inbound (20/11/2026)", () => {
     const ms = CRM_POR_NEGOCIO.matchsales;
     const I = {
