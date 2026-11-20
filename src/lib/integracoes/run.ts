@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hojeBR } from "@/lib/data-br";
 import { CRM_POR_NEGOCIO, INICIO_HISTORICO, INICIO_REALIZADO, TRESC_POR_NEGOCIO, type ConfigCrm } from "./config";
-import { buscarLigacoesDoDia, contarAlosConexoes, contarPorPessoa } from "./tresc";
+import { buscarLigacoesDoDia, contarAlosConexoes, contarPorPessoa, tentativasPorPessoa } from "./tresc";
 import { Pipefacil, type AtividadePipefacil, type DealPipefacil } from "./pipefacil";
 import { calcularFunilUnico, contarPorDia, creditarPessoas, detalharVisoes, etapaBase, montarFollow, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
 import { ETAPAS_COM_LISTA } from "./leads-funil";
@@ -177,30 +177,33 @@ function etapaDoEvento(a: AtividadePipefacil): string | null {
 
 // ---------------------------------------------------------------- 3C Plus
 
-async function sync3c(supabase: SupabaseClient, negocioId: string, token: string, segundosConexao: number, desde: string, simular: boolean, agentes: Record<number, string> = {}) {
+async function sync3c(supabase: SupabaseClient, negocioId: string, token: string, segundosConexao: number, desde: string, simular: boolean, agentes: Record<number, string> = {}, campanhas: Record<string, string> = {}) {
   const hoje = hojeBR();
   const dias: string[] = [];
   for (let d = desde; d <= hoje; d = somaDias(d, 1)) dias.push(d);
-  const porDia: { data: string; alos: number; conexoes: number; porPessoa: Map<string, { alos: number; conexoes: number }> }[] = [];
+  const porDia: { data: string; tentativas: number; alos: number; conexoes: number; porPessoa: Map<string, { alos: number; conexoes: number }>; tentativasPessoa: Map<string, number> }[] = [];
   for (const dia of dias) {
     const ligacoes = await buscarLigacoesDoDia(token, dia);
-    porDia.push({ data: dia, ...contarAlosConexoes(ligacoes, segundosConexao), porPessoa: contarPorPessoa(ligacoes, segundosConexao, agentes) });
+    // Tentativas = toda ligação discada (o mesmo universo dos alôs); por pessoa, pela campanha do BDR.
+    porDia.push({ data: dia, tentativas: ligacoes.length, ...contarAlosConexoes(ligacoes, segundosConexao), porPessoa: contarPorPessoa(ligacoes, segundosConexao, agentes), tentativasPessoa: tentativasPorPessoa(ligacoes, campanhas) });
   }
   if (!simular) {
     const agora = new Date().toISOString();
     const linha = (data: string, etapa: string, quantidade: number) => ({ negocio_id: negocioId, data, canal: "outbound", etapa, quantidade, fonte: "3c", synced_at: agora });
     // Total do time e, para o funil por pré-vendas, cada pessoa ("pv:<usuário do Pipefácil>:alos").
     const linhas = porDia.flatMap((d) => [
+      linha(d.data, "tentativas", d.tentativas),
       linha(d.data, "alos", d.alos),
       linha(d.data, "conexoes", d.conexoes),
       ...Array.from(d.porPessoa, ([quem, c]) => [linha(d.data, `pv:${quem}:alos`, c.alos), linha(d.data, `pv:${quem}:conexoes`, c.conexoes)]).flat(),
+      ...Array.from(d.tentativasPessoa, ([quem, n]) => linha(d.data, `pv:${quem}:tentativas`, n)),
     ]);
     for (const lote of chunk(linhas, 500)) {
       const { error } = await supabase.from("funil_realizado").upsert(lote, { onConflict: "negocio_id,data,canal,etapa" });
       if (error) throw new Error("Erro gravando 3C: " + error.message);
     }
   }
-  return porDia.map(({ porPessoa, ...d }) => ({ ...d, porPessoa: Object.fromEntries(porPessoa) }));
+  return porDia.map(({ porPessoa, tentativasPessoa, ...d }) => ({ ...d, porPessoa: Object.fromEntries(porPessoa), tentativasPessoa: Object.fromEntries(tentativasPessoa) }));
 }
 
 // ---------------------------------------------------------------- Pipefácil
@@ -572,7 +575,7 @@ export async function runSyncIntegracoes(opts: OpcoesSync = {}): Promise<Resulta
         const token = process.env[c3.tokenEnv];
         try {
           if (!token) throw new Error(`${c3.tokenEnv} não configurado`);
-          r.tresc = await sync3c(supabase, n.id, token, c3.segundosConexao, opts.desde3c ?? somaDias(hoje, -1), !!opts.simular, c3.agentes);
+          r.tresc = await sync3c(supabase, n.id, token, c3.segundosConexao, opts.desde3c ?? somaDias(hoje, -1), !!opts.simular, c3.agentes, c3.campanhas);
         } catch (e) {
           const msg = `${n.slug}/3c: ${e instanceof Error ? e.message : String(e)}`;
           erros.push(msg);

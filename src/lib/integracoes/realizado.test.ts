@@ -271,8 +271,9 @@ describe("funil do dashboard", () => {
   it("preenche só as etapas integradas e zera as integradas sem registro", () => {
     const funis = aplicarRealizado(funisDoMes("vorp", 2026, 11), [{ canal: "outbound", etapa: "alos", quantidade: 143 }], etapasIntegradas("vorp"));
     const out = funis.find((f) => f.canal === "outbound")!;
-    expect(out.etapas[0].realizado).toBe(143);
-    expect(out.etapas[1].realizado).toBe(0);
+    expect(out.etapas.find((e) => e.chave === "alos")!.realizado).toBe(143);
+    expect(out.etapas.find((e) => e.chave === "tentativas")!.realizado).toBe(0);
+    expect(out.etapas.find((e) => e.chave === "conexoes")!.realizado).toBe(0);
     const semIntegracao = aplicarRealizado(funisDoMes("vorp-finance", 2026, 12), [], etapasIntegradas("vorp-finance"));
     expect(semIntegracao[0].etapas[0].realizado).toBeNull();
   });
@@ -295,6 +296,7 @@ describe("Galáticos (MatchSales)", () => {
     expect(ms.tokenEnv).toBe("PIPEFACIL_API_TOKEN_MATCH");
     const i = etapasIntegradas("matchsales");
     expect(i.has("outbound|alos")).toBe(true);
+    expect(i.has("outbound|tentativas")).toBe(true);
     expect(i.has("inbound|mql")).toBe(true);
     expect(i.has("indicacao|vendas")).toBe(true);
   });
@@ -673,6 +675,20 @@ describe("3C por pré-vendas", () => {
     expect(Object.fromEntries(r)).toEqual({ marcus: { alos: 2, conexoes: 1 }, vini: { alos: 1, conexoes: 1 }, ninguem: { alos: 0, conexoes: 0 } });
     // o agente 3 (sem de-para) fica só no total
     expect(contarAlosConexoes(ligs, 60)).toEqual({ alos: 4, conexoes: 3 });
+  });
+
+  it("tentativas: toda ligação discada, por pessoa pela campanha (começo do nome, sem acento)", async () => {
+    const { tentativasPorPessoa, pessoaDaCampanha } = await import("./tresc");
+    const l = (campaign: string | null, has_agent = false) => ({ call_date: "2026-11-10 10:00:00", has_agent, agent: "-", agent_id: null, status_id: 9, speaking_with_agent_time: "00:00:00", campaign });
+    const camp = TRESC_POR_NEGOCIO.vorp.campanhas!;
+    expect(pessoaDaCampanha("Jorge Abudi - Eventos", camp)).toBe(camp["Jorge Abudi"]);
+    expect(pessoaDaCampanha("Vinícius Ferreira", camp)).toBe(camp["Vinicius Ferreira"]);
+    expect(pessoaDaCampanha("Outra campanha", camp)).toBeNull();
+    const r = tentativasPorPessoa([l("Jorge Abudi"), l("Jorge Abudi - Rastreamento"), l("Marcus Ryquelme", true), l("Outra"), l(null)], camp);
+    expect(r.get(camp["Jorge Abudi"])).toBe(2);
+    expect(r.get(camp["Marcus Ryquelme"])).toBe(1);
+    expect(r.get(camp["Vinicius Ferreira"])).toBe(0);
+    expect(Object.keys(TRESC_POR_NEGOCIO.matchsales.campanhas!)).toEqual(["Fernando", "Leonardo", "Matheus", "Nicolas"]);
   });
 });
 

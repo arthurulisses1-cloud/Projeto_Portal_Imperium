@@ -435,7 +435,7 @@ export default async function NegocioDashboardPage({
                     { rotulo: "Leads do mês", href: hrefVisao({ recorte: "mes" }), ativo: recorte === "mes", dica: "Só os leads que entraram no mês e o que fizeram dentro do mês" },
                   ]}
                 />
-                {recorte === "mes" && <span className="text-[11px] text-stone-500">Alôs e conexões vêm do 3C (ligações) e não mudam.</span>}
+                {recorte === "mes" && <span className="text-[11px] text-stone-500">Tentativas, alôs e conexões vêm do 3C (ligações) e não mudam.</span>}
               </div>
             )}
           </div>
@@ -517,7 +517,7 @@ export default async function NegocioDashboardPage({
                           href: hrefVisao(fu.canal === "outbound" ? { pvOut: o.id } : { pvIn: o.id }),
                           ativo: filtroPv[fu.canal]!.escolhido === o.id,
                         }))}
-                        dica={`Funil de cada pessoa: alôs e conexões que atendeu no 3C, leads e reuniões que levou (a realizada, a proposta e a venda vão para quem agendou). Meta = meta do canal ÷ ${filtroPv[fu.canal]!.divisor}.`}
+                        dica={`Funil de cada pessoa: tentativas da campanha dela, alôs e conexões que atendeu no 3C, leads e reuniões que levou (a realizada, a proposta e a venda vão para quem agendou). Meta = meta do canal ÷ ${filtroPv[fu.canal]!.divisor}.`}
                       />
                     </div>
                   )}

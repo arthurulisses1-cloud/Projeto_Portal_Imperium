@@ -15,9 +15,37 @@ export type Ligacao3c = {
   speaking_with_agent_time: string; // "00:01:25"
   agent: string;
   agent_id?: number | null;
+  /** Nome da campanha (uma por BDR, com o nome dele; ex.: "Jorge Abudi - Eventos"). */
+  campaign?: string | null;
 };
 
 const STATUS_NAO_ATENDIDA = [5, 8];
+
+/** Texto sem acento e em minúsculas, para casar nomes de campanha. */
+const normalizar = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+
+/** Usuário do Pipefácil dono da campanha: a primeira chave de `campanhas` com que o nome da campanha começa. */
+export function pessoaDaCampanha(campanha: string | null | undefined, campanhas: Record<string, string>): string | null {
+  if (!campanha) return null;
+  const nome = normalizar(campanha);
+  for (const [prefixo, pessoa] of Object.entries(campanhas)) if (nome.startsWith(normalizar(prefixo))) return pessoa;
+  return null;
+}
+
+/**
+ * Tentativas de cada pré-vendas: toda ligação discada (inclusive não atendida, caixa postal e as do discador
+ * automático, que não têm agente), atribuída pela campanha, que é uma por BDR. Todo mapeado aparece, com zero
+ * se não ligou (a gravação sobrescreve o dia inteiro). Campanha fora do mapa conta só no total do time.
+ */
+export function tentativasPorPessoa(ligacoes: Ligacao3c[], campanhas: Record<string, string>): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const id of Object.values(campanhas)) out.set(id, 0);
+  for (const l of ligacoes) {
+    const quem = pessoaDaCampanha(l.campaign, campanhas);
+    if (quem) out.set(quem, (out.get(quem) ?? 0) + 1);
+  }
+  return out;
+}
 
 export function segundos(hms: string | null | undefined): number {
   if (!hms) return 0;

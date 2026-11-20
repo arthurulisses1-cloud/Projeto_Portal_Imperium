@@ -9,12 +9,24 @@ describe("funisDoMes", () => {
   });
   it("volume inicial e conversões do forecast (outbound MatchSales, mês cheio)", () => {
     const e = funisDoMes("matchsales", 2026, 12)[0].etapas;
-    expect(e[0]).toMatchObject({ label: "Alôs", meta: 5280, conversaoMeta: null });
-    expect(e[1].meta).toBeCloseTo(792);
+    expect(e[1]).toMatchObject({ label: "Alôs", meta: 5280 });
+    expect(e[2].meta).toBeCloseTo(792);
     expect(e[e.length - 1].label).toBe("Vendas");
   });
   it("novembro aplica ramp-up de 50%", () => {
-    expect(funisDoMes("vorp", 2026, 11)[0].etapas[0].meta).toBe(1980);
+    expect(funisDoMes("vorp", 2026, 11)[0].etapas[1].meta).toBe(1980);
+  });
+  it("com discador (Acrópole e Galáticos): Tentativas antes de Alôs, meta = alôs ÷ 15% e conversão ideal de 15%", () => {
+    for (const slug of ["vorp", "matchsales"]) {
+      const [t, a] = funisDoMes(slug, 2026, 11)[0].etapas;
+      expect(t).toMatchObject({ chave: "tentativas", label: "Tentativas", conversaoMeta: null });
+      expect(a).toMatchObject({ chave: "alos", conversaoMeta: 0.15 });
+      expect(t.meta).toBeCloseTo((a.meta as number) / 0.15);
+    }
+    expect(funisDoMes("matchsales", 2026, 11)[0].etapas[0].meta).toBeCloseTo(17600); // 2.640 alôs ÷ 15%
+    // Sem discador, o funil não muda
+    expect(funisDoMes("vorp-finance", 2026, 12)[0].etapas.map((x) => x.chave)).not.toContain("tentativas");
+    expect(funisDoMes("vorp-energy", 2026, 12)[0].etapas[0].chave).toBe("alos");
   });
   it("rótulos próprios: Finance com Entrevistas/Subidos, Energy com Contas subidas", () => {
     expect(funisDoMes("vorp-finance", 2026, 12)[0].etapas.map((x) => x.label)).toEqual(["Entrevistas", "Subidos", "Vendas"]);
