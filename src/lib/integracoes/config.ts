@@ -183,7 +183,8 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "25aceef3-3528-488b-9f6d-c15b6cd9d551": NIVEL.proposta, // Follow-Up
       "b52cb249-6aa9-4f00-ae25-557357c0cc44": NIVEL.proposta, // Em Negociação
       "78175757-8a62-4e00-a05d-9cdbc08c921b": NIVEL.proposta, // Proposta Aceita/Aguardando Pagamento
-      "382bcdf9-310a-401f-bc9a-f4d4ab20efb4": NIVEL.proposta, // Contratação Futura
+      // Contratação Futura (382bcdf9-310a-401f-bc9a-f4d4ab20efb4) fica fora do mapa (20/11/2026): o time usa a
+      // etapa para lead que só contrata mais para frente, mesmo sem reunião. Não conta etapa; vale o que veio antes.
       "31aab8a9-79f7-4824-b229-4d1a4eac8319": NIVEL.venda, // Ganho
       // Inbound (1). Sem etapa de Reunião Realizada: a reunião conta como realizada quando vira proposta.
       "626eef2e-4d84-49ab-ac8b-4d59d1cea87b": NIVEL.conectado, // Atendimento Humano
