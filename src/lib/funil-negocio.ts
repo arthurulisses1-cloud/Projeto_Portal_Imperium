@@ -4,7 +4,7 @@
 // Mapeamento de etapas (premissa): Finance usa Entrevistas e Subidos no lugar de
 // Reunião e Proposta; Energy usa Contas subidas no lugar de Proposta.
 import { PARAMETROS, RAMP_UP, indiceMes, vendasDoMes, type CanalFunil } from "@/lib/forecast-negocios";
-import { CRM_POR_NEGOCIO, ETAPAS_PORTAL, TRESC_POR_NEGOCIO } from "@/lib/integracoes/config";
+import { CRM_POR_NEGOCIO, ETAPAS_PORTAL, TAXA_TENTATIVA_ALO, TRESC_POR_NEGOCIO } from "@/lib/integracoes/config";
 import { chaveVisao, type Qualificacao, type Recorte } from "@/lib/integracoes/realizado";
 
 export type CanalDoFunil = "outbound" | "inbound" | "indicacao";
@@ -68,6 +68,16 @@ export function funisDoMes(slug: string, ano: number, mes: number): FunilDoCanal
     // Finance (2026-11-17): sem Alôs, Conexões e Entrevistas agendadas — o funil começa em Entrevistas
     // (vindas da planilha do formulário). A meta de Entrevistas segue a do forecast (já passou pelas 3 etapas).
     if (slug === "vorp-finance") etapas = etapas.slice(3).map((e, idx) => (idx === 0 ? { ...e, conversaoMeta: null } : e));
+    // Negócios com discador (3C): Tentativas antes de Alôs (20/11/2026). O forecast não tem tentativas: a meta
+    // é a de alôs dividida pela conversão ideal de tentativa para alô (15%), que vira a meta da conversão.
+    if (TRESC_POR_NEGOCIO[slug] && etapas[0]?.chave === "alos") {
+      const alos = etapas[0];
+      etapas = [
+        { chave: "tentativas", label: "Tentativas", meta: alos.meta === null ? null : alos.meta / TAXA_TENTATIVA_ALO, conversaoMeta: null, realizado: null },
+        { ...alos, conversaoMeta: TAXA_TENTATIVA_ALO },
+        ...etapas.slice(1),
+      ];
+    }
     funis.push({ canal: "outbound", titulo: TITULO.outbound, etapas });
   }
   if (p.inbound) funis.push({ canal: "inbound", titulo: TITULO.inbound, etapas: montar(etapasDe(slug, "inbound"), ETAPAS_PORTAL.inbound, p.inbound, ramp) });
@@ -102,7 +112,7 @@ export function funilUnicoDoNegocio(slug: string): FunilDoCanal | null {
 /** Etapas que a integração do negócio alimenta (as demais continuam sem realizado). */
 export function etapasIntegradas(slug: string): Set<string> {
   const out = new Set<string>();
-  if (TRESC_POR_NEGOCIO[slug]) ["outbound|alos", "outbound|conexoes"].forEach((k) => out.add(k));
+  if (TRESC_POR_NEGOCIO[slug]) ["outbound|tentativas", "outbound|alos", "outbound|conexoes"].forEach((k) => out.add(k));
   const unico = CRM_POR_NEGOCIO[slug]?.funilUnico;
   if (unico) {
     for (const e of unico.etapas) out.add(`outbound|${e.chave}`);
@@ -140,7 +150,7 @@ export function aplicarLeads(funis: FunilDoCanal[], porEtapa: Map<string, LeadEt
 }
 
 /** Etapas que vêm do 3C (contam ligações, não leads): iguais em todas as visões. */
-const ETAPA_DO_DISCADOR = (canal: string, chave: string) => canal === "outbound" && (chave === "alos" || chave === "conexoes");
+const ETAPA_DO_DISCADOR = (canal: string, chave: string) => canal === "outbound" && (chave === "tentativas" || chave === "alos" || chave === "conexoes");
 
 /**
  * Funis na visão escolhida (pura). Recorte: "todos" (qualquer lead) ou "mes" (só leads que entraram no

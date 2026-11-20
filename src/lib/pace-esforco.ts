@@ -29,7 +29,7 @@ export const TIMES_POR_CANAL: Record<string, Partial<Record<CanalPortal, string[
       "cmpy5vxa2026g3ukcydv7ddke", // Nicolas Roberto
       "1b2cd3b8-5b6c-48e0-83a5-3d4fa3e8f94f", // Matheus Mesquita
       "fd4b8d73-5438-4c60-a985-87f3394721e6", // Leonardo Enzo
-      "605125ac-10bc-40ae-9ced-2c88cf747a20", // Arthur Soares
+      // Arthur Soares não trabalha no Outbound (20/11/2026): só no Inbound.
     ],
     inbound: [
       "b58b3ad3-8f28-48a3-a103-4c65db9307b4",

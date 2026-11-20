@@ -270,7 +270,14 @@ export type Config3c = {
   /** Agente do 3C (agent_id) → usuário do Pipefácil, para o funil por pré-vendas. Quem entra no
    *  discador: acrescentar aqui. Agente fora do mapa conta só no total do time. */
   agentes?: Record<number, string>;
+  /** Campanha do 3C → usuário do Pipefácil, para as tentativas por pré-vendas (cada BDR tem a própria campanha,
+   *  com o nome dele; a chave casa com o começo do nome da campanha, sem acento). Fora do mapa: só no total. */
+  campanhas?: Record<string, string>;
 };
+
+/** Conversão ideal de tentativas (ligações discadas no 3C) para alôs. O forecast não tem tentativas: a meta
+ *  de tentativas sai da meta de alôs dividida por esta taxa (20/11/2026). */
+export const TAXA_TENTATIVA_ALO = 0.15;
 export const TRESC_POR_NEGOCIO: Record<string, Config3c> = {
   // Conta "Grupo Vorp". Alô = ligação atendida que falou com o BDR; conexão = conversa de 60s ou mais.
   vorp: {
@@ -280,6 +287,12 @@ export const TRESC_POR_NEGOCIO: Record<string, Config3c> = {
       134502: "7d0660e3-9acb-4266-93db-cfdee71e2289", // Marcus Ryquelme
       272989: "2acc1ce9-0160-4bf9-8526-4f799604143a", // Vinicius Ferreira → Vinícius Anastácio Ferreira
       252689: "efaa951d-455a-4148-ba3a-fa3b5f4bafd9", // Jorge Abudi
+    },
+    // Inclui "Jorge Abudi - Eventos" e "Jorge Abudi - Rastreamento".
+    campanhas: {
+      "Marcus Ryquelme": "7d0660e3-9acb-4266-93db-cfdee71e2289",
+      "Vinicius Ferreira": "2acc1ce9-0160-4bf9-8526-4f799604143a",
+      "Jorge Abudi": "efaa951d-455a-4148-ba3a-fa3b5f4bafd9",
     },
   },
   // Conta própria da Galáticos (MatchSales), mesmas regras.
@@ -291,6 +304,12 @@ export const TRESC_POR_NEGOCIO: Record<string, Config3c> = {
       273160: "fd4b8d73-5438-4c60-a985-87f3394721e6", // Leonardo
       273158: "1b2cd3b8-5b6c-48e0-83a5-3d4fa3e8f94f", // Matheus → Matheus Mesquita
       273390: "cmpy5vxa2026g3ukcydv7ddke", // Nicolas → Nicolas Roberto
+    },
+    campanhas: {
+      Fernando: "b58b3ad3-8f28-48a3-a103-4c65db9307b4",
+      Leonardo: "fd4b8d73-5438-4c60-a985-87f3394721e6",
+      Matheus: "1b2cd3b8-5b6c-48e0-83a5-3d4fa3e8f94f",
+      Nicolas: "cmpy5vxa2026g3ukcydv7ddke",
     },
   },
 };
