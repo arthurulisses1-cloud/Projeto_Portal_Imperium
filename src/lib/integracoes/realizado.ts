@@ -81,12 +81,12 @@ function marcosDoLead(eventos: EventoCrm[], cfg: ConfigCrm): Marcos {
   };
   // Mesmo instante: o nível menor primeiro (o CRM grava "Agendada" e "Ganho" no mesmo segundo).
   const ordem = eventos
-    .map((e) => ({ t: e.ocorrido_em, n: nivelDe(e) }))
-    .filter((e): e is { t: string; n: Nivel } => e.n !== undefined)
+    .map((e) => ({ t: e.ocorrido_em, n: nivelDe(e), desfaz: !!cfg.regressaoDesfaz || (!!e.stage_id && !!cfg.etapasQueDesfazem?.includes(e.stage_id)) }))
+    .filter((e): e is { t: string; n: Nivel; desfaz: boolean } => e.n !== undefined)
     .sort((a, b) => Date.parse(a.t) - Date.parse(b.t) || a.n - b.n);
   const m: Marcos = {};
-  for (const { t, n } of ordem) {
-    if (cfg.regressaoDesfaz) for (const k of NIVEIS_DESFEITOS) if (k > n) delete m[k];
+  for (const { t, n, desfaz } of ordem) {
+    if (desfaz) for (const k of NIVEIS_DESFEITOS) if (k > n) delete m[k];
     for (let k = 1 as Nivel; k <= n; k = (k + 1) as Nivel) if (!m[k]) m[k] = t;
   }
 

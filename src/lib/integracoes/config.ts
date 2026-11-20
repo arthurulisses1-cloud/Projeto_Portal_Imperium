@@ -22,6 +22,9 @@ export type ConfigCrm = {
    *  para Proposta Pendente deixa de contar; reunião marcada como realizada por engano e devolvida para
    *  Reunião Agendada/No Show também). Agendada e conectado continuam contando: o agendamento aconteceu. */
   regressaoDesfaz?: boolean;
+  /** Versão restrita da regra acima: só voltar para uma destas etapas (id) desfaz reunião realizada, proposta
+   *  e venda. Para funis em que outras etapas de nível baixo também aparecem depois da proposta (ex.: Follow Up). */
+  etapasQueDesfazem?: string[];
   /** Funis (id) onde a criação do lead não conta etapa: lead que nasce direto no Funil de Vendas (ex.:
    *  criado pela conversa do WhatsApp) não teve reunião realizada por isso. */
   pipelinesSemNivelNaCriacao?: string[];
@@ -190,6 +193,13 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "cb69fb19-dd9d-41cb-8ae0-5618484aeb30": NIVEL.proposta, // Aguardando pagamento
       "8c448cb1-7c1a-4244-bb64-690a70f453d0": NIVEL.venda, // Ganho
     },
+    // Realizada marcada por engano e devolvida para Reunião Agendada ou No Show deixa de contar (20/11/2026).
+    // Só essas etapas desfazem: no Inbound, o Follow Up (nível de conexão) também é usado depois da proposta.
+    etapasQueDesfazem: [
+      "7184f5de-b7d6-4271-8dee-b7fcf29cf93f", // Outbound: Reunião Agendada
+      "576ef8ec-5359-4c03-b183-96f88b371bcd", // Outbound: No Show
+      "a4252513-8bce-41cd-9fe1-43af1d1cb12f", // Inbound: Reunião Agendada
+    ],
     stagesGanhoVenda: ["8c448cb1-7c1a-4244-bb64-690a70f453d0", "31aab8a9-79f7-4824-b229-4d1a4eac8319"],
     // Inbound = só Tráfego Pago; Referidos = "Referido". Google, Instagram, WhatsApp IA, Parceiros, Indicação
     // de cliente/investidor etc. são canais alternativos (vendas sem funil).
