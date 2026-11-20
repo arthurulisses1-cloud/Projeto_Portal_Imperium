@@ -11,6 +11,7 @@ import { FERIADOS_NACIONAIS, calcularPace, limitesDoMes, type PaceCalculado } fr
 import { ehFimDeSemana, paraDataUTC } from "@/lib/data-br";
 import type { CanalPortal } from "@/lib/integracoes/config";
 import type { RankingGravado } from "@/lib/integracoes/leads-funil";
+import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 
 /** Pré-vendas de cada canal, por usuário do Pipefácil. Quem entra ou sai do time: ajuste aqui. */
 export const TIMES_POR_CANAL: Record<string, Partial<Record<CanalPortal, string[]>>> = {
@@ -182,18 +183,21 @@ export async function buscarEsforcoNegocio(admin: SupabaseClient, slug: string, 
   if (!TIMES_POR_CANAL[slug]) return null;
   const mesStr = `${ctx.ano}-${String(ctx.mes).padStart(2, "0")}`;
   const seg = ctx.mes === 12 ? `${ctx.ano + 1}-01` : `${ctx.ano}-${String(ctx.mes + 1).padStart(2, "0")}`;
-  const [{ data: linhas }, { data: rk }, { data: mb }, { data: ls }] = await Promise.all([
-    admin
-      .from("funil_realizado")
-      .select("canal, etapa, quantidade, data")
-      .eq("negocio_id", negocioId)
-      .in("etapa", [...ETAPAS_FUNIL])
-      .gte("data", `${mesStr}-01`)
-      .lt("data", `${seg}-01`)
-      .order("data")
-      .order("canal")
-      .order("etapa")
-      .range(0, 999),
+  const [linhas, { data: rk }, { data: mb }, { data: ls }] = await Promise.all([
+    // Paginado: o Supabase devolve no máximo 1.000 linhas por consulta.
+    buscarTudoPaginado<{ canal: string; etapa: string; quantidade: number; data: string }>((de, ate) =>
+      admin
+        .from("funil_realizado")
+        .select("canal, etapa, quantidade, data")
+        .eq("negocio_id", negocioId)
+        .in("etapa", [...ETAPAS_FUNIL])
+        .gte("data", `${mesStr}-01`)
+        .lt("data", `${seg}-01`)
+        .order("data")
+        .order("canal")
+        .order("etapa")
+        .range(de, ate),
+    ),
     admin.from("integracao_estado").select("valor").eq("chave", `ranking:${slug}:${mesStr}`).maybeSingle(),
     admin.from("integracao_estado").select("valor").eq("chave", `pipefacil:${slug}:membros`).maybeSingle(),
     admin.from("integracao_estado").select("valor").eq("chave", `leads_funil:${slug}:${mesStr}`).maybeSingle(),
@@ -201,7 +205,7 @@ export async function buscarEsforcoNegocio(admin: SupabaseClient, slug: string, 
   return montarEsforco(
     slug,
     ctx,
-    linhas ?? [],
+    linhas,
     (rk?.valor as RankingGravado | null) ?? null,
     (mb?.valor as Record<string, string> | null) ?? {},
     (ls?.valor as Record<string, LeadEtapa[]> | null) ?? {},

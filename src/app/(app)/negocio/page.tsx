@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { buscarTudoPaginado } from "@/lib/supabase/paginate";
 import { hojeBR } from "@/lib/data-br";
 import { getViewerContext } from "@/lib/preview";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
@@ -155,16 +156,23 @@ export default async function NegocioDashboardPage({
   const integradas = etapasIntegradas(atual.slug);
   const inicioMes = `${mesParam}-01`;
   const fimMesExcl = `${seg}-01`;
-  const { data: linhasRealizado } =
+  // Paginado: o Supabase devolve no máximo 1.000 linhas por consulta, e um mês do negócio passa disso (a
+  // Galáticos tinha 1.384 em 20/11/2026 e a tela perdia as tentativas de 01 a 18/11). Ordem fixa pela chave única.
+  const linhasRealizado =
     integradas.size > 0
-      ? await supabase
-          .from("funil_realizado")
-          .select("canal, etapa, quantidade, synced_at")
-          .eq("negocio_id", atual.id)
-          .gte("data", inicioMes)
-          .lt("data", fimMesExcl)
-          .range(0, 29999)
-      : { data: [] as { canal: string; etapa: string; quantidade: number; synced_at: string }[] };
+      ? await buscarTudoPaginado<{ canal: string; etapa: string; quantidade: number; synced_at: string }>((de, ate) =>
+          supabase
+            .from("funil_realizado")
+            .select("canal, etapa, quantidade, synced_at")
+            .eq("negocio_id", atual.id)
+            .gte("data", inicioMes)
+            .lt("data", fimMesExcl)
+            .order("data")
+            .order("canal")
+            .order("etapa")
+            .range(de, ate),
+        )
+      : [];
   // Funis por canal do forecast; o negócio com funil próprio no CRM (Energy) mostra só ele, sem meta.
   const previstos = funisDoMes(atual.slug, ano, mes);
   const funilUnico = funilUnicoDoNegocio(atual.slug);
