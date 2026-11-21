@@ -79,4 +79,20 @@ describe("funil por pré-vendas", () => {
     expect(out(time, "reunioes_agendadas").porPessoa).toBeUndefined();
     expect(out(marcus, "alos").porPessoa).toBeUndefined();
   });
+
+  it("funil completo do Inbound: a conversão de conectados parte dos Leads e fica sem meta", async () => {
+    const { montarFunisDaVisao, etapasIntegradas } = await import("./funil-negocio");
+    const base = funisDoMes("matchsales", 2026, 11);
+    const conectados = (q: "completo" | "mql" | "nao_mql") =>
+      montarFunisDaVisao(base, [], etapasIntegradas("matchsales"), new Map(), "todos", q)
+        .find((f) => f.canal === "inbound")!
+        .etapas.find((e) => e.chave === "conectados")!;
+    expect(conectados("completo").conversaoDe).toBe("leads");
+    expect(conectados("completo").conversaoMeta).toBeNull();
+    // A meta de volume e as visões MQL / Não MQL não mudam.
+    expect(conectados("completo").meta).toBe(conectados("mql").meta);
+    expect(conectados("mql").conversaoDe).toBeUndefined();
+    expect(conectados("mql").conversaoMeta).toBeGreaterThan(0);
+    expect(conectados("nao_mql").conversaoDe).toBeUndefined();
+  });
 });
