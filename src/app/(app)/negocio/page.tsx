@@ -613,12 +613,14 @@ export default async function NegocioDashboardPage({
                       </div>
                     ))}
                     {fu.etapas.slice(1).map((e, idx) => {
-                      const ant = fu.etapas[idx].realizado;
+                      // Base da conversão: a etapa anterior, ou a indicada (no funil completo, conectados ← leads).
+                      const base = (e.conversaoDe && fu.etapas.find((x) => x.chave === e.conversaoDe)) || fu.etapas[idx];
+                      const ant = base.realizado;
                       const real = e.realizado !== null && ant !== null && ant > 0 ? e.realizado / ant : null;
                       return (
                       <div key={e.label} className="contents">
-                        <span className="min-w-0 truncate border-b border-imperium-line/60 py-1.5 text-stone-300" title={`${fu.etapas[idx].label} → ${e.label}`}>
-                          {e.label} <span className="text-stone-500">← {fu.etapas[idx].label}</span>
+                        <span className="min-w-0 truncate border-b border-imperium-line/60 py-1.5 text-stone-300" title={`${base.label} → ${e.label}`}>
+                          {e.label} <span className="text-stone-500">← {base.label}</span>
                         </span>
                         <span className={`border-b border-imperium-line/60 py-1.5 text-right ${corConversao(real, e.conversaoMeta)}`}>
                           {real === null ? "—" : `${(real * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}

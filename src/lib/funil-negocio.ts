@@ -24,6 +24,9 @@ export type EtapaFunil = {
   /** Etapas do 3C (tentativas, alôs, conexões) na visão do time: o realizado de cada pré-vendas (usuário do
    *  Pipefácil), do maior para o menor. */
   porPessoa?: { id: string; quantidade: number }[];
+  /** Chave da etapa que serve de base da conversão, quando não é a anterior. No funil completo do Inbound, a
+   *  conversão de conectados parte dos Leads: o MQL é um filtro dos leads, não um passo do caminho. */
+  conversaoDe?: string;
 };
 
 /** Lead que compõe o realizado de uma etapa: aparece ao passar o mouse no número. */
@@ -185,6 +188,11 @@ export function montarFunisDaVisao(
   return funis.map((f) => {
     let etapas = f.etapas;
     const iMql = etapas.findIndex((e) => e.chave === "mql");
+    // Funil completo: conectados vêm de todos os leads (MQL ou não). A conversão parte dos Leads e fica sem meta,
+    // porque o forecast só prevê o caminho dos MQL (o "Conectados ← MQL" passava de 100%).
+    if (f.canal === "inbound" && qualificacao === "completo" && iMql > 0 && etapas[iMql + 1]) {
+      etapas = etapas.map((e, i) => (i === iMql + 1 ? { ...e, conversaoMeta: null, conversaoDe: etapas[0].chave } : e));
+    }
     if (f.canal === "inbound" && qualificacao !== "completo" && iMql > 0) {
       const mql = qualificacao === "mql";
       etapas = [
