@@ -27,6 +27,11 @@ export type EtapaFunil = {
   /** Chave da etapa que serve de base da conversão, quando não é a anterior. No funil completo do Inbound, a
    *  conversão de conectados parte dos Leads: o MQL é um filtro dos leads, não um passo do caminho. */
   conversaoDe?: string;
+  /** A meta de volume é uma referência proporcional (as conversões do funil MQL aplicadas a todos os leads),
+   *  não a meta oficial do forecast, que só prevê o caminho dos MQL. */
+  metaReferencia?: boolean;
+  /** A meta de conversão é a do funil MQL, mostrada só para comparação (visão Não MQL). */
+  conversaoReferencia?: boolean;
 };
 
 /** Lead que compõe o realizado de uma etapa: aparece ao passar o mouse no número. */
@@ -188,16 +193,27 @@ export function montarFunisDaVisao(
   return funis.map((f) => {
     let etapas = f.etapas;
     const iMql = etapas.findIndex((e) => e.chave === "mql");
-    // Funil completo: conectados vêm de todos os leads (MQL ou não). A conversão parte dos Leads e fica sem meta,
-    // porque o forecast só prevê o caminho dos MQL (o "Conectados ← MQL" passava de 100%).
+    // Funil completo: conectados vêm de todos os leads (MQL ou não), então a conversão parte dos Leads. O forecast
+    // só prevê o caminho dos MQL; de Conectados em diante a meta vira uma referência proporcional: as mesmas
+    // conversões do funil MQL aplicadas à meta de todos os leads (21/11/2026). Sem isso o volume total parecia
+    // sempre acima da meta.
     if (f.canal === "inbound" && qualificacao === "completo" && iMql > 0 && etapas[iMql + 1]) {
-      etapas = etapas.map((e, i) => (i === iMql + 1 ? { ...e, conversaoMeta: null, conversaoDe: etapas[0].chave } : e));
+      const base = etapas;
+      let anterior = base[0].meta;
+      etapas = base.map((e, i) => {
+        if (i <= iMql) return e;
+        const meta = anterior !== null && e.conversaoMeta !== null ? anterior * e.conversaoMeta : null;
+        anterior = meta;
+        return { ...e, meta, metaReferencia: true, ...(i === iMql + 1 ? { conversaoDe: base[0].chave } : {}) };
+      });
     }
+    // MQL: a meta oficial do forecast. Não MQL: sem meta de volume (o forecast não prevê esse caminho); as
+    // conversões do funil MQL ficam ao lado, só para comparação.
     if (f.canal === "inbound" && qualificacao !== "completo" && iMql > 0) {
       const mql = qualificacao === "mql";
       etapas = [
         { ...etapas[0], label: mql ? "Leads MQL" : "Leads não MQL", meta: mql ? etapas[iMql].meta : null, conversaoMeta: null },
-        ...etapas.slice(iMql + 1).map((e) => (mql ? e : { ...e, meta: null, conversaoMeta: null })),
+        ...etapas.slice(iMql + 1).map((e) => (mql ? e : { ...e, meta: null, conversaoReferencia: e.conversaoMeta !== null })),
       ];
     }
     const pv = pessoas[f.canal];
