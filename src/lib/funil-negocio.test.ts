@@ -80,19 +80,35 @@ describe("funil por pré-vendas", () => {
     expect(out(marcus, "alos").porPessoa).toBeUndefined();
   });
 
-  it("funil completo do Inbound: a conversão de conectados parte dos Leads e fica sem meta", async () => {
+  it("funil completo do Inbound: metas proporcionais (referência) a partir dos Leads; Não MQL compara com o MQL", async () => {
     const { montarFunisDaVisao, etapasIntegradas } = await import("./funil-negocio");
-    const base = funisDoMes("matchsales", 2026, 11);
-    const conectados = (q: "completo" | "mql" | "nao_mql") =>
-      montarFunisDaVisao(base, [], etapasIntegradas("matchsales"), new Map(), "todos", q)
-        .find((f) => f.canal === "inbound")!
-        .etapas.find((e) => e.chave === "conectados")!;
-    expect(conectados("completo").conversaoDe).toBe("leads");
-    expect(conectados("completo").conversaoMeta).toBeNull();
-    // A meta de volume e as visões MQL / Não MQL não mudam.
-    expect(conectados("completo").meta).toBe(conectados("mql").meta);
-    expect(conectados("mql").conversaoDe).toBeUndefined();
-    expect(conectados("mql").conversaoMeta).toBeGreaterThan(0);
-    expect(conectados("nao_mql").conversaoDe).toBeUndefined();
+    for (const slug of ["matchsales", "vorp"]) {
+      const base = funisDoMes(slug, 2026, 11);
+      const visao = (q: "completo" | "mql" | "nao_mql") =>
+        montarFunisDaVisao(base, [], etapasIntegradas(slug), new Map(), "todos", q).find((f) => f.canal === "inbound")!.etapas;
+      const et = (q: "completo" | "mql" | "nao_mql", k: string) => visao(q).find((e) => e.chave === k)!;
+      const leads = et("completo", "leads").meta!;
+      // MQL: a meta oficial do forecast, sem marcação de referência.
+      expect(et("mql", "conectados").metaReferencia).toBeUndefined();
+      expect(et("mql", "conectados").conversaoReferencia).toBeUndefined();
+      // Completo: leads e MQL do forecast; de conectados em diante, as conversões do MQL aplicadas a todos os leads.
+      expect(et("completo", "mql").meta).toBe(et("mql", "leads").meta);
+      expect(et("completo", "mql").metaReferencia).toBeUndefined();
+      const conv = (k: string) => et("mql", k).conversaoMeta!;
+      expect(et("completo", "conectados").conversaoDe).toBe("leads");
+      expect(et("completo", "conectados").conversaoMeta).toBe(conv("conectados"));
+      expect(et("completo", "conectados").meta).toBeCloseTo(leads * conv("conectados"));
+      expect(et("completo", "reunioes_agendadas").meta).toBeCloseTo(leads * conv("conectados") * conv("reunioes_agendadas"));
+      expect(et("completo", "vendas").metaReferencia).toBe(true);
+      expect(et("completo", "vendas").meta!).toBeGreaterThan(et("mql", "vendas").meta!);
+      // Não MQL: sem meta de volume; conversões do MQL só para comparação.
+      expect(visao("nao_mql").every((e) => e.meta === null)).toBe(true);
+      expect(et("nao_mql", "conectados").conversaoMeta).toBe(conv("conectados"));
+      expect(et("nao_mql", "conectados").conversaoReferencia).toBe(true);
+    }
+    // Galáticos, novembro (rampa de 50%): 220 leads → 176 conectados → 52,8 agendadas.
+    const ms = montarFunisDaVisao(funisDoMes("matchsales", 2026, 11), [], etapasIntegradas("matchsales"), new Map(), "todos", "completo").find((f) => f.canal === "inbound")!;
+    expect(ms.etapas.find((e) => e.chave === "conectados")!.meta).toBeCloseTo(176);
+    expect(ms.etapas.find((e) => e.chave === "reunioes_agendadas")!.meta).toBeCloseTo(52.8);
   });
 });

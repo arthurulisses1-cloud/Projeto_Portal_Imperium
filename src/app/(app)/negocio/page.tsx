@@ -34,6 +34,8 @@ export const maxDuration = 60;
 
 const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const CANAL: Record<MixCanal["canal"], string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", alternativo: "Canais alternativos", sem_canal: "Sem canal" };
+const REFERENCIA_PROPORCIONAL = "Referência proporcional: as conversões do funil MQL aplicadas a todos os leads. O forecast só prevê o caminho dos MQL.";
+
 const STATUS: Record<StatusPace, { texto: string; classe: string }> = {
   sem_meta: { texto: "Sem meta", classe: "border-imperium-line text-stone-400" },
   adiantado: { texto: "Adiantado", classe: "border-success/50 text-success-bright" },
@@ -588,17 +590,28 @@ export default async function NegocioDashboardPage({
                             </div>
                             {faixas100k && (e.chave === "reunioes_agendadas" || e.chave === "reunioes_realizadas") && <Acima100kFunil leads={e.leads} faixas={faixas100k} />}
                           </div>
-                          <span className="text-right text-stone-400">{num(e.meta * fracaoMes)}</span>
+                          <span className={`text-right ${e.metaReferencia ? "text-stone-500" : "text-stone-400"}`} title={e.metaReferencia ? REFERENCIA_PROPORCIONAL : undefined}>
+                            {num(e.meta * fracaoMes)}
+                          </span>
                           <RealizadoComLeads
                             valor={e.realizado === null ? "—" : num(e.realizado)}
                             leads={e.leads}
                             porPessoa={e.porPessoa && e.realizado ? { rotulo: e.label.toLowerCase(), total: e.realizado, fonte: e.chave === "tentativas" ? "pela campanha do BDR no 3C" : "pelo pré-vendas que atendeu no 3C", pessoas: e.porPessoa.map((p) => ({ nome: nomes[p.id] ?? "Sem nome", quantidade: p.quantidade })) } : undefined}
                           />
-                          <span className="text-right text-stone-300">{num(e.meta)}</span>
+                          <span className={`text-right ${e.metaReferencia ? "text-stone-500" : "text-stone-300"}`} title={e.metaReferencia ? REFERENCIA_PROPORCIONAL : undefined}>
+                            {num(e.meta)}
+                            {e.metaReferencia && <sup className="ml-0.5 text-[9px] text-stone-500">ref</sup>}
+                          </span>
                         </div>
                       ),
                     )}
                   </div>
+                  {fu.etapas.some((e) => e.metaReferencia) && (
+                    <p className="mt-2 text-[10px] leading-snug text-stone-500">
+                      <span className="text-stone-400">ref</span> = referência proporcional: as conversões do funil MQL aplicadas a todos os leads. O
+                      forecast só prevê o caminho dos MQL; a meta oficial está na visão MQLs.
+                    </p>
+                  )}
 
                   {/* Conversões: mesma grade, uma linha por passagem de etapa */}
                   <div className="mt-5 grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem] items-center gap-x-2 text-xs tabular-nums">
@@ -625,13 +638,22 @@ export default async function NegocioDashboardPage({
                         <span className={`border-b border-imperium-line/60 py-1.5 text-right ${corConversao(real, e.conversaoMeta)}`}>
                           {real === null ? "—" : `${(real * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
                         </span>
-                        <span className="border-b border-imperium-line/60 py-1.5 text-right text-stone-300">
+                        <span
+                          className={`border-b border-imperium-line/60 py-1.5 text-right ${e.conversaoReferencia ? "text-stone-500" : "text-stone-300"}`}
+                          title={e.conversaoReferencia ? "Conversão do funil MQL, só para comparação: o forecast não tem meta para os não MQL." : undefined}
+                        >
                           {e.conversaoMeta === null ? "—" : `${(e.conversaoMeta * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
                         </span>
                       </div>
                       );
                     })}
                   </div>
+
+                  {fu.etapas.some((e) => e.conversaoReferencia) && (
+                    <p className="mt-2 text-[10px] leading-snug text-stone-500">
+                      Meta de conversão = a do funil MQL, só para comparação. O forecast não prevê meta para os não MQL.
+                    </p>
+                  )}
 
                   {/* Desfecho das agendadas: depois das conversões (os canais sem ele reservam o espaço) */}
                   {algumDesfecho && (
