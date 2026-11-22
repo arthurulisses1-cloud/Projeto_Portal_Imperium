@@ -131,3 +131,66 @@ describe("tentativas por pré-vendas por dia", () => {
     expect(total).toBe(p.totais.ligacoes);
   });
 });
+
+describe("listas ao longo do tempo por pré-vendas", () => {
+  it("separa por pessoa, dia e lista, e bate com a tabela por pré-vendas", async () => {
+    const { agregar, enxugar, SEM_LISTA } = await import("./esforco-3c");
+    const b = (p: Record<string, unknown>) =>
+      enxugar({ call_date: "2026-11-10 10:00:00", agent: "-", has_agent: false, campaign: "Marcus Ryquelme", list: "Lista X1", status_id: 9, speaking_with_agent_time: "00:00:00", ...p });
+    const ligs = [
+      b({}),
+      b({ agent: "Marcus Ryquelme", has_agent: true, status_id: 7, speaking_with_agent_time: "00:01:30" }),
+      b({ agent: "Marcus Ryquelme", has_agent: true, status_id: 7, speaking_with_agent_time: "00:00:10", list: "-" }),
+      b({ call_date: "2026-11-11 09:00:00", list: "Lista X2" }),
+    ];
+    const p = agregar("vorp", ligs, "2026-11-10", "2026-11-11", {}, 60);
+    expect(p.porPessoaDiaLista).toEqual({
+      "Marcus Ryquelme": {
+        "2026-11-10": { "Lista X1": { ligacoes: 2, alos: 1, conexoes: 1 }, [SEM_LISTA]: { ligacoes: 1, alos: 1, conexoes: 0 } },
+        "2026-11-11": { "Lista X2": { ligacoes: 1, alos: 0, conexoes: 0 } },
+      },
+    });
+    const linha = p.porPreVendas.find((x) => x.nome === "Marcus Ryquelme")!;
+    const soma = Object.values(p.porPessoaDiaLista["Marcus Ryquelme"]).flatMap((d) => Object.values(d));
+    expect([linha.ligacoes, linha.alos, linha.conexoes]).toEqual([
+      soma.reduce((s, f) => s + f.ligacoes, 0),
+      soma.reduce((s, f) => s + f.alos, 0),
+      soma.reduce((s, f) => s + f.conexoes, 0),
+    ]);
+  });
+
+  it("lista principal do dia vira faixa; dia sem ligação não corta a faixa; fim de semana só entra se discou", async () => {
+    const { linhaDoTempoListas } = await import("./esforco-3c");
+    const f = (ligacoes: number, alos = 0, conexoes = 0) => ({ ligacoes, alos, conexoes });
+    // 05/11 qui (sem ligação, antes do primeiro dia: fica fora), 06 sex, 07 sáb, 08 dom, 09 seg, 10 ter, 11 qua, 12 qui
+    const periodo = ["2026-11-05", "2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12"];
+    const t = linhaDoTempoListas(
+      {
+        "2026-11-06": { X1: f(100, 10, 1) },
+        "2026-11-08": { X1: f(20, 2, 0) },
+        // 09 sem ligação
+        "2026-11-10": { X1: f(50, 5, 1), X2: f(10, 3, 2) },
+        "2026-11-11": { X2: f(200, 50, 30) },
+        "2026-11-12": { X2: f(150, 40, 20) },
+      },
+      periodo,
+    );
+    expect(t.dias.map((d) => [d.dia, d.lista, d.ligacoes])).toEqual([
+      ["2026-11-06", "X1", 100],
+      ["2026-11-08", "X1", 20],
+      ["2026-11-09", null, 0],
+      ["2026-11-10", "X1", 60],
+      ["2026-11-11", "X2", 200],
+      ["2026-11-12", "X2", 150],
+    ]);
+    expect(t.faixas).toEqual([
+      { lista: "X1", inicio: 0, fim: 3 },
+      { lista: "X2", inicio: 4, fim: 5 },
+    ]);
+    expect(t.listas).toEqual([
+      { lista: "X2", dias: 3, ligacoes: 360, alos: 93, conexoes: 52 },
+      { lista: "X1", dias: 3, ligacoes: 170, alos: 17, conexoes: 2 },
+    ]);
+    expect(linhaDoTempoListas({}, periodo)).toEqual({ dias: [], faixas: [], listas: [] });
+  });
+});

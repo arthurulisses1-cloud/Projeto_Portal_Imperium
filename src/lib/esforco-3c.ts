@@ -123,6 +123,12 @@ export const ehAlo = (l: Ligacao) => l.temAgente && !STATUS_NAO_ATENDIDA.include
 /** Conexão: conversa de N segundos ou mais com o pré-vendas. */
 export const ehConexao = (l: Ligacao, segundosConexao: number) => l.falado >= segundosConexao;
 
+/** Nome da lista quando a ligação não veio de lista (ligação manual). */
+export const SEM_LISTA = "Sem lista (ligação manual)";
+type Funil3 = { ligacoes: number; alos: number; conexoes: number };
+/** pessoa → dia → lista → contagem. */
+export type PorDiaLista = Record<string, Record<string, Record<string, Funil3>>>;
+
 export type Filtro = { agentes?: string[]; campanhas?: string[]; listas?: string[] };
 type Contagem = { ligacoes: number; alos: number; conexoes: number; conversoes: number };
 const zero = (): Contagem => ({ ligacoes: 0, alos: 0, conexoes: 0, conversoes: 0 });
@@ -136,6 +142,8 @@ export type PainelEsforco = {
   porPreVendas: { nome: string; temDono: boolean; ligacoes: number; alos: number; conexoes: number }[];
   /** Tentativas de cada pré-vendas por dia (a mesma regra da tabela por pré-vendas), para o gráfico de linhas. */
   tentativasPorPessoaDia: Record<string, Record<string, number>>;
+  /** Por pré-vendas, dia e lista: tentativas, alôs e conexões (mesma atribuição da tabela por pré-vendas). */
+  porPessoaDiaLista: PorDiaLista;
   porDiagnostico: { id: string; nome: string; nota: string; ligacoes: number }[];
   porAgente: { agente: string; alos: number; conexoes: number; conversoes: number; dmc: number; faladoTotal: number; faladoMedio: number; faladoMediano: number }[];
   porCampanha: ({ campanha: string } & Contagem)[];
@@ -193,6 +201,7 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
   const horas = Array.from({ length: 24 }, (_, hora) => ({ hora, ligacoes: 0, alos: 0, conexoes: 0 }));
   const pv = new Map<string, { nome: string; temDono: boolean; ligacoes: number; alos: number; conexoes: number }>();
   const porPessoaDia: Record<string, Record<string, number>> = {};
+  const porPessoaDiaLista: PorDiaLista = {};
   const diag = new Map(DIAGNOSTICO.map((d) => [d.id, { ...d, ligacoes: 0 }]));
   const agentes = new Map<string, { agente: string; alos: number; conexoes: number; conversoes: number; dmc: number; faladoTotal: number; falados: number[] }>();
   const campanhas = new Map<string, { campanha: string } & Contagem>();
@@ -242,7 +251,7 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
     const c = campanhas.get(l.campanha) ?? { campanha: l.campanha, ...zero() };
     conta(c);
     campanhas.set(l.campanha, c);
-    const nomeLista = l.lista ?? "Sem lista (ligação manual)";
+    const nomeLista = l.lista ?? SEM_LISTA;
     const li = listas.get(nomeLista) ?? { lista: nomeLista, campanha: l.campanha, origem: origemDaLista(slug, l.lista), ...zero() };
     conta(li);
     listas.set(nomeLista, li);
@@ -253,6 +262,11 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
     if (quem) {
       const dias = (porPessoaDia[quem] ??= {});
       dias[l.data.slice(0, 10)] = (dias[l.data.slice(0, 10)] ?? 0) + 1;
+      const doDia = ((porPessoaDiaLista[quem] ??= {})[l.data.slice(0, 10)] ??= {});
+      const f = (doDia[nomeLista] ??= { ligacoes: 0, alos: 0, conexoes: 0 });
+      f.ligacoes++;
+      if (alo) f.alos++;
+      if (con) f.conexoes++;
     }
     if (alo) linhaPv.alos++;
     if (con) linhaPv.conexoes++;
@@ -278,6 +292,7 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
     porPreVendas: Array.from(pv.values()).sort((a, b) => Number(b.temDono) - Number(a.temDono) || b.conexoes - a.conexoes || b.ligacoes - a.ligacoes),
     porDiagnostico: Array.from(diag.values()),
     tentativasPorPessoaDia: porPessoaDia,
+    porPessoaDiaLista,
     porCampanha: Array.from(campanhas.values()).sort((a, b) => b.ligacoes - a.ligacoes),
     porLista: Array.from(listas.values()).sort((a, b) => b.conexoes - a.conexoes || b.ligacoes - a.ligacoes),
     porStatus: lista(status),
@@ -286,6 +301,56 @@ export function agregar(slug: string, ligacoes: Ligacao[], de: string, ate: stri
     qualificacaoConexoes: lista(qualifCon),
     opcoes,
   };
+}
+
+// ---------------------------------------------------------------- listas ao longo do tempo (por pré-vendas)
+
+export type LinhaDoTempoListas = {
+  /** Um ponto por dia do eixo: o funil do dia e a lista principal (a de mais tentativas; null sem ligação). */
+  dias: ({ dia: string; lista: string | null; listasNoDia: number } & Funil3)[];
+  /** Trechos seguidos com a mesma lista principal (índices em `dias`, inclusivos). Dia sem ligação no meio não corta o trecho. */
+  faixas: { lista: string; inicio: number; fim: number }[];
+  /** Total por lista no período, com os dias em que a lista teve tentativa; da que mais discou para a que menos. */
+  listas: ({ lista: string; dias: number } & Funil3)[];
+};
+
+const fimDeSemana = (dia: string) => [0, 6].includes(new Date(`${dia}T12:00:00Z`).getUTCDay());
+
+/**
+ * Linha do tempo de um pré-vendas, para ver se alôs e conexões caem e com qual lista. O eixo são os dias
+ * úteis do período, mais o sábado ou domingo em que ele discou, a partir do primeiro dia em que discou.
+ */
+export function linhaDoTempoListas(porDia: Record<string, Record<string, Funil3>>, periodo: string[]): LinhaDoTempoListas {
+  const discou = (d: string) => Object.keys(porDia[d] ?? {}).length > 0;
+  const primeiro = periodo.findIndex(discou);
+  const eixo = primeiro < 0 ? [] : periodo.slice(primeiro).filter((d) => !fimDeSemana(d) || discou(d));
+  const totais = new Map<string, { lista: string; dias: number } & Funil3>();
+  const dias = eixo.map((dia) => {
+    const ponto = { dia, lista: null as string | null, listasNoDia: 0, ligacoes: 0, alos: 0, conexoes: 0 };
+    let maior = 0;
+    for (const [lista, f] of Object.entries(porDia[dia] ?? {}).sort(([a], [b]) => a.localeCompare(b, "pt-BR"))) {
+      ponto.listasNoDia++;
+      ponto.ligacoes += f.ligacoes;
+      ponto.alos += f.alos;
+      ponto.conexoes += f.conexoes;
+      if (f.ligacoes > maior) [maior, ponto.lista] = [f.ligacoes, lista];
+      const t = totais.get(lista) ?? { lista, dias: 0, ligacoes: 0, alos: 0, conexoes: 0 };
+      if (f.ligacoes > 0) t.dias++;
+      t.ligacoes += f.ligacoes;
+      t.alos += f.alos;
+      t.conexoes += f.conexoes;
+      totais.set(lista, t);
+    }
+    return ponto;
+  });
+  const faixas: LinhaDoTempoListas["faixas"] = [];
+  dias.forEach((p, i) => {
+    if (!p.lista) return;
+    const ultima = faixas[faixas.length - 1];
+    if (ultima && ultima.lista === p.lista) ultima.fim = i;
+    else faixas.push({ lista: p.lista, inicio: i, fim: i });
+  });
+  return { dias, faixas, listas: Array.from(totais.values()).sort((a, b) => b.ligacoes - a.ligacoes || a.lista.localeCompare(b.lista, "pt-BR")) };
 }
 
 // ---------------------------------------------------------------- leitura (com cache curto)
