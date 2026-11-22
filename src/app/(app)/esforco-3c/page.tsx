@@ -7,7 +7,8 @@ import { podeVerArea } from "@/lib/permissoes-analista";
 import { vinculoCloser } from "@/lib/closer-negocio";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { TRESC_POR_NEGOCIO } from "@/lib/integracoes/config";
-import { MAX_DIAS, agregar, buscarAtividade, buscarLigacoes, somarAtividade, type Atividade, type PainelEsforco } from "@/lib/esforco-3c";
+import { MAX_DIAS, agregar, buscarAtividade, buscarLigacoes, linhaDoTempoListas, somarAtividade, type Atividade, type PainelEsforco } from "@/lib/esforco-3c";
+import { ListasPorPreVendas } from "@/components/esforco/ListasPorPreVendas";
 import { PARAMETROS } from "@/lib/forecast-negocios";
 import { INICIO_REALIZADO } from "@/lib/integracoes/config";
 
@@ -155,6 +156,11 @@ export default async function Esforco3cPage({ searchParams }: { searchParams: Pa
   };
   const filtrando = filtro.agentes.length + filtro.campanhas.length + filtro.listas.length > 0;
   const seg = painel?.segundosConexao ?? 60;
+  // Listas ao longo do tempo: uma linha do tempo por pré-vendas, de quem mais discou para quem menos.
+  const diasDoPeriodo = painel?.porDia.map((d) => d.dia) ?? [];
+  const linhasPorPessoa = Object.entries(painel?.porPessoaDiaLista ?? {})
+    .map(([nome, porDia]) => ({ nome, linha: linhaDoTempoListas(porDia, diasDoPeriodo) }))
+    .sort((a, b) => b.linha.listas.reduce((s, l) => s + l.ligacoes, 0) - a.linha.listas.reduce((s, l) => s + l.ligacoes, 0) || a.nome.localeCompare(b.nome, "pt-BR"));
 
   return (
     <main className="mx-auto max-w-7xl space-y-5 px-6 py-8">
@@ -310,6 +316,22 @@ export default async function Esforco3cPage({ searchParams }: { searchParams: Pa
                 ]}
               />
               <TentativasPorPessoa porPessoa={painel.tentativasPorPessoaDia} dias={painel.porDia.map((d) => d.dia)} />
+            </section>
+          )}
+
+          {/* Listas ao longo do tempo, por pré-vendas */}
+          {linhasPorPessoa.length > 0 && (
+            <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
+              <p className="text-[10px] uppercase tracking-widest" style={{ color: `rgb(${cor})` }}>
+                Listas
+              </p>
+              <h2 className="font-display text-lg text-stone-100">Listas ao longo do tempo, por pré-vendas</h2>
+              <p className="mt-0.5 text-[12px] text-stone-400">
+                Tentativas, alôs e conexões de cada dia do pré-vendas escolhido. A faixa de fundo mostra a lista principal de cada trecho (a de mais tentativas no dia);
+                passe o mouse num dia para ver o detalhe. Tentativas: as das campanhas dele; alôs e conexões: as que ele atendeu (a mesma regra da tabela por pré-vendas).
+                Só dias úteis, mais o fim de semana em que ele discou.
+              </p>
+              <ListasPorPreVendas pessoas={linhasPorPessoa} inicial={filtro.agentes[0] ?? linhasPorPessoa[0].nome} idealAlo={IDEAL_ALO} idealConexao={idealConexao} seg={seg} />
             </section>
           )}
 
