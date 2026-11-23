@@ -138,3 +138,27 @@ export async function buscarDreNegocios(supabase: SupabaseClient, ano: number, m
   const fixosPor = await buscarFixosPorNegocio(supabase, (negocios ?? []) as { id: string; slug: string }[], ano, mes);
   return montarDre(comissoes, fixosPor);
 }
+
+export type MeuFixo = { itens: { negocio: string; fixo: number; bonus: number; bonusEstado: EstadoBonus | null }[]; totalFixo: number; bonusAplicado: number; bonusEmAberto: number; bonusNaoLiberado: number };
+
+/**
+ * O fixo do mês de uma pessoa (todos os negócios em que ela está), com o bônus de conduta e a situação dele. Só lê o dela:
+ * `admin` é usado porque a RLS dos fixos é do Diretor, e quem chama já escolheu o próprio perfil.
+ */
+export async function buscarMeuFixo(admin: SupabaseClient, profileId: string, ano: number, mes: number): Promise<MeuFixo> {
+  const { data: negocios } = await admin.from("negocios").select("id, slug, nome, equipe_nome").eq("status", "ativo");
+  const lista = (negocios ?? []) as { id: string; slug: string; nome: string; equipe_nome: string | null }[];
+  const fixosPor = await buscarFixosPorNegocio(admin, lista, ano, mes);
+  const nomePor = new Map(lista.map((n) => [n.slug, n.equipe_nome || n.nome]));
+  const itens: MeuFixo["itens"] = [];
+  for (const [slug, pessoas] of Array.from(fixosPor)) {
+    for (const f of pessoas) if (f.profileId === profileId) itens.push({ negocio: nomePor.get(slug) ?? slug, fixo: f.fixo, bonus: f.bonus ?? 0, bonusEstado: f.bonus ? f.bonusEstado ?? "pendente" : null });
+  }
+  return {
+    itens,
+    totalFixo: itens.reduce((s, i) => s + i.fixo, 0),
+    bonusAplicado: itens.filter((i) => i.bonusEstado === "aplicado").reduce((s, i) => s + i.bonus, 0),
+    bonusEmAberto: itens.filter((i) => i.bonusEstado === "pendente").reduce((s, i) => s + i.bonus, 0),
+    bonusNaoLiberado: itens.filter((i) => i.bonusEstado === "nao").reduce((s, i) => s + i.bonus, 0),
+  };
+}

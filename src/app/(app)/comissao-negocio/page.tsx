@@ -13,6 +13,8 @@ import { vinculoCloser } from "@/lib/closer-negocio";
 import { buscarComissaoEnergia, vinculoEnergia } from "@/lib/energy-time";
 import { ComissaoEnergiaDiretor, ComissaoEnergiaExecutivo, ComissaoEnergiaHead } from "@/components/negocio/ComissaoEnergia";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { buscarMeuFixo } from "@/lib/dre-negocios";
+import ResumoMesPessoal from "@/components/negocio/ResumoMesPessoal";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +93,10 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
   const mostraFinance =
     (ehDiretor || doFinance) && dados.some((d) => d.slug === "vorp-finance" && (veTudo(d) || d.pessoas.some((p) => p.id === user.id)));
 
+  // Recorrência por mês dos contratos ativos da carteira da pessoa (entra no "Seu mês").
+  let recorrenciaMesPessoal = 0;
+  let energiaExecutivoTotal: number | null = null;
+
   // SDR da Acrópole: regras da Acrópole, RQA do mês, comissão de venda padrão e carteira de recorrência.
   const preVendas = ehDiretor ? null : await vinculoPreVendas(supabase, user.id);
   let blocoSdr: React.ReactNode = null;
@@ -101,6 +107,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
       buscarCarteira(admin, preVendas.id, user.id, hoje, pctNegocio(preVendas.slug), preVendas.slug === "matchsales", MATCH_COMISSAO_10_SEMPRE.includes(viewer.effectiveNome)),
     ]);
     const comissaoVendas = dados.find((d) => d.slug === preVendas.slug)?.pessoas.find((p) => p.id === user.id)?.total ?? 0;
+    recorrenciaMesPessoal = carteira.filter((c) => c.ativo).reduce((s, c) => s + c.porMes, 0);
     blocoSdr = (
       <>
         {preVendas.slug === "vorp" ? <ExplicacaoComissaoVorp /> : <ExplicacaoComissaoMatch papel="bdr" />}
@@ -123,6 +130,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
   if (!blocoSdr && closerVorp && (!foco || foco.slug === closerVorp.slug)) {
     const carteira = await buscarCarteira(createAdminClient(), closerVorp.id, user.id, hoje, pctNegocio(closerVorp.slug), closerVorp.slug === "matchsales", closerVorp.slug === "matchsales" && MATCH_COMISSAO_10_SEMPRE.includes(viewer.effectiveNome));
     const comissaoVendas = dados.find((d) => d.slug === closerVorp.slug)?.pessoas.find((p) => p.id === user.id)?.total ?? 0;
+    recorrenciaMesPessoal = carteira.filter((c) => c.ativo).reduce((s, c) => s + c.porMes, 0);
     blocoSdr = (
       <>
         {closerVorp.slug === "vorp" ? <ExplicacaoComissaoCloserVorp /> : <ExplicacaoComissaoMatch papel="executivo" />}
@@ -157,6 +165,7 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
   if (headMatch && (!foco || foco.slug === "matchsales")) {
     const gestaoPct = percentuais("matchsales", { id: "", valor: 0, canal: "outbound", closerId: "x", closerCargo: "executivo", indicadorId: null })?.head ?? 2;
     const carteiraGestao = await buscarCarteiraGestao(createAdminClient(), headMatch.id, user.id, hoje, pctNegocio("matchsales"), gestaoPct, true);
+    recorrenciaMesPessoal += carteiraGestao.filter((c) => c.ativo).reduce((s, c) => s + c.porMes, 0);
     blocoGestaoMatch = <CarteiraRecorrencia carteira={carteiraGestao} titulo="Carteira do time · recorrência" />;
   }
 
@@ -174,7 +183,10 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
         // O Head não vê o que cada executivo ganha: só as vendas individuais dele e a comissão sobre o time.
         blocoEnergia = <ComissaoEnergiaHead dados={ce} headId={user.id} />;
         energiaDoHead = (ce.pessoas.find((p) => p.id === user.id)?.total ?? 0) + ce.headTotal;
-      } else blocoEnergia = <ComissaoEnergiaExecutivo pessoa={ce.pessoas.find((p) => p.id === user.id) ?? null} pct={ce.pct.executivo} />;
+      } else {
+        energiaExecutivoTotal = ce.pessoas.find((p) => p.id === user.id)?.total ?? 0;
+        blocoEnergia = <ComissaoEnergiaExecutivo pessoa={ce.pessoas.find((p) => p.id === user.id) ?? null} pct={ce.pct.executivo} />;
+      }
     } catch (e) {
       console.error("Comissão do Energy falhou", e);
     }
@@ -187,6 +199,9 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
     .filter((o) => o.total > 0);
   const totalPessoal = (energiaDoHead ?? 0) + outrasComissoes.reduce((s, o) => s + o.total, 0);
   const jaPago = dados.reduce((s, d) => s + (d.pessoas.find((p) => p.id === user.id)?.pago ?? 0), 0);
+  // "Seu mês" (fixo + variável) para quem não é o Diretor.
+  const meuFixo = ehDiretor ? null : await buscarMeuFixo(createAdminClient(), user.id, ano, mes);
+  const vendasMesPessoal = (energiaDoHead ?? energiaExecutivoTotal ?? 0) + outrasComissoes.reduce((s, o) => s + o.total, 0);
 
   return (
     <main className="mx-auto max-w-4xl space-y-5 px-6 py-8">
@@ -207,7 +222,11 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
         </div>
       </div>
 
-      {(energiaDoHead !== null || ehDiretor) && (
+      {meuFixo && (
+        <ResumoMesPessoal mesLabel={MESES[mes] + " de " + ano} fixo={meuFixo} vendas={vendasMesPessoal} recorrencia={recorrenciaMesPessoal} jaPago={jaPago} />
+      )}
+
+      {ehDiretor && (
         <div className="rounded-lg border border-gold/40 bg-imperium-surface p-4">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Sua comissão total em {MESES[mes]} · a pagar em {dataBR(dados[0]?.pagamento ?? seg + "-15")}</p>
           <p className="mt-1 text-2xl font-semibold text-gold-bright">{moeda(totalPessoal)}</p>
