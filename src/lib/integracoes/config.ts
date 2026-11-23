@@ -54,6 +54,9 @@ export type ConfigCrm = {
   /** Motivos de perda de lead falso (cadastro inválido): o lead sai do funil inteiro, inclusive de
    *  "Leads", seja ou não MQL (17/11/2026). */
   motivosLeadFalso?: string[];
+  /** Canal → donos que o Pipefácil põe sozinho ao criar o card (ex.: o dono da conta, no WhatsApp sem responsável
+   *  próprio). Lead e conexão nascidos com um deles contam para o responsável seguinte (23/11/2026). */
+  donosAutomaticos?: Partial<Record<CanalPortal, string[]>>;
   /** Conexões marcadas à mão em leads que nunca responderam, antes de o CRM mover para Conectados só com a
    *  resposta do lead: a entrada desses leads numa etapa de conexão antes de `ate` não conta. Etapas acima
    *  (agendada em diante) seguem valendo. */
@@ -133,6 +136,8 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "150aa133-a018-406d-9d1f-7ab2acb514b7": NIVEL.entrada, // Listas Eventos: Sem Conexão
     },
     regressaoDesfaz: true,
+    // Os cards do WhatsApp do Marcus Ryquelme nascem com o dono da conta.
+    donosAutomaticos: { eventos: ["cmnnj373a001o37mdey2cjzap"] },
     // Social Selling só entra com closer do comercial que fez a call (17/11/2026).
     closersPorCanal: {
       social_selling: [
