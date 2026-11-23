@@ -8,12 +8,16 @@ export type Nivel = (typeof NIVEL)[keyof typeof NIVEL];
 /** Canal do portal (funis com taxas). No CRM: outbound = "outbound", inbound = "trafego" (Tráfego Pago),
  *  indicacao = "referido" (Referidos: indicação pega na call de vendas). Qualquer outro canal preenchido é
  *  "canal alternativo": a venda entra no recebido, sem funil (17/11/2026). */
-export type CanalPortal = "outbound" | "inbound" | "indicacao";
+export type CanalPortal = "outbound" | "inbound" | "indicacao" | "eventos";
+
+/** Canais com funil próprio mas de trabalho esporádico (sem meta no forecast): ficam na seção recolhida do
+ *  Dashboard e somam nos totais (Pace, rankings, Auditoria, RQA). Aparecem só no negócio que os mapeia em `canais`. */
+export const CANAIS_OCASIONAIS: CanalPortal[] = ["eventos"];
 
 export type ConfigCrm = {
   /** Nome da variável de ambiente com o token do Pipefácil da conta do negócio. */
   tokenEnv: string;
-  /** Funis lidos (seq do Pipefácil). Os demais (Social Seller, Eventos, ABM, Monetização…) não entram. */
+  /** Funis lidos (seq do Pipefácil). Os demais (Social Seller, ABM, Monetização…) não entram. */
   pipelines: number[];
   /** Etapa do CRM (id) → nível de avanço. Etapas fora do mapa (perda) são neutras; nível 0 (entrada,
    *  sem conexão) não conta etapa nenhuma, mas serve para saber que o lead voltou para trás. */
@@ -90,8 +94,8 @@ export type FunilUnico = { titulo: string; etapas: { chave: string; label: strin
 export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
   vorp: {
     tokenEnv: "PIPEFACIL_API_TOKEN",
-    // [Vorp] Inbound SDR (3), [Vorp] Outbound (28), [Vorp] Funil de Vendas (4)
-    pipelines: [3, 28, 4],
+    // [Vorp] Inbound SDR (3), [Vorp] Outbound (28), [Vorp] Listas Eventos (29, desde 23/11/2026), [Vorp] Funil de Vendas (4)
+    pipelines: [3, 28, 29, 4],
     niveis: {
       // Outbound (28)
       "32320263-e093-43e7-a620-289e88d76429": NIVEL.conectado, // Conectado 3C
@@ -106,6 +110,12 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       cmq9hpng3008t40mzafab69sq: NIVEL.agendada, // REUNIÃO AGENDADA
       cmq9i1fif00dn40mzn6zsplik: NIVEL.agendada, // NO-SHOW
       cmq9hpng3008v40mzd9hnzoca: NIVEL.realizada, // REUNIÃO REALIZADA (ganho)
+      // Listas Eventos (29)
+      "5c57fc8e-816e-413a-927d-07a4ecedd076": NIVEL.conectado, // Conectados
+      "26c724e6-3ba6-4055-9514-bc8468ecc455": NIVEL.conectado, // Perdemos Conexão
+      "e55c62a2-f796-4cfb-b6bb-49d8cca75b5a": NIVEL.agendada, // Reunião Agendada
+      "ccfe944e-0d1e-4626-9cde-a5b1f6cbf387": NIVEL.agendada, // No Show
+      "e153adab-aef7-44ca-a4b6-669b2e630b1d": NIVEL.realizada, // Ganho (= reunião realizada)
       // Funil de Vendas (4)
       cmq9wwt8l024541npexvflx5e: NIVEL.realizada, // Reunião Realizada
       "21f92e96-e550-4c9d-b3c8-5fda04341cf0": NIVEL.realizada, // Proposta Pendente (ainda não apresentada)
@@ -119,6 +129,8 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "74c30965-d9f9-4223-a8d9-6b15278f8fc5": NIVEL.entrada, // Outbound: Sem Conexão
       cmq9hpng3008q40mz50stjrfp: NIVEL.entrada, // Inbound SDR: ENTRADA DE LEADS
       "15f65232-76e8-4c24-93d0-a52c6c477998": NIVEL.entrada, // Inbound SDR: SEM CONEXÃO
+      "9f148d6c-7ff5-43c9-b40a-895ba3e0fb66": NIVEL.entrada, // Listas Eventos: Entrada de Leads
+      "150aa133-a018-406d-9d1f-7ab2acb514b7": NIVEL.entrada, // Listas Eventos: Sem Conexão
     },
     regressaoDesfaz: true,
     // Social Selling só entra com closer do comercial que fez a call (17/11/2026).
@@ -153,7 +165,7 @@ export const CRM_POR_NEGOCIO: Record<string, ConfigCrm> = {
       "acima_de_50_milhoes",
     ],
     stagesGanhoVenda: ["cmq9wwt8l024a41npns90puld"],
-    canais: { outbound: "outbound", trafego: "inbound", referido: "indicacao" },
+    canais: { outbound: "outbound", trafego: "inbound", referido: "indicacao", eventos: "eventos" },
     campos: { faturamento: "quanto_sua_empresa_fatura_por_mes", cargo: "qual_seu_cargo_atual", origem: "origem_lead" },
     mql: {
       faturamento: [
@@ -367,6 +379,7 @@ export const ETAPAS_PORTAL: Record<CanalPortal, string[]> = {
   outbound: ["alos", "conexoes", "reunioes_agendadas", "reunioes_realizadas", "propostas", "vendas"],
   inbound: ["leads", "mql", "conectados", "reunioes_agendadas", "reunioes_realizadas", "propostas", "vendas"],
   indicacao: ["leads_indicados", "reunioes_realizadas", "vendas"],
+  eventos: ["leads", "conectados", "reunioes_agendadas", "reunioes_realizadas", "propostas", "vendas"],
 };
 
 /** Etapa do portal → nível do CRM que ela exige (as de topo saem da criação do lead ou do 3C). */

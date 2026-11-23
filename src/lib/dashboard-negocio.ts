@@ -3,11 +3,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarPaceNegocios, limitesDoMes, type PaceNegocio } from "@/lib/pace-negocio";
 import { PARAMETROS, indiceMes, vendasDoMes } from "@/lib/forecast-negocios";
+import { CANAIS_OCASIONAIS } from "@/lib/integracoes/config";
 import { buscarGanhosCrm } from "@/lib/recebido-crm";
 
-export type MixCanal = { canal: "outbound" | "inbound" | "indicacao" | "alternativo" | "sem_canal"; qtd: number; valor: number };
+export type MixCanal = { canal: "outbound" | "inbound" | "indicacao" | "eventos" | "alternativo" | "sem_canal"; qtd: number; valor: number };
 
-/** Vendas de canais alternativos (fora dos funis): somam no recebido, aparecem num bloco sem funil. */
+/** Vendas de canais alternativos: as de canal fora dos funis e as dos canais ocasionais (seção recolhida, ex.:
+ *  Eventos), que também contam no funil deles. É só uma lista: no recebido cada venda soma uma vez. */
 export type VendasAlternativas = {
   qtd: number;
   valor: number;
@@ -115,7 +117,7 @@ export async function buscarDashboardNegocio(supabase: SupabaseClient, slug: str
     vendas: { qtd, ticketMedio: qtd > 0 ? total / qtd : 0, mix: Array.from(mixMap.values()).sort((a, b) => b.valor - a.valor) },
     previsto,
     esforco: Array.from(porKpi.values()),
-    alternativas: montarAlternativas(lista.filter((v) => v.canal === "alternativo"), nomePor),
+    alternativas: montarAlternativas(lista, nomePor),
     ultimas: lista.slice(0, 8).map((v) => ({
       id: v.id,
       data: v.data,
@@ -126,13 +128,18 @@ export async function buscarDashboardNegocio(supabase: SupabaseClient, slug: str
   };
 }
 
-function montarAlternativas(
-  vendas: { id: string; valor: number; canal_origem?: string | null; mrr?: number | null; data: string; cliente: string | null; profile_id: string | null }[],
+export function montarAlternativas(
+  todas: { id: string; valor: number; canal: string | null; canal_origem?: string | null; mrr?: number | null; data: string; cliente: string | null; profile_id: string | null }[],
   nomePor: Map<string, string>,
 ): VendasAlternativas {
+  const ocasionais = new Set<string>(CANAIS_OCASIONAIS);
+  const vendas = todas
+    .filter((v) => v.canal === "alternativo" || (v.canal !== null && ocasionais.has(v.canal)))
+    // Canal ocasional não tem canal_origem: o próprio canal é o nome.
+    .map((v) => ({ ...v, origem: (v.canal === "alternativo" ? v.canal_origem : v.canal) ?? "sem_canal" }));
   const porCanal = new Map<string, { canal: string; qtd: number; valor: number; mrr: number }>();
   for (const v of vendas) {
-    const canal = v.canal_origem ?? "sem_canal";
+    const canal = v.origem;
     const atual = porCanal.get(canal) ?? { canal, qtd: 0, valor: 0, mrr: 0 };
     atual.qtd += 1;
     atual.valor += Number(v.valor);
@@ -149,7 +156,7 @@ function montarAlternativas(
         id: v.id,
         data: v.data,
         cliente: v.cliente,
-        canal: v.canal_origem ?? "sem_canal",
+        canal: v.origem,
         valor: Number(v.valor),
         mrr: v.mrr == null ? null : Number(v.mrr),
         vendedor: (v.profile_id && nomePor.get(v.profile_id)) || "—",

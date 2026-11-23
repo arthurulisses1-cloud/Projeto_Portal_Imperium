@@ -60,8 +60,8 @@ export type EsforcoNegocio = { time: Record<EtapaEsforco, IndicadorEsforco>; ide
 type LinhaRealizado = { canal: string; etapa: string; quantidade: number; data?: string };
 type Ctx = { ano: number; mes: number; hoje: string };
 
-const ORDEM_CANAIS: CanalPortal[] = ["outbound", "inbound", "indicacao"];
-const NOME_CANAL: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", alternativo: "Canais alternativos" };
+const ORDEM_CANAIS: CanalPortal[] = ["outbound", "inbound", "indicacao", "eventos"];
+const NOME_CANAL: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", eventos: "Eventos", alternativo: "Canais alternativos" };
 
 /** Metas do forecast de cada etapa de esforço por canal (pura). */
 export function metasPorCanal(slug: string, ano: number, mes: number): Record<EtapaEsforco, Partial<Record<CanalPortal, number>>> {

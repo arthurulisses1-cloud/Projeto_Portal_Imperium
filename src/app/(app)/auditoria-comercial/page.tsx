@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 // as contagens batem com o funil e o ranking. Só Diretor, Líder e Analista com acesso a Dados.
 
 const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-const CANAL: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", alternativo: "Canais alternativos" };
+const CANAL: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", eventos: "Eventos", alternativo: "Canais alternativos" };
 const SITUACAO: Record<SituacaoReuniao, { texto: string; classe: string }> = {
   a_acontecer: { texto: "A acontecer", classe: "border-gold/50 text-gold-bright" },
   realizada: { texto: "Realizada", classe: "border-success/50 text-success-bright" },
@@ -118,7 +118,8 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
   // RQA: só nos negócios com critério de RQA (Acrópole) e só para a gestão (o closer não vê; 18/11/2026).
   const cfgRqa = CRM_POR_NEGOCIO[atual.slug]?.rqa;
   const veRqa = !!cfgRqa && (eu.role === "diretor" || eu.role === "lider" || eu.role === "analista");
-  const ABAS = ["closer", "leads_outbound", "leads_inbound", ...(veRqa ? ["rqa"] : [])];
+  const temEventos = Object.values(CRM_POR_NEGOCIO[atual.slug]?.canais ?? {}).includes("eventos");
+  const ABAS = ["closer", "leads_outbound", "leads_inbound", ...(temEventos ? ["leads_eventos"] : []), ...(veRqa ? ["rqa"] : [])];
   const aba = ABAS.includes(searchParams.aba ?? "") ? searchParams.aba! : "reunioes";
   const f: Filtros = { pv: searchParams.pv ?? "", closer: searchParams.closer ?? "", canal: searchParams.canal ?? "", q: (searchParams.q ?? "").trim() };
 
@@ -210,6 +211,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
             ["closer", "Pós-reunião (closer)"],
             ["leads_outbound", "Leads Outbound do período"],
             ["leads_inbound", "Leads Inbound do período"],
+            ...(temEventos ? ([["leads_eventos", "Leads Eventos do período"]] as const) : []),
             ...(veRqa ? ([["rqa", "RQA"]] as const) : []),
           ] as const
         ).map(([k, rotulo]) => (
@@ -410,6 +412,8 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
         />
       ) : aba === "leads_outbound" ? (
         <AbaLeadsDoPeriodo todos={todos} f={f} noMes={noMes} canal="outbound" href={href} />
+      ) : aba === "leads_eventos" ? (
+        <AbaLeadsDoPeriodo todos={todos} f={f} noMes={noMes} canal="eventos" href={href} />
       ) : (
         <AbaLeadsInbound todos={baseToda} f={f} noMes={noMes} sp={searchParams} href={href} />
       )}
@@ -902,7 +906,7 @@ function AbaLeadsDoPeriodo({
   todos: LeadAuditoria[];
   f: Filtros;
   noMes: (iso: string | null) => boolean;
-  canal: "outbound" | "inbound";
+  canal: "outbound" | "inbound" | "eventos";
   href: (m: Partial<Params>) => string;
 }) {
   const lista = todos
@@ -911,7 +915,7 @@ function AbaLeadsDoPeriodo({
     .sort((a, b) => b.ultimo.localeCompare(a.ultimo))
     .map((x) => x.l);
   const conta = (t: (l: LeadAuditoria) => boolean) => lista.filter(t).length;
-  const titulo = canal === "outbound" ? "Outbound" : "Tráfego Pago";
+  const titulo = CANAL[canal];
   return (
     <div className="space-y-4">
       <p className="text-[11px] text-stone-500">
@@ -924,7 +928,7 @@ function AbaLeadsDoPeriodo({
           <thead className="border-b border-imperium-line">
             <tr>
               <th className={thClasse}>Lead</th>
-              <th className={thClasse}>{canal === "outbound" ? "BDR" : "SDR"}</th>
+              <th className={thClasse}>{canal === "outbound" ? "BDR" : canal === "eventos" ? "Pré-vendas" : "SDR"}</th>
               <th className={thClasse}>Caminho</th>
               <th className={thClasse}>Closer</th>
               <th className={`${thClasse} text-right`}>Valor</th>

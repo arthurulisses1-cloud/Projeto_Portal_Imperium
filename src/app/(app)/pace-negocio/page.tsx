@@ -659,7 +659,7 @@ function PaceIndividual({ meu, vendas, negocio, equipe, cor }: { meu: PaceCalcul
 
 // ------------------------------------------------------------ Pace Comercial (por B.U)
 
-const CANAL_NOME: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", alternativo: "Canais alternativos" };
+const CANAL_NOME: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", eventos: "Eventos", alternativo: "Canais alternativos" };
 const dec = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 const COR_STATUS: Record<StatusPace, string> = {
   sem_meta: "rgb(120 113 108)",
