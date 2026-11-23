@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { hojeBR } from "@/lib/data-br";
 import { podeVerArea } from "@/lib/permissoes-analista";
 import { vinculoCloser } from "@/lib/closer-negocio";
+import { FiltroMultiplo } from "@/components/negocio/FiltroMultiplo";
 import { pagamentoDoMes, resumirRqa, situacaoDaRqa, bantPreenchidos, type SituacaoRqa, type ValidacaoGerente } from "@/lib/rqa";
 import { podeValidarRqa, salvarValidacaoRqa } from "./actions";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
@@ -61,8 +62,8 @@ type Params = {
   sitR?: string;
   ger?: string;
   bant?: string;
-  /** Pós-reunião: etapa atual, RQA (sim, nao, sem) e mês da previsão de fechamento (AAAA-MM ou "sem"). */
-  etapa?: string;
+  /** Pós-reunião: etapas atuais (uma ou mais), RQA (sim, nao, sem) e mês da previsão de fechamento (AAAA-MM ou "sem"). */
+  etapa?: string | string[];
   rqa?: string;
   prev?: string;
   /** Reuniões: faturamento (valor do CRM) e dia da reunião (AAAA-MM-DD). */
@@ -156,6 +157,8 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
   // Opções dos filtros da aba closer: das reuniões realizadas da base (etapa de agora e mês da previsão).
   const realizadasBase = todos.filter((l) => l.realizadaEm);
   const etapasCloser = Array.from(new Set(realizadasBase.map((l) => l.etapa))).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const etapasPedidas = [searchParams.etapa ?? []].flat();
+  const etapasSel = etapasCloser.filter((x) => etapasPedidas.includes(x));
   const mesesPrevisao = Array.from(new Set(realizadasBase.map((l) => l.previsao?.slice(0, 7)).filter((x): x is string => !!x))).sort();
   const faturamentos = Array.from(new Map(todos.filter((l) => l.faturamento).map((l) => [l.faturamento!, l.faturamentoRotulo ?? legivel(l.faturamento)!])).entries()).sort(
     (a, b) => ordemFaixa(a[0]) - ordemFaixa(b[0]) || a[1].localeCompare(b[1], "pt-BR"),
@@ -164,7 +167,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
   const href = (mudar: Partial<Params>) => {
     const p = new URLSearchParams();
     const tudo: Params = { negocio: atual.slug, mes: mesParam, aba, pv: f.pv, closer: f.closer, canal: f.canal, q: f.q, base: searchParams.base, situacao: searchParams.situacao, modo: searchParams.modo, fat: searchParams.fat, diaR: searchParams.diaR, temp: searchParams.temp, sitR: searchParams.sitR, ger: searchParams.ger, bant: searchParams.bant, etapa: searchParams.etapa, rqa: searchParams.rqa, prev: searchParams.prev, vq: searchParams.vq, ...mudar };
-    for (const [k, v] of Object.entries(tudo)) if (v) p.set(k, v);
+    for (const [k, v] of Object.entries(tudo)) for (const x of Array.isArray(v) ? v : [v]) if (x) p.append(k, x);
     return `/auditoria-comercial?${p}`;
   };
   const lead = searchParams.lead ? baseToda.find((l) => String(l.seq) === searchParams.lead || l.id === searchParams.lead) : undefined;
@@ -296,14 +299,8 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
           </Campo>
         )}
         {aba === "closer" && (
-          <Campo rotulo="Etapa">
-            <select name="etapa" defaultValue={searchParams.etapa ?? ""} className="rounded border border-imperium-line bg-imperium-raised px-2 py-1 text-stone-200">
-              <option value="">Todas</option>
-              {etapasCloser.map((x) => (
-                <option key={x}>{x}</option>
-              ))}
-            </select>
-          </Campo>
+          // A chave recria o filtro quando a seleção da URL muda (ex.: Limpar filtros).
+          <FiltroMultiplo key={etapasSel.join("|")} nome="etapa" rotulo="Etapa" opcoes={etapasCloser} selecionadas={etapasSel} />
         )}
         {aba === "closer" && (
           <Campo rotulo="RQA">
@@ -381,7 +378,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
         <button type="submit" className="rounded border border-gold/60 px-3 py-1 text-gold-bright hover:bg-gold/10">
           Filtrar
         </button>
-        {(f.pv || f.closer || f.canal || f.q || searchParams.situacao || searchParams.temp || searchParams.fat || searchParams.diaR || searchParams.etapa || searchParams.rqa || searchParams.prev || searchParams.sitR || searchParams.ger || searchParams.bant) && (
+        {(f.pv || f.closer || f.canal || f.q || searchParams.situacao || searchParams.temp || searchParams.fat || searchParams.diaR || etapasSel.length > 0 || searchParams.rqa || searchParams.prev || searchParams.sitR || searchParams.ger || searchParams.bant) && (
           <Link href={`/auditoria-comercial?negocio=${atual.slug}&mes=${mesParam}&aba=${aba}`} className="px-2 py-1 text-stone-400 hover:text-stone-200">
             Limpar filtros
           </Link>
@@ -393,7 +390,7 @@ export default async function AuditoriaComercialPage({ searchParams }: { searchP
       ) : aba === "reunioes" ? (
         <AbaReunioes todos={todos} f={f} noMes={noMes} mesParam={mesParam} sp={searchParams} href={href} />
       ) : aba === "closer" ? (
-        <AbaCloser todos={todos} f={f} noMes={noMes} sp={searchParams} href={href} />
+        <AbaCloser todos={todos} etapas={etapasSel} f={f} noMes={noMes} sp={searchParams} href={href} />
       ) : aba === "rqa" && cfgRqa ? (
         <AbaRqa
           todos={todos}
@@ -635,7 +632,7 @@ function AbaReunioes({
 }
 
 // ------------------------------------------------------------ Pós-reunião (closer)
-function AbaCloser({ todos, f, noMes, sp, href }: { todos: LeadAuditoria[]; f: Filtros; noMes: (iso: string | null) => boolean; sp: Params; href: (m: Partial<Params>) => string }) {
+function AbaCloser({ todos, etapas, f, noMes, sp, href }: { todos: LeadAuditoria[]; etapas: string[]; f: Filtros; noMes: (iso: string | null) => boolean; sp: Params; href: (m: Partial<Params>) => string }) {
   const emAberto = sp.modo === "aberto";
   const base = todos.filter((l) => l.realizadaEm && (emAberto ? l.status === "open" : noMes(l.realizadaEm)));
   const filtrados = base.filter((l) => passaFiltros(l, f));
@@ -648,7 +645,7 @@ function AbaCloser({ todos, f, noMes, sp, href }: { todos: LeadAuditoria[]; f: F
   const lista = filtrados.filter(
     (l) =>
       (!sp.temp || temp(l) === sp.temp) &&
-      (!sp.etapa || l.etapa === sp.etapa) &&
+      (etapas.length === 0 || etapas.includes(l.etapa)) &&
       (!sp.rqa || rqaDe(l) === sp.rqa) &&
       (!sp.prev || (sp.prev === "sem" ? !l.previsao : l.previsao?.slice(0, 7) === sp.prev)),
   );
