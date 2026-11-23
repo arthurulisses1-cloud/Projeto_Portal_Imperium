@@ -526,7 +526,9 @@ async function sincronizarVendas(
     const semDonoRecusada = (e: { code?: string } | null) =>
       (!closer && e?.code === "23502") || (g.canal === "alternativo" && (e?.code === "23514" || e?.code === "42703" || e?.code === "PGRST204"));
     if (id) {
-      let { error } = await supabase.from("vendas").update(comImplantacao).eq("id", id);
+      // Na atualização, o co-responsável também é limpo quando saiu do card no Pipefácil (co_closer_id nulo).
+      let { error } = await supabase.from("vendas").update({ ...comImplantacao, co_closer_id: coCloser && coCloser !== closer ? coCloser : null }).eq("id", id);
+      if (error && semColunaImplantacao(error)) ({ error } = await supabase.from("vendas").update(comImplantacao).eq("id", id));
       if (error && comImplantacao !== campos && semColunaImplantacao(error)) ({ error } = await supabase.from("vendas").update(campos).eq("id", id));
       if (semDonoRecusada(error)) continue;
       if (error) throw new Error("Erro atualizando venda do CRM: " + error.message);
