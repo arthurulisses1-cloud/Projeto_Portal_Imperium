@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { montarAlternativas } from "./dashboard-negocio";
 import { funisDoMes, funisOcasionais } from "./funil-negocio";
 import { CRM_POR_NEGOCIO } from "./integracoes/config";
-import { leadsDoRealizado, vendasGanhas, type DealCrm, type EventoCrm } from "./integracoes/realizado";
+import { creditarPessoas, leadsDoRealizado, vendasGanhas, type DealCrm, type EventoCrm } from "./integracoes/realizado";
 import { montarAuditoria } from "./integracoes/auditoria";
 import { montarEsforco } from "./pace-esforco";
 import { resumirDesfechoAgendadas } from "./desfecho-agendadas";
@@ -77,5 +77,19 @@ describe("canal Eventos (Acrópole)", () => {
   });
   it("a RQA de Eventos vale o mesmo que a do inbound", () => {
     expect(RQA_VALOR.vorp.eventos).toBe(RQA_VALOR.vorp.inbound);
+  });
+  it("lead e conexão nascidos com o dono automático contam para o pré-vendas que assumiu", () => {
+    const DONO = cfg.donosAutomaticos!.eventos![0], CONECTADOS = "5c57fc8e-816e-413a-927d-07a4ecedd076";
+    const criado = "2026-11-19T15:00:00Z", conectou = "2026-11-19T15:01:00Z";
+    const pessoas = (canal: string, hist: [string, string][], atual = MARCUS) => {
+      const d = [lead({ deal_id: "z", canal, stage_id: CONECTADOS, responsavel_user_id: atual, sdr_user_id: null })];
+      const evs = [ev("z", CONECTADOS, conectou)];
+      const its = leadsDoRealizado(d, evs, cfg, "2026-11-01", "2026-12-01").filter((i) => ["leads", "conectados"].includes(i.etapa));
+      return Array.from(new Set(creditarPessoas(its, evs, cfg, new Map([["z", hist]])).map((i) => i.etapa.split(":")[1])));
+    };
+    expect(pessoas("eventos", [[criado, DONO], ["2026-11-23T21:40:00Z", MARCUS]])).toEqual([MARCUS]);
+    expect(pessoas("eventos", [[criado, DONO]])).toEqual([MARCUS]);
+    expect(pessoas("eventos", [[criado, DONO]], DONO)).toEqual([DONO]);
+    expect(pessoas("trafego", [[criado, DONO], ["2026-11-23T21:40:00Z", MARCUS]])).toEqual([DONO]);
   });
 });

@@ -408,21 +408,34 @@ const ETAPAS_DO_AGENDAMENTO = ["reunioes_agendadas", "reunioes_realizadas", "pro
  * agendada em diante, quem era o responsável pelo lead no agendamento (a realizada, a proposta e a venda
  * vão para quem agendou); leads e MQL, o responsável na criação; conectados, o responsável na conexão.
  * Sem histórico do momento, o pré-vendas do lead, senão o responsável atual. Referidos não têm pré-vendas.
+ * Dono automático do canal (cfg.donosAutomaticos): o lead e a conexão vão para o responsável seguinte; se
+ * ninguém assumiu o lead, continuam com ele.
  */
 export function pessoaDaContagem(
   it: LeadDoRealizado,
   marcos: Partial<Record<Nivel, string>> | undefined,
   hist: [string, string][] | undefined,
+  cfg?: Pick<ConfigCrm, "donosAutomaticos">,
 ): string | null {
   if (it.canal === "indicacao") return null;
   const d = it.deal;
+  const automaticos = cfg?.donosAutomaticos?.[it.canal] ?? [];
+  const assumido = (quem: string | null, iso: string | null | undefined) => {
+    if (!quem || !iso || !automaticos.includes(quem)) return quem;
+    const seguinte = [...(hist ?? [])]
+      .sort((a, b) => Date.parse(a[0]) - Date.parse(b[0]))
+      .find(([em, r]) => Date.parse(em) > Date.parse(iso) && !automaticos.includes(r));
+    // O histórico só tem mudanças de etapa: troca de dono sem mover o card aparece só no responsável atual.
+    const atual = d.sdr_user_id ?? d.responsavel_user_id;
+    return seguinte?.[1] ?? (atual && !automaticos.includes(atual) ? atual : quem);
+  };
   const base = etapaBase(it.etapa);
   if (ETAPAS_DO_AGENDAMENTO.includes(base)) return responsavelNoAgendamento(d, marcos, hist);
   if (base === "conectados") {
     const t = marcos?.[NIVEL.conectado];
-    return (t ? responsavelEm(hist, t) : null) ?? d.sdr_user_id ?? d.responsavel_user_id;
+    return assumido((t ? responsavelEm(hist, t) : null) ?? d.sdr_user_id ?? d.responsavel_user_id, t);
   }
-  if (base === "leads" || base === "mql") return (d.criado_em ? responsavelEm(hist, d.criado_em) : null) ?? d.responsavel_user_id;
+  if (base === "leads" || base === "mql") return assumido((d.criado_em ? responsavelEm(hist, d.criado_em) : null) ?? d.responsavel_user_id, d.criado_em);
   return null;
 }
 
@@ -431,7 +444,7 @@ export function creditarPessoas(itens: LeadDoRealizado[], eventos: EventoCrm[], 
   const marcos = marcosPorLead(eventos, cfg);
   const out: LeadDoRealizado[] = [];
   for (const it of itens) {
-    const quem = pessoaDaContagem(it, marcos.get(it.deal.deal_id), responsaveis.get(it.deal.deal_id));
+    const quem = pessoaDaContagem(it, marcos.get(it.deal.deal_id), responsaveis.get(it.deal.deal_id), cfg);
     if (quem) out.push({ ...it, etapa: `pv:${quem}:${it.etapa}` });
   }
   return out;
