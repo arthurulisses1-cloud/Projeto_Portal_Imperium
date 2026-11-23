@@ -95,7 +95,7 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
           {totalBonus > 0 && (
             <p className="flex justify-between text-sm text-stone-300">
               <span>
-                Fim do mês · bônus de conduta{bonusPendentes > 0 && <span className="ml-1 text-xs text-amber-400">{bonusPendentes} a decidir</span>}
+                Fim do mês · Auxílio Transporte{bonusPendentes > 0 && <span className="ml-1 text-xs text-amber-400">{bonusPendentes} a decidir</span>}
               </span>
               <span className="text-stone-100">{moeda(totalBonus)}</span>
             </p>
@@ -113,7 +113,7 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Resultado de {MESES[mes]} (competência)</p>
           <p className={`mt-2 text-2xl font-semibold ${resultado >= 0 ? "text-success-bright" : "text-wine-bright"}`}>{moeda(resultado)}</p>
           <p className="text-xs text-stone-500">
-            Recebido {moeda(recebido)} − fixos {moeda(totalFixos)}{totalBonus > 0 ? " (com bônus)" : ""} − comissões {moeda(totalComissoes)} − Diretor {moeda(CUSTO_DIRETOR)}
+            Recebido {moeda(recebido)} − fixos {moeda(totalFixos)}{totalBonus > 0 ? " (com auxílio transporte)" : ""} − comissões {moeda(totalComissoes)} − Diretor {moeda(CUSTO_DIRETOR)}
           </p>
         </div>
       </div>
@@ -133,7 +133,7 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-stone-400">
-                    Fixos (dia 5){tb > 0 && <span className="ml-1 text-xs text-stone-500">com bônus de conduta {moeda(tb)}</span>}
+                    Fixos (dia 5){tb > 0 && <span className="ml-1 text-xs text-stone-500">com Auxílio Transporte {moeda(tb)}</span>}
                   </dt>
                   <dd className="text-stone-100">− {moeda(tf)}</dd>
                 </div>

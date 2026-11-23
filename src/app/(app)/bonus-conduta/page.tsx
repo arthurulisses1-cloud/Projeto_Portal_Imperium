@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** Fechamento do bônus de conduta: quem recebe os R$ 200 do fixo fechado no mês, depois de analisar conduta, horários e faltas. Só o Diretor. */
+/** Fechamento do Auxílio Transporte: quem recebe os R$ 200 do fixo fechado no mês, condicionado à aprovação da direção. Só o Diretor. */
 export default async function BonusCondutaPage({ searchParams }: { searchParams: { mes?: string } }) {
   const supabase = await createClient();
   const {
@@ -36,9 +36,9 @@ export default async function BonusCondutaPage({ searchParams }: { searchParams:
   if (error) {
     return (
       <main className="mx-auto max-w-3xl space-y-4 px-6 py-8">
-        <h1 className="font-display text-2xl text-gold-bright">Bônus de conduta</h1>
+        <h1 className="font-display text-2xl text-gold-bright">Auxílio Transporte</h1>
         <p className="rounded border border-amber-400/40 bg-imperium-surface p-3 text-sm text-amber-300">
-          Ainda não dá para fechar o bônus: o banco não tem a coluna do bônus. Rode as migrations 0122 (estrutura) e o script 0122b dos fixos e volte aqui.
+          Ainda não dá para fechar o Auxílio Transporte: o banco não tem a coluna dele. Rode as migrations 0122 (estrutura) e o script 0122b dos fixos e volte aqui.
         </p>
       </main>
     );
@@ -68,9 +68,9 @@ export default async function BonusCondutaPage({ searchParams }: { searchParams:
     <main className="mx-auto max-w-4xl space-y-5 px-6 py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl text-gold-bright">Bônus de conduta</h1>
+          <h1 className="font-display text-2xl text-gold-bright">Auxílio Transporte</h1>
           <p className="mt-1 text-sm text-stone-400">
-            {MESES[mes]} de {ano} · o fixo base é pago no dia 5; os R$ 200 de bônus você libera no fim do mês, depois de analisar conduta, horários e faltas. Marque quem recebe.
+            {MESES[mes]} de {ano} · o fixo base é pago no dia 5; o Auxílio Transporte de R$ 200 é condicionado à aprovação da direção: você libera no fim do mês. Marque quem recebe.
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm">
@@ -84,13 +84,13 @@ export default async function BonusCondutaPage({ searchParams }: { searchParams:
       </div>
 
       {linhas.length === 0 ? (
-        <p className="text-sm text-stone-500">Ninguém tem bônus de conduta cadastrado.</p>
+        <p className="text-sm text-stone-500">Ninguém tem Auxílio Transporte cadastrado.</p>
       ) : (
         <BonusCondutaForm key={`${ano}-${mes}`} ano={ano} mes={mes} linhas={linhas} />
       )}
 
       <p className="text-xs text-stone-500">
-        Quem ainda não foi decidido aparece marcado e já conta no custo do mês (DRE e Financeiro por Negócio) como previsão; desmarcar e salvar tira o bônus do custo.
+        Quem ainda não foi decidido aparece marcado e já conta no custo do mês (DRE e Financeiro por Negócio) como previsão; desmarcar e salvar tira o auxílio do custo.
       </p>
     </main>
   );

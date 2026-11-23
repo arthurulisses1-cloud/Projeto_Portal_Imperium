@@ -18,7 +18,7 @@ export type LinhaBonus = {
 
 const moeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
-/** Fechamento do bônus de conduta do mês: marque quem recebe os R$ 200 e salve. Quem ainda não foi decidido vem marcado. */
+/** Fechamento do Auxílio Transporte do mês: marque quem recebe os R$ 200 e salve. Quem ainda não foi decidido vem marcado. */
 export default function BonusCondutaForm({ ano, mes, linhas }: { ano: number; mes: number; linhas: LinhaBonus[] }) {
   const [marcados, setMarcados] = useState<Record<string, boolean>>(Object.fromEntries(linhas.map((l) => [l.chave, l.estado !== "nao"])));
   const total = linhas.filter((l) => marcados[l.chave]).reduce((s, l) => s + l.bonus, 0);
@@ -42,7 +42,7 @@ export default function BonusCondutaForm({ ano, mes, linhas }: { ano: number; me
           Não aplicar em ninguém
         </button>
         <span className="text-stone-400">
-          {qtd} de {linhas.length} · <span className="font-semibold text-gold-bright">{moeda(total)}</span> de bônus a pagar
+          {qtd} de {linhas.length} · <span className="font-semibold text-gold-bright">{moeda(total)}</span> de Auxílio Transporte a pagar
         </span>
       </div>
 
@@ -71,7 +71,7 @@ export default function BonusCondutaForm({ ano, mes, linhas }: { ano: number; me
       ))}
 
       <button type="submit" className="rounded border border-gold/50 bg-gold/10 px-4 py-2 text-sm text-gold-bright hover:bg-gold/20">
-        Fechar bônus do mês
+        Fechar Auxílio Transporte do mês
       </button>
     </FormSalvar>
   );

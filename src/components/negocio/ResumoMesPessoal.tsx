@@ -1,4 +1,4 @@
-// "Seu mês": o fixo, a comissão (vendas e recorrência) e o bônus de conduta de quem vê a tela, para ele saber quanto ganha no mês no total.
+// "Seu mês": o fixo, a comissão (vendas e recorrência) e o Auxílio Transporte de quem vê a tela, para ele saber quanto ganha no mês no total.
 import type { MeuFixo } from "@/lib/dre-negocios";
 
 const moeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
@@ -27,7 +27,7 @@ export default function ResumoMesPessoal({
     <section className="rounded-lg border border-gold/40 bg-imperium-surface p-4">
       <p className="text-[10px] uppercase tracking-widest text-stone-500">Seu mês · {mesLabel} · fixo + variável</p>
       <p className="mt-1 text-2xl font-semibold text-gold-bright">{moeda(total)}</p>
-      <p className="text-xs text-stone-500">{potencial > 0 ? `com o bônus de conduta liberado, até ${moeda(total + potencial)}` : "o que você ganha no mês somando o fixo e a comissão"}</p>
+      <p className="text-xs text-stone-500">{potencial > 0 ? `com o Auxílio Transporte liberado, até ${moeda(total + potencial)}` : "o que você ganha no mês somando o fixo e a comissão"}</p>
 
       <ul className="mt-3 divide-y divide-imperium-line text-sm">
         {fixo.itens.length === 0 ? (
@@ -62,7 +62,7 @@ export default function ResumoMesPessoal({
         {temBonus && (
           <li className="flex justify-between gap-3 py-1.5">
             <span className="text-stone-300">
-              Bônus de conduta <span className="text-[11px] text-stone-500">liberado no fim do mês, depois da análise de conduta, horários e faltas</span>
+              Auxílio Transporte <span className="text-[11px] text-stone-500">condicionado à aprovação da direção, liberado no fim do mês</span>
             </span>
             <span className={`shrink-0 ${fixo.bonusAplicado > 0 ? "text-success-bright" : fixo.bonusNaoLiberado > 0 && fixo.bonusEmAberto === 0 ? "text-stone-600 line-through" : "text-amber-400"}`}>
               {fixo.bonusAplicado > 0 ? `+ ${moeda(fixo.bonusAplicado)} liberado` : fixo.bonusNaoLiberado > 0 && fixo.bonusEmAberto === 0 ? `${moeda(fixo.bonusNaoLiberado)} não liberado` : `até ${moeda(fixo.bonusEmAberto)}`}
