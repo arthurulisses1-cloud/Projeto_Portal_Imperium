@@ -3,11 +3,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buscarComissoesNegocios, type ComissaoNegocio } from "@/lib/comissao-negocio";
 import { buscarComissaoEnergia } from "@/lib/energy-time";
+import { bonusEfetivo, buscarDecisoesBonus, chaveBonus, estadoDoBonus, type EstadoBonus } from "@/lib/bonus-conduta";
 
 /** Custo mensal do Diretor, dividido igualmente entre os negócios ativos (pedido do Diretor, 2026-11-05). */
 export const CUSTO_DIRETOR = 10000;
 
-export type FixoPessoa = { nome: string; cargo: string; fixo: number };
+/** Fixo base de uma pessoa num negócio; o bônus de conduta (R$ 200 do fixo fechado) vem à parte e depende da decisão do mês. */
+export type FixoPessoa = { profileId?: string; negocioId?: string; nome: string; cargo: string; fixo: number; bonus?: number; bonusEstado?: EstadoBonus };
+
+/** Custo de uma pessoa no mês: o fixo base mais o bônus aplicado ou ainda pendente (pura). */
+export const custoDaPessoa = (f: FixoPessoa) => f.fixo + bonusEfetivo(f);
 
 /**
  * Comissões do mês por negócio. O Maximus Energy não grava vendas: a receita (80% da primeira fatura) e as comissões vêm da Sunne.
@@ -41,32 +46,32 @@ export async function buscarFixosPorNegocio(supabase: SupabaseClient, negocios: 
   const out = new Map<string, FixoPessoa[]>();
   if (negocios.length === 0) return out;
   const ids = negocios.map((n) => n.id);
-  // fixo_excecoes vem da migration 0120; sem ela, cai na leitura antiga.
-  const comExcecoes = await supabase
-    .from("profile_negocios")
-    .select("negocio_id, cargo, fixo, fixo_excecoes, profiles!inner(id, full_name, ativo)")
-    .in("negocio_id", ids)
-    .not("fixo", "is", null);
-  const vinculos: unknown[] | null = comExcecoes.error
-    ? (
-        await supabase
-          .from("profile_negocios")
-          .select("negocio_id, cargo, fixo, profiles!inner(id, full_name, ativo)")
-          .in("negocio_id", ids)
-          .not("fixo", "is", null)
-      ).data
-    : comExcecoes.data;
-  type V = { negocio_id: string; cargo: string; fixo: number; fixo_excecoes?: Record<string, number> | null; profiles: { id: string; full_name: string; ativo: boolean } | { id: string; full_name: string; ativo: boolean }[] };
+  // bonus_conduta (migration 0122) e fixo_excecoes (0120): sem elas, cai na leitura mais simples.
+  const ler = (colunas: string) => supabase.from("profile_negocios").select(colunas).in("negocio_id", ids).not("fixo", "is", null);
+  let achados = await ler("negocio_id, cargo, fixo, fixo_excecoes, bonus_conduta, profiles!inner(id, full_name, ativo)");
+  if (achados.error) achados = await ler("negocio_id, cargo, fixo, fixo_excecoes, profiles!inner(id, full_name, ativo)");
+  if (achados.error) achados = await ler("negocio_id, cargo, fixo, profiles!inner(id, full_name, ativo)");
+  const vinculos: unknown[] | null = achados.data;
+  const decisoes = ano && mes ? await buscarDecisoesBonus(supabase, ano, mes) : new Map<string, { aplicado: boolean; decididoEm: string }>();
+  type V = { negocio_id: string; cargo: string; fixo: number; fixo_excecoes?: Record<string, number> | null; bonus_conduta?: number | null; profiles: { id: string; full_name: string; ativo: boolean } | { id: string; full_name: string; ativo: boolean }[] };
   const slugPorId = new Map(negocios.map((n) => [n.id, n.slug]));
   for (const v of (vinculos ?? []) as unknown as V[]) {
     const p = Array.isArray(v.profiles) ? v.profiles[0] : v.profiles;
     const slug = slugPorId.get(v.negocio_id);
     if (!p?.ativo || !slug) continue;
     const arr = out.get(slug) ?? [];
-    arr.push({ nome: p.full_name, cargo: v.cargo, fixo: ano && mes ? fixoDoMes(Number(v.fixo), v.fixo_excecoes, ano, mes) : Number(v.fixo) });
+    const bonus = v.bonus_conduta ? Number(v.bonus_conduta) : 0;
+    arr.push({
+      profileId: p.id,
+      negocioId: v.negocio_id,
+      nome: p.full_name,
+      cargo: v.cargo,
+      fixo: ano && mes ? fixoDoMes(Number(v.fixo), v.fixo_excecoes, ano, mes) : Number(v.fixo),
+      ...(bonus > 0 ? { bonus, bonusEstado: estadoDoBonus(decisoes.get(chaveBonus(p.id, v.negocio_id))) } : {}),
+    });
     out.set(slug, arr);
   }
-  Array.from(out.values()).forEach((arr) => arr.sort((a, b) => b.fixo - a.fixo));
+  Array.from(out.values()).forEach((arr) => arr.sort((a, b) => custoDaPessoa(b) - custoDaPessoa(a)));
   return out;
 }
 
@@ -95,7 +100,7 @@ export function montarDre(
   const rateio = comissoes.length > 0 ? custoDiretor / comissoes.length : 0;
   const negocios = comissoes.map((c): DreNegocio => {
     const fixos = fixosPor.get(c.slug) ?? [];
-    const totalFixos = fixos.reduce((s, f) => s + f.fixo, 0);
+    const totalFixos = fixos.reduce((s, f) => s + custoDaPessoa(f), 0);
     const margemContribuicao = c.recebido - c.totalComissao;
     return {
       slug: c.slug,

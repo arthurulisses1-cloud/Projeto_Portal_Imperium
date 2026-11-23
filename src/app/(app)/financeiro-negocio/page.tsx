@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
 import { NEGOCIO_COR } from "@/lib/negocios";
-import { comissoesComEnergia, buscarFixosPorNegocio, CUSTO_DIRETOR } from "@/lib/dre-negocios";
+import { comissoesComEnergia, buscarFixosPorNegocio, custoDaPessoa, CUSTO_DIRETOR } from "@/lib/dre-negocios";
+import { bonusEfetivo } from "@/lib/bonus-conduta";
 
 export const dynamic = "force-dynamic";
 
@@ -43,14 +44,19 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
 
   const custoDiretorPorNegocio = comissoes.length > 0 ? CUSTO_DIRETOR / comissoes.length : 0;
   const linhas = comissoes.map((c) => {
-    const fixos = (fixosPor.get(c.slug) ?? []).sort((a, b) => b.fixo - a.fixo);
-    const totalFixos = fixos.reduce((s, f) => s + f.fixo, 0);
+    const fixos = (fixosPor.get(c.slug) ?? []).sort((a, b) => custoDaPessoa(b) - custoDaPessoa(a));
+    const totalBase = fixos.reduce((s, f) => s + f.fixo, 0);
+    const totalBonus = fixos.reduce((s, f) => s + bonusEfetivo(f), 0);
+    const totalFixos = totalBase + totalBonus;
     const resultado = c.recebido - totalFixos - c.totalComissao - custoDiretorPorNegocio;
-    return { c, fixos, totalFixos, resultado };
+    return { c, fixos, totalBase, totalBonus, totalFixos, resultado };
   });
 
   const recebido = linhas.reduce((s, l) => s + l.c.recebido, 0);
   const totalFixos = linhas.reduce((s, l) => s + l.totalFixos, 0);
+  const totalBase = linhas.reduce((s, l) => s + l.totalBase, 0);
+  const totalBonus = linhas.reduce((s, l) => s + l.totalBonus, 0);
+  const bonusPendentes = linhas.reduce((s, l) => s + l.fixos.filter((f) => f.bonus && f.bonusEstado === "pendente").length, 0);
   const totalComissoes = linhas.reduce((s, l) => s + l.c.totalComissao, 0);
   const resultado = recebido - totalFixos - totalComissoes - CUSTO_DIRETOR;
   // O que já foi marcado como pago não entra no que falta pagar.
@@ -84,8 +90,16 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Caixa a pagar em {MESES[mes]}</p>
           <p className="mt-2 flex justify-between text-sm text-stone-300">
             <span>Dia 5 · fixos</span>
-            <span className="text-stone-100">{moeda(totalFixos)}</span>
+            <span className="text-stone-100">{moeda(totalBase)}</span>
           </p>
+          {totalBonus > 0 && (
+            <p className="flex justify-between text-sm text-stone-300">
+              <span>
+                Fim do mês · bônus de conduta{bonusPendentes > 0 && <span className="ml-1 text-xs text-amber-400">{bonusPendentes} a decidir</span>}
+              </span>
+              <span className="text-stone-100">{moeda(totalBonus)}</span>
+            </p>
+          )}
           <p className="flex justify-between text-sm text-stone-300">
             <span>Dia 15 · comissões de {MESES[ant.mes]}</span>
             <span className="text-stone-100">{moeda(comissaoAnteriorAPagar)}</span>
@@ -99,13 +113,13 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Resultado de {MESES[mes]} (competência)</p>
           <p className={`mt-2 text-2xl font-semibold ${resultado >= 0 ? "text-success-bright" : "text-wine-bright"}`}>{moeda(resultado)}</p>
           <p className="text-xs text-stone-500">
-            Recebido {moeda(recebido)} − fixos {moeda(totalFixos)} − comissões {moeda(totalComissoes)} − Diretor {moeda(CUSTO_DIRETOR)}
+            Recebido {moeda(recebido)} − fixos {moeda(totalFixos)}{totalBonus > 0 ? " (com bônus)" : ""} − comissões {moeda(totalComissoes)} − Diretor {moeda(CUSTO_DIRETOR)}
           </p>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {linhas.map(({ c, fixos, totalFixos: tf, resultado: res }) => {
+        {linhas.map(({ c, fixos, totalFixos: tf, totalBonus: tb, resultado: res }) => {
           const cor = NEGOCIO_COR[c.slug] ?? "201 162 74";
           return (
             <section key={c.slug} className="rounded-lg border bg-imperium-surface p-4" style={{ borderColor: `rgb(${cor} / 0.55)` }}>
@@ -118,7 +132,9 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
                   <dd className="text-stone-100">{moeda(c.recebido)}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-stone-400">Fixos (dia 5)</dt>
+                  <dt className="text-stone-400">
+                    Fixos (dia 5){tb > 0 && <span className="ml-1 text-xs text-stone-500">com bônus de conduta {moeda(tb)}</span>}
+                  </dt>
                   <dd className="text-stone-100">− {moeda(tf)}</dd>
                 </div>
                 <div className="flex justify-between">
@@ -146,7 +162,14 @@ export default async function FinanceiroNegocioPage({ searchParams }: { searchPa
                     {fixos.map((f) => (
                       <li key={f.nome} className="flex justify-between py-1">
                         <span className="text-stone-300">{f.nome}</span>
-                        <span className="text-stone-100">{moeda(f.fixo)}</span>
+                        <span className="text-stone-100">
+                          {moeda(f.fixo)}
+                          {f.bonus ? (
+                            <span className={"ml-1 text-xs " + (f.bonusEstado === "nao" ? "text-stone-600 line-through" : f.bonusEstado === "pendente" ? "text-amber-400" : "text-success-bright")}>
+                              + {moeda(f.bonus)}
+                            </span>
+                          ) : null}
+                        </span>
                       </li>
                     ))}
                   </ul>

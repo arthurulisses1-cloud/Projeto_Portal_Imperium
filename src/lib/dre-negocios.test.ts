@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fixoDoMes, montarDre } from "./dre-negocios";
+import { custoDaPessoa, fixoDoMes, montarDre } from "./dre-negocios";
 import type { ComissaoNegocio } from "./comissao-negocio";
 
 const neg = (slug: string, recebido: number, totalComissao: number): ComissaoNegocio => ({
@@ -11,6 +11,19 @@ const neg = (slug: string, recebido: number, totalComissao: number): ComissaoNeg
   totalComissao,
   pessoas: [],
   pagamento: "",
+});
+
+describe("bônus de conduta no custo", () => {
+  it("o bônus aplicado e o pendente entram no custo; o não aplicado, não", () => {
+    expect(custoDaPessoa({ nome: "A", cargo: "sdr", fixo: 2300, bonus: 200, bonusEstado: "aplicado" })).toBe(2500);
+    expect(custoDaPessoa({ nome: "A", cargo: "sdr", fixo: 2300, bonus: 200, bonusEstado: "pendente" })).toBe(2500);
+    expect(custoDaPessoa({ nome: "A", cargo: "sdr", fixo: 2300, bonus: 200, bonusEstado: "nao" })).toBe(2300);
+    expect(custoDaPessoa({ nome: "B", cargo: "head", fixo: 4000 })).toBe(4000);
+  });
+  it("a DRE soma fixo base mais bônus", () => {
+    const { negocios } = montarDre([neg("a", 10000, 0)], new Map([["a", [{ nome: "X", cargo: "sdr", fixo: 1800, bonus: 200, bonusEstado: "aplicado" as const }, { nome: "Y", cargo: "sdr", fixo: 1800, bonus: 200, bonusEstado: "nao" as const }]]]), 0);
+    expect(negocios[0].totalFixos).toBe(2000 + 1800);
+  });
 });
 
 describe("fixoDoMes", () => {

@@ -129,7 +129,10 @@ export default async function DreNegociosPage({ searchParams }: { searchParams: 
                   {n.fixos.map((f) => (
                     <li key={f.nome} className="flex justify-between gap-2 py-1">
                       <span className="truncate text-stone-300">{f.nome}</span>
-                      <span className="shrink-0 text-stone-100">{moeda(f.fixo)}</span>
+                      <span className="shrink-0 text-stone-100">
+                        {moeda(f.fixo)}
+                        {f.bonus ? <span className={"ml-1 text-xs " + (f.bonusEstado === "nao" ? "text-stone-600 line-through" : f.bonusEstado === "pendente" ? "text-amber-400" : "text-success-bright")}>+ {moeda(f.bonus)}</span> : null}
+                      </span>
                     </li>
                   ))}
                 </ul>
