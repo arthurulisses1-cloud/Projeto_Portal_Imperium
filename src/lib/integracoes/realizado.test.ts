@@ -506,7 +506,7 @@ describe("Energy (funil Inside Sales do Pipefácil da Sunne)", () => {
 
 describe("lista de leads do dashboard", () => {
   it("a lista de cada etapa tem exatamente os leads que o número conta", () => {
-    const deals = [deal({ deal_id: "a", nome: "ACME" }), deal({ deal_id: "b", nome: "Beta" }), deal({ deal_id: "c", nome: "Fora", canal: "eventos" })];
+    const deals = [deal({ deal_id: "a", nome: "ACME" }), deal({ deal_id: "b", nome: "Beta" }), deal({ deal_id: "c", nome: "Fora", canal: "network" })];
     const eventos = [
       ev("a", ST.agendadaOut, "2026-11-05T13:00:00Z"),
       ev("a", ST.ganhoOut, "2026-11-06T13:00:00Z"),

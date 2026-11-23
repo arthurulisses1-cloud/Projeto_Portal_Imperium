@@ -4,10 +4,10 @@
 // Mapeamento de etapas (premissa): Finance usa Entrevistas e Subidos no lugar de
 // Reunião e Proposta; Energy usa Contas subidas no lugar de Proposta.
 import { PARAMETROS, RAMP_UP, indiceMes, vendasDoMes, type CanalFunil } from "@/lib/forecast-negocios";
-import { CRM_POR_NEGOCIO, ETAPAS_PORTAL, TAXA_TENTATIVA_ALO, TRESC_POR_NEGOCIO } from "@/lib/integracoes/config";
+import { CANAIS_OCASIONAIS, CRM_POR_NEGOCIO, ETAPAS_PORTAL, TAXA_TENTATIVA_ALO, TRESC_POR_NEGOCIO, type CanalPortal } from "@/lib/integracoes/config";
 import { chaveVisao, type Qualificacao, type Recorte } from "@/lib/integracoes/realizado";
 
-export type CanalDoFunil = "outbound" | "inbound" | "indicacao";
+export type CanalDoFunil = CanalPortal;
 
 export type EtapaFunil = {
   /** Chave estável da etapa (ver ETAPAS_PORTAL em integracoes/config.ts). */
@@ -50,7 +50,7 @@ export type LeadEtapa = {
 
 export type FunilDoCanal = { canal: CanalDoFunil; titulo: string; etapas: EtapaFunil[] };
 
-const TITULO: Record<CanalDoFunil, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos" };
+const TITULO: Record<CanalDoFunil, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", eventos: "Eventos" };
 
 function etapasDe(slug: string, canal: "outbound" | "inbound"): string[] {
   const reuniao = slug === "vorp-finance" ? "Entrevistas" : "Reuniões";
@@ -102,6 +102,25 @@ export function funisDoMes(slug: string, ano: number, mes: number): FunilDoCanal
     });
   }
   return funis;
+}
+
+const LABEL_ETAPA: Record<string, string> = {
+  leads: "Leads",
+  conectados: "Conectados",
+  reunioes_agendadas: "Reuniões agendadas",
+  reunioes_realizadas: "Reuniões realizadas",
+  propostas: "Propostas",
+  vendas: "Vendas",
+};
+
+/** Funis dos canais ocasionais do negócio (ex.: Eventos), sem meta: o forecast não os prevê. */
+export function funisOcasionais(slug: string): FunilDoCanal[] {
+  const usados = new Set(Object.values(CRM_POR_NEGOCIO[slug]?.canais ?? {}));
+  return CANAIS_OCASIONAIS.filter((c) => usados.has(c)).map((canal) => ({
+    canal,
+    titulo: TITULO[canal],
+    etapas: ETAPAS_PORTAL[canal].map((chave) => ({ chave, label: LABEL_ETAPA[chave] ?? chave, meta: null, conversaoMeta: null, realizado: null })),
+  }));
 }
 
 export type LinhaRealizado = { canal: string; etapa: string; quantidade: number };

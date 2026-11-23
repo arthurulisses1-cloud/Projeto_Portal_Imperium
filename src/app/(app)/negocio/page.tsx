@@ -7,12 +7,13 @@ import { hojeBR } from "@/lib/data-br";
 import { getViewerContext } from "@/lib/preview";
 import { COOKIE_NEGOCIO, NEGOCIO_COR, buscarNegociosVisiveis, negocioEmFoco, nomeEquipe } from "@/lib/negocios";
 import { buscarDashboardNegocio, RANKINGS, type MixCanal } from "@/lib/dashboard-negocio";
-import { etapasIntegradas, funilUnicoDoNegocio, funisDoMes, leadsPorQualificacao, montarFunisDaVisao, pessoasDoCanal, type CanalDoFunil, type LeadEtapa } from "@/lib/funil-negocio";
+import { etapasIntegradas, funilUnicoDoNegocio, funisDoMes, funisOcasionais, leadsPorQualificacao, montarFunisDaVisao, pessoasDoCanal, type CanalDoFunil, type LeadEtapa } from "@/lib/funil-negocio";
 import { TIMES_POR_CANAL } from "@/lib/pace-esforco";
 import { buscarLeadsDoFunil, buscarListasGravadas, buscarRankingGravado } from "@/lib/integracoes/leads-funil";
 import type { Qualificacao, Recorte } from "@/lib/integracoes/realizado";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RealizadoComLeads } from "@/components/negocio/RealizadoComLeads";
+import { SecaoRecolhivel } from "@/components/negocio/SecaoRecolhivel";
 import { CardsValor } from "@/components/negocio/CardsValor";
 import type { FollowGravado } from "@/lib/integracoes/realizado";
 import { CRM_POR_NEGOCIO } from "@/lib/integracoes/config";
@@ -33,7 +34,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MESES = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-const CANAL: Record<MixCanal["canal"], string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", alternativo: "Canais alternativos", sem_canal: "Sem canal" };
+const CANAL: Record<MixCanal["canal"], string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", eventos: "Eventos", alternativo: "Canais alternativos", sem_canal: "Sem canal" };
 const REFERENCIA_PROPORCIONAL = "Referência proporcional: as conversões do funil MQL aplicadas a todos os leads. O forecast só prevê o caminho dos MQL.";
 
 const STATUS: Record<StatusPace, { texto: string; classe: string }> = {
@@ -78,7 +79,7 @@ function Barra({ valor, total, cor }: { valor: number; total: number; cor: strin
 export default async function NegocioDashboardPage({
   searchParams,
 }: {
-  searchParams: { negocio?: string; mes?: string; visao?: string; recorte?: string; pvOut?: string; pvIn?: string };
+  searchParams: { negocio?: string; mes?: string; visao?: string; recorte?: string; pvOut?: string; pvIn?: string; pvEv?: string };
 }) {
   // Visões do funil: qualificação (só Inbound) e recorte dos leads. Padrão: MQLs + todos os leads.
   const qualificacao: Qualificacao = searchParams.visao === "completo" || searchParams.visao === "nao_mql" ? searchParams.visao : "mql";
@@ -203,7 +204,7 @@ export default async function NegocioDashboardPage({
     } catch (e) {
       console.error("nomes do Pipefácil falharam:", e);
     }
-    for (const canal of ["outbound", "inbound"] as const) {
+    for (const canal of ["outbound", "inbound", ...funisOcasionais(atual.slug).map((x) => x.canal)] as CanalDoFunil[]) {
       const time = TIMES_POR_CANAL[atual.slug]?.[canal] ?? [];
       const ids = Array.from(new Set([...time, ...pessoasDoCanal(linhasRealizado ?? [], canal)]));
       if (ids.length === 0) continue;
@@ -211,7 +212,7 @@ export default async function NegocioDashboardPage({
       const opcoes = ids
         .map((id) => ({ id, nome: ids.filter((x) => primeiro(x) === primeiro(id)).length > 1 ? nomes[id] ?? id : primeiro(id) }))
         .sort((a, b) => Number(time.includes(b.id)) - Number(time.includes(a.id)) || a.nome.localeCompare(b.nome, "pt-BR"));
-      const pedido = canal === "outbound" ? searchParams.pvOut : searchParams.pvIn;
+      const pedido = canal === "outbound" ? searchParams.pvOut : canal === "eventos" ? searchParams.pvEv : searchParams.pvIn;
       filtroPv[canal] = { opcoes, escolhido: opcoes.some((o) => o.id === pedido) ? pedido! : null, divisor: time.length || opcoes.length };
     }
   }
@@ -240,7 +241,7 @@ export default async function NegocioDashboardPage({
     if (f.escolhido) pessoasEscolhidas[canal] = { id: f.escolhido, divisor: f.divisor };
   }
   let funis = montarFunisDaVisao(
-    funilUnico ? [funilUnico] : previstos,
+    funilUnico ? [funilUnico] : [...previstos, ...funisOcasionais(atual.slug)],
     linhasRealizado ?? [],
     integradas,
     listasFunil,
@@ -261,18 +262,24 @@ export default async function NegocioDashboardPage({
     funis = funis.map((f) => (f.canal === "outbound" ? { ...f, etapas: f.etapas.map((e) => (e.chave in porChave ? { ...e, realizado: porChave[e.chave] } : e)) } : f));
   }
   const leadsQualificacao = leadsPorQualificacao(linhasRealizado ?? [], recorte, pessoasEscolhidas.inbound?.id);
-  const hrefVisao = (mudar: { visao?: Qualificacao; recorte?: Recorte; pvOut?: string | null; pvIn?: string | null }) => {
+  const hrefVisao = (mudar: { visao?: Qualificacao; recorte?: Recorte; pvOut?: string | null; pvIn?: string | null; pvEv?: string | null }) => {
     const q = new URLSearchParams({ mes: mesParam, negocio: atual.slug, visao: mudar.visao ?? qualificacao, recorte: mudar.recorte ?? recorte });
     const out = mudar.pvOut !== undefined ? mudar.pvOut : filtroPv.outbound?.escolhido;
     const inb = mudar.pvIn !== undefined ? mudar.pvIn : filtroPv.inbound?.escolhido;
     if (out) q.set("pvOut", out);
     if (inb) q.set("pvIn", inb);
+    const ev = mudar.pvEv !== undefined ? mudar.pvEv : filtroPv.eventos?.escolhido;
+    if (ev) q.set("pvEv", ev);
     return `/negocio?${q}`;
   };
+  const mudarPv = (canal: CanalDoFunil, id: string | null) => (canal === "outbound" ? { pvOut: id } : canal === "eventos" ? { pvEv: id } : { pvIn: id });
   const ultimaSyncFunil = (linhasRealizado ?? []).reduce<string | null>((m, l) => (!m || l.synced_at > m ? l.synced_at : m), null);
   const fracaoMes = pace.diasUteisTotal > 0 ? pace.diasUteisDecorridos / pace.diasUteisTotal : 0;
   // Desfecho das agendadas de cada funil; os canais sem ele reservam o mesmo espaço (conversões alinhadas).
   const desfechos = funis.map((fu) => resumirDesfechoAgendadas(fu.etapas.find((e) => e.chave === "reunioes_agendadas")?.leads, auditoria, hoje));
+  const ocasionais = new Set<CanalDoFunil>(funisOcasionais(atual.slug).map((x) => x.canal));
+  const funisPrincipais = funis.filter((x) => !ocasionais.has(x.canal));
+  const funisRecolhidos = funis.filter((x) => ocasionais.has(x.canal));
   const algumDesfecho = desfechos.some(Boolean);
   // Energy: contas subidas vêm da Sunne (negócios criados no mês por vendedor), não do compromisso do dia.
   // Ranking de pré-vendas pelo Pipefácil (agendadas e realizadas, todos os leads e canais), gravado pela
@@ -285,7 +292,7 @@ export default async function NegocioDashboardPage({
       console.error("ranking do CRM falhou:", e);
     }
   }
-  const CANAL_LEAD: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos" };
+  const CANAL_LEAD: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referidos", eventos: "Eventos" };
   const rankings = (RANKINGS[atual.slug] ?? [])
     .map((k) => dados.esforco.find((e) => e.chave === k) ?? (rankingCrm?.[k] ? { chave: k, label: LABEL_RANKING[k] ?? k, meta: 0, realizado: 0, porPessoa: [] } : undefined))
     .filter((e): e is NonNullable<typeof e> => !!e)
@@ -320,6 +327,189 @@ export default async function NegocioDashboardPage({
   const metaEtapa = (label: string) => previstos.reduce((s, fu) => s + (fu.etapas.find((e) => e.label === label)?.meta ?? 0), 0);
   const funilSunne = atual.slug === "vorp-energy" && sunne ? { contas: sunne.criados, metaContas: metaEtapa("Contas subidas"), vendas: sunne.fechados, metaVendas: metaEtapa("Vendas") } : null;
   const pessoasComVenda = dados.pace.pessoas.filter((p) => p.recebido > 0);
+
+  // Um funil (volumes, conversões, desfecho e valores); `grupo` = os funis lado a lado com ele.
+  const cartaoFunil = (fu: (typeof funis)[number], grupo: typeof funis) => {
+              // Todos os canais têm o mesmo número de linhas: os mais curtos ganham linhas vazias no topo,
+              // assim as etapas finais (reuniões, propostas, vendas) e os cabeçalhos ficam na mesma altura.
+              const pad = Math.max(...grupo.map((x) => x.etapas.length)) - fu.etapas.length;
+              return (
+                <div key={fu.canal} className="min-w-0">
+                  <div className="flex flex-wrap items-end justify-between gap-2 border-b pb-1.5" style={{ borderColor: `rgb(${cor} / 0.4)` }}>
+                    <p className="text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
+                      {fu.titulo}
+                    </p>
+                    {comVisoes && fu.canal === "inbound" && (
+                      <Seletor
+                        opcoes={[
+                          { rotulo: "MQLs", contagem: leadsQualificacao.mql, href: hrefVisao({ visao: "mql" }), ativo: qualificacao === "mql" },
+                          { rotulo: "Funil completo", contagem: leadsQualificacao.completo, href: hrefVisao({ visao: "completo" }), ativo: qualificacao === "completo" },
+                          { rotulo: "Não MQLs", contagem: leadsQualificacao.nao_mql, href: hrefVisao({ visao: "nao_mql" }), ativo: qualificacao === "nao_mql" },
+                        ]}
+                      />
+                    )}
+                  </div>
+                  {/* Pré-vendas do funil: "Time" ou uma pessoa (o funil inteiro dela, com a meta dela), numa lista suspensa */}
+                  {comVisoes && filtroPv[fu.canal] && (
+                    <div className="mt-1.5">
+                      <SeletorPessoa
+                        key={filtroPv[fu.canal]!.escolhido ?? "time"}
+                        escolhido={filtroPv[fu.canal]!.opcoes.find((o) => o.id === filtroPv[fu.canal]!.escolhido)?.nome ?? null}
+                        time={hrefVisao(mudarPv(fu.canal, null))}
+                        opcoes={filtroPv[fu.canal]!.opcoes.map((o) => ({
+                          nome: o.nome,
+                          href: hrefVisao(mudarPv(fu.canal, o.id)),
+                          ativo: filtroPv[fu.canal]!.escolhido === o.id,
+                        }))}
+                        dica={`Funil de cada pessoa: tentativas da campanha dela, alôs e conexões que atendeu no 3C, leads e reuniões que levou (a realizada, a proposta e a venda vão para quem agendou).${ocasionais.has(fu.canal) ? "" : ` Meta = meta do canal ÷ ${filtroPv[fu.canal]!.divisor}.`}`}
+                      />
+                    </div>
+                  )}
+
+                  {/* Volumes: colunas fixas para alinhar os números entre as linhas */}
+                  <div className="mt-2 grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem_3.5rem] items-center gap-x-2 gap-y-1.5 text-xs tabular-nums">
+                    <span className="text-[10px] uppercase tracking-widest text-stone-500">Volumes</span>
+                    <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Hoje</span>
+                    <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Real.</span>
+                    <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Meta</span>
+                    {Array.from({ length: pad }).map((_, i) => (
+                      <div key={`pv${i}`} className="contents" aria-hidden="true">
+                        <div className="invisible">
+                          <p>.</p>
+                          <div className="mt-1 h-1.5" />
+                        </div>
+                        <span className="invisible">0</span>
+                        <span className="invisible">0</span>
+                        <span className="invisible">0</span>
+                      </div>
+                    ))}
+                    {fu.etapas.map((e) =>
+                      e.meta === null ? (
+                        // Etapa sem meta (funil próprio do CRM): a barra é o realizado em relação à 1ª etapa.
+                        <div key={e.label} className="contents">
+                          <div className="min-w-0">
+                            <p className="truncate text-stone-200" title={e.label}>
+                              {e.label}
+                            </p>
+                            <div className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-imperium-raised" title={`Realizado ${e.realizado === null ? "—" : num(e.realizado)}`}>
+                              {e.realizado !== null && (fu.etapas[0].realizado ?? 0) > 0 && (
+                                <div
+                                  className="absolute inset-y-0 left-0 rounded-full"
+                                  style={{ width: `${Math.min(100, Math.max(e.realizado > 0 ? 1.5 : 0, (e.realizado / (fu.etapas[0].realizado as number)) * 100))}%`, backgroundColor: `rgb(${cor})` }}
+                                />
+                              )}
+                            </div>
+                            {faixas100k && (e.chave === "reunioes_agendadas" || e.chave === "reunioes_realizadas") && <Acima100kFunil leads={e.leads} faixas={faixas100k} />}
+                          </div>
+                          <span className="text-right text-stone-500">—</span>
+                          <RealizadoComLeads valor={e.realizado === null ? "—" : num(e.realizado)} leads={e.leads} />
+                          <span className="text-right text-stone-500">—</span>
+                        </div>
+                      ) : (
+                        <div key={e.label} className="contents">
+                          <div className="min-w-0">
+                            <p className="truncate text-stone-200" title={e.label}>
+                              {e.label}
+                            </p>
+                            {/* Barra = meta da etapa (100%): faixa clara = esperado até hoje; preenchimento = realizado. */}
+                            <div
+                              className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-imperium-raised"
+                              title={`Esperado até hoje ${num(e.meta * fracaoMes)} · realizado ${e.realizado === null ? "—" : num(e.realizado)} · meta ${num(e.meta)}`}
+                            >
+                              <div className="absolute inset-y-0 left-0 opacity-30" style={{ width: `${Math.min(100, fracaoMes * 100)}%`, backgroundColor: `rgb(${cor})` }} />
+                              {e.realizado !== null && (
+                                <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${e.meta > 0 ? Math.min(100, Math.max(0, (e.realizado / e.meta) * 100)) : 0}%`, backgroundColor: `rgb(${cor})` }} />
+                              )}
+                              <div className="absolute inset-y-0 w-px bg-stone-200" style={{ left: `${Math.min(100, fracaoMes * 100)}%` }} />
+                            </div>
+                            {faixas100k && (e.chave === "reunioes_agendadas" || e.chave === "reunioes_realizadas") && <Acima100kFunil leads={e.leads} faixas={faixas100k} />}
+                          </div>
+                          <span className={`text-right ${e.metaReferencia ? "text-stone-500" : "text-stone-400"}`} title={e.metaReferencia ? REFERENCIA_PROPORCIONAL : undefined}>
+                            {num(e.meta * fracaoMes)}
+                          </span>
+                          <RealizadoComLeads
+                            valor={e.realizado === null ? "—" : num(e.realizado)}
+                            leads={e.leads}
+                            porPessoa={e.porPessoa && e.realizado ? { rotulo: e.label.toLowerCase(), total: e.realizado, fonte: e.chave === "tentativas" ? "pela campanha do BDR no 3C" : "pelo pré-vendas que atendeu no 3C", pessoas: e.porPessoa.map((p) => ({ nome: nomes[p.id] ?? "Sem nome", quantidade: p.quantidade })) } : undefined}
+                          />
+                          <span className={`text-right ${e.metaReferencia ? "text-stone-500" : "text-stone-300"}`} title={e.metaReferencia ? REFERENCIA_PROPORCIONAL : undefined}>
+                            {num(e.meta)}
+                            {e.metaReferencia && <sup className="ml-0.5 text-[9px] text-stone-500">ref</sup>}
+                          </span>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                  {fu.etapas.some((e) => e.metaReferencia) && (
+                    <p className="mt-2 text-[10px] leading-snug text-stone-500">
+                      <span className="text-stone-400">ref</span> = referência proporcional: as conversões do funil MQL aplicadas a todos os leads. O
+                      forecast só prevê o caminho dos MQL; a meta oficial está na visão MQLs.
+                    </p>
+                  )}
+
+                  {/* Conversões: mesma grade, uma linha por passagem de etapa */}
+                  <div className="mt-5 grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem] items-center gap-x-2 text-xs tabular-nums">
+                    <span className="border-b border-imperium-line pb-1 text-[10px] uppercase tracking-widest text-stone-500">Conversões</span>
+                    <span className="border-b border-imperium-line pb-1 text-right text-[10px] uppercase tracking-widest text-stone-500">Real.</span>
+                    <span className="border-b border-imperium-line pb-1 text-right text-[10px] uppercase tracking-widest text-stone-500">Meta</span>
+                    {Array.from({ length: pad }).map((_, i) => (
+                      <div key={`pc${i}`} className="contents" aria-hidden="true">
+                        <span className="invisible border-b border-transparent py-1.5">.</span>
+                        <span className="invisible border-b border-transparent py-1.5">0</span>
+                        <span className="invisible border-b border-transparent py-1.5">0</span>
+                      </div>
+                    ))}
+                    {fu.etapas.slice(1).map((e, idx) => {
+                      // Base da conversão: a etapa anterior, ou a indicada (no funil completo, conectados ← leads).
+                      const base = (e.conversaoDe && fu.etapas.find((x) => x.chave === e.conversaoDe)) || fu.etapas[idx];
+                      const ant = base.realizado;
+                      const real = e.realizado !== null && ant !== null && ant > 0 ? e.realizado / ant : null;
+                      return (
+                      <div key={e.label} className="contents">
+                        <span className="min-w-0 truncate border-b border-imperium-line/60 py-1.5 text-stone-300" title={`${base.label} → ${e.label}`}>
+                          {e.label} <span className="text-stone-500">← {base.label}</span>
+                        </span>
+                        <span className={`border-b border-imperium-line/60 py-1.5 text-right ${corConversao(real, e.conversaoMeta)}`}>
+                          {real === null ? "—" : `${(real * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
+                        </span>
+                        <span
+                          className={`border-b border-imperium-line/60 py-1.5 text-right ${e.conversaoReferencia ? "text-stone-500" : "text-stone-300"}`}
+                          title={e.conversaoReferencia ? "Conversão do funil MQL, só para comparação: o forecast não tem meta para os não MQL." : undefined}
+                        >
+                          {e.conversaoMeta === null ? "—" : `${(e.conversaoMeta * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
+                        </span>
+                      </div>
+                      );
+                    })}
+                  </div>
+
+                  {fu.etapas.some((e) => e.conversaoReferencia) && (
+                    <p className="mt-2 text-[10px] leading-snug text-stone-500">
+                      Meta de conversão = a do funil MQL, só para comparação. O forecast não prevê meta para os não MQL.
+                    </p>
+                  )}
+
+                  {/* Desfecho das agendadas: depois das conversões (os canais sem ele reservam o espaço) */}
+                  {(ocasionais.has(fu.canal) ? desfechos[funis.indexOf(fu)] : algumDesfecho) && (
+                    <div className="mt-4">
+                      <DesfechoAgendadasFunil d={desfechos[funis.indexOf(fu)]} />
+                    </div>
+                  )}
+
+                  {/* Valores: vendido no mês e follow (Funil de Vendas) por temperatura, com o filtro de pré-vendas
+                      (Referidos não têm pré-vendas: sempre o canal todo) */}
+                  {follow && (() => {
+                    const pv = pessoasEscolhidas[fu.canal]?.id;
+                    const doFunil = (l: { canal: string; pessoa: string | null }) => l.canal === fu.canal && (!pv || l.pessoa === pv);
+                    return <CardsValor vendas={(follow.vendas[mesParam] ?? []).filter(doFunil)} abertos={follow.abertos.filter(doFunil)} cor={cor} />;
+                  })()}
+                </div>
+              );
+  };
+  const resumoFunil = (fu: (typeof funis)[number]) => {
+    const v = (chave: string) => num(fu.etapas.find((e) => e.chave === chave)?.realizado ?? 0);
+    return `${fu.titulo}: ${v("leads")} leads, ${v("reunioes_agendadas")} agendadas, ${v("reunioes_realizadas")} realizadas, ${v("vendas")} vendas`;
+  };
 
   return (
     <main className="mx-auto max-w-5xl space-y-5 px-6 py-8">
@@ -492,198 +682,32 @@ export default async function NegocioDashboardPage({
             )}
           </div>
         </div>
-        {funis.length === 0 ? (
+        {funisPrincipais.length === 0 ? (
           <p className="mt-2 text-sm text-stone-500">Este negócio ainda não tem forecast neste mês.</p>
         ) : (
-          <div className={`mt-3 grid gap-5 ${funis.length >= 3 ? "lg:grid-cols-3" : funis.length === 2 ? "lg:grid-cols-2" : ""}`}>
-            {funis.map((fu, iFunil) => {
-              // Todos os canais têm o mesmo número de linhas: os mais curtos ganham linhas vazias no topo,
-              // assim as etapas finais (reuniões, propostas, vendas) e os cabeçalhos ficam na mesma altura.
-              const pad = Math.max(...funis.map((x) => x.etapas.length)) - fu.etapas.length;
-              return (
-                <div key={fu.canal} className="min-w-0">
-                  <div className="flex flex-wrap items-end justify-between gap-2 border-b pb-1.5" style={{ borderColor: `rgb(${cor} / 0.4)` }}>
-                    <p className="text-sm font-semibold" style={{ color: `rgb(${cor})` }}>
-                      {fu.titulo}
-                    </p>
-                    {comVisoes && fu.canal === "inbound" && (
-                      <Seletor
-                        opcoes={[
-                          { rotulo: "MQLs", contagem: leadsQualificacao.mql, href: hrefVisao({ visao: "mql" }), ativo: qualificacao === "mql" },
-                          { rotulo: "Funil completo", contagem: leadsQualificacao.completo, href: hrefVisao({ visao: "completo" }), ativo: qualificacao === "completo" },
-                          { rotulo: "Não MQLs", contagem: leadsQualificacao.nao_mql, href: hrefVisao({ visao: "nao_mql" }), ativo: qualificacao === "nao_mql" },
-                        ]}
-                      />
-                    )}
-                  </div>
-                  {/* Pré-vendas do funil: "Time" ou uma pessoa (o funil inteiro dela, com a meta dela), numa lista suspensa */}
-                  {comVisoes && (fu.canal === "outbound" || fu.canal === "inbound") && filtroPv[fu.canal] && (
-                    <div className="mt-1.5">
-                      <SeletorPessoa
-                        key={filtroPv[fu.canal]!.escolhido ?? "time"}
-                        escolhido={filtroPv[fu.canal]!.opcoes.find((o) => o.id === filtroPv[fu.canal]!.escolhido)?.nome ?? null}
-                        time={hrefVisao(fu.canal === "outbound" ? { pvOut: null } : { pvIn: null })}
-                        opcoes={filtroPv[fu.canal]!.opcoes.map((o) => ({
-                          nome: o.nome,
-                          href: hrefVisao(fu.canal === "outbound" ? { pvOut: o.id } : { pvIn: o.id }),
-                          ativo: filtroPv[fu.canal]!.escolhido === o.id,
-                        }))}
-                        dica={`Funil de cada pessoa: tentativas da campanha dela, alôs e conexões que atendeu no 3C, leads e reuniões que levou (a realizada, a proposta e a venda vão para quem agendou). Meta = meta do canal ÷ ${filtroPv[fu.canal]!.divisor}.`}
-                      />
-                    </div>
-                  )}
-
-                  {/* Volumes: colunas fixas para alinhar os números entre as linhas */}
-                  <div className="mt-2 grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem_3.5rem] items-center gap-x-2 gap-y-1.5 text-xs tabular-nums">
-                    <span className="text-[10px] uppercase tracking-widest text-stone-500">Volumes</span>
-                    <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Hoje</span>
-                    <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Real.</span>
-                    <span className="text-right text-[10px] uppercase tracking-widest text-stone-500">Meta</span>
-                    {Array.from({ length: pad }).map((_, i) => (
-                      <div key={`pv${i}`} className="contents" aria-hidden="true">
-                        <div className="invisible">
-                          <p>.</p>
-                          <div className="mt-1 h-1.5" />
-                        </div>
-                        <span className="invisible">0</span>
-                        <span className="invisible">0</span>
-                        <span className="invisible">0</span>
-                      </div>
-                    ))}
-                    {fu.etapas.map((e) =>
-                      e.meta === null ? (
-                        // Etapa sem meta (funil próprio do CRM): a barra é o realizado em relação à 1ª etapa.
-                        <div key={e.label} className="contents">
-                          <div className="min-w-0">
-                            <p className="truncate text-stone-200" title={e.label}>
-                              {e.label}
-                            </p>
-                            <div className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-imperium-raised" title={`Realizado ${e.realizado === null ? "—" : num(e.realizado)}`}>
-                              {e.realizado !== null && (fu.etapas[0].realizado ?? 0) > 0 && (
-                                <div
-                                  className="absolute inset-y-0 left-0 rounded-full"
-                                  style={{ width: `${Math.min(100, Math.max(e.realizado > 0 ? 1.5 : 0, (e.realizado / (fu.etapas[0].realizado as number)) * 100))}%`, backgroundColor: `rgb(${cor})` }}
-                                />
-                              )}
-                            </div>
-                          </div>
-                          <span className="text-right text-stone-500">—</span>
-                          <RealizadoComLeads valor={e.realizado === null ? "—" : num(e.realizado)} leads={e.leads} />
-                          <span className="text-right text-stone-500">—</span>
-                        </div>
-                      ) : (
-                        <div key={e.label} className="contents">
-                          <div className="min-w-0">
-                            <p className="truncate text-stone-200" title={e.label}>
-                              {e.label}
-                            </p>
-                            {/* Barra = meta da etapa (100%): faixa clara = esperado até hoje; preenchimento = realizado. */}
-                            <div
-                              className="relative mt-1 h-1.5 overflow-hidden rounded-full bg-imperium-raised"
-                              title={`Esperado até hoje ${num(e.meta * fracaoMes)} · realizado ${e.realizado === null ? "—" : num(e.realizado)} · meta ${num(e.meta)}`}
-                            >
-                              <div className="absolute inset-y-0 left-0 opacity-30" style={{ width: `${Math.min(100, fracaoMes * 100)}%`, backgroundColor: `rgb(${cor})` }} />
-                              {e.realizado !== null && (
-                                <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${e.meta > 0 ? Math.min(100, Math.max(0, (e.realizado / e.meta) * 100)) : 0}%`, backgroundColor: `rgb(${cor})` }} />
-                              )}
-                              <div className="absolute inset-y-0 w-px bg-stone-200" style={{ left: `${Math.min(100, fracaoMes * 100)}%` }} />
-                            </div>
-                            {faixas100k && (e.chave === "reunioes_agendadas" || e.chave === "reunioes_realizadas") && <Acima100kFunil leads={e.leads} faixas={faixas100k} />}
-                          </div>
-                          <span className={`text-right ${e.metaReferencia ? "text-stone-500" : "text-stone-400"}`} title={e.metaReferencia ? REFERENCIA_PROPORCIONAL : undefined}>
-                            {num(e.meta * fracaoMes)}
-                          </span>
-                          <RealizadoComLeads
-                            valor={e.realizado === null ? "—" : num(e.realizado)}
-                            leads={e.leads}
-                            porPessoa={e.porPessoa && e.realizado ? { rotulo: e.label.toLowerCase(), total: e.realizado, fonte: e.chave === "tentativas" ? "pela campanha do BDR no 3C" : "pelo pré-vendas que atendeu no 3C", pessoas: e.porPessoa.map((p) => ({ nome: nomes[p.id] ?? "Sem nome", quantidade: p.quantidade })) } : undefined}
-                          />
-                          <span className={`text-right ${e.metaReferencia ? "text-stone-500" : "text-stone-300"}`} title={e.metaReferencia ? REFERENCIA_PROPORCIONAL : undefined}>
-                            {num(e.meta)}
-                            {e.metaReferencia && <sup className="ml-0.5 text-[9px] text-stone-500">ref</sup>}
-                          </span>
-                        </div>
-                      ),
-                    )}
-                  </div>
-                  {fu.etapas.some((e) => e.metaReferencia) && (
-                    <p className="mt-2 text-[10px] leading-snug text-stone-500">
-                      <span className="text-stone-400">ref</span> = referência proporcional: as conversões do funil MQL aplicadas a todos os leads. O
-                      forecast só prevê o caminho dos MQL; a meta oficial está na visão MQLs.
-                    </p>
-                  )}
-
-                  {/* Conversões: mesma grade, uma linha por passagem de etapa */}
-                  <div className="mt-5 grid grid-cols-[minmax(0,1fr)_3.5rem_3.5rem] items-center gap-x-2 text-xs tabular-nums">
-                    <span className="border-b border-imperium-line pb-1 text-[10px] uppercase tracking-widest text-stone-500">Conversões</span>
-                    <span className="border-b border-imperium-line pb-1 text-right text-[10px] uppercase tracking-widest text-stone-500">Real.</span>
-                    <span className="border-b border-imperium-line pb-1 text-right text-[10px] uppercase tracking-widest text-stone-500">Meta</span>
-                    {Array.from({ length: pad }).map((_, i) => (
-                      <div key={`pc${i}`} className="contents" aria-hidden="true">
-                        <span className="invisible border-b border-transparent py-1.5">.</span>
-                        <span className="invisible border-b border-transparent py-1.5">0</span>
-                        <span className="invisible border-b border-transparent py-1.5">0</span>
-                      </div>
-                    ))}
-                    {fu.etapas.slice(1).map((e, idx) => {
-                      // Base da conversão: a etapa anterior, ou a indicada (no funil completo, conectados ← leads).
-                      const base = (e.conversaoDe && fu.etapas.find((x) => x.chave === e.conversaoDe)) || fu.etapas[idx];
-                      const ant = base.realizado;
-                      const real = e.realizado !== null && ant !== null && ant > 0 ? e.realizado / ant : null;
-                      return (
-                      <div key={e.label} className="contents">
-                        <span className="min-w-0 truncate border-b border-imperium-line/60 py-1.5 text-stone-300" title={`${base.label} → ${e.label}`}>
-                          {e.label} <span className="text-stone-500">← {base.label}</span>
-                        </span>
-                        <span className={`border-b border-imperium-line/60 py-1.5 text-right ${corConversao(real, e.conversaoMeta)}`}>
-                          {real === null ? "—" : `${(real * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
-                        </span>
-                        <span
-                          className={`border-b border-imperium-line/60 py-1.5 text-right ${e.conversaoReferencia ? "text-stone-500" : "text-stone-300"}`}
-                          title={e.conversaoReferencia ? "Conversão do funil MQL, só para comparação: o forecast não tem meta para os não MQL." : undefined}
-                        >
-                          {e.conversaoMeta === null ? "—" : `${(e.conversaoMeta * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
-                        </span>
-                      </div>
-                      );
-                    })}
-                  </div>
-
-                  {fu.etapas.some((e) => e.conversaoReferencia) && (
-                    <p className="mt-2 text-[10px] leading-snug text-stone-500">
-                      Meta de conversão = a do funil MQL, só para comparação. O forecast não prevê meta para os não MQL.
-                    </p>
-                  )}
-
-                  {/* Desfecho das agendadas: depois das conversões (os canais sem ele reservam o espaço) */}
-                  {algumDesfecho && (
-                    <div className="mt-4">
-                      <DesfechoAgendadasFunil d={desfechos[iFunil]} />
-                    </div>
-                  )}
-
-                  {/* Valores: vendido no mês e follow (Funil de Vendas) por temperatura, com o filtro de pré-vendas
-                      (Referidos não têm pré-vendas: sempre o canal todo) */}
-                  {follow && (() => {
-                    const pv = pessoasEscolhidas[fu.canal]?.id;
-                    const doFunil = (l: { canal: string; pessoa: string | null }) => l.canal === fu.canal && (!pv || l.pessoa === pv);
-                    return <CardsValor vendas={(follow.vendas[mesParam] ?? []).filter(doFunil)} abertos={follow.abertos.filter(doFunil)} cor={cor} />;
-                  })()}
-                </div>
-              );
-            })}
+          <div className={`mt-3 grid gap-5 ${funisPrincipais.length >= 3 ? "lg:grid-cols-3" : funisPrincipais.length === 2 ? "lg:grid-cols-2" : ""}`}>
+            {funisPrincipais.map((fu) => cartaoFunil(fu, funisPrincipais))}
           </div>
         )}
       </section>
 
+      {/* Canais de trabalho esporádico (ex.: Eventos): funil próprio, recolhido; somam nos totais */}
+      {comVisoes && funisRecolhidos.length > 0 && (
+        <SecaoRecolhivel titulo="Outros canais · menor frequência" resumo={funisRecolhidos.map(resumoFunil).join(" · ")}>
+          <div className={`grid gap-5 ${funisRecolhidos.length >= 3 ? "lg:grid-cols-3" : funisRecolhidos.length === 2 ? "lg:grid-cols-2" : "max-w-xl"}`}>
+            {funisRecolhidos.map((fu) => cartaoFunil(fu, funisRecolhidos))}
+          </div>
+        </SecaoRecolhivel>
+      )}
+
       {/* Energy: contas na plataforma Sunne (todos os canais) até a validação e o desfecho */}
       {atual.slug === "vorp-energy" && sunne && <ContasSunne contas={sunne.contas} consolidado={sunne.consolidado} cor={cor} mesLabel={`${String(mes).padStart(2, "0")}/${ano}`} />}
 
-      {/* Vendas de canais alternativos: fora dos funis, somam no recebido */}
+      {/* Vendas de canais alternativos: fora dos funis ou dos canais da seção recolhida; somam no recebido */}
       {comVisoes && (
         <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-[10px] uppercase tracking-widest text-stone-500">Vendas de canais alternativos · fora dos funis, somam no recebido</p>
+            <p className="text-[10px] uppercase tracking-widest text-stone-500">Vendas de canais alternativos · fora dos funis principais, somam no recebido</p>
             <p className="text-xs text-stone-400">
               <span className="text-stone-100">{dados.alternativas.qtd}</span> {dados.alternativas.qtd === 1 ? "venda" : "vendas"} ·{" "}
               <span className="text-stone-100">{moeda(dados.alternativas.valor)}</span>

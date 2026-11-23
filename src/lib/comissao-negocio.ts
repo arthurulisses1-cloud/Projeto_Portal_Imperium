@@ -5,7 +5,7 @@
 // Quem é quem numa venda (tabela vendas):
 //   profile_id   = quem fechou (closer / executivo / head vendendo)
 //   indicador_id = quem prospectou ou indicou (SDR; BDR na MatchSales)
-//   canal        = outbound | inbound | indicacao (indicação paga como inbound)
+//   canal        = outbound | inbound | indicacao | eventos (indicação e eventos pagam como inbound)
 // Gestão = Head do negócio; sem Head (Vorp), o Diretor ocupa o lugar.
 //
 // Vorp: lança-se MRR, valor total do contrato e valor antecipado. A base da comissão
@@ -23,7 +23,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-export type Canal = "outbound" | "inbound" | "indicacao";
+export type Canal = "outbound" | "inbound" | "indicacao" | "eventos";
 export type PapelComissao = "closer" | "sdr" | "bdr" | "head" | "diretor";
 
 export type LinhaComissao = {

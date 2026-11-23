@@ -23,10 +23,10 @@ export const CARGOS_PRE_VENDAS = ["sdr", "bdr", "pre_vendas"];
 
 /**
  * Valor de cada RQA validada, por canal do lead. Vorp: R$ 20 no outbound e R$ 10 no inbound (regra
- * anotada em comissao-negocio.ts; a validação fica para o fim do mês). Referido paga como inbound.
+ * anotada em comissao-negocio.ts; a validação fica para o fim do mês). Referido e Eventos pagam como inbound.
  */
 export const RQA_VALOR: Record<string, Record<CanalPortal, number>> = {
-  vorp: { outbound: 20, inbound: 10, indicacao: 10 },
+  vorp: { outbound: 20, inbound: 10, indicacao: 10, eventos: 10 },
 };
 
 /** Negócios com a visão do pré-vendas (Mural, Pace, Produção). Só a Acrópole paga RQA. */
@@ -186,7 +186,7 @@ const dataBR = (iso: string | null) =>
 export function resumirReunioes(leads: LeadAuditoria[], nomeCrm: string, slug: string, ano: number, mes: number, hoje: string = hojeBR()): ResumoReunioes {
   const { inicio, fim } = limitesDoMes(ano, mes);
   const fimExcl = new Date(Date.parse(fim + "T00:00:00Z") + 86400_000).toISOString().slice(0, 10);
-  const valores = RQA_VALOR[slug] ?? { outbound: 0, inbound: 0, indicacao: 0 };
+  const valores = RQA_VALOR[slug] ?? { outbound: 0, inbound: 0, indicacao: 0, eventos: 0 };
   const meus = leads.filter((l) => l.preVendas === nomeCrm);
 
   const agendadas = meus.filter((l) => noMes(dataBR(l.agendadaEm), inicio, fimExcl));

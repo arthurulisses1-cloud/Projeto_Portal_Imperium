@@ -7,7 +7,7 @@ function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
 }
 const dataCurta = (iso: string | null) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "—");
-const CANAL: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referido", alternativo: "Canal alternativo" };
+const CANAL: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referido", eventos: "Eventos", alternativo: "Canal alternativo" };
 
 /** % do SDR e do closer na Vorp, lidos da mesma regra que calcula o pagamento. */
 export function pctVorp(papel: "sdr" | "closer", canal: string | null): number {
@@ -88,7 +88,7 @@ export function ExplicacaoComissaoVorp() {
           <p className="text-[10px] uppercase tracking-widest text-stone-500">1 · RQA (Reunião Qualificada Agendada)</p>
           <p className="mt-1">
             Cada reunião que você agendou, que foi <strong>realizada</strong> e que o closer <strong>validou como RQA</strong> no Pipefácil paga{" "}
-            <strong>{moeda(rqa.outbound)} no outbound</strong> e <strong>{moeda(rqa.inbound)} no inbound</strong>. Reunião sem validação fica como &quot;aguardando&quot; e entra
+            <strong>{moeda(rqa.outbound)} no outbound</strong> e <strong>{moeda(rqa.inbound)} no inbound</strong> (leads de eventos pagam como inbound). Reunião sem validação fica como &quot;aguardando&quot; e entra
             quando o closer validar; a validação fecha no fim do mês.
           </p>
         </div>

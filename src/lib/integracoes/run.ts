@@ -4,7 +4,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hojeBR } from "@/lib/data-br";
-import { CRM_POR_NEGOCIO, INICIO_HISTORICO, INICIO_REALIZADO, TRESC_POR_NEGOCIO, type ConfigCrm } from "./config";
+import { CANAIS_OCASIONAIS, CRM_POR_NEGOCIO, INICIO_HISTORICO, INICIO_REALIZADO, TRESC_POR_NEGOCIO, type ConfigCrm } from "./config";
 import { buscarLigacoesDoDia, contarAlosConexoes, contarPorPessoa, tentativasPorPessoa } from "./tresc";
 import { Pipefacil, type AtividadePipefacil, type DealPipefacil } from "./pipefacil";
 import { calcularFunilUnico, contarPorDia, creditarPessoas, detalharVisoes, etapaBase, montarFollow, rankingPreVendas, vendasGanhas, type DealCrm, type EventoCrm } from "./realizado";
@@ -378,10 +378,18 @@ async function syncCrm(supabase: SupabaseClient, slug: string, negocioId: string
       .lt("data", fimExcl);
     if (limpar) throw new Error("Erro limpando realizado do CRM: " + limpar.message);
     const agora = new Date().toISOString();
-    for (const lote of chunk(contagens, 500)) {
+    // Os canais ocasionais vão por último e à parte: sem a migration 0123 o banco os recusa (23514), e isso não
+    // pode derrubar a gravação dos demais.
+    const ocasionais = new Set<string>(CANAIS_OCASIONAIS);
+    const principais = contagens.filter((c) => !ocasionais.has(c.canal));
+    for (const lote of [...chunk(principais, 500), ...chunk(contagens.filter((c) => ocasionais.has(c.canal)), 500)]) {
       const { error } = await supabase
         .from("funil_realizado")
         .insert(lote.map((c) => ({ negocio_id: negocioId, ...c, fonte: "pipefacil", synced_at: agora })));
+      if (error?.code === "23514" && ocasionais.has(lote[0].canal)) {
+        console.error("canais ocasionais fora do funil_realizado (migration 0123 não aplicada):", error.message);
+        continue;
+      }
       if (error) throw new Error("Erro gravando realizado do CRM: " + error.message);
     }
   }
@@ -522,9 +530,9 @@ async function sincronizarVendas(
     };
     const comImplantacao = Object.keys(extras).length > 0 ? { ...campos, ...extras } : campos;
     // Sem a migration 0113 (vendas.profile_id opcional), venda sem dono é recusada pelo banco: fica de fora.
-    // Sem a migration 0115 (canal "alternativo" e canal_origem), a venda de canal alternativo é recusada.
+    // Sem a migration 0115 (canal "alternativo" e canal_origem) ou 0123 ("eventos"), a venda desses canais é recusada.
     const semDonoRecusada = (e: { code?: string } | null) =>
-      (!closer && e?.code === "23502") || (g.canal === "alternativo" && (e?.code === "23514" || e?.code === "42703" || e?.code === "PGRST204"));
+      (!closer && e?.code === "23502") || ((g.canal === "alternativo" || g.canal === "eventos") && (e?.code === "23514" || e?.code === "42703" || e?.code === "PGRST204"));
     if (id) {
       // Na atualização, o co-responsável também é limpo quando saiu do card no Pipefácil (co_closer_id nulo).
       let { error } = await supabase.from("vendas").update({ ...comImplantacao, co_closer_id: coCloser && coCloser !== closer ? coCloser : null }).eq("id", id);
