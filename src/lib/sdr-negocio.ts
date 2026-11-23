@@ -137,7 +137,10 @@ export function separarReunioes(leads: LeadAuditoria[], hoje: string, mapa: (l: 
   return { aAcontecer: aAcontecer.sort(porData), reagendar: reagendar.sort(porData) };
 }
 
-/** Lê o campo de data da reunião: ISO, "dd/mm/aaaa" ou "dd/mm/aaaa hh:mm" (horário de Brasília). */
+/**
+ * Lê o campo de data da reunião: ISO, "dd/mm/aaaa" ou "dd/mm/aaaa hh:mm". Data e hora sem fuso (como o "Data da Reunião" do
+ * Pipefácil, ex.: "2026-11-23T13:00") são horário de Brasília; o servidor roda em UTC e antes lia a hora como UTC (13h virava 10h).
+ */
 export function lerDataReuniao(v: string | null): string | null {
   if (!v) return null;
   const s = v.trim();
@@ -147,7 +150,8 @@ export function lerDataReuniao(v: string | null): string | null {
     return new Date(`${a}-${m}-${d}T${h.padStart(2, "0")}:${mi}:00-03:00`).toISOString();
   }
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-    const t = Date.parse(s.length === 10 ? `${s}T00:00:00-03:00` : s);
+    const semFuso = /^[0-9]{4}-[0-9]{2}-[0-9]{2}[T ][0-9]{2}:[0-9]{2}(?::[0-9]{2}(?:[.][0-9]+)?)?$/.test(s);
+    const t = Date.parse(s.length === 10 ? `${s}T00:00:00-03:00` : semFuso ? `${s.replace(" ", "T")}-03:00` : s);
     return Number.isNaN(t) ? null : new Date(t).toISOString();
   }
   return null;

@@ -89,6 +89,10 @@ describe("reuniões a acontecer", () => {
     expect(lerDataReuniao("20/11/2026 14:00")).toBe("2026-11-20T17:00:00.000Z");
     expect(lerDataReuniao("2026-11-20")).toBe("2026-11-20T03:00:00.000Z");
     expect(lerDataReuniao("quinta à tarde")).toBeNull();
+    // Sem fuso (Data da Reunião do Pipefácil): é horário de Brasília. 13:00 em Brasília = 16:00Z.
+    expect(lerDataReuniao("2026-11-23T13:00")).toBe("2026-11-23T16:00:00.000Z");
+    expect(lerDataReuniao("2026-11-23 13:00:00")).toBe("2026-11-23T16:00:00.000Z");
+    expect(lerDataReuniao("2026-11-23T13:00:00-03:00")).toBe("2026-11-23T16:00:00.000Z");
   });
   it("lista as dele ainda por acontecer, da mais próxima para a mais distante, sem data por último", () => {
     const r = resumirReunioes(
@@ -303,7 +307,7 @@ describe("lead repassado pelo BDR (Match Sales)", () => {
   it("mostra com quem é a reunião quando o lead foi para outra pessoa", () => {
     const l1 = lead({ nome: "Repassado", preVendas: "Fernando", closer: null, responsavel: "Davi Ximenes", reuniaoMarcada: "20/11/2026 10:00" });
     const l2 = lead({ nome: "Meu mesmo", preVendas: "Fernando", closer: null, responsavel: "Fernando", reuniaoMarcada: "21/11/2026 10:00" });
-    const r = resumirReunioes([l1, l2], "Fernando", "matchsales", 2026, 11);
+    const r = resumirReunioes([l1, l2], "Fernando", "matchsales", 2026, 11, "2026-11-18"); // data fixa: não depende do dia em que roda
     expect(r.aAcontecer.map((x) => x.com)).toEqual(["Davi Ximenes", null]);
   });
 });
