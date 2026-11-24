@@ -59,7 +59,15 @@ export async function buscarNegociosVisiveis(
       .from("negocios")
       .select("id, slug, nome, status, aceita_vendas_ate, equipe_nome, equipe_bandeira")
       .order("ordem");
-    return ((data ?? []) as Negocio[]).map((n) => ({ ...n, cargo: "head" as CargoNegocio, principal: false }));
+    let todos = (data ?? []) as Negocio[];
+    // Analista com vínculo a algum negócio ativo vê só esses (ex.: só Acrópole e Galácticos); sem vínculo ativo, a visão consolidada de sempre.
+    if (role === "analista") {
+      const { data: vinculos } = await supabase.from("profile_negocios").select("negocio_id").eq("profile_id", userId);
+      const meus = new Set((vinculos ?? []).map((v) => v.negocio_id as string));
+      const ativosMeus = todos.filter((n) => n.status === "ativo" && meus.has(n.id));
+      if (ativosMeus.length > 0) todos = ativosMeus;
+    }
+    return todos.map((n) => ({ ...n, cargo: "head" as CargoNegocio, principal: false }));
   }
   const { data } = await supabase
     .from("profile_negocios")
