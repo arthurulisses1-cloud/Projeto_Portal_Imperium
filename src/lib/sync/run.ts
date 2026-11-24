@@ -8,6 +8,7 @@ import { buscarOperacoes } from "./weekly";
 import { normalizarNome } from "./parse";
 import { csvUrl, SHEET_GIDS } from "./config";
 import { hojeBR, inicioMesBR } from "@/lib/data-br";
+import { reconciliarEsforcoFinance } from "@/lib/finance-esforco-sync";
 import { rotacionarLeadsParados } from "@/lib/leads-rotacao";
 import { apurarBonusEstrelas } from "@/lib/estrelas-bonus";
 import { atribuirRepassesDeEntrevista } from "@/lib/leads-repasse";
@@ -255,6 +256,12 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
   for (const batch of chunk(leadRows, 1000)) {
     const { error } = await supabase.from("entrevistas_leads").upsert(batch, { onConflict: "chave_natural" });
     if (error) throw new Error("Erro gravando entrevistas_leads: " + error.message);
+  }
+  // Compromisso do Finance: entrevistas/subidos gravados dos últimos dias passam a bater com os leads (lead que entrou depois do compromisso salvo).
+  try {
+    await reconciliarEsforcoFinance(supabase, hojeBR());
+  } catch (e) {
+    console.error("reconciliarEsforcoFinance falhou:", e);
   }
 
   // ---------- aba Assinado: funil (assinaturas/pagos) + vendas ----------

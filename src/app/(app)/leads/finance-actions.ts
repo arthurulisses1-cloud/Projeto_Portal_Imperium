@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { hojeBR } from "@/lib/data-br";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { reconciliarEsforcoFinance } from "@/lib/finance-esforco-sync";
 import { canalDaOrigem, definirExecutivo, etapaDePerda, nomeArquivoSeguro, podeAprovarVenda, validarSubido, validarVenda } from "@/lib/leads-finance";
 
 // Funil de leads do Vorp Finance (migration 0113). As ações devolvem { erro } em vez de lançar,
@@ -76,7 +78,7 @@ export async function subirLeadFinance(_prev: EstadoForm, formData: FormData): P
     .from("entrevistas_leads")
     .update({
       status_followup: "subido",
-      subido_em: agora,
+      subido_em: hojeBR(), // dia no horário de Brasília (o ISO em UTC virava o dia seguinte depois das 21h)
       subido_por: user.id,
       subido_obs: String(formData.get("observacao") ?? "").trim() || null,
       sub_valor_precatorio: dados.valorPrecatorio,
@@ -92,6 +94,7 @@ export async function subirLeadFinance(_prev: EstadoForm, formData: FormData): P
     .eq("id", lead.id);
   if (error) return { erro: "Não foi possível salvar: " + error.message };
 
+  await reconciliarEsforcoFinance(createAdminClient(), hojeBR(), 3).catch((e) => console.error("reconciliarEsforcoFinance falhou:", e));
   revalidatePath("/leads");
   return { ok: true };
 }
