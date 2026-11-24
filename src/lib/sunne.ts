@@ -243,6 +243,42 @@ export async function lerAssinaturasDoDia(hoje: string): Promise<[string, number
   return Array.from(porOrg);
 }
 
+/**
+ * Contratos assinados em cada um dos `dias` (AAAA-MM-DD, do mais antigo ao mais novo), por organização, numa passada só.
+ * Lê os negócios mexidos desde o primeiro dia e confere o signedAt dos contratos de cada um.
+ */
+export async function lerAssinaturasDosDias(dias: string[]): Promise<Map<string, Map<string, number>>> {
+  const token = process.env.SUNNE_SYS_API_TOKEN;
+  if (!token) throw new Error("Sunne não configurada");
+  const resultado = new Map<string, Map<string, number>>(dias.map((d) => [d, new Map<string, number>()]));
+  if (dias.length === 0) return resultado;
+  const deals = await listarTudo(token, "deals", "deals", { product: PRODUTO_KWH, updatedSince: `${dias[0]}T03:00:00.000Z` }, lerDeal);
+  const candidatos = deals.filter((d) => alcanceDoNegocio(d) >= 5);
+  let falhas = 0;
+  for (let i = 0; i < candidatos.length; i += 5) {
+    await Promise.all(
+      candidatos.slice(i, i + 5).map(async (d) => {
+        try {
+          const resposta = await fetch(new URL(`${BASE}/deals/${d.id}`), { headers: { "s-api-key": token }, cache: "no-store", signal: AbortSignal.timeout(15000) });
+          if (!resposta.ok) { falhas += 1; return; }
+          const corpo = (await resposta.json()) as { contracts?: { status?: string; signedAt?: string | null }[] } | null;
+          for (const c of corpo?.contracts ?? []) {
+            if (c.status !== "signed" || !c.signedAt) continue;
+            const dia = new Date(c.signedAt).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+            const porOrg = resultado.get(dia);
+            if (porOrg) porOrg.set(d.organizationId, (porOrg.get(d.organizationId) ?? 0) + 1);
+          }
+        } catch {
+          falhas += 1;
+        }
+      }),
+    );
+  }
+  // Leitura incompleta não vira número: quem chama não corrige assinaturas com contagem parcial.
+  if (falhas > 0) throw new Error(`Sunne: ${falhas} negócio(s) sem detalhe`);
+  return resultado;
+}
+
 export const assinaturasDoDiaEmCache = unstable_cache(lerAssinaturasDoDia, ["sunne-assinaturas-dia-v1"], { revalidate: CACHE_SUNNE_SEGUNDOS, tags: ["sunne"] });
 
 /** Mesma leitura, guardada em cache no servidor por alguns minutos. */

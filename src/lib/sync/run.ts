@@ -9,6 +9,7 @@ import { normalizarNome } from "./parse";
 import { csvUrl, SHEET_GIDS } from "./config";
 import { hojeBR, inicioMesBR } from "@/lib/data-br";
 import { reconciliarEsforcoFinance } from "@/lib/finance-esforco-sync";
+import { reconciliarEsforcoEnergy } from "@/lib/energy-esforco-sync";
 import { rotacionarLeadsParados } from "@/lib/leads-rotacao";
 import { apurarBonusEstrelas } from "@/lib/estrelas-bonus";
 import { atribuirRepassesDeEntrevista } from "@/lib/leads-repasse";
@@ -262,6 +263,12 @@ async function executarSync(supabase: ReturnType<typeof createAdminClient>): Pro
     await reconciliarEsforcoFinance(supabase, hojeBR());
   } catch (e) {
     console.error("reconciliarEsforcoFinance falhou:", e);
+  }
+  // Compromisso do Energy: contas subidas, assinaturas e kWh dos dias anteriores passam a bater com a Sunne.
+  try {
+    await reconciliarEsforcoEnergy(supabase, hojeBR());
+  } catch (e) {
+    console.error("reconciliarEsforcoEnergy falhou:", e);
   }
 
   // ---------- aba Assinado: funil (assinaturas/pagos) + vendas ----------
