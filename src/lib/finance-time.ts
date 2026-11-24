@@ -57,6 +57,8 @@ export type PainelFinance = {
   metas: { entrevistasPessoa: number; subidosPessoa: number; entrevistasTime: number; subidosTime: number };
   /** Funil aberto de todo o time; o executivo filtra o dele. */
   funil: EtapaFunilFinance[];
+  /** Vendas do Matri sem o time do Finance: fora do recebido e da meta. */
+  extra: { recebido: number; vendas: number } | null;
   atualizadoEm: string;
 };
 
@@ -195,6 +197,7 @@ export async function buscarPainelFinance(
     },
     metas,
     funil: montarFunilFinance((abertos ?? []) as unknown as LeadFinance[], membros, nomes, hoje),
+    extra: pace.extra,
     atualizadoEm: new Date().toISOString(),
   };
 }

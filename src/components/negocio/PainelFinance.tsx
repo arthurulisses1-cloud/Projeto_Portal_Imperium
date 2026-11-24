@@ -8,10 +8,20 @@ import { BarraMes, PaceEsforcoCard } from "@/components/negocio/PainelSdr";
 const moeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const num = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 0 });
 
-function Paces({ reais, entrevistas, subidos, cor, mesAtual, time = false, semReais = false }: { reais: PaceCalculado; entrevistas: PaceCalculado; subidos: PaceCalculado; cor: string; mesAtual: boolean; time?: boolean; semReais?: boolean }) {
+function Paces({ reais, entrevistas, subidos, cor, mesAtual, time = false, semReais = false, extra = null }: { extra?: PainelFinance["extra"]; reais: PaceCalculado; entrevistas: PaceCalculado; subidos: PaceCalculado; cor: string; mesAtual: boolean; time?: boolean; semReais?: boolean }) {
   return (
     <div className={`grid gap-4 ${semReais ? "md:grid-cols-2" : "lg:grid-cols-3"}`}>
-      {!semReais && <PaceEsforcoCard titulo={time ? "Recebido do time no mês" : "Seu recebido no mês"} p={reais} cor={cor} mesAtual={mesAtual} formato="moeda" />}
+      {!semReais && (
+        <div className="space-y-1">
+          <PaceEsforcoCard titulo={time ? "Recebido do time no mês" : "Seu recebido no mês"} p={reais} cor={cor} mesAtual={mesAtual} formato="moeda" />
+          {time && extra && (extra.vendas > 0 || extra.recebido > 0) && (
+            <p className="px-1 text-xs text-stone-400">
+              Extra <span className="font-semibold text-stone-200">{moeda(extra.recebido)}</span>{" "}
+              <span className="text-[11px] text-stone-500">· {extra.vendas} {extra.vendas === 1 ? "venda" : "vendas"} do Matri, sem o time do Finance · fora da meta</span>
+            </p>
+          )}
+        </div>
+      )}
       <PaceEsforcoCard titulo={time ? "Entrevistas do time" : "Suas entrevistas"} p={entrevistas} cor={cor} mesAtual={mesAtual} />
       <PaceEsforcoCard titulo={time ? "Subidos do time" : "Seus subidos"} p={subidos} cor={cor} mesAtual={mesAtual} />
     </div>
@@ -127,7 +137,7 @@ export function MuralFinanceHead({ painel, equipe, cor, mesLabel, mesAtual, vend
           {vendasParaAprovar} {vendasParaAprovar === 1 ? "venda aguardando" : "vendas aguardando"} a sua aprovação · abrir Meus Leads →
         </a>
       )}
-      <Paces reais={painel.equipe.reais} entrevistas={painel.equipe.entrevistas} subidos={painel.equipe.subidos} cor={cor} mesAtual={mesAtual} time semReais={semReais} />
+      <Paces reais={painel.equipe.reais} entrevistas={painel.equipe.entrevistas} subidos={painel.equipe.subidos} cor={cor} mesAtual={mesAtual} time semReais={semReais} extra={painel.extra} />
       <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Time · quem precisa de atenção</p>
