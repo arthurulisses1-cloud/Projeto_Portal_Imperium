@@ -26,7 +26,7 @@ export default function PainelNegocios({
   const ativos = linhas.filter((l) => l.status === "ativo");
   const arquivados = linhas.filter((l) => l.status === "arquivado" && l.recebido > 0);
   const metaTotal = ativos.reduce((s, l) => s + l.meta, 0);
-  const recebidoTotal = linhas.reduce((s, l) => s + l.recebido, 0);
+  const recebidoTotal = linhas.reduce((s, l) => s + l.recebido + (l.extra?.recebido ?? 0), 0);
   const pctTotal = pct(recebidoTotal, metaTotal);
 
   return (
@@ -87,6 +87,13 @@ export default function PainelNegocios({
                 <p className="text-2xl font-semibold text-stone-100">{p === null ? "—" : `${p}%`}</p>
               </div>
               <Barra rotulo="Recebido" valor={n.recebido} meta={n.meta} cor={cor} ritmoPct={ritmoPct} />
+              {n.extra && (n.extra.vendas > 0 || n.extra.recebido > 0) && (
+                <p className="mt-1.5 text-xs text-stone-400">
+                  <span className="uppercase tracking-widest text-stone-500">Extra</span>{" "}
+                  <span className="font-semibold text-stone-200">{moeda(n.extra.recebido)}</span>
+                  <span className="text-[11px] text-stone-500"> · {n.extra.vendas} {n.extra.vendas === 1 ? "venda" : "vendas"} do Matri, sem o time do Finance · fora da meta</span>
+                </p>
+              )}
               {n.mrrMeta > 0 && <Barra rotulo="MRR" valor={n.mrrRealizado} meta={n.mrrMeta} cor={cor} ritmoPct={ritmoPct} />}
               {n.kwhMeta > 0 && <Barra rotulo="kWh no mês" valor={n.kwhRealizado} meta={n.kwhMeta} cor={cor} ritmoPct={ritmoPct} fmt={kwhFmt} />}
               <p className="mt-3 text-[11px] text-stone-500">

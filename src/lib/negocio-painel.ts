@@ -22,6 +22,8 @@ export type LinhaPainelNegocio = {
   /** Só Energy: meta e realizado de kWh vendidos no mês. */
   kwhMeta: number;
   kwhRealizado: number;
+  /** Só Vorp Finance: vendas do Matri sem ninguém do time do Finance. Ficam fora do recebido e da meta. */
+  extra: { recebido: number; vendas: number } | null;
 };
 
 export async function buscarPainelNegocios(
@@ -32,16 +34,20 @@ export async function buscarPainelNegocios(
   const inicio = `${ano}-${String(mes).padStart(2, "0")}-01`;
   const fim = mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, "0")}-01`;
 
-  const [{ data: negocios }, { data: metas }, { data: vendas }, kwhSunne] = await Promise.all([
+  const [{ data: negocios }, { data: metas }, { data: vendas }, kwhSunne, { data: membrosFinance }] = await Promise.all([
     supabase.from("negocios").select("id, slug, nome, status, equipe_nome, equipe_bandeira").order("ordem"),
     supabase.from("metas_negocio").select("negocio_id, meta_recebimento").eq("ano", ano).eq("mes", mes),
-    supabase.from("vendas").select("negocio_id, valor, mrr, kwh").gte("data", inicio).lt("data", fim).range(0, 19999),
+    supabase.from("vendas").select("negocio_id, profile_id, indicador_id, valor, mrr, kwh").gte("data", inicio).lt("data", fim).range(0, 19999),
     // kWh do Energy vem da Sunne (consumo médio dos fechados no mês); null se a leitura falhar.
     kwhSunneDoMes(ano, mes).catch((e) => {
       console.error("kwhSunneDoMes falhou:", e);
       return null;
     }),
+    supabase.from("profile_negocios").select("profile_id, negocios!inner(slug)").eq("negocios.slug", "vorp-finance"),
   ]);
+  const timeFinance = new Set((membrosFinance ?? []).map((m) => m.profile_id as string));
+  const extraFinance = { recebido: 0, vendas: 0 };
+  const idFinance = (negocios ?? []).find((n) => n.slug === "vorp-finance")?.id;
 
   const metaPor = new Map((metas ?? []).map((m) => [m.negocio_id as string, Number(m.meta_recebimento)]));
   const recebidoPor = new Map<string, number>();
@@ -50,6 +56,12 @@ export async function buscarPainelNegocios(
   const kwhPor = new Map<string, number>();
   for (const v of vendas ?? []) {
     if (!v.negocio_id) continue;
+    // Finance: venda sem o dono nem o participante no time do Finance é do Matri, vai para o Extra.
+    if (v.negocio_id === idFinance && !(v.profile_id && timeFinance.has(v.profile_id)) && !(v.indicador_id && timeFinance.has(v.indicador_id))) {
+      extraFinance.recebido += Number(v.valor);
+      extraFinance.vendas += 1;
+      continue;
+    }
     recebidoPor.set(v.negocio_id, (recebidoPor.get(v.negocio_id) ?? 0) + Number(v.valor));
     mrrPor.set(v.negocio_id, (mrrPor.get(v.negocio_id) ?? 0) + Number(v.mrr ?? 0));
     kwhPor.set(v.negocio_id, (kwhPor.get(v.negocio_id) ?? 0) + Number(v.kwh ?? 0));
@@ -76,6 +88,7 @@ export async function buscarPainelNegocios(
     mrrRealizado: mrrPor.get(n.id) ?? 0,
     vendasQtd: qtdPor.get(n.id) ?? 0,
     kwhMeta: Math.round(metaKwhForecast(n.slug, ano, mes)),
+    extra: n.slug === "vorp-finance" ? extraFinance : null,
     kwhRealizado: n.slug === "vorp-energy" && kwhSunne !== null ? kwhSunne : kwhPor.get(n.id) ?? 0,
   }));
 }
