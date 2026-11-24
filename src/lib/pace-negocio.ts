@@ -5,6 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { ehFimDeSemana, paraDataUTC } from "@/lib/data-br";
 import { metaForecast } from "@/lib/forecast-negocios";
 import { buscarGanhosCrm } from "@/lib/recebido-crm";
+import { ehVendaExtra, vendasDoFundoMatri } from "@/lib/extra-finance";
 
 export type StatusPace = "sem_meta" | "adiantado" | "no_ritmo" | "atrasado" | "critico";
 
@@ -140,11 +141,13 @@ export async function buscarPaceNegocios(
 
   const [{ data: metas }, { data: vendas }, { data: membros }, ganhosCrm] = await Promise.all([
     supabase.from("metas_negocio").select("negocio_id, meta_recebimento").eq("ano", ano).eq("mes", mes).in("negocio_id", ids),
-    supabase.from("vendas").select("negocio_id, profile_id, indicador_id, valor, data").in("negocio_id", ids).gte("data", inicio).lt("data", fimExcl).range(0, 19999),
+    supabase.from("vendas").select("id, negocio_id, profile_id, indicador_id, valor, data").in("negocio_id", ids).gte("data", inicio).lt("data", fimExcl).range(0, 19999),
     supabase.from("profile_negocios").select("negocio_id, cargo, profiles!inner(id, full_name, ativo, role)").in("negocio_id", ids),
     buscarGanhosCrm(lista, inicio, fimExcl),
   ]);
 
+  const idFinance = lista.find((n) => n.slug === "vorp-finance")?.id;
+  const fundoMatri = await vendasDoFundoMatri((vendas ?? []).filter((v) => v.negocio_id === idFinance).map((v) => v.id as string));
   const metaPor = new Map((metas ?? []).map((m) => [m.negocio_id as string, Number(m.meta_recebimento)]));
 
   type P = { id: string; full_name: string; ativo: boolean; role: string | null };
@@ -163,15 +166,12 @@ export async function buscarPaceNegocios(
     const meta = Math.round(metaForecast(n.slug, ano, mes)) || (metaPor.get(n.id) ?? 0);
     // Negócio com recebidoPeloCrm (Energy): Ganhos do CRM, sem pessoa do portal; os demais, tabela vendas.
     const crm = ganhosCrm.get(n.id);
-    const todas: { profile_id: string | null; valor: number; data: string }[] = crm
+    const todas: { id?: string; profile_id: string | null; indicador_id?: string | null; valor: number; data: string }[] = crm
       ? crm.map((g) => ({ profile_id: null, valor: g.valor, data: g.data }))
       : (vendas ?? []).filter((v) => v.negocio_id === n.id);
-    // Vorp Finance: venda sem o dono nem o participante no time do Finance é do Matri, vai para o "Extra".
+    // Vorp Finance: venda do fundo do Matri sem o dono nem o participante no time do Finance vai para o "Extra".
     const timeFinance = new Set((membrosPor.get(n.id) ?? []).map((m) => m.id));
-    const ehExtra = (v: unknown) => {
-      const x = v as { profile_id: string | null; indicador_id?: string | null };
-      return !(x.profile_id && timeFinance.has(x.profile_id)) && !(x.indicador_id && timeFinance.has(x.indicador_id));
-    };
+    const ehExtra = (v: { id?: string; profile_id: string | null; indicador_id?: string | null }) => ehVendaExtra({ id: v.id ?? "", profile_id: v.profile_id, indicador_id: v.indicador_id }, timeFinance, fundoMatri);
     const extraVendas = n.slug === "vorp-finance" && !crm ? todas.filter(ehExtra) : [];
     const doNegocio = extraVendas.length > 0 ? todas.filter((v) => !ehExtra(v)) : todas;
     const extra = n.slug === "vorp-finance" ? { recebido: extraVendas.reduce((s, v) => s + Number(v.valor), 0), vendas: extraVendas.length } : null;

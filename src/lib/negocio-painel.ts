@@ -5,6 +5,7 @@ import type { CargoNegocio } from "@/lib/negocios";
 import { kwhSunneDoMes } from "@/lib/sunne";
 import type { VendedorOpcao, PessoaOpcao } from "@/components/negocio/FormLancarVenda";
 import { buscarGanhosCrm } from "@/lib/recebido-crm";
+import { ehVendaExtra, vendasDoFundoMatri } from "@/lib/extra-finance";
 
 export type LinhaPainelNegocio = {
   id: string;
@@ -37,7 +38,7 @@ export async function buscarPainelNegocios(
   const [{ data: negocios }, { data: metas }, { data: vendas }, kwhSunne, { data: membrosFinance }] = await Promise.all([
     supabase.from("negocios").select("id, slug, nome, status, equipe_nome, equipe_bandeira").order("ordem"),
     supabase.from("metas_negocio").select("negocio_id, meta_recebimento").eq("ano", ano).eq("mes", mes),
-    supabase.from("vendas").select("negocio_id, profile_id, indicador_id, valor, mrr, kwh").gte("data", inicio).lt("data", fim).range(0, 19999),
+    supabase.from("vendas").select("id, negocio_id, profile_id, indicador_id, valor, mrr, kwh").gte("data", inicio).lt("data", fim).range(0, 19999),
     // kWh do Energy vem da Sunne (consumo médio dos fechados no mês); null se a leitura falhar.
     kwhSunneDoMes(ano, mes).catch((e) => {
       console.error("kwhSunneDoMes falhou:", e);
@@ -48,6 +49,7 @@ export async function buscarPainelNegocios(
   const timeFinance = new Set((membrosFinance ?? []).map((m) => m.profile_id as string));
   const extraFinance = { recebido: 0, vendas: 0 };
   const idFinance = (negocios ?? []).find((n) => n.slug === "vorp-finance")?.id;
+  const fundoMatri = await vendasDoFundoMatri((vendas ?? []).filter((v) => v.negocio_id === idFinance).map((v) => v.id as string));
 
   const metaPor = new Map((metas ?? []).map((m) => [m.negocio_id as string, Number(m.meta_recebimento)]));
   const recebidoPor = new Map<string, number>();
@@ -56,8 +58,8 @@ export async function buscarPainelNegocios(
   const kwhPor = new Map<string, number>();
   for (const v of vendas ?? []) {
     if (!v.negocio_id) continue;
-    // Finance: venda sem o dono nem o participante no time do Finance é do Matri, vai para o Extra.
-    if (v.negocio_id === idFinance && !(v.profile_id && timeFinance.has(v.profile_id)) && !(v.indicador_id && timeFinance.has(v.indicador_id))) {
+    // Finance: venda do fundo do Matri sem o dono nem o participante no time do Finance vai para o Extra.
+    if (v.negocio_id === idFinance && ehVendaExtra({ id: v.id as string, profile_id: v.profile_id as string | null, indicador_id: v.indicador_id as string | null }, timeFinance, fundoMatri)) {
       extraFinance.recebido += Number(v.valor);
       extraFinance.vendas += 1;
       continue;
