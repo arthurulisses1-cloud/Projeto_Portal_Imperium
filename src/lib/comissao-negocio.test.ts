@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { comissaoDaVenda, dataPagamento, ehFundoMatri, type VendaParaComissao } from "./comissao-negocio";
+import { canalComissaoMatch, comissaoDaVenda, dataPagamento, ehFundoMatri, MATCH_ETAPA_GANHO_OUTBOUND, type VendaParaComissao } from "./comissao-negocio";
 
 const base: VendaParaComissao = { id: "v", valor: 10000, canal: "outbound", closerId: "c", closerCargo: "executivo", indicadorId: null };
 const ctx = { headId: "h", diretorId: "d" };
@@ -103,6 +103,13 @@ describe("comissaoDaVenda", () => {
     const co = comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "a", coCloserId: "h" }, ctx);
     expect(co.filter((x) => x.beneficiarioId === "h").map((x) => [x.papel, x.pct])).toEqual([["closer", 4], ["head", 1]]);
     expect(co.filter((x) => x.beneficiarioId === "d").map((x) => [x.papel, x.pct])).toEqual([["diretor", 1]]);
+  });
+  it("Match: venda ganha no funil Outbound comissiona como outbound mesmo com Canal tráfego (dupla 5/5)", () => {
+    const canal = canalComissaoMatch("inbound", MATCH_ETAPA_GANHO_OUTBOUND);
+    expect(canal).toBe("outbound");
+    expect(canalComissaoMatch("inbound", "8c448cb1-7c1a-4244-bb64-690a70f453d0")).toBe("inbound");
+    const l = comissaoDaVenda("matchsales", { ...base, canal, closerId: "leo", coCloserId: "soares" }, { headId: "h", diretorId: "d", comissao10Sempre: new Set(["soares"]) });
+    expect(l.filter((x) => x.papel === "closer").map((x) => x.pct)).toEqual([5, 5]);
   });
   it("Match: Soares sozinho recebe 10% até no inbound; os demais seguem 8%", () => {
     const comSoares = { headId: "h", diretorId: "d", comissao10Sempre: new Set(["soares"]) };

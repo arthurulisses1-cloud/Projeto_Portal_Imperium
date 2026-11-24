@@ -67,6 +67,17 @@ export type VendaParaComissao = {
 /** Match Sales: quem recebe sempre 10% no fechamento, mesmo no inbound (combinado com o time, 2026-11-18). */
 export const MATCH_COMISSAO_10_SEMPRE = ["Arthur Soares"];
 
+/**
+ * Match Sales: etapa Ganho do funil [MS] Outbound. Venda ganha ali comissiona como outbound mesmo com o Canal do lead
+ * em tráfego (recuperação de lead antigo do inbound, combinado em 2026-11-24). Vale só para a comissão.
+ */
+export const MATCH_ETAPA_GANHO_OUTBOUND = "31aab8a9-79f7-4824-b229-4d1a4eac8319";
+
+/** Match Sales: canal que vale na comissão, dado o canal da venda e a etapa de Ganho do lead. */
+export function canalComissaoMatch(canal: Canal | null, etapaGanho: string | null | undefined): Canal | null {
+  return etapaGanho === MATCH_ETAPA_GANHO_OUTBOUND ? "outbound" : canal;
+}
+
 /** Match Sales: % de cada vendedor do fechamento (cada um pela própria taxa; em dupla, metade para cada). */
 export function taxasFechamentoMatch(venda: VendaParaComissao, ctx: ContextoNegocio, taxaPadrao: number): { id: string; pct: number }[] {
   // Com BDR a regra é a mesma para todos (5%).
@@ -334,7 +345,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
   if (lista.length === 0) return [];
   const ids = lista.map((n) => n.id);
 
-  const colunasVenda = "id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente, mrr, valor_antecipado, primeiro_contrato, recorrencia, valor_cliente, tipo_contrato, valor_implantacao";
+  const colunasVenda = "id, negocio_id, profile_id, indicador_id, canal, valor, data, cliente, mrr, valor_antecipado, primeiro_contrato, recorrencia, valor_cliente, tipo_contrato, valor_implantacao, crm_deal_id";
   const lerVendas = (colunas: string) => supabase.from("vendas").select(colunas).in("negocio_id", ids).gte("data", inicio).lt("data", fimExcl).range(0, 19999);
   const [vendasBruto, { data: membros }, { data: diretor }, { data: perfis }] = await Promise.all([
     lerVendas(colunasVenda + ", co_closer_id").then(async (r) => (r.error ? await lerVendas(colunasVenda) : r)),
@@ -363,6 +374,22 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
       }
     } catch (e) {
       console.error("buscarComissoesNegocios: fundo do Matri indisponível:", e);
+    }
+  }
+
+  // Match: etapa de Ganho do lead de cada venda, para o canal da comissão seguir o funil do Ganho.
+  const etapaGanhoPorVenda = new Map<string, string>();
+  const idsMatch = vendas.filter((v) => v.crm_deal_id && lista.some((n) => n.id === v.negocio_id && n.slug === "matchsales"));
+  if (idsMatch.length > 0) {
+    try {
+      const { data: deals } = await createAdminClient().from("crm_deals").select("deal_id, stage_id").in("deal_id", idsMatch.map((v) => v.crm_deal_id as string));
+      const etapaPor = new Map((deals ?? []).map((d) => [d.deal_id as string, d.stage_id as string]));
+      for (const v of idsMatch) {
+        const e = etapaPor.get(v.crm_deal_id as string);
+        if (e) etapaGanhoPorVenda.set(v.id as string, e);
+      }
+    } catch (e) {
+      console.error("buscarComissoesNegocios: etapa de Ganho do Match indisponível:", e);
     }
   }
 
@@ -402,7 +429,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
       const venda: VendaParaComissao = {
         id: v.id,
         valor: Number(v.valor),
-        canal: (v.canal as Canal | null) ?? null,
+        canal: n.slug === "matchsales" ? canalComissaoMatch((v.canal as Canal | null) ?? null, etapaGanhoPorVenda.get(v.id as string)) : (v.canal as Canal | null) ?? null,
         closerId: v.profile_id,
         closerCargo: cargoDe.get(v.profile_id) ?? null,
         indicadorId: v.indicador_id ?? null,
