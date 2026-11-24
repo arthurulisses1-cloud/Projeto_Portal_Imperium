@@ -18,6 +18,7 @@ import { buscarUltimaSyncOk } from "@/lib/sync/status";
 import { buscarMencoesPendentes } from "@/lib/social";
 import { logErroSupabase } from "@/lib/log-erro-supabase";
 import { buscarPermissoesAnalista, type AreaAnalista } from "@/lib/permissoes-analista";
+import { ehGestorDeSdrs } from "@/lib/sdr-negocio";
 
 export const dynamic = "force-dynamic";
 // Tempo da função (Vercel): o botão "Sincronizar todas as integrações" do menu roda as leituras de todos os negócios.
@@ -261,6 +262,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       // Executivo/closer não usa a Minha Produção do SDR.
       const iProd = itensVisiveis.findIndex((i) => i.type === "link" && i.href === "/producao");
       if (iProd >= 0) itensVisiveis.splice(iProd, 1);
+    }
+  }
+  // Gestor de SDRs (Jorge): em Dados ganha o Esforço 3C Plus e a Auditoria, mantendo a Minha Produção de SDR.
+  if (user && papelAtual === "sdr" && ehGestorDeSdrs(previewPessoa?.id ?? user.id)) {
+    const dados = itensVisiveis.find((i) => i.type === "group" && i.label === "Dados");
+    if (dados && dados.type === "group") {
+      const extras = [
+        { href: "/esforco-3c", label: "Esforço 3C Plus" },
+        { href: "/auditoria-comercial", label: "Auditoria" },
+      ].filter((x) => !dados.items.some((i) => i.href === x.href));
+      const pos = dados.items.findIndex((i) => i.href === "/pace-negocio");
+      dados.items.splice(pos >= 0 ? pos + 1 : dados.items.length, 0, ...extras);
     }
   }
   // Energy: todo executivo faz o processo completo e vê o funil e os paces no Mural; a Minha Produção do SDR não se aplica.

@@ -27,7 +27,7 @@ import { buscarAcumuladoKwhSunne } from "@/lib/sunne";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getViewerContext } from "@/lib/preview";
 import { faixasAcima100k, pctAcima100k, resumirAcima100k } from "@/lib/faturamento-100k";
-import { CARGOS_PRE_VENDAS, buscarPainelSdr, somarPreVendas, temPainelSdr } from "@/lib/sdr-negocio";
+import { CARGOS_PRE_VENDAS, buscarPainelSdr, ehGestorDeSdrs, somarPreVendas, temPainelSdr } from "@/lib/sdr-negocio";
 import { CARGOS_CLOSER, SLUG_VORP, ehPainelCloser } from "@/lib/closer-negocio";
 import { AvisoSdr, BarraMes, PaceEsforcoCard, QuadradosSdr, TabelaPaceDiario } from "@/components/negocio/PainelSdr";
 
@@ -206,7 +206,7 @@ function CartaoPace({ n, ano, mes, aberto }: { n: PaceNegocio; ano: number; mes:
   );
 }
 
-export default async function PaceNegocioPage({ searchParams }: { searchParams: { negocio?: string; mes?: string; sdr?: string; pessoa?: string } }) {
+export default async function PaceNegocioPage({ searchParams }: { searchParams: { negocio?: string; mes?: string; sdr?: string; pessoa?: string; meu?: string } }) {
   const supabase = await createClient();
   // Pessoa "vista": respeita o "Ver como" do Diretor.
   const viewer = await getViewerContext(supabase);
@@ -254,7 +254,9 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
   const seg = mes === 12 ? `${ano + 1}-01` : `${ano}-${String(mes + 1).padStart(2, "0")}`;
   // Executivo (não é Head nem visão consolidada): vê só o próprio pace, com o negócio como referência.
   const cargoNoFoco = foco?.cargo ?? null;
-  const individual = !veConsolidado(eu.role) && !!foco && cargoNoFoco !== "head" && dados.length === 1;
+  // Gestor de SDRs (Jorge) abre na visão do time; "?meu=1" mostra o pace individual dele.
+  const gestorDeSdrs = ehGestorDeSdrs(user.id) && foco?.slug === SLUG_VORP && searchParams.meu !== "1";
+  const individual = !veConsolidado(eu.role) && !!foco && cargoNoFoco !== "head" && dados.length === 1 && !gestorDeSdrs;
   // SDR (pré-vendas) de negócio com CRM: pace de reuniões e a tabela diária etapa por etapa, como na Matri.
   // No Match Sales o executivo agenda a própria reunião: usa a mesma visão do pré-vendas (agendadas, realizadas, vendas).
   const executivoQueAgenda = !!cargoNoFoco && foco?.slug === "matchsales" && CARGOS_CLOSER.includes(cargoNoFoco);
@@ -273,12 +275,17 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
             <p className="mt-1 text-sm text-stone-400">
               {nomeEquipe(foco)} · {MESES[mes]} de {ano}. Dias úteis de segunda a sexta, sem feriados.
             </p>
+            {ehGestorDeSdrs(user.id) && (
+              <Link href="/pace-negocio" className="mt-1 inline-block text-xs text-gold hover:underline">
+                Ver o pace do time →
+              </Link>
+            )}
           </div>
           <div className="flex items-center gap-2 text-sm">
-            <Link href={`/pace-negocio?mes=${ant}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
+            <Link href={`/pace-negocio?mes=${ant}${ehGestorDeSdrs(user.id) ? "&meu=1" : ""}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
               ← {MESES[mes === 1 ? 12 : mes - 1]}
             </Link>
-            <Link href={`/pace-negocio?mes=${seg}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
+            <Link href={`/pace-negocio?mes=${seg}${ehGestorDeSdrs(user.id) ? "&meu=1" : ""}`} className="rounded border border-imperium-line px-3 py-1 text-stone-300 hover:text-stone-100">
               {MESES[mes === 12 ? 1 : mes + 1]} →
             </Link>
           </div>
@@ -469,6 +476,11 @@ export default async function PaceNegocioPage({ searchParams }: { searchParams: 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl text-gold-bright">Pace de recebimento</h1>
+          {ehGestorDeSdrs(user.id) && foco?.slug === SLUG_VORP && (
+            <Link href="/pace-negocio?meu=1" className="mt-1 inline-block text-xs text-gold hover:underline">
+              Ver meu pace de SDR →
+            </Link>
+          )}
           <p className="mt-1 text-sm text-stone-400">
             {foco ? nomeEquipe(foco) : "Todos os negócios"} · {MESES[mes]} de {ano}. Dias úteis de segunda a sexta, sem feriados.
           </p>

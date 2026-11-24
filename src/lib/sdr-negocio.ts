@@ -29,6 +29,14 @@ export const RQA_VALOR: Record<string, Record<CanalPortal, number>> = {
   vorp: { outbound: 20, inbound: 10, indicacao: 10, eventos: 10 },
 };
 
+/**
+ * SDRs que também ajudam na gestão dos outros SDRs (pedido do Diretor, 2026-11-24): além da visão de pré-vendas, veem o
+ * Mural de gestão do time, o pace do time, o esforço do 3C Plus e a auditoria. Comissão e compromisso seguem os de SDR.
+ * Jorge Abudi.
+ */
+export const GESTORES_DE_SDRS = ["b79e3182-a019-4f17-862a-14972718f604"];
+export const ehGestorDeSdrs = (profileId: string | null | undefined) => !!profileId && GESTORES_DE_SDRS.includes(profileId);
+
 /** Negócios com a visão do pré-vendas (Mural, Pace, Produção). Só a Acrópole paga RQA. */
 export const SLUGS_PAINEL_SDR = ["vorp", "matchsales"];
 export function temPainelSdr(slug: string): boolean {

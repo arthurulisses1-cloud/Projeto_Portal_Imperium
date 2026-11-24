@@ -26,7 +26,7 @@ import { buscarPainelNegocios } from "@/lib/negocio-painel";
 import { NEGOCIO_COR, nomeEquipe } from "@/lib/negocios";
 import MetaExecutivo from "@/components/negocio/MetaExecutivo";
 import { buscarPaceNegocios, calcularPace } from "@/lib/pace-negocio";
-import { buscarPainelSdr, vinculoPreVendas } from "@/lib/sdr-negocio";
+import { buscarPainelSdr, ehGestorDeSdrs, vinculoPreVendas } from "@/lib/sdr-negocio";
 import { MuralSdr } from "@/components/negocio/PainelSdr";
 import { MuralCloser } from "@/components/negocio/PainelCloser";
 import { buscarPainelCloser, ehPainelCloser, setupDoNegocio, vinculoCloser } from "@/lib/closer-negocio";
@@ -278,6 +278,20 @@ export default async function MuralPage({
       );
     } catch (e) {
       console.error("Mural: painel do SDR falhou", e);
+    }
+    // Gestor de SDRs (Jorge): o Mural dele + o painel de gestão do time, como o do Head.
+    if (metaExecutivo && ehGestorDeSdrs(meId) && ehPainelCloser(preVendas.slug)) {
+      try {
+        const painelHead = await buscarPainelHead(createAdminClient(), preVendas, { ano, mes, hoje });
+        metaExecutivo = (
+          <>
+            {metaExecutivo}
+            <MuralHead painel={painelHead} equipe={nomeEquipe(preVendas)} cor={NEGOCIO_COR[preVendas.slug] ?? "201 162 74"} mesLabel={MESES[mes - 1] + " de " + ano} mesAtual={mesEhAtual} />
+          </>
+        );
+      } catch (e) {
+        console.error("Mural: painel de gestão do time falhou", e);
+      }
     }
   }
   // Closer da Acrópole (Vorp): pace de recebido/MRR e as reuniões (previstas, do dia e realizadas).
