@@ -557,6 +557,12 @@ export default async function NegocioDashboardPage({
             <p className="text-[10px] uppercase tracking-widest text-stone-500">Recebido</p>
             <p className="text-3xl font-semibold text-stone-100">{moeda(pace.recebido)}</p>
             <p className="text-sm text-stone-400">{pace.meta > 0 ? `${pctMeta}% de ${moeda(pace.meta)} (meta do forecast)` : "sem meta de forecast neste mês"}</p>
+            {dados.pace.extra && (dados.pace.extra.vendas > 0 || dados.pace.extra.recebido > 0) && (
+              <p className="mt-1 text-sm text-stone-400">
+                Extra <span className="font-semibold text-stone-200">{moeda(dados.pace.extra.recebido)}</span>
+                <span className="text-[11px] text-stone-500"> · {dados.pace.extra.vendas} {dados.pace.extra.vendas === 1 ? "venda" : "vendas"} do Matri, sem o time do Finance · fora da meta</span>
+              </p>
+            )}
           </div>
           <span className={`rounded border px-2 py-0.5 text-xs ${st.classe}`}>{st.texto}</span>
         </div>

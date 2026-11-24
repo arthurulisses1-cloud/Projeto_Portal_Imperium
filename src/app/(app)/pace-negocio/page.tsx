@@ -155,6 +155,11 @@ function CartaoPace({ n, ano, mes, aberto }: { n: PaceNegocio; ano: number; mes:
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Recebido</p>
           <p className="text-lg font-semibold text-stone-100">{moeda(p.recebido)}</p>
           <p className="text-[11px] text-stone-500">{pctMeta === null ? "sem meta" : `${pctMeta}% da meta`}</p>
+          {n.extra && (n.extra.vendas > 0 || n.extra.recebido > 0) && (
+            <p className="mt-0.5 text-[11px] text-stone-400">
+              Extra <span className="font-semibold text-stone-200">{moeda(n.extra.recebido)}</span> <span className="text-stone-500">· Matri, fora da meta</span>
+            </p>
+          )}
         </div>
         <div>
           <p className="text-[10px] uppercase tracking-widest text-stone-500">Deveria estar em</p>

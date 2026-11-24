@@ -109,6 +109,8 @@ export type PaceNegocio = {
   /** Acumulado por dia do mês até hoje (dias corridos), para o gráfico. */
   acumulado: { data: string; valor: number }[];
   pessoas: PessoaPace[];
+  /** Vorp Finance: vendas feitas pelo Matri, sem ninguém do time do Finance. Ficam fora do recebido do time. */
+  extra: { recebido: number; vendas: number } | null;
 };
 
 /** Cargos que vendem e dividem a meta em partes iguais (closers e executivos). O Head não entra: ele
@@ -138,7 +140,7 @@ export async function buscarPaceNegocios(
 
   const [{ data: metas }, { data: vendas }, { data: membros }, ganhosCrm] = await Promise.all([
     supabase.from("metas_negocio").select("negocio_id, meta_recebimento").eq("ano", ano).eq("mes", mes).in("negocio_id", ids),
-    supabase.from("vendas").select("negocio_id, profile_id, valor, data").in("negocio_id", ids).gte("data", inicio).lt("data", fimExcl).range(0, 19999),
+    supabase.from("vendas").select("negocio_id, profile_id, indicador_id, valor, data").in("negocio_id", ids).gte("data", inicio).lt("data", fimExcl).range(0, 19999),
     supabase.from("profile_negocios").select("negocio_id, cargo, profiles!inner(id, full_name, ativo, role)").in("negocio_id", ids),
     buscarGanhosCrm(lista, inicio, fimExcl),
   ]);
@@ -161,9 +163,18 @@ export async function buscarPaceNegocios(
     const meta = Math.round(metaForecast(n.slug, ano, mes)) || (metaPor.get(n.id) ?? 0);
     // Negócio com recebidoPeloCrm (Energy): Ganhos do CRM, sem pessoa do portal; os demais, tabela vendas.
     const crm = ganhosCrm.get(n.id);
-    const doNegocio: { profile_id: string | null; valor: number; data: string }[] = crm
+    const todas: { profile_id: string | null; valor: number; data: string }[] = crm
       ? crm.map((g) => ({ profile_id: null, valor: g.valor, data: g.data }))
       : (vendas ?? []).filter((v) => v.negocio_id === n.id);
+    // Vorp Finance: venda sem o dono nem o participante no time do Finance é do Matri, vai para o "Extra".
+    const timeFinance = new Set((membrosPor.get(n.id) ?? []).map((m) => m.id));
+    const ehExtra = (v: unknown) => {
+      const x = v as { profile_id: string | null; indicador_id?: string | null };
+      return !(x.profile_id && timeFinance.has(x.profile_id)) && !(x.indicador_id && timeFinance.has(x.indicador_id));
+    };
+    const extraVendas = n.slug === "vorp-finance" && !crm ? todas.filter(ehExtra) : [];
+    const doNegocio = extraVendas.length > 0 ? todas.filter((v) => !ehExtra(v)) : todas;
+    const extra = n.slug === "vorp-finance" ? { recebido: extraVendas.reduce((s, v) => s + Number(v.valor), 0), vendas: extraVendas.length } : null;
     const recebido = doNegocio.reduce((s, v) => s + Number(v.valor), 0);
 
     const porDia = new Map<string, number>();
@@ -199,6 +210,6 @@ export async function buscarPaceNegocios(
       }))
       .sort((a, b) => b.recebido - a.recebido || a.nome.localeCompare(b.nome, "pt-BR"));
 
-    return { negocio: n, pace: calcularPace({ meta, recebido, hoje, ano, mes }), acumulado, pessoas };
+    return { negocio: n, pace: calcularPace({ meta, recebido, hoje, ano, mes }), acumulado, pessoas, extra };
   });
 }
