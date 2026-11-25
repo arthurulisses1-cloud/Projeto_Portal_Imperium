@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import MuralForm from "./mural-form";
 import { excluirPostMural } from "./mural-actions";
@@ -47,7 +48,7 @@ const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julh
 export default async function MuralPage({
   searchParams,
 }: {
-  searchParams: { ano?: string; mes?: string; lancado?: string };
+  searchParams: { ano?: string; mes?: string; lancado?: string; negocio?: string };
 }) {
   const supabase = await createClient();
 
@@ -262,6 +263,30 @@ export default async function MuralPage({
     ano === anoHoje && mes === mesHoje ? Math.round((Number(hoje.slice(8, 10)) / new Date(ano, mes, 0).getDate()) * 100) : null;
   // Executivo de um negócio: a primeira coisa do Mural é a meta individual, onde deveria estar (pace) e onde está.
   let metaExecutivo: React.ReactNode = null;
+  // Diretor: escolhe um negócio e vê o Mural do Head dele (reuniões do dia, pace, time), logo abaixo dos quadrantes dos negócios.
+  const negociosDoHead = meRole === "diretor" || meRole === "investidor" ? painelNegocios.filter((l) => l.status === "ativo") : [];
+  const negocioDoHead = negociosDoHead.find((l) => l.slug === searchParams.negocio) ?? null;
+  let visaoDoHead: React.ReactNode = null;
+  if (negocioDoHead) {
+    const n = negocioDoHead;
+    const cor = NEGOCIO_COR[n.slug] ?? "201 162 74";
+    const rotulo = MESES[mes - 1] + " de " + ano;
+    try {
+      if (n.slug === "vorp-energy") {
+        visaoDoHead = <MuralEnergiaHead painel={await buscarPainelEnergia(createAdminClient(), { ano, mes, hoje })} equipe={nomeEquipe(n)} cor={cor} mesLabel={rotulo} mesAtual={mesEhAtual} />;
+      } else if (n.slug === SLUG_FINANCE) {
+        const [pn] = await buscarPaceNegocios(supabase, ano, mes, hoje, [n.slug]);
+        if (pn) {
+          const painelF = await buscarPainelFinance(createAdminClient(), pn, { ano, mes, hoje });
+          visaoDoHead = <MuralFinanceHead painel={painelF} equipe={nomeEquipe(n)} cor={cor} mesLabel={rotulo} mesAtual={mesEhAtual} vendasParaAprovar={painelF.funil.find((e) => e.chave === "venda")?.leads.length ?? 0} />;
+        }
+      } else if (ehPainelCloser(n.slug)) {
+        visaoDoHead = <MuralHead painel={await buscarPainelHead(createAdminClient(), { id: n.id, slug: n.slug }, { ano, mes, hoje })} equipe={nomeEquipe(n)} cor={cor} mesLabel={rotulo} mesAtual={mesEhAtual} />;
+      }
+    } catch (e) {
+      console.error("Mural: visão do Head falhou", n.slug, e);
+    }
+  }
   // SDR (pré-vendas) de um negócio com CRM (Acrópole): pace de reuniões agendadas e realizadas, no-show e vendas.
   const preVendas = meRole !== "diretor" && meRole !== "investidor" ? await vinculoPreVendas(supabase, meId) : null;
   if (preVendas) {
@@ -481,6 +506,25 @@ export default async function MuralPage({
       {painelNegocios.length > 0 && (
         <PainelNegocios linhas={painelNegocios} mesLabel={MESES[mes - 1] + " de " + ano} ritmoPct={ritmoPct} />
       )}
+      {negociosDoHead.length > 0 && (
+        <section className="flex flex-wrap items-center gap-2 text-sm" aria-label="Visão do Head por negócio">
+          <span className="text-xs uppercase tracking-wider text-stone-500">Visão do Head</span>
+          {negociosDoHead.map((n) => {
+            const ativo = negocioDoHead?.slug === n.slug;
+            const base = `/?ano=${ano}&mes=${mes}`;
+            return (
+              <Link
+                key={n.slug}
+                href={ativo ? base : `${base}&negocio=${n.slug}`}
+                className={`rounded border px-3 py-1 ${ativo ? "border-gold text-stone-100" : "border-imperium-line text-stone-400 hover:text-stone-100"}`}
+              >
+                {nomeEquipe(n)}
+              </Link>
+            );
+          })}
+        </section>
+      )}
+      {visaoDoHead}
       {metaExecutivo}
       {/* O Diretor não vê o resumo de tarefas em aberto no Mural (pedido em 2026-11-19); as tarefas seguem na aba Tarefas. */}
       {(meRole === "lider" || meRole === "closer" || meRole === "sdr" || meRole === "analista") && (
