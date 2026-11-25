@@ -13,7 +13,7 @@ function Paces({ reais, entrevistas, subidos, cor, mesAtual, time = false, semRe
     <div className={`grid gap-4 ${semReais ? "md:grid-cols-2" : "lg:grid-cols-3"}`}>
       {!semReais && (
         <div className="space-y-1">
-          <PaceEsforcoCard titulo={time ? "Recebido do time no mês" : "Seu recebido no mês"} p={reais} cor={cor} mesAtual={mesAtual} formato="moeda" />
+          <PaceEsforcoCard titulo={time ? "Recebido do time no mês" : "Seu recebido no mês"} p={reais} cor={cor} mesAtual={mesAtual} formato="moeda" ondeEstaPrimeiro />
           {time && extra && (extra.vendas > 0 || extra.recebido > 0) && (
             <p className="px-1 text-xs text-stone-400">
               Extra <span className="font-semibold text-stone-200">{moeda(extra.recebido)}</span>{" "}

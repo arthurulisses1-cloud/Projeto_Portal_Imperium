@@ -35,7 +35,7 @@ export function BarraMes({ p, cor }: { p: PaceCalculado; cor: string }) {
 }
 
 /** Pace de um indicador de esforço: meta do mês, onde deveria estar hoje e onde está. */
-export function PaceEsforcoCard({ titulo, p, cor, mesAtual, formato = "num" }: { titulo: string; p: PaceCalculado; cor: string; mesAtual: boolean; formato?: "num" | "moeda" }) {
+export function PaceEsforcoCard({ titulo, p, cor, mesAtual, formato = "num", ondeEstaPrimeiro = false }: { titulo: string; p: PaceCalculado; cor: string; mesAtual: boolean; formato?: "num" | "moeda"; /** Ordem dos números: Onde está, Deveria estar, Meta (em vez de Meta, Deveria, Onde está). */ ondeEstaPrimeiro?: boolean }) {
   const dec = formato === "moeda" ? moeda : decimal;
   const pctFeito = p.meta > 0 ? Math.min(100, (p.recebido / p.meta) * 100) : 0;
   const pctEsperado = p.meta > 0 ? Math.min(100, (p.esperadoAteHoje / p.meta) * 100) : 0;
@@ -53,7 +53,7 @@ export function PaceEsforcoCard({ titulo, p, cor, mesAtual, formato = "num" }: {
         </p>
       ) : (
         <>
-          <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className={`mt-2 grid grid-cols-3 gap-2 ${ondeEstaPrimeiro ? "[&>*:nth-child(1)]:order-3 [&>*:nth-child(2)]:order-2 [&>*:nth-child(3)]:order-1" : ""}`}>
             <div>
               <p className="text-[10px] uppercase tracking-widest text-stone-500">Meta do mês</p>
               <p className="mt-0.5 text-lg font-semibold text-stone-100">{dec(p.meta)}</p>

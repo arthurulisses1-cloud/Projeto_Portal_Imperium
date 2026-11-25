@@ -104,7 +104,7 @@ export function MuralHead({
       {mesAtual && <BarraMes p={painel.recebido} cor={cor} />}
       <PaceAlternavel
         opcoes={[
-          { chave: "recebido", rotulo: "Recebido", conteudo: <PaceEsforcoCard titulo="Recebido do time no mês" p={painel.recebido} cor={cor} mesAtual={mesAtual} formato="moeda" /> },
+          { chave: "recebido", rotulo: "Recebido", conteudo: <PaceEsforcoCard titulo="Recebido do time no mês" p={painel.recebido} cor={cor} mesAtual={mesAtual} formato="moeda" ondeEstaPrimeiro /> },
           { chave: "mrr", rotulo: "MRR", conteudo: <PaceEsforcoCard titulo="MRR vendido pelo time no mês" p={painel.mrr} cor={cor} mesAtual={mesAtual} formato="moeda" /> },
           ...(painel.setup
             ? [{ chave: "setup", rotulo: "Setup", conteudo: <PaceEsforcoCard titulo="Setup / implantação do time no mês" p={painel.setup} cor={cor} mesAtual={mesAtual} formato="moeda" /> }]
