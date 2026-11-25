@@ -62,6 +62,15 @@ export const ROTULO_STATUS: Record<StatusPace, { texto: string; classe: string }
   critico: { texto: "Crítico", classe: "border-wine text-wine-bright" },
 };
 
+/**
+ * Uma reunião por lead (pura). A mesma reunião entra pelo SDR/BDR que agendou e pelo closer que a toca, e as duas pessoas
+ * são do time: sem isso ela aparecia duas vezes nas listas do Head. Fica a primeira ocorrência.
+ */
+export function semRepetidas<T extends { id: string }>(itens: T[]): T[] {
+  const vistos = new Set<string>();
+  return itens.filter((i) => (vistos.has(i.id) ? false : (vistos.add(i.id), true)));
+}
+
 /** Lê tudo o que a visão do Head precisa. `admin`: só depois de conferir que a pessoa é Head do negócio. */
 export async function buscarPainelHead(
   admin: SupabaseClient,
@@ -126,10 +135,10 @@ export async function buscarPainelHead(
       indice: recebido?.indice ?? null,
     });
   }
-  previstas.sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
-  reagendar.sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
-  canceladas.sort((a, b) => (b.perdidaEm ?? "").localeCompare(a.perdidaEm ?? ""));
-  doDia.sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
+  const previstasUnicas = semRepetidas(previstas).sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
+  const reagendarUnicas = semRepetidas(reagendar).sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
+  const canceladasUnicas = semRepetidas(canceladas).sort((a, b) => (b.perdidaEm ?? "").localeCompare(a.perdidaEm ?? ""));
+  const doDiaUnicas = semRepetidas(doDia).sort((a, b) => (a.quando ?? "9999").localeCompare(b.quando ?? "9999"));
 
   const qtd = time.reduce((s, l) => s + (l.noShow?.qtd ?? 0), 0);
   const baseNs = time.reduce((s, l) => s + (l.noShow?.base ?? 0), 0);
@@ -142,10 +151,10 @@ export async function buscarPainelHead(
     agendadas: esforco?.time.reunioes_agendadas.pace ?? null,
     realizadas: esforco?.time.reunioes_realizadas.pace ?? null,
     noShow: leads.length > 0 ? { qtd, base: baseNs, pct: baseNs > 0 ? qtd / baseNs : null } : null,
-    previstas,
-    reagendar,
-    canceladas,
-    doDia,
+    previstas: previstasUnicas,
+    reagendar: reagendarUnicas,
+    canceladas: canceladasUnicas,
+    doDia: doDiaUnicas,
     time: ordenarPorAtencao(time),
     esforco,
     atualizadoEm: auditoria?.atualizado_em ?? null,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ordenarPorAtencao, type LinhaTime } from "./head-negocio";
+import { ordenarPorAtencao, semRepetidas, type LinhaTime } from "./head-negocio";
 
 const linha = (nome: string, indice: number | null): LinhaTime => ({
   id: nome,
@@ -21,5 +21,12 @@ describe("ordenarPorAtencao", () => {
   });
   it("empate segue a ordem alfabética", () => {
     expect(ordenarPorAtencao([linha("Zeca", 0.5), linha("Ana", 0.5)]).map((l) => l.nome)).toEqual(["Ana", "Zeca"]);
+  });
+});
+
+describe("semRepetidas", () => {
+  it("a reunião que entra pelo SDR e pelo closer do time aparece uma vez, na ordem em que chegou", () => {
+    const l = [{ id: "a", n: 1 }, { id: "b", n: 2 }, { id: "a", n: 3 }, { id: "c", n: 4 }, { id: "b", n: 5 }];
+    expect(semRepetidas(l)).toEqual([{ id: "a", n: 1 }, { id: "b", n: 2 }, { id: "c", n: 4 }]);
   });
 });
