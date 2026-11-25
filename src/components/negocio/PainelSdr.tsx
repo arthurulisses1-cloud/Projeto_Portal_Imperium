@@ -53,20 +53,40 @@ export function PaceEsforcoCard({ titulo, p, cor, mesAtual, formato = "num", ond
         </p>
       ) : (
         <>
-          <div className={`mt-2 grid grid-cols-3 gap-2 ${ondeEstaPrimeiro ? "[&>*:nth-child(1)]:order-3 [&>*:nth-child(2)]:order-2 [&>*:nth-child(3)]:order-1" : ""}`}>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-stone-500">Meta do mês</p>
-              <p className="mt-0.5 text-lg font-semibold text-stone-100">{dec(p.meta)}</p>
+          {ondeEstaPrimeiro && formato === "moeda" ? (
+            // Valores em R$ são largos: o que importa (onde está) ganha a linha toda; meta e ritmo dividem a de baixo.
+            <div className="mt-2 space-y-2">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-stone-500">Onde está</p>
+                <p className={`mt-0.5 text-2xl font-semibold ${mesAtual ? (noRitmo ? "text-success-bright" : "text-wine-bright") : "text-gold-bright"}`}>{dec(p.recebido)}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-stone-500">Deveria estar</p>
+                  <p className="mt-0.5 text-base font-semibold text-stone-300">{mesAtual ? dec(p.esperadoAteHoje) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-stone-500">Meta do mês</p>
+                  <p className="mt-0.5 text-base font-semibold text-stone-100">{dec(p.meta)}</p>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-stone-500">Deveria estar</p>
-              <p className="mt-0.5 text-lg font-semibold text-stone-300">{mesAtual ? dec(p.esperadoAteHoje) : "—"}</p>
+          ) : (
+            <div className={`mt-2 grid grid-cols-3 gap-2 ${ondeEstaPrimeiro ? "[&>*:nth-child(1)]:order-3 [&>*:nth-child(2)]:order-2 [&>*:nth-child(3)]:order-1" : ""}`}>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-stone-500">Meta do mês</p>
+                <p className="mt-0.5 text-lg font-semibold text-stone-100">{dec(p.meta)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-stone-500">Deveria estar</p>
+                <p className="mt-0.5 text-lg font-semibold text-stone-300">{mesAtual ? dec(p.esperadoAteHoje) : "—"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-stone-500">Onde está</p>
+                <p className={`mt-0.5 text-lg font-semibold ${mesAtual ? (noRitmo ? "text-success-bright" : "text-wine-bright") : "text-gold-bright"}`}>{dec(p.recebido)}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-stone-500">Onde está</p>
-              <p className={`mt-0.5 text-lg font-semibold ${mesAtual ? (noRitmo ? "text-success-bright" : "text-wine-bright") : "text-gold-bright"}`}>{dec(p.recebido)}</p>
-            </div>
-          </div>
+          )}
           <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-imperium-raised">
             {mesAtual && <div className="absolute inset-y-0 left-0 opacity-25" style={{ width: `${pctEsperado}%`, backgroundColor: `rgb(${cor})` }} />}
             <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${pctFeito}%`, backgroundColor: `rgb(${cor})` }} />
