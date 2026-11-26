@@ -409,8 +409,10 @@ export type ContratoCarteira = {
   papel: "sdr" | "closer" | "head";
   /** Gestão: quem fechou o contrato (nome). */
   dono?: string | null;
-  /** Dupla com a pessoa como co-responsável e Head: soma a gestão ao % de fechamento. */
+  /** A pessoa vendeu e também leva gestão: soma a gestão ao % da venda (Head em dupla: metade). */
   somaGestao?: boolean;
+  /** Diretor presente na venda: a gestão somada é inteira. */
+  gestaoCheia?: boolean;
   desde: string;
   ultimo: string;
   mrr: number;
@@ -506,9 +508,9 @@ export function montarCarteira(
   gestao?: {
     pct: number;
     nomes?: ReadonlyMap<string, string>;
-    /** Visão do Diretor: os contratos em que este Head participou (sozinho: gestão inteira; dupla: metade) e os que o Diretor vendeu sozinho. */
+    /** Visão do Diretor: os contratos em que este Head participou (sozinho: gestão inteira; dupla: metade) e aqueles em que o Diretor está. */
     diretorDe?: string;
-    /** Contrato que o Diretor vendeu sozinho (sem co-responsável nem BDR): a gestão é dele, não do Head. */
+    /** Contrato com o Diretor presente (responsável, co-responsável ou BDR): a gestão é toda dele, não do Head. */
     diretorId?: string | null;
   },
 ): ContratoCarteira[] {
@@ -520,10 +522,11 @@ export function montarCarteira(
     if (!(Number(v.mrr) > 0) || v.primeiro_contrato === false) continue;
     const souCloser = v.profile_id === profileId || v.co_closer_id === profileId;
     const headNela = !!gestao?.diretorDe && (v.profile_id === gestao.diretorDe || v.co_closer_id === gestao.diretorDe);
-    const soDiretor = !!gestao?.diretorId && v.profile_id === gestao.diretorId && !v.indicador_id && (!v.co_closer_id || v.co_closer_id === v.profile_id);
+    const dir = gestao?.diretorId;
+    const comDiretor = !!dir && [v.profile_id, v.co_closer_id, v.indicador_id].includes(dir);
     const papel = gestao?.diretorDe
-      ? soDiretor ? "closer" : headNela ? "head" : null
-      : v.indicador_id === profileId ? "sdr" : souCloser ? "closer" : gestao && !soDiretor ? "head" : null;
+      ? comDiretor ? (v.indicador_id === dir ? "sdr" : "closer") : headNela ? "head" : null
+      : v.indicador_id === profileId ? "sdr" : souCloser ? "closer" : gestao && !comDiretor ? "head" : null;
     if (!papel) continue;
     const chave = (v.cliente ?? "").trim().toLowerCase() || v.crm_deal_id || v.data;
     const c = porChave.get(chave) ?? {
@@ -545,7 +548,8 @@ export function montarCarteira(
       sinal: false,
       dupla: false,
       dono: v.profile_id ? gestao?.nomes?.get(v.profile_id) ?? null : null,
-      somaGestao: gestao?.diretorDe ? soDiretor : !!gestao && souCloser && !!v.co_closer_id && v.co_closer_id !== v.profile_id,
+      somaGestao: gestao?.diretorDe ? comDiretor : !!gestao && !comDiretor && souCloser && !!v.co_closer_id && v.co_closer_id !== v.profile_id,
+      gestaoCheia: !!gestao?.diretorDe && comDiretor,
     };
     // Match Sales: plano semestral/anual pago de uma vez cobre o contrato todo; conta pela 1ª venda do cliente.
     if (detectarPrepago && !porChave.has(chave)) {
@@ -564,7 +568,7 @@ export function montarCarteira(
     .map((c) => {
       // Fechamento: quem recebe 10% sempre (sem BDR) usa 10; em dupla, metade da taxa de cada um.
       const taxa = c.papel === "closer" && dezSempre && !c.comIndicador ? 10 : c.papel === "head" ? 0 : pctDe(c.papel, c.canal, c.comIndicador);
-      const pct = c.papel === "head" && gestao ? (gestao.diretorDe && c.dupla ? gestao.pct / 2 : gestao.pct) : (c.papel === "closer" && c.dupla ? taxa / 2 : taxa) + (c.somaGestao && gestao ? (c.dupla ? gestao.pct / 2 : gestao.pct) : 0);
+      const pct = c.papel === "head" && gestao ? (gestao.diretorDe && c.dupla ? gestao.pct / 2 : gestao.pct) : (c.papel === "closer" && c.dupla ? taxa / 2 : taxa) + (c.somaGestao && gestao ? (c.gestaoCheia ? gestao.pct : gestao.pct / 2) : 0);
       // Contrato pago de uma vez: não gera recorrência até o fim do período pago (só vigora se houver renovação).
       const antecipado = !!c.pagoAte && hoje < c.pagoAte;
       const ativo = !antecipado && !c.sinal && (c.ultimo.startsWith(mesAtual) || c.ultimo.startsWith(mesAnterior));

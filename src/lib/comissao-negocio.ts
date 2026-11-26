@@ -219,8 +219,9 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
     // participou da dupla (responsável ou co-responsável) → 1% para ele e 1% para o Diretor.
     const headNaVenda = venda.closerId === ctx.headId || venda.coCloserId === ctx.headId;
     const dupla = !!venda.coCloserId && venda.coCloserId !== venda.closerId;
-    // Diretor vendeu sozinho: o Head não tem comissão; os 2% são do Diretor (2026-11-26).
-    if (diretorVendeu && !dupla && !venda.indicadorId) add(ctx.diretorId, "diretor", p.head);
+    // Diretor presente na venda (responsável, co-responsável ou BDR): o Head não tem gestão; os 2% são do Diretor (2026-11-26).
+    const diretorPresente = !!ctx.diretorId && [venda.closerId, venda.coCloserId, venda.indicadorId].includes(ctx.diretorId);
+    if (diretorPresente) add(ctx.diretorId, "diretor", p.head);
     else if (!headNaVenda) add(ctx.headId, "head", p.head);
     else if (dupla) {
       add(ctx.headId, "head", p.head / 2);

@@ -261,7 +261,7 @@ export function CarteiraRecorrencia({ carteira, titulo = "Minha carteira · reco
               {carteira.map((c) => (
                 <tr key={c.chave} className={`border-t border-imperium-line/60 ${c.ativo || c.antecipado || c.sinal ? "" : "opacity-50"}`}>
                   <td className="py-1.5 text-stone-200">
-                    {c.cliente} <span className="text-[11px] text-stone-500">· {c.papel === "sdr" ? "você agendou" : c.papel === "head" ? "gestão" + (c.dono ? " · " + c.dono + " fechou" : "") : c.somaGestao ? (c.dupla ? "você fechou em dupla + gestão" : "você fechou + gestão") : "você fechou"}</span>
+                    {c.cliente} <span className="text-[11px] text-stone-500">· {c.papel === "sdr" ? "você agendou" + (c.somaGestao ? " + gestão" : "") : c.papel === "head" ? "gestão" + (c.dono ? " · " + c.dono + " fechou" : "") : c.somaGestao ? (c.dupla ? "você fechou em dupla + gestão" : "você fechou + gestão") : "você fechou"}</span>
                   </td>
                   <td className="py-1.5 text-stone-400">{c.desde.slice(8)}/{c.desde.slice(5, 7)}/{c.desde.slice(0, 4)}</td>
                   <td className="py-1.5 text-stone-400">{dataCurta(c.ultimo)}</td>

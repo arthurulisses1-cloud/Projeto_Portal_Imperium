@@ -141,11 +141,18 @@ describe("comissaoDaVenda", () => {
     expect(parcial.find((x) => x.tipo === "implantacao")?.base).toBe(500);
     expect(comissaoDaVenda("vorp-energy", { ...base, implantacao: 9000 }, ctx).some((x) => x.tipo === "implantacao")).toBe(false);
   });
-  it("Match: Diretor vendendo sozinho, o Head não recebe e os 2% ficam com o Diretor; com BDR segue a regra normal", () => {
+  it("Match: com o Diretor na venda, o Head não tem gestão e os 2% ficam com o Diretor", () => {
     const sozinho = comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "d" }, ctx);
     expect(sozinho.some((x) => x.beneficiarioId === "h")).toBe(false);
     expect(sozinho.map((x) => [x.beneficiarioId, x.papel, x.pct])).toEqual([["d", "closer", 8], ["d", "diretor", 2]]);
-    expect(comissaoDaVenda("matchsales", { ...base, closerId: "d", indicadorId: "b" }, ctx).find((x) => x.beneficiarioId === "h")?.pct).toBe(2);
+    for (const v of [{ closerId: "d", indicadorId: "b" }, { closerId: "a", coCloserId: "d" }, { closerId: "d", coCloserId: "a" }, { closerId: "a", indicadorId: "d" }]) {
+      const l = comissaoDaVenda("matchsales", { ...base, ...v }, ctx);
+      expect(l.some((x) => x.beneficiarioId === "h")).toBe(false);
+      expect(l.find((x) => x.beneficiarioId === "d" && x.papel === "diretor")?.pct).toBe(2);
+    }
+    // Dupla com o Head: ele recebe a parte de quem vendeu, sem gestão.
+    const comHead = comissaoDaVenda("matchsales", { ...base, closerId: "d", coCloserId: "h" }, ctx);
+    expect(comHead.filter((x) => x.beneficiarioId === "h").map((x) => [x.papel, x.pct])).toEqual([["closer", 5]]);
   });
   it("Energy: executivo 30 + head 5 + diretor 5", () => {
     expect(soma(comissaoDaVenda("vorp-energy", base, ctx))).toBeCloseTo(4000);
