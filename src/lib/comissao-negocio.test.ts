@@ -116,6 +116,37 @@ describe("comissaoDaVenda", () => {
     expect(comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "soares" }, comSoares).find((x) => x.papel === "closer")?.pct).toBe(10);
     expect(comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "leo" }, comSoares).find((x) => x.papel === "closer")?.pct).toBe(8);
   });
+  it("Match, implantação: sozinho leva 50% do que passa de 2.500 + o % normal sobre o resto; gestão sobre tudo", () => {
+    const l = comissaoDaVenda("matchsales", { ...base, valor: 4351, implantacao: 4000, closerId: "a" }, ctx);
+    const meu = l.filter((x) => x.beneficiarioId === "a");
+    expect(meu.find((x) => !x.tipo)).toMatchObject({ pct: 10, base: 2851 });
+    expect(meu.find((x) => x.tipo === "implantacao")).toMatchObject({ pct: 50, base: 1500, valor: 750 });
+    expect(soma(meu)).toBeCloseTo(1035.1);
+    expect(l.find((x) => x.beneficiarioId === "h")?.valor).toBeCloseTo(87.02);
+  });
+  it("Match, implantação: com BDR ou co-responsável, os 50% são divididos em partes iguais", () => {
+    const partes = (v: Partial<VendaParaComissao>) =>
+      comissaoDaVenda("matchsales", { ...base, implantacao: 4500, closerId: "a", ...v }, ctx)
+        .filter((x) => x.tipo === "implantacao")
+        .map((x) => [x.beneficiarioId, x.papel, x.valor]);
+    expect(partes({ indicadorId: "b" })).toEqual([["a", "closer", 500], ["b", "bdr", 500]]);
+    expect(partes({ coCloserId: "c2" })).toEqual([["a", "closer", 500], ["c2", "closer", 500]]);
+    const tres = partes({ coCloserId: "c2", indicadorId: "b" }).map((p) => p[2] as number);
+    expect(tres).toHaveLength(3);
+    for (const v of tres) expect(v).toBeCloseTo(333.33);
+  });
+  it("Match, implantação até 2.500 não muda nada; recebimento parcial só conta o que entrou", () => {
+    expect(comissaoDaVenda("matchsales", { ...base, implantacao: 2500 }, ctx).some((x) => x.tipo === "implantacao")).toBe(false);
+    const parcial = comissaoDaVenda("matchsales", { ...base, valor: 3000, implantacao: 4000 }, ctx);
+    expect(parcial.find((x) => x.tipo === "implantacao")?.base).toBe(500);
+    expect(comissaoDaVenda("vorp-energy", { ...base, implantacao: 9000 }, ctx).some((x) => x.tipo === "implantacao")).toBe(false);
+  });
+  it("Match: Diretor vendendo sozinho, o Head não recebe e os 2% ficam com o Diretor; com BDR segue a regra normal", () => {
+    const sozinho = comissaoDaVenda("matchsales", { ...base, canal: "inbound", closerId: "d" }, ctx);
+    expect(sozinho.some((x) => x.beneficiarioId === "h")).toBe(false);
+    expect(sozinho.map((x) => [x.beneficiarioId, x.papel, x.pct])).toEqual([["d", "closer", 8], ["d", "diretor", 2]]);
+    expect(comissaoDaVenda("matchsales", { ...base, closerId: "d", indicadorId: "b" }, ctx).find((x) => x.beneficiarioId === "h")?.pct).toBe(2);
+  });
   it("Energy: executivo 30 + head 5 + diretor 5", () => {
     expect(soma(comissaoDaVenda("vorp-energy", base, ctx))).toBeCloseTo(4000);
   });

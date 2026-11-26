@@ -1,11 +1,12 @@
 // Comissão do mês do SDR da Acrópole (Vorp): regras, RQA, comissão de venda padrão e carteira de recorrência.
-import { percentuais } from "@/lib/comissao-negocio";
+import { MATCH_IMPLANTACAO, percentuais } from "@/lib/comissao-negocio";
 import { RQA_VALOR, recorrenciaDaVenda, type ContratoCarteira, type ResumoReunioes, type StatusRqa } from "@/lib/sdr-negocio";
 import type { ItemComissao } from "@/lib/comissao-negocio";
 
 function moeda(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
 }
+const pctTexto = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%";
 const dataCurta = (iso: string | null) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "—");
 const CANAL: Record<string, string> = { outbound: "Outbound", inbound: "Tráfego Pago", indicacao: "Referido", eventos: "Eventos", alternativo: "Canal alternativo" };
 
@@ -63,7 +64,14 @@ export function ExplicacaoComissaoMatch({ papel }: { papel: "bdr" | "executivo" 
           </div>
         )}
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-stone-500">2 · Recorrência</p>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">2 · Implantação acima de {moeda(MATCH_IMPLANTACAO.teto)}</p>
+          <p className="mt-1">
+            Do que passa de {moeda(MATCH_IMPLANTACAO.teto)} de implantação, <strong>{MATCH_IMPLANTACAO.pctTime}%</strong> vão para o time da venda: quem vendeu sozinho leva tudo; com BDR
+            ou co-responsável, o valor é dividido em partes iguais. O seu % normal vale sobre o restante do valor recebido.
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-stone-500">3 · Recorrência</p>
           <p className="mt-1">
             A comissão segue a cada recebimento do cliente da sua carteira e termina quando o contrato deixa de ser lançado (cancelamento ou encerramento). Não há teto de 3 meses no
             Match Sales.
@@ -147,7 +155,12 @@ export function ExplicacaoComissaoCloserVorp() {
 
 /** O que está gerando a comissão do mês: uma linha por venda, com o valor recebido, se gera recorrência e a comissão. */
 export function TabelaComissaoMes({ itens, hoje, detectarPrepago }: { itens: ItemComissao[]; hoje: string; detectarPrepago: boolean }) {
-  const linhas = itens.slice().sort((a, b) => (a.data < b.data ? 1 : -1));
+  // Uma linha por venda: a mesma venda pode ter mais de uma parcela de comissão (implantação, gestão).
+  const porVenda = new Map<string, ItemComissao[]>();
+  for (const i of itens) porVenda.set(i.vendaId, [...(porVenda.get(i.vendaId) ?? []), i]);
+  const linhas = Array.from(porVenda.values())
+    .map((partes) => ({ ...partes[0], partes, valor: partes.reduce((s, p) => s + p.valor, 0) }))
+    .sort((a, b) => (a.data < b.data ? 1 : -1));
   const total = linhas.reduce((s, l) => s + l.valor, 0);
   return (
     <section className="rounded-lg border border-imperium-line bg-imperium-surface p-4">
@@ -172,16 +185,25 @@ export function TabelaComissaoMes({ itens, hoje, detectarPrepago }: { itens: Ite
               </tr>
             </thead>
             <tbody>
-              {linhas.map((l, idx) => {
+              {linhas.map((l) => {
                 const r = recorrenciaDaVenda(l, hoje, detectarPrepago);
+                const normais = l.partes.filter((p) => p.tipo !== "implantacao");
+                const extra = l.partes.filter((p) => p.tipo === "implantacao");
                 return (
-                  <tr key={l.vendaId + idx} className="border-t border-imperium-line/60">
+                  <tr key={l.vendaId} className="border-t border-imperium-line/60">
                     <td className="py-1.5 text-stone-200">
                       {l.cliente ?? "—"} <span className="text-[11px] text-stone-600">· {dataCurta(l.data)}</span>
                     </td>
                     <td className="num py-1.5 text-right tabular-nums text-stone-300">{moeda(l.recebido)}</td>
                     <td className={"max-w-[280px] py-1.5 text-xs leading-snug " + (r.gera ? "text-success-bright" : "text-amber-400")}>{r.texto}</td>
-                    <td className="num py-1.5 text-right tabular-nums text-stone-400">{l.pct}%</td>
+                    <td className="num py-1.5 text-right tabular-nums text-stone-400">
+                      {normais.map((p) => pctTexto(p.pct)).join(" + ")}
+                      {extra.map((p, n) => (
+                        <span key={n} className="block text-[11px] text-stone-500">
+                          {normais[0] && normais[0].base < l.recebido ? "sobre " + moeda(normais[0].base) + " · " : ""}+ {pctTexto(p.pct)} de {moeda(p.base)} (implantação)
+                        </span>
+                      ))}
+                    </td>
                     <td className="num py-1.5 text-right tabular-nums text-stone-100">{moeda(l.valor)}</td>
                   </tr>
                 );
@@ -239,7 +261,7 @@ export function CarteiraRecorrencia({ carteira, titulo = "Minha carteira · reco
               {carteira.map((c) => (
                 <tr key={c.chave} className={`border-t border-imperium-line/60 ${c.ativo || c.antecipado || c.sinal ? "" : "opacity-50"}`}>
                   <td className="py-1.5 text-stone-200">
-                    {c.cliente} <span className="text-[11px] text-stone-500">· {c.papel === "sdr" ? "você agendou" : c.papel === "head" ? "gestão" + (c.dono ? " · " + c.dono + " fechou" : "") : c.somaGestao ? "você fechou em dupla + gestão" : "você fechou"}</span>
+                    {c.cliente} <span className="text-[11px] text-stone-500">· {c.papel === "sdr" ? "você agendou" : c.papel === "head" ? "gestão" + (c.dono ? " · " + c.dono + " fechou" : "") : c.somaGestao ? (c.dupla ? "você fechou em dupla + gestão" : "você fechou + gestão") : "você fechou"}</span>
                   </td>
                   <td className="py-1.5 text-stone-400">{c.desde.slice(8)}/{c.desde.slice(5, 7)}/{c.desde.slice(0, 4)}</td>
                   <td className="py-1.5 text-stone-400">{dataCurta(c.ultimo)}</td>

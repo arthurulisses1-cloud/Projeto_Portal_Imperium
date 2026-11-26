@@ -404,9 +404,10 @@ export default async function ComissaoNegocioPage({ searchParams }: { searchPara
                                 <td className="py-1">
                                   {PAPEL[i.papel]}
                                   {i.tipo === "desagio" && " · deságio"}
+                                  {i.tipo === "implantacao" && " · implantação acima de R$ 2.500"}
                                 </td>
                                 <td className="py-1 text-right">
-                                  {i.ajustado ? "valor definido" : `${i.pct}% de ${moeda(i.base)}`}
+                                  {i.ajustado ? "valor definido" : `${i.pct.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}% de ${moeda(i.base)}`}
                                 </td>
                                 <td className="py-1 text-right text-stone-200">{moeda(i.valor)}</td>
                               </tr>

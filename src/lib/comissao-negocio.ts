@@ -33,8 +33,8 @@ export type LinhaComissao = {
   /** Base sobre a qual o % incide (valor recebido, ou o teto de 3 x MRR na Vorp). */
   base: number;
   valor: number;
-  /** Finance: "base" (margem de 6%) ou "desagio" (excedente da comissão sobre a margem). */
-  tipo?: "base" | "desagio";
+  /** Finance: "base" (margem de 6%) ou "desagio" (excedente da comissão sobre a margem). Match: "implantacao" (excedente do setup). */
+  tipo?: "base" | "desagio" | "implantacao";
 };
 
 export type VendaParaComissao = {
@@ -62,6 +62,8 @@ export type VendaParaComissao = {
   fundoMatri?: { sdrId: string | null; closerId: string | null } | null;
   /** Match Sales: segundo vendedor da dupla (co-responsável do lead); divide a comissão do fechamento. */
   coCloserId?: string | null;
+  /** Match Sales: valor da implantação (setup) da venda. */
+  implantacao?: number | null;
 };
 
 /** Match Sales: quem recebe sempre 10% no fechamento, mesmo no inbound (combinado com o time, 2026-11-18). */
@@ -76,6 +78,18 @@ export const MATCH_ETAPA_GANHO_OUTBOUND = "31aab8a9-79f7-4824-b229-4d1a4eac8319"
 /** Match Sales: canal que vale na comissão, dado o canal da venda e a etapa de Ganho do lead. */
 export function canalComissaoMatch(canal: Canal | null, etapaGanho: string | null | undefined): Canal | null {
   return etapaGanho === MATCH_ETAPA_GANHO_OUTBOUND ? "outbound" : canal;
+}
+
+/**
+ * Match Sales, implantação (regra do Diretor, 2026-11-26): do que passa de R$ 2.500 de implantação, 50% vão para o
+ * time da venda (sozinho leva os 50%; com BDR ou co-responsável, dividem em partes iguais). O % normal de quem vendeu
+ * incide sobre o recebido sem esse excedente. A gestão (2%) segue sobre o recebido todo.
+ */
+export const MATCH_IMPLANTACAO = { teto: 2500, pctTime: 50 } as const;
+
+/** Parte da implantação recebida que passa do teto (pura). Recebimento parcial só conta o que já entrou. */
+export function excedenteImplantacao(recebido: number, implantacao: number | null | undefined): number {
+  return Math.max(0, Math.min(recebido, Number(implantacao ?? 0)) - MATCH_IMPLANTACAO.teto);
 }
 
 /** Match Sales: % de cada vendedor do fechamento (cada um pela própria taxa; em dupla, metade para cada). */
@@ -172,19 +186,29 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
     slug === "vorp" && (venda.valorAntecipado ?? 0) > 0 && (venda.mrr ?? 0) > 0
       ? Math.min(venda.valorAntecipado as number, 3 * (venda.mrr as number))
       : venda.valor;
-  const add = (beneficiarioId: string | null, papel: PapelComissao, pct: number) => {
+  const add = (beneficiarioId: string | null, papel: PapelComissao, pct: number, sobre: number = base) => {
     if (!beneficiarioId || pct <= 0) return;
-    linhas.push({ beneficiarioId, papel, pct, base, valor: (base * pct) / 100 });
+    linhas.push({ beneficiarioId, papel, pct, base: sobre, valor: (sobre * pct) / 100 });
   };
+  // Match: o excedente da implantação sai da base do % normal de quem vendeu e é rateado à parte.
+  const excedente = slug === "matchsales" ? excedenteImplantacao(venda.valor, venda.implantacao) : 0;
   const energia = slug === "vorp-energy";
   const diretorVendeu = !!ctx.diretorId && venda.closerId === ctx.diretorId;
   if (slug === "matchsales") {
-    for (const t of taxasFechamentoMatch(venda, ctx, p.closer)) add(t.id, "closer", t.pct);
+    for (const t of taxasFechamentoMatch(venda, ctx, p.closer)) add(t.id, "closer", t.pct, base - excedente);
   } else {
     add(venda.closerId, "closer", p.closer);
   }
   if (venda.indicadorId) {
-    add(venda.indicadorId, slug === "matchsales" ? "bdr" : "sdr", slug === "matchsales" ? p.bdr : p.sdr);
+    add(venda.indicadorId, slug === "matchsales" ? "bdr" : "sdr", slug === "matchsales" ? p.bdr : p.sdr, base - excedente);
+  }
+  if (excedente > 0) {
+    const time = Array.from(new Set([venda.closerId, venda.coCloserId, venda.indicadorId].filter((id): id is string => !!id)));
+    for (const id of time) {
+      const pct = MATCH_IMPLANTACAO.pctTime / time.length;
+      const papel: PapelComissao = id === venda.indicadorId && id !== venda.closerId ? "bdr" : "closer";
+      linhas.push({ beneficiarioId: id, papel, pct, base: excedente, valor: (excedente * pct) / 100, tipo: "implantacao" });
+    }
   }
   // Head: o líder do negócio. Se o próprio Head fechou, o % de Head não se soma ao dele.
   // Energy: o Head leva os 5% mesmo vendendo (35%); se o Diretor vendeu, ele fica também com o do Head (40%).
@@ -195,7 +219,9 @@ export function comissaoDaVenda(slug: string, venda: VendaParaComissao, ctx: Con
     // participou da dupla (responsável ou co-responsável) → 1% para ele e 1% para o Diretor.
     const headNaVenda = venda.closerId === ctx.headId || venda.coCloserId === ctx.headId;
     const dupla = !!venda.coCloserId && venda.coCloserId !== venda.closerId;
-    if (!headNaVenda) add(ctx.headId, "head", p.head);
+    // Diretor vendeu sozinho: o Head não tem comissão; os 2% são do Diretor (2026-11-26).
+    if (diretorVendeu && !dupla && !venda.indicadorId) add(ctx.diretorId, "diretor", p.head);
+    else if (!headNaVenda) add(ctx.headId, "head", p.head);
     else if (dupla) {
       add(ctx.headId, "head", p.head / 2);
       add(ctx.diretorId, "diretor", p.head / 2);
@@ -296,7 +322,7 @@ export type ItemComissao = {
   pct: number;
   base: number;
   valor: number;
-  tipo?: "base" | "desagio";
+  tipo?: "base" | "desagio" | "implantacao";
   /** Valor recebido da venda (a base pode ser menor, como o teto de 3 x MRR da Vorp). */
   recebido: number;
   mrr: number | null;
@@ -440,6 +466,7 @@ export async function buscarComissoesNegocios(supabase: SupabaseClient, ano: num
         valorCliente: v.valor_cliente === null || v.valor_cliente === undefined ? null : Number(v.valor_cliente),
         fundoMatri: fundoMatriPorVenda.get(v.id as string) ?? null,
         coCloserId: (v.co_closer_id as string | null | undefined) ?? null,
+        implantacao: v.valor_implantacao === null || v.valor_implantacao === undefined ? null : Number(v.valor_implantacao),
       };
       let linhasVenda = comissaoDaVenda(n.slug, venda, ctx);
       const ajustesVenda = ajustesPor.get(v.id as string) ?? [];

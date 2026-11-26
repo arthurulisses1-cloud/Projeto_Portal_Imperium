@@ -503,7 +503,14 @@ export function montarCarteira(
   /** Match Sales: a pessoa recebe 10% no fechamento em qualquer canal (sem BDR). */
   dezSempre = false,
   /** Head (Match Sales): inclui os contratos do time com o % de gestão; no contrato em que é co-responsável soma a gestão ao fechamento. */
-  gestao?: { pct: number; nomes?: ReadonlyMap<string, string>; /** Visão do Diretor: só os contratos em que este Head participou (sozinho: gestão inteira; dupla: metade). */ diretorDe?: string },
+  gestao?: {
+    pct: number;
+    nomes?: ReadonlyMap<string, string>;
+    /** Visão do Diretor: os contratos em que este Head participou (sozinho: gestão inteira; dupla: metade) e os que o Diretor vendeu sozinho. */
+    diretorDe?: string;
+    /** Contrato que o Diretor vendeu sozinho (sem co-responsável nem BDR): a gestão é dele, não do Head. */
+    diretorId?: string | null;
+  },
 ): ContratoCarteira[] {
   const mesAtual = hoje.slice(0, 7);
   const [a, m] = mesAtual.split("-").map(Number);
@@ -513,7 +520,10 @@ export function montarCarteira(
     if (!(Number(v.mrr) > 0) || v.primeiro_contrato === false) continue;
     const souCloser = v.profile_id === profileId || v.co_closer_id === profileId;
     const headNela = !!gestao?.diretorDe && (v.profile_id === gestao.diretorDe || v.co_closer_id === gestao.diretorDe);
-    const papel = gestao?.diretorDe ? (headNela ? "head" : null) : v.indicador_id === profileId ? "sdr" : souCloser ? "closer" : gestao ? "head" : null;
+    const soDiretor = !!gestao?.diretorId && v.profile_id === gestao.diretorId && !v.indicador_id && (!v.co_closer_id || v.co_closer_id === v.profile_id);
+    const papel = gestao?.diretorDe
+      ? soDiretor ? "closer" : headNela ? "head" : null
+      : v.indicador_id === profileId ? "sdr" : souCloser ? "closer" : gestao && !soDiretor ? "head" : null;
     if (!papel) continue;
     const chave = (v.cliente ?? "").trim().toLowerCase() || v.crm_deal_id || v.data;
     const c = porChave.get(chave) ?? {
@@ -535,7 +545,7 @@ export function montarCarteira(
       sinal: false,
       dupla: false,
       dono: v.profile_id ? gestao?.nomes?.get(v.profile_id) ?? null : null,
-      somaGestao: !!gestao && souCloser && !!v.co_closer_id && v.co_closer_id !== v.profile_id,
+      somaGestao: gestao?.diretorDe ? soDiretor : !!gestao && souCloser && !!v.co_closer_id && v.co_closer_id !== v.profile_id,
     };
     // Match Sales: plano semestral/anual pago de uma vez cobre o contrato todo; conta pela 1ª venda do cliente.
     if (detectarPrepago && !porChave.has(chave)) {
@@ -554,7 +564,7 @@ export function montarCarteira(
     .map((c) => {
       // Fechamento: quem recebe 10% sempre (sem BDR) usa 10; em dupla, metade da taxa de cada um.
       const taxa = c.papel === "closer" && dezSempre && !c.comIndicador ? 10 : c.papel === "head" ? 0 : pctDe(c.papel, c.canal, c.comIndicador);
-      const pct = c.papel === "head" && gestao ? (gestao.diretorDe && c.dupla ? gestao.pct / 2 : gestao.pct) : (c.papel === "closer" && c.dupla ? taxa / 2 : taxa) + (c.somaGestao && gestao ? gestao.pct / 2 : 0);
+      const pct = c.papel === "head" && gestao ? (gestao.diretorDe && c.dupla ? gestao.pct / 2 : gestao.pct) : (c.papel === "closer" && c.dupla ? taxa / 2 : taxa) + (c.somaGestao && gestao ? (c.dupla ? gestao.pct / 2 : gestao.pct) : 0);
       // Contrato pago de uma vez: não gera recorrência até o fim do período pago (só vigora se houver renovação).
       const antecipado = !!c.pagoAte && hoje < c.pagoAte;
       const ativo = !antecipado && !c.sinal && (c.ultimo.startsWith(mesAtual) || c.ultimo.startsWith(mesAnterior));
@@ -606,7 +616,8 @@ export async function buscarCarteiraGestao(
   let { data, error } = await consulta(base + ", tipo_contrato, co_closer_id");
   if (error) ({ data, error } = await consulta(base + ", tipo_contrato"));
   if (error) ({ data, error } = await consulta(base));
-  const { data: perfis } = await admin.from("profiles").select("id, full_name");
+  const { data: perfis } = await admin.from("profiles").select("id, full_name, role, ativo");
   const nomes = new Map((perfis ?? []).map((p) => [p.id as string, (p.full_name as string).split(" ")[0]] as const));
-  return montarCarteira((data ?? []) as unknown as LinhaVendaCarteira[], headId, hoje, pctDe, detectarPrepago, false, { pct: pctGestao, nomes, ...(comoDiretor ? { diretorDe: headId } : {}) });
+  const diretorId = ((perfis ?? []).find((p) => p.role === "diretor" && p.ativo)?.id as string | undefined) ?? null;
+  return montarCarteira((data ?? []) as unknown as LinhaVendaCarteira[], headId, hoje, pctDe, detectarPrepago, false, { pct: pctGestao, nomes, diretorId, ...(comoDiretor ? { diretorDe: headId } : {}) });
 }
